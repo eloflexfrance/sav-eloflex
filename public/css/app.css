@@ -107,3 +107,9 @@ select.form-input{cursor:pointer}textarea.form-input{resize:vertical;min-height:
 .param-section{background:var(--surface);border:0.5px solid var(--border);border-radius:11px;padding:16px;margin-bottom:14px}
 .param-section h3{font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .dark-toggle i{color:var(--text2)}
+
+/* Autocomplétion pièces détachées */
+.piece-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border-s);border-top:none;border-radius:0 0 var(--radius) var(--radius);box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:200;max-height:280px;overflow-y:auto}
+.piece-option{padding:8px 12px;cursor:pointer;border-bottom:0.5px solid var(--border);transition:background .1s}
+.piece-option:last-child{border-bottom:none}
+.piece-option:hover{background:var(--accent-bg)}

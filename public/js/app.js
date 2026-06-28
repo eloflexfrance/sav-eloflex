@@ -655,10 +655,13 @@ async function saveFauteuil(id,clientId){const data={client_id:clientId,modele:g
 async function deleteFauteuil(id,clientId){if(!confirm('Supprimer ce fauteuil et ses interventions ?'))return;await API.deleteFauteuil(id);toast('Supprimé','ti-trash');closeModal();setView('client',{clientId});}
 
 // ── MODALES INTERVENTIONS ─────────────────────────────────────────
+let TMP_CLIENTS = [];
+
 async function modalNewIntervention(fauteuilId,clientId){
   TMP_PRODUITS=[];
   const[clients,fauts]=await Promise.all([API.clients(),clientId?API.fauteuils(clientId):API.fauteuils()]);
   if(!CACHE.catalogue.length) CACHE.catalogue=await API.catalogue();
+  TMP_CLIENTS=clients;
   showModal(interForm(null,clients,fauts,fauteuilId,clientId));
   renderProduitsForm();
 }
@@ -667,6 +670,7 @@ async function modalEditIntervention(id){
   TMP_PRODUITS=JSON.parse(JSON.stringify(i.produits||[]));
   const[clients,fauts]=await Promise.all([API.clients(),API.fauteuils(i.client_id)]);
   if(!CACHE.catalogue.length) CACHE.catalogue=await API.catalogue();
+  TMP_CLIENTS=clients;
   closeModal();
   setTimeout(()=>{showModal(interForm(i,clients,fauts,i.fauteuil_id,i.client_id));renderProduitsForm();},50);
 }
@@ -674,7 +678,18 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
   <div class="modal-header"><i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i><h2>${i?`Modifier #${i.id}`:'Nouvelle intervention'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body">
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Client *</label><select class="form-input" id="f-client" onchange="refreshFauteuilSelect()"><option value="">-- Choisir --</option>${clients.map(c=>`<option value="${c.id}" ${(c.id===clientId||c.id===d.client_id)?'selected':''}>${esc(c.nom)}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Client *</label>
+        <div style="position:relative">
+          <input class="form-input" id="f-client-search" placeholder="Taper le nom du distributeur…"
+            autocomplete="off"
+            value="${d.client_id||clientId ? esc(clients.find(c=>c.id===(d.client_id||clientId))?.nom||'') : ''}"
+            oninput="searchClients(this.value,TMP_CLIENTS)"
+            onfocus="searchClients(this.value,TMP_CLIENTS)"
+            onblur="setTimeout(()=>{const dr=document.getElementById('client-drop');if(dr)dr.style.display='none'},150)">
+          <input type="hidden" id="f-client" value="${d.client_id||clientId||''}">
+          <div id="client-drop" class="piece-dropdown" style="display:none"></div>
+        </div>
+      </div>
       <div class="form-group"><label class="form-label">Fauteuil *</label><select class="form-input" id="f-fauteuil">${fauteuils.map(f=>`<option value="${f.id}" ${(f.id===fauteuilId||f.id===d.fauteuil_id)?'selected':''}>${esc(f.modele)} – ${esc(f.serie)}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Date *</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().slice(0,10)}"></div>
       <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map(tp=>`<option ${d.type===tp?'selected':''}>${tp}</option>`).join('')}</select></div>
@@ -721,19 +736,89 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
     <button class="btn" onclick="closeModal()">Annuler</button>
     <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?'Mettre à jour':'Enregistrer'}</button>
   </div>`;}
-async function refreshFauteuilSelect(){const cid=parseInt(gv('f-client'));const list=cid?await API.fauteuils(cid):await API.fauteuils();$('f-fauteuil').innerHTML=list.map(f=>`<option value="${f.id}">${esc(f.modele)} – ${esc(f.serie)}</option>`).join('');}
-function addProduitRow(){TMP_PRODUITS.push({ref:'',designation:'',qte:1,pxht:0});renderProduitsForm();}
+async function refreshFauteuilSelect(){
+  const cid=parseInt(gv('f-client'));
+  const list=cid?await API.fauteuils(cid):await API.fauteuils();
+  $('f-fauteuil').innerHTML=list.length
+    ? list.map(f=>`<option value="${f.id}">${esc(f.modele)} – ${esc(f.serie)}</option>`).join('')
+    : '<option value="">Aucun fauteuil pour ce client</option>';
+}
+
+function searchClients(q, allClients){
+  const drop=document.getElementById('client-drop');
+  if(!drop) return;
+  const query=q.toLowerCase().trim();
+  // Afficher tous les clients si champ vide, sinon filtrer
+  const results=(query
+    ? allClients.filter(c=>c.nom.toLowerCase().includes(query)||(c.ville&&c.ville.toLowerCase().includes(query))||(c.contact&&c.contact.toLowerCase().includes(query)))
+    : allClients
+  ).slice(0,15);
+  if(!results.length){drop.style.display='none';return;}
+  drop.innerHTML=results.map(c=>`
+    <div class="piece-option" onmousedown="event.preventDefault();selectClient(${c.id},'${c.nom.replace(/'/g,"\'")}')">
+      <div style="font-size:12px;font-weight:600">${esc(c.nom)}</div>
+      <div style="font-size:11px;color:var(--text3)">${esc(c.ville||'')}${c.contact?' — '+esc(c.contact):''}</div>
+    </div>`).join('');
+  drop.style.display='block';
+}
+
+async function selectClient(id, nom){
+  const inp=document.getElementById('f-client-search');
+  const hid=document.getElementById('f-client');
+  if(inp) inp.value=nom;
+  if(hid) hid.value=id;
+  const drop=document.getElementById('client-drop');
+  if(drop) drop.style.display='none';
+  await refreshFauteuilSelect();
+}
+function addProduitRow(){TMP_PRODUITS.push({ref:'',designation:'',qte:1,pxht:0});renderProduitsForm();setTimeout(()=>{const inputs=document.querySelectorAll('.piece-search');if(inputs.length)inputs[inputs.length-1].focus();},50);}
 function removeProduit(i){TMP_PRODUITS.splice(i,1);renderProduitsForm();}
-function selectCatalogue(idx,val){if(!val)return;const p=CACHE.catalogue.find(c=>c.id===parseInt(val));if(p){TMP_PRODUITS[idx]={...TMP_PRODUITS[idx],ref:p.ref,designation:p.designation,pxht:p.pxht};renderProduitsForm();}}
+
+function selectCatalogueByItem(idx, item){
+  TMP_PRODUITS[idx]={...TMP_PRODUITS[idx],ref:item.ref,designation:item.designation,pxht:parseFloat(item.pxht||0)};
+  renderProduitsForm();
+  // Remettre le focus sur la qté de cette ligne
+  setTimeout(()=>{const qtInputs=document.querySelectorAll('.piece-qte');if(qtInputs[idx])qtInputs[idx].focus();},50);
+}
+
+function searchPieces(idx, q){
+  const drop=document.getElementById(`piece-drop-${idx}`);
+  if(!drop)return;
+  const query=q.toLowerCase().trim();
+  if(!query){drop.style.display='none';return;}
+  const results=CACHE.catalogue.filter(p=>
+    p.designation.toLowerCase().includes(query)||
+    (p.ref&&p.ref.toLowerCase().includes(query))||
+    (p.ref_fournisseur&&p.ref_fournisseur.toLowerCase().includes(query))
+  ).slice(0,12);
+  if(!results.length){drop.style.display='none';return;}
+  drop.innerHTML=results.map(p=>`
+    <div class="piece-option" onmousedown="event.preventDefault();selectCatalogueByItem(${idx},{ref:'${p.ref.replace(/'/g,"\'")}',designation:'${p.designation.replace(/'/g,"\'")}',pxht:${parseFloat(p.pxht||0)}})">
+      <div style="font-size:12px;font-weight:600">${esc(p.designation)}</div>
+      <div style="font-size:11px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref)}</span><span style="margin-left:auto">${parseFloat(p.pxht||0).toFixed(2)} €</span></div>
+    </div>`).join('');
+  drop.style.display='block';
+}
+
 function renderProduitsForm(){
   const el=$('produits-list');if(!el)return;
   if(!TMP_PRODUITS.length){el.innerHTML='<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>';return;}
   el.innerHTML=TMP_PRODUITS.map((p,i)=>`
-    <div style="display:grid;grid-template-columns:2fr 0.8fr 0.5fr 0.7fr auto;gap:5px;align-items:start;margin-bottom:6px">
-      <div>${i===0?'<div class="form-label">Désignation</div>':''}<select class="form-input" style="font-size:11px;margin-bottom:3px" onchange="selectCatalogue(${i},this.value)"><option value="">Choisir du catalogue…</option>${CACHE.catalogue.map(cc=>`<option value="${cc.id}">${esc(cc.ref)} – ${esc(cc.designation)}</option>`).join('')}</select><input class="form-input" style="font-size:12px" placeholder="Désignation" value="${esc(p.designation)}" oninput="TMP_PRODUITS[${i}].designation=this.value"></div>
+    <div style="display:grid;grid-template-columns:2fr 0.8fr 0.5fr 0.7fr auto;gap:5px;align-items:start;margin-bottom:8px">
+      <div>
+        ${i===0?'<div class="form-label">Désignation</div>':''}
+        <div style="position:relative">
+          <input class="form-input piece-search" style="font-size:12px" placeholder="Taper nom ou référence…"
+            value="${esc(p.designation)}"
+            oninput="TMP_PRODUITS[${i}].designation=this.value;searchPieces(${i},this.value)"
+            onfocus="searchPieces(${i},this.value)"
+            onblur="setTimeout(()=>{const d=document.getElementById('piece-drop-${i}');if(d)d.style.display='none'},150)">
+          <div id="piece-drop-${i}" class="piece-dropdown" style="display:none"></div>
+        </div>
+      </div>
       <div>${i===0?'<div class="form-label">Réf</div>':''}<input class="form-input mono" style="font-size:11px" value="${esc(p.ref)}" oninput="TMP_PRODUITS[${i}].ref=this.value"></div>
-      <div>${i===0?'<div class="form-label">Qté</div>':''}<input class="form-input" type="number" min="1" value="${p.qte}" oninput="TMP_PRODUITS[${i}].qte=parseInt(this.value)||1"></div>
-      <div>${i===0?'<div class="form-label">PU HT</div>':''}<input class="form-input" type="number" step="0.01" value="${p.pxht}" oninput="TMP_PRODUITS[${i}].pxht=parseFloat(this.value)||0"></div>
+      <div>${i===0?'<div class="form-label">Qté</div>':''}<input class="form-input piece-qte" type="number" min="1" value="${p.qte}" oninput="TMP_PRODUITS[${i}].qte=parseInt(this.value)||1"></div>
+      <div>${i===0?'<div class="form-label">PU HT</div>':''}<input class="form-input" type="number" step="0.01" value="${parseFloat(p.pxht||0).toFixed(2)}" oninput="TMP_PRODUITS[${i}].pxht=parseFloat(this.value)||0"></div>
       <div style="${i===0?'padding-top:18px':''}"><button class="btn sm danger" onclick="removeProduit(${i})"><i class="ti ti-x"></i></button></div>
     </div>`).join('');
 }
