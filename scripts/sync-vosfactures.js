@@ -2,9 +2,9 @@
 require('dotenv').config();
 const axios = require('axios');
 const { pool } = require('../server/db');
- 
+
 // Pas de process.exit ici — les variables sont vérifiées dans chaque fonction
- 
+
 function getVfApi() {
   const token   = process.env.VOSFACTURES_API_TOKEN;
   const account = process.env.VOSFACTURES_ACCOUNT;
@@ -15,7 +15,7 @@ function getVfApi() {
     params:  { api_token: token }
   });
 }
- 
+
 async function log(type, status, message, records = 0) {
   try {
     const client = await pool.connect();
@@ -26,7 +26,7 @@ async function log(type, status, message, records = 0) {
     client.release();
   } catch(e) { console.error('Erreur log sync:', e.message); }
 }
- 
+
 async function syncClients() {
   const vfApi = getVfApi();
   const client = await pool.connect();
@@ -49,7 +49,7 @@ async function syncClients() {
     throw e;
   } finally { client.release(); }
 }
- 
+
 async function syncProducts() {
   const vfApi = getVfApi();
   const client = await pool.connect();
@@ -72,7 +72,7 @@ async function syncProducts() {
     throw e;
   } finally { client.release(); }
 }
- 
+
 async function syncInvoices() {
   const vfApi = getVfApi();
   const client = await pool.connect();
@@ -97,5 +97,5 @@ async function syncInvoices() {
     throw e;
   } finally { client.release(); }
 }
- 
+
 module.exports = { syncClients, syncProducts, syncInvoices };
