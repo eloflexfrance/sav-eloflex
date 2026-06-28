@@ -515,7 +515,7 @@ router.get('/export/excel', async (req, res) => {
       const cat = await db.all('SELECT * FROM catalogue ORDER BY ref');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cat.map(p => ({
         'Référence': p.ref, 'Désignation': p.designation, 'Fournisseur': p.fournisseur||'',
-        'Réf fournisseur': p.ref_fournisseur||'', 'Prix HT': p.pxht, 'Stock': p.stock, 'Seuil alerte': p.stock_alerte
+        'Réf fournisseur': p.ref_fournisseur||'', 'Prix HT': parseFloat(p.pxht||0), 'Stock': p.stock, 'Seuil alerte': p.stock_alerte
       }))), 'Catalogue');
     }
     if (type === 'expeditions' || type === 'complet') {
