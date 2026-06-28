@@ -226,7 +226,7 @@ router.get('/interventions/:id', async (req, res) => {
 router.post('/interventions', async (req, res) => {
   try {
     const { fauteuil_id, client_id, date, type, garantie, statut, description, notes, technicien,
-      envoi_transporteur, envoi_numero, envoi_date, retour_transporteur, retour_numero, retour_date, produits = [] } = req.body;
+      envoi_transporteur, envoi_numero, envoi_date, retour_transporteur, retour_numero, retour_date, num_bordereau_vf, produits = [] } = req.body;
     if (!fauteuil_id || !date) return res.status(400).json({ error: 'fauteuil_id et date requis' });
     const faut = await db.get('SELECT client_id,date_achat,duree_garantie_mois FROM fauteuils WHERE id=$1', [fauteuil_id]);
     const cid  = client_id || faut?.client_id;
@@ -238,12 +238,12 @@ router.post('/interventions', async (req, res) => {
       await pgClient.query('BEGIN');
       const r = await pgClient.query(
         `INSERT INTO interventions (fauteuil_id,client_id,date,type,garantie,garantie_auto,statut,description,notes,technicien,
-          envoi_transporteur,envoi_numero,envoi_date,retour_transporteur,retour_numero,retour_date)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+          envoi_transporteur,envoi_numero,envoi_date,retour_transporteur,retour_numero,retour_date,num_bordereau_vf)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
         [fauteuil_id, cid, date, type||'Réparation', !!garantie, !!gaAuto,
          statut||'Ouvert', description||null, notes||null, technicien||null,
          envoi_transporteur||null, envoi_numero||null, envoi_date||null,
-         retour_transporteur||null, retour_numero||null, retour_date||null]
+         retour_transporteur||null, retour_numero||null, retour_date||null, num_bordereau_vf||null]
       );
       id = r.rows[0].id;
       for (const p of produits) {
@@ -276,7 +276,7 @@ router.put('/interventions/:id', async (req, res) => {
     const old = await db.get('SELECT * FROM interventions WHERE id=$1', [req.params.id]);
     if (!old) return res.status(404).json({ error: 'Introuvable' });
     const { type, garantie, statut, description, notes, technicien,
-      envoi_transporteur, envoi_numero, envoi_date, retour_transporteur, retour_numero, retour_date, produits } = req.body;
+      envoi_transporteur, envoi_numero, envoi_date, retour_transporteur, retour_numero, retour_date, num_bordereau_vf, produits } = req.body;
 
     const pgClient = await db.pool.connect();
     try {
@@ -284,10 +284,10 @@ router.put('/interventions/:id', async (req, res) => {
       await pgClient.query(
         `UPDATE interventions SET type=$1,garantie=$2,statut=$3,description=$4,notes=$5,technicien=$6,
           envoi_transporteur=$7,envoi_numero=$8,envoi_date=$9,retour_transporteur=$10,retour_numero=$11,retour_date=$12,
-          updated_at=NOW() WHERE id=$13`,
+          num_bordereau_vf=$13,updated_at=NOW() WHERE id=$14`,
         [type, !!garantie, statut, description, notes, technicien,
          envoi_transporteur||null, envoi_numero||null, envoi_date||null,
-         retour_transporteur||null, retour_numero||null, retour_date||null, req.params.id]
+         retour_transporteur||null, retour_numero||null, retour_date||null, num_bordereau_vf||null, req.params.id]
       );
       for (const [champ, anc, nouv] of [
         ['statut', old.statut, statut],

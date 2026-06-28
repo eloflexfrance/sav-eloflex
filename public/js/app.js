@@ -467,6 +467,7 @@ async function viewIntervention(id){
         <div><div class="stat-label">Client</div><div style="font-weight:600">${esc(i.client_nom||'')}</div></div>
         <div><div class="stat-label">Fauteuil</div><div style="font-weight:600">${esc(i.modele)} – <span class="mono">${esc(i.serie)}</span></div></div>
         ${i.num_facture?`<div><div class="stat-label">Facture VF</div><div class="mono" style="color:var(--accent)">${esc(i.num_facture)}</div></div>`:''}
+      ${i.num_bordereau_vf?`<div><div class="stat-label">Bordereau VosFactures</div><div style="display:flex;align-items:center;gap:6px"><span class="mono" style="color:var(--accent)">${esc(i.num_bordereau_vf)}</span><a href="https://eloflex.vosfactures.fr/documents?search=${esc(i.num_bordereau_vf)}" target="_blank" class="btn sm" style="padding:2px 7px;font-size:11px"><i class="ti ti-external-link"></i>Ouvrir VF</a></div></div>`:''}
         <div><div class="stat-label">Technicien</div><div>${esc(i.technicien||'—')}</div></div>
       </div>
       <div class="form-group"><div class="form-label">Description</div><div style="font-size:12px;background:var(--bg);padding:8px;border-radius:var(--radius)">${esc(i.description||'—')}</div></div>
@@ -482,6 +483,15 @@ async function viewIntervention(id){
       ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px">ENVOI</div><div style="font-size:12px">${esc(i.envoi_transporteur||'—')} — <span class="mono">${esc(i.envoi_numero)}</span> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Aucun envoi</div>'}
       <div class="section-title" style="margin-top:6px"><i class="ti ti-arrow-back-up"></i>Retour</div>
       ${i.retour_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:4px">RETOUR</div><div style="font-size:12px">${esc(i.retour_transporteur||'—')} — <span class="mono">${esc(i.retour_numero)}</span> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun retour</div>'}
+      <div class="divider"></div>
+      ${i.num_bordereau_vf?`<div style="background:var(--accent-bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px">
+        <i class="ti ti-receipt" style="color:var(--accent);font-size:18px"></i>
+        <div style="flex:1">
+          <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Bordereau VosFactures</div>
+          <div style="font-size:13px;font-weight:700;color:var(--accent)" class="mono">${esc(i.num_bordereau_vf)}</div>
+        </div>
+        <a href="https://eloflex.vosfactures.fr/documents?search=${esc(i.num_bordereau_vf)}" target="_blank" class="btn sm primary"><i class="ti ti-external-link"></i>Ouvrir dans VosFactures</a>
+      </div>`:''}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-photo"></i>Photos (${photos.length})</div>
       <div id="photo-gallery">${renderPhotoGallery(photos,i.id)}</div>
@@ -696,6 +706,15 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
       <div class="form-group" style="margin-bottom:0"><label class="form-label">Date retour</label><input class="form-input" id="f-ret-date" type="date" value="${d.retour_date||''}"></div>
       <div class="form-group" style="margin-bottom:0;grid-column:1/-1"><label class="form-label">N° de suivi retour</label><input class="form-input mono" id="f-ret-num" value="${esc(d.retour_numero||'')}"></div>
     </div></div>
+    <div class="divider"></div>
+    <div class="section-title"><i class="ti ti-receipt"></i>Lien VosFactures</div>
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label class="form-label">N° bordereau / bon de livraison VosFactures</label>
+        <input class="form-input mono" id="f-bordereau" placeholder="ex: BL-2026-0042" value="${esc(d.num_bordereau_vf||'')}">
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px">Ce numéro sera affiché sur la fiche et permettra d'accéder directement au document dans VosFactures.</div>
   </div>
   <div class="modal-footer">
     ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast('Supprimé','ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
@@ -719,7 +738,7 @@ function renderProduitsForm(){
     </div>`).join('');
 }
 async function saveIntervention(id){
-  const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client'))||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),produits:TMP_PRODUITS};
+  const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client'))||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau')||undefined,produits:TMP_PRODUITS};
   if(!data.fauteuil_id||!data.date){alert('Fauteuil et date requis');return;}
   try{id?await API.updateIntervention(id,data):await API.createIntervention(data);TMP_PRODUITS=[];toast(id?'Intervention mise à jour':'Intervention créée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}
 }

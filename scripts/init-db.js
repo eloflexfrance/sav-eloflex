@@ -37,6 +37,7 @@ async function initDB() {
         description TEXT, notes TEXT, technicien TEXT,
         envoi_transporteur TEXT, envoi_numero TEXT, envoi_date TEXT,
         retour_transporteur TEXT, retour_numero TEXT, retour_date TEXT,
+        num_bordereau_vf TEXT,
         relance_envoyee BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
       );
@@ -97,6 +98,7 @@ async function initDB() {
       await client.query(`ALTER TABLE fauteuils ALTER COLUMN vf_facture_id TYPE BIGINT`);
       await client.query(`ALTER TABLE intervention_produits ALTER COLUMN vf_product_id TYPE BIGINT`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_actif BOOLEAN DEFAULT TRUE`);
+      await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_bordereau_vf TEXT`);
     } catch(e) { /* déjà en BIGINT */ }
     console.log("✅ Tables créées");
 
