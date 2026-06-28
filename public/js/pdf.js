@@ -53,10 +53,10 @@ const PDF = {
       doc.setFont('helvetica', 'normal');
       let total = 0;
       inter.produits.forEach(p => {
-        const t = p.pxht * p.qte; total += t;
+        const t = parseFloat(p.pxht||0) * p.qte; total += t;
         const dl2 = doc.splitTextToSize(p.designation, 77);
         doc.text(dl2, 15, y); doc.text(p.ref || '', 95, y); doc.text(String(p.qte), 140, y);
-        doc.text(p.pxht.toFixed(2) + ' €', 155, y); doc.text(t.toFixed(2) + ' €', 175, y);
+        doc.text(parseFloat(p.pxht||0).toFixed(2) + ' €', 155, y); doc.text(t.toFixed(2) + ' €', 175, y);
         y += dl2.length * 5 + 2;
       });
       doc.line(15, y, 195, y); y += 5;
