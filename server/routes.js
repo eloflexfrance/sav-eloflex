@@ -254,7 +254,7 @@ router.post('/interventions', async (req, res) => {
         if (p.ref) {
           await pgClient.query('UPDATE catalogue SET stock=GREATEST(0,stock-$1),updated_at=NOW() WHERE ref=$2', [p.qte||1, p.ref]);
           const piece = (await pgClient.query('SELECT * FROM catalogue WHERE ref=$1', [p.ref])).rows[0];
-          if (piece && piece.stock <= piece.stock_alerte)
+          if (piece && piece.stock_actif !== false && piece.stock <= piece.stock_alerte)
             await pgClient.query('INSERT INTO alertes (type,reference_id,message) VALUES ($1,$2,$3)',
               ['stock_faible', piece.id, `Stock faible : ${piece.designation} (${piece.stock} restant${piece.stock!==1?'s':''})`]);
         }
@@ -413,21 +413,21 @@ router.get('/catalogue', async (req, res) => {
 });
 router.post('/catalogue', async (req, res) => {
   try {
-    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte } = req.body;
+    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif } = req.body;
     if (!ref || !designation) return res.status(400).json({ error: 'ref et designation requis' });
     const r = await db.run(
-      'INSERT INTO catalogue (ref,designation,fournisseur,ref_fournisseur,pxht,stock,stock_alerte) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-      [ref, designation, fournisseur||null, ref_fournisseur||null, pxht||0, stock||0, stock_alerte||2]
+      'INSERT INTO catalogue (ref,designation,fournisseur,ref_fournisseur,pxht,stock,stock_alerte,stock_actif) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
+      [ref, designation, fournisseur||null, ref_fournisseur||null, pxht||0, stock||0, stock_alerte||2, stock_actif!==false]
     );
     res.status(201).json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.put('/catalogue/:id', async (req, res) => {
   try {
-    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte } = req.body;
+    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif } = req.body;
     const r = await db.run(
-      'UPDATE catalogue SET ref=$1,designation=$2,fournisseur=$3,ref_fournisseur=$4,pxht=$5,stock=$6,stock_alerte=$7,updated_at=NOW() WHERE id=$8 RETURNING *',
-      [ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte||2, req.params.id]
+      'UPDATE catalogue SET ref=$1,designation=$2,fournisseur=$3,ref_fournisseur=$4,pxht=$5,stock=$6,stock_alerte=$7,stock_actif=$8,updated_at=NOW() WHERE id=$9 RETURNING *',
+      [ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte||2, stock_actif!==false, req.params.id]
     );
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -465,7 +465,7 @@ router.get('/stats', async (req, res) => {
         (SELECT COUNT(*)::int FROM interventions WHERE garantie=true) AS garantie,
         (SELECT COUNT(*)::int FROM interventions WHERE garantie=false) AS hors_garantie,
         (SELECT COUNT(*)::int FROM alertes WHERE lue=false) AS alertes_non_lues,
-        (SELECT COUNT(*)::int FROM catalogue WHERE stock<=stock_alerte) AS pieces_alerte,
+        (SELECT COUNT(*)::int FROM catalogue WHERE stock<=stock_alerte AND stock_actif=true) AS pieces_alerte,
         (SELECT COUNT(*)::int FROM interventions WHERE envoi_numero IS NOT NULL AND envoi_numero!='' AND (retour_numero IS NULL OR retour_numero='') AND statut!='Fermé') AS expeditions_cours
     `);
     const recentes = await db.all(
@@ -541,6 +541,13 @@ router.get('/export/excel', async (req, res) => {
 });
 
 // ── PARAMÈTRES ────────────────────────────────────────────────────
+
+// Statut Cloudinary
+router.get('/parametres/cloudinary-status', (req, res) => {
+  const configured = !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+  res.json({ configured, cloud_name: process.env.CLOUDINARY_CLOUD_NAME || null });
+});
+
 router.get('/parametres', async (req, res) => {
   try {
     const rows = await db.all('SELECT * FROM parametres');
@@ -606,50 +613,5 @@ router.get('/vosfactures/status', async (req, res) => {
 });
 
 
-
-// DIAGNOSTIC VosFactures — à supprimer après vérification
-router.get('/debug/vf', async (req, res) => {
-  try {
-    const axios = require('axios');
-    const token   = process.env.VOSFACTURES_API_TOKEN;
-    const account = process.env.VOSFACTURES_ACCOUNT;
-    if (!token || !account) return res.json({ error: 'Variables non définies', token: !!token, account: !!account });
-
-    const vfApi = axios.create({
-      baseURL: `https://${account}.vosfactures.fr`,
-      headers: { Accept: 'application/json' },
-      params: { api_token: token }
-    });
-
-    const [clients, products] = await Promise.all([
-      vfApi.get('/clients.json', { params: { page: 1, per_page: 100 } }).then(r => r.data).catch(e => ({ error: e.message })),
-      vfApi.get('/products.json', { params: { page: 1, per_page: 100 } }).then(r => r.data).catch(e => ({ error: e.message })),
-    ]);
-
-    res.json({
-      clients_type: typeof clients,
-      clients_is_array: Array.isArray(clients),
-      clients_count: Array.isArray(clients) ? clients.length : 'N/A',
-      clients_sample: Array.isArray(clients) ? clients.slice(0,2) : clients,
-      products_type: typeof products,
-      products_is_array: Array.isArray(products),
-      products_count: Array.isArray(products) ? products.length : 'N/A',
-      products_sample: Array.isArray(products) ? products.slice(0,2) : products,
-    });
-  } catch(e) {
-    res.status(500).json({ error: e.message, stack: e.stack });
-  }
-});
-
-// DIAGNOSTIC TEMPORAIRE — à supprimer après vérification
-router.get('/debug/env', (req, res) => {
-  res.json({
-    VF_TOKEN_defini: !!process.env.VOSFACTURES_API_TOKEN,
-    VF_TOKEN_longueur: (process.env.VOSFACTURES_API_TOKEN||'').length,
-    VF_ACCOUNT: process.env.VOSFACTURES_ACCOUNT || 'NON DEFINI',
-    DATABASE_URL_defini: !!process.env.DATABASE_URL,
-    NODE_ENV: process.env.NODE_ENV
-  });
-});
 
 module.exports = router;

@@ -300,17 +300,17 @@ async function renderCatalogue(t,c,a){
     <input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderCatalogue(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <button class="btn" onclick="API.exportExcel('catalogue');toast('Téléchargement…','ti-download')"><i class="ti ti-file-spreadsheet"></i>Excel</button>
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>Ajouter pièce</button>`;
-  const list=await API.catalogue(STATE.q);
+  const [list, params]=await Promise.all([API.catalogue(STATE.q), API.parametres()]);
   CACHE.catalogue=list;
+  const stockGlobal=params.stock_gestion_active!=='0';
   c.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>Référence</th><th>Désignation</th><th>Fournisseur</th><th>Réf fournisseur</th><th>Prix HT</th><th>Stock</th><th>Seuil</th></tr></thead>
+    <thead><tr><th>Référence</th><th>Désignation</th><th>Fournisseur</th><th>Réf fournisseur</th><th>Prix HT</th>${stockGlobal?'<th>Stock</th><th>Seuil</th>':''}</tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
       <td style="color:var(--text3)">${esc(p.fournisseur||'')}</td>
       <td class="mono">${esc(p.ref_fournisseur||'')}</td>
       <td style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>
-      <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
-      <td style="font-size:11px;color:var(--text3)">${p.stock_alerte}</td>
+      ${stockGlobal?`<td>${p.stock_actif===false||p.stock_actif===0?'<span style="font-size:11px;color:var(--text3)">—</span>':`<span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span>`}</td><td style="font-size:11px;color:var(--text3)">${p.stock_actif===false||p.stock_actif===0?'—':p.stock_alerte}</td>`:''}
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -377,22 +377,52 @@ async function renderParametres(t,c,a){
   const p=await API.parametres(); CACHE.params=p;
   c.innerHTML=`
     <div class="param-section">
-      <h3><i class="ti ti-bell"></i>Alertes automatiques</h3>
+      <h3><i class="ti ti-bell"></i>Alertes & relances automatiques</h3>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">Relance après (jours sans mise à jour)</label><input class="form-input" id="p-relance" type="number" min="1" value="${p.relance_jours||7}"></div>
         <div class="form-group"><label class="form-label">Seuil stock alerte par défaut</label><input class="form-input" id="p-stock-alerte" type="number" min="0" value="${p.stock_alerte_defaut||2}"></div>
       </div>
+      <div class="form-group"><label class="form-label">Gestion des stocks</label>
+        <select class="form-input" id="p-stock-gestion"><option value="1" ${p.stock_gestion_active!=='0'?'selected':''}>Activée — suivi des quantités</option><option value="0" ${p.stock_gestion_active==='0'?'selected':''}>Désactivée — pas de suivi de stock</option></select>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">Désactiver masque toutes les colonnes de stock dans le catalogue et supprime les alertes de rupture.</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm" onclick="desactiverStockVF()"><i class="ti ti-packages"></i>Désactiver stock pour toutes les pièces VosFactures</button>
+        <button class="btn sm success" onclick="activerStockTout()"><i class="ti ti-packages"></i>Réactiver stock pour toutes les pièces</button>
+      </div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-building"></i>Société</h3>
-      <div class="form-group"><label class="form-label">Nom affiché dans les PDFs</label><input class="form-input" id="p-societe" value="${esc(p.nom_societe||'Éloflex France')}"></div>
+      <h3><i class="ti ti-refresh"></i>VosFactures</h3>
+      <div id="vf-status-detail" style="font-size:12px;color:var(--text2);margin-bottom:10px">Vérification…</div>
+      <div class="grid-2" style="margin-bottom:10px">
+        <div class="form-group" style="margin-bottom:0"><label class="form-label">Sync automatique quotidienne (6h)</label>
+          <select class="form-input" id="p-vf-auto"><option value="1" ${p.sync_vf_auto!=='0'?'selected':''}>Activée</option><option value="0" ${p.sync_vf_auto==='0'?'selected':''}>Désactivée</option></select>
+        </div>
+      </div>
+      <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>Synchroniser maintenant</button>
+    </div>
+    <div class="param-section">
+      <h3><i class="ti ti-photo"></i>Stockage photos (Cloudinary)</h3>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Sans Cloudinary, les photos sont stockées sur le serveur et perdues à chaque redéploiement. Configurez Cloudinary dans les variables d'environnement Render : <code>CLOUDINARY_CLOUD_NAME</code>, <code>CLOUDINARY_API_KEY</code>, <code>CLOUDINARY_API_SECRET</code>.</div>
+      <div id="cloudinary-status" style="font-size:12px;font-weight:600">Vérification…</div>
+    </div>
+    <div class="param-section">
+      <h3><i class="ti ti-activity"></i>Anti-veille (Render plan gratuit)</h3>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Sur le plan gratuit Render, l'application se met en veille après 15 min d'inactivité. Ajoutez la variable <code>APP_URL</code> dans Render Environment pour activer le ping automatique toutes les 10 minutes.</div>
+      <div class="form-group"><label class="form-label">URL de l'application</label>
+        <input class="form-input" id="p-appurl" placeholder="https://sav-eloflex.onrender.com" value="${esc(p.app_url||'')}">
+      </div>
+      <div style="font-size:11px;color:var(--text3)">Note : ajoutez aussi APP_URL dans les variables d'environnement Render pour que le ping fonctionne au démarrage.</div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-globe"></i>Portail client</h3>
       <div class="form-group"><label class="form-label">Portail activé</label>
         <select class="form-input" id="p-portail"><option value="1" ${p.portail_actif==='1'?'selected':''}>Activé</option><option value="0" ${p.portail_actif!=='1'?'selected':''}>Désactivé</option></select>
       </div>
-      <div style="font-size:12px;color:var(--text2)">Chaque client a un lien unique pour suivre ses interventions en lecture seule.</div>
+    </div>
+    <div class="param-section">
+      <h3><i class="ti ti-building"></i>Société</h3>
+      <div class="form-group"><label class="form-label">Nom affiché dans les PDFs</label><input class="form-input" id="p-societe" value="${esc(p.nom_societe||'Éloflex France')}"></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-moon"></i>Apparence</h3>
@@ -402,16 +432,12 @@ async function renderParametres(t,c,a){
           <option value="1" ${p.mode_sombre==='1'?'selected':''}>Sombre</option>
         </select>
       </div>
-    </div>
-    <div class="param-section">
-      <h3><i class="ti ti-refresh"></i>VosFactures</h3>
-      <div id="vf-status-detail" style="font-size:12px;color:var(--text2);margin-bottom:10px">Vérification…</div>
-      <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>Synchroniser</button>
     </div>`;
-  API.vfStatus().then(s=>{const el=$('vf-status-detail');if(!el)return;el.innerHTML=s.configured?`<span style="color:var(--success)">✓ Compte : ${esc(s.account||'')}${s.last_sync?' — Dernière sync : '+s.last_sync.created_at?.slice(0,16).replace('T',' '):''}</span>`:`<span style="color:var(--danger)">⚠ Non configuré — renseigner VOSFACTURES_API_TOKEN dans .env</span>`;}).catch(()=>{});
+  API.vfStatus().then(s=>{const el=$('vf-status-detail');if(!el)return;el.innerHTML=s.configured?`<span style="color:var(--success)">✓ Compte : ${esc(s.account||'')}${s.last_sync?' — Dernière sync : '+s.last_sync.created_at?.slice(0,16).replace('T',' '):''}</span>`:`<span style="color:var(--danger)">⚠ Non configuré — renseigner VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT dans Render</span>`;}).catch(()=>{});
+  fetch('/api/parametres/cloudinary-status').then(r=>r.json()).then(s=>{const el=$('cloudinary-status');if(!el)return;el.innerHTML=s.configured?'<span style="color:var(--success)">✓ Cloudinary configuré — photos persistantes</span>':'<span style="color:var(--warning)">⚠ Cloudinary non configuré — photos non persistantes</span>';}).catch(()=>{const el=$('cloudinary-status');if(el)el.innerHTML='<span style="color:var(--text3)">Statut inconnu</span>';});
 }
 async function saveParametres(){
-  const p={relance_jours:gv('p-relance'),stock_alerte_defaut:gv('p-stock-alerte'),nom_societe:gv('p-societe'),portail_actif:gv('p-portail'),mode_sombre:gv('p-dark')};
+  const p={relance_jours:gv('p-relance'),stock_alerte_defaut:gv('p-stock-alerte'),stock_gestion_active:gv('p-stock-gestion'),nom_societe:gv('p-societe'),portail_actif:gv('p-portail'),mode_sombre:gv('p-dark'),sync_vf_auto:gv('p-vf-auto'),app_url:gv('p-appurl')};
   await API.saveParametres(p);
   if(p.mode_sombre==='1')document.body.classList.add('dark');else document.body.classList.remove('dark');
   localStorage.setItem('dark',p.mode_sombre==='1'?'1':'0');
@@ -701,6 +727,7 @@ async function saveIntervention(id){
 // ── MODALES CATALOGUE ─────────────────────────────────────────────
 async function modalPiece(id){
   const p=id?CACHE.catalogue.find(x=>x.id===id)||await API.catalogue().then(l=>l.find(x=>x.id===id)):null;
+  const stockActif = p ? (p.stock_actif!==false && p.stock_actif!==0) : true;
   showModal(`<div class="modal-header"><i class="ti ti-box" style="font-size:18px;color:var(--accent)"></i><h2>${id?'Modifier pièce':'Nouvelle pièce'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="grid-2">
       <div class="form-group"><label class="form-label">Référence *</label><input class="form-input mono" id="f-ref" value="${esc(p?.ref||'')}"></div>
@@ -708,15 +735,31 @@ async function modalPiece(id){
       <div class="form-group" style="grid-column:1/-1"><label class="form-label">Désignation *</label><input class="form-input" id="f-des" value="${esc(p?.designation||'')}"></div>
       <div class="form-group"><label class="form-label">Fournisseur</label><input class="form-input" id="f-fou" value="${esc(p?.fournisseur||'Eloflex AB')}"></div>
       <div class="form-group"><label class="form-label">Prix HT (€)</label><input class="form-input" id="f-px" type="number" step="0.01" value="${p?.pxht||0}"></div>
-      <div class="form-group"><label class="form-label">Stock actuel</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}"></div>
-      <div class="form-group"><label class="form-label">Seuil alerte stock</label><input class="form-input" id="f-stalerte" type="number" value="${p?.stock_alerte||2}"></div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">Gestion du stock</label>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px">
+            <input type="checkbox" id="f-stock-actif" ${stockActif?'checked':''} onchange="document.getElementById('stock-fields').style.display=this.checked?'contents':'none'">
+            <span>Gérer le stock pour cette pièce</span>
+          </label>
+        </div>
+      </div>
+      <div id="stock-fields" style="display:${stockActif?'contents':'none'}">
+        <div class="form-group"><label class="form-label">Stock actuel</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}"></div>
+        <div class="form-group"><label class="form-label">Seuil alerte stock</label><input class="form-input" id="f-stalerte" type="number" value="${p?.stock_alerte||2}"></div>
+      </div>
     </div></div>
     <div class="modal-footer">
       ${id?`<button class="btn danger" onclick="deletePiece(${id})"><i class="ti ti-trash"></i></button>`:''}
       <button class="btn" onclick="closeModal()">Annuler</button>
       <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>Enregistrer</button>
     </div>`);}
-async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(!data.ref||!data.designation){alert('Référence et désignation requises');return;}try{id?await API.updatePiece(id,data):await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+async function savePiece(id){
+  const stockActif=document.getElementById('f-stock-actif')?.checked!==false;
+  const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2,stock_actif:stockActif};
+  if(!data.ref||!data.designation){alert('Référence et désignation requises');return;}
+  try{id?await API.updatePiece(id,data):await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}
+}
 async function deletePiece(id){if(!confirm('Supprimer cette pièce du catalogue ?'))return;await API.deletePiece(id);CACHE.catalogue=[];toast('Supprimé','ti-trash');closeModal();render();}
 
 // ── EXPORTS PDF ───────────────────────────────────────────────────

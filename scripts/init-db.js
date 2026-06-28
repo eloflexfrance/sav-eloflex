@@ -15,7 +15,7 @@ async function initDB() {
         id SERIAL PRIMARY KEY,
         nom TEXT NOT NULL, contact TEXT, email TEXT, tel TEXT, ville TEXT,
         type TEXT DEFAULT 'Distributeur',
-        token_portail TEXT UNIQUE, vf_id INTEGER UNIQUE,
+        token_portail TEXT UNIQUE, vf_id BIGINT UNIQUE,
         created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS fauteuils (
@@ -23,7 +23,7 @@ async function initDB() {
         client_id INTEGER NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
         modele TEXT NOT NULL, serie TEXT NOT NULL UNIQUE, annee INTEGER,
         couleur TEXT, duree_garantie_mois INTEGER DEFAULT 24,
-        date_achat TEXT, num_facture TEXT, vf_facture_id INTEGER, notes TEXT,
+        date_achat TEXT, num_facture TEXT, vf_facture_id BIGINT, notes TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS interventions (
@@ -45,7 +45,7 @@ async function initDB() {
         intervention_id INTEGER NOT NULL REFERENCES interventions(id) ON DELETE CASCADE,
         ref TEXT, designation TEXT NOT NULL,
         qte INTEGER NOT NULL DEFAULT 1, pxht NUMERIC NOT NULL DEFAULT 0,
-        vf_product_id INTEGER
+        vf_product_id BIGINT
       );
       CREATE TABLE IF NOT EXISTS intervention_photos (
         id SERIAL PRIMARY KEY,
@@ -72,8 +72,8 @@ async function initDB() {
         ref TEXT NOT NULL UNIQUE, designation TEXT NOT NULL,
         fournisseur TEXT, ref_fournisseur TEXT,
         pxht NUMERIC NOT NULL DEFAULT 0,
-        stock INTEGER DEFAULT 0, stock_alerte INTEGER DEFAULT 2,
-        vf_product_id INTEGER UNIQUE,
+        stock INTEGER DEFAULT 0, stock_alerte INTEGER DEFAULT 2, stock_actif BOOLEAN DEFAULT TRUE,
+        vf_product_id BIGINT UNIQUE,
         created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS sync_log (
@@ -90,12 +90,23 @@ async function initDB() {
         cle TEXT PRIMARY KEY, valeur TEXT
       );
     `);
-    console.log('✅ Tables créées');
+    // Migration BIGINT (idempotente)
+    try {
+      await client.query(`ALTER TABLE catalogue ALTER COLUMN vf_product_id TYPE BIGINT`);
+      await client.query(`ALTER TABLE clients ALTER COLUMN vf_id TYPE BIGINT`);
+      await client.query(`ALTER TABLE fauteuils ALTER COLUMN vf_facture_id TYPE BIGINT`);
+      await client.query(`ALTER TABLE intervention_produits ALTER COLUMN vf_product_id TYPE BIGINT`);
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_actif BOOLEAN DEFAULT TRUE`);
+    } catch(e) { /* déjà en BIGINT */ }
+    console.log("✅ Tables créées");
 
     // Paramètres par défaut
     for (const [cle, valeur] of [
       ['relance_jours','7'], ['stock_alerte_defaut','2'],
-      ['mode_sombre','0'], ['nom_societe','Éloflex France'], ['portail_actif','1']
+      ['mode_sombre','0'], ['nom_societe','Éloflex France'], ['portail_actif','1'],
+      ['sync_vf_auto','1'],
+      ['app_url',''],
+      ['stock_gestion_active','1']
     ]) {
       await client.query(
         'INSERT INTO parametres (cle,valeur) VALUES ($1,$2) ON CONFLICT (cle) DO NOTHING',

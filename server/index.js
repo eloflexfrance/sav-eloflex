@@ -56,6 +56,15 @@ async function start() {
     // On continue — les tables existent peut-être déjà
   }
 
+  // Récupérer APP_URL depuis la DB si pas dans les variables d'env
+  if (!process.env.APP_URL) {
+    try {
+      const { get } = require('./db');
+      const r = await get("SELECT valeur FROM parametres WHERE cle='app_url'");
+      if (r && r.valeur) { process.env.APP_URL = r.valeur; console.log('🔗 APP_URL :', r.valeur); }
+    } catch(e) {}
+  }
+
   // Tâches cron
   try {
     const { startCron } = require('./cron');
