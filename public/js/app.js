@@ -690,7 +690,55 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
           <div id="client-drop" class="piece-dropdown" style="display:none"></div>
         </div>
       </div>
-      <div class="form-group"><label class="form-label">Fauteuil *</label><select class="form-input" id="f-fauteuil">${fauteuils.map(f=>`<option value="${f.id}" ${(f.id===fauteuilId||f.id===d.fauteuil_id)?'selected':''}>${esc(f.modele)} – ${esc(f.serie)}</option>`).join('')}</select></div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Fauteuil *</span>
+          <button type="button" class="btn sm" style="font-size:10px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>Créer un fauteuil</button>
+        </label>
+        <select class="form-input" id="f-fauteuil">
+          ${fauteuils.length ? fauteuils.map(f=>`<option value="${f.id}" ${(f.id===fauteuilId||f.id===d.fauteuil_id)?'selected':''}>${esc(f.modele)} – ${esc(f.serie)}</option>`).join('') : '<option value="">— Aucun fauteuil (créez-en un ci-dessous) —</option>'}
+        </select>
+        <div id="new-fauteuil-inline" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-top:8px;border:1px dashed var(--border-s)">
+          <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Nouveau fauteuil</div>
+          <div class="grid-2" style="gap:6px">
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Modèle *</label>
+              <select class="form-input" id="nf-modele">${['Eloflex S','Eloflex M','Eloflex L','Eloflex M+','Eloflex XL','Eloflex F','Eloflex D2','Eloflex X','Eloflex P','Eloflex H','Eloflex C','Eloflex C3','Eloflex K','Eloflex R','Eloflex S1'].map(m=>`<option>${m}</option>`).join('')}</select>
+            </div>
+            <div class="form-group" style="margin-bottom:4px">
+              <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
+                <span>N° de série *</span>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:400;font-size:11px;cursor:pointer">
+                  <input type="checkbox" id="nf-serie-absent" onchange="toggleSerieAbsent(this.checked)">
+                  Numéro absent
+                </label>
+              </label>
+              <input class="form-input mono" id="nf-serie" placeholder="ex: EL-2024-0123">
+              <div id="nf-serie-absent-msg" style="display:none;font-size:11px;color:var(--warning);margin-top:3px">
+                <i class="ti ti-alert-triangle" style="font-size:11px"></i> Un numéro temporaire sera généré automatiquement
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Année</label>
+              <input class="form-input" id="nf-annee" type="number" value="${new Date().getFullYear()}">
+            </div>
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Couleur</label>
+              <input class="form-input" id="nf-couleur" placeholder="ex: Anthracite">
+            </div>
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Date d'achat</label>
+              <input class="form-input" id="nf-dateachat" type="date">
+            </div>
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Durée garantie (mois)</label>
+              <input class="form-input" id="nf-garduree" type="number" value="24">
+            </div>
+            <div class="form-group" style="margin-bottom:4px;grid-column:1/-1"><label class="form-label">N° facture VosFactures</label>
+              <input class="form-input mono" id="nf-facture" placeholder="ex: VF-2024-0089">
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button type="button" class="btn sm primary" onclick="createFauteuilInline()"><i class="ti ti-check"></i>Créer et sélectionner</button>
+            <button type="button" class="btn sm" onclick="toggleNewFauteuilInline()">Annuler</button>
+          </div>
+        </div>
+      </div>
       <div class="form-group"><label class="form-label">Date *</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().slice(0,10)}"></div>
       <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map(tp=>`<option ${d.type===tp?'selected':''}>${tp}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Statut</label><select class="form-input" id="f-statut">${['Ouvert','En attente','Fermé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -736,6 +784,70 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
     <button class="btn" onclick="closeModal()">Annuler</button>
     <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?'Mettre à jour':'Enregistrer'}</button>
   </div>`;}
+function toggleNewFauteuilInline(){
+  const el=document.getElementById('new-fauteuil-inline');
+  if(!el) return;
+  const open=el.style.display==='none';
+  el.style.display=open?'block':'none';
+  if(open){
+    // Si un client est sélectionné, focus sur le série
+    setTimeout(()=>{const s=document.getElementById('nf-serie');if(s)s.focus();},50);
+  }
+}
+
+function toggleSerieAbsent(checked){
+  const inp=document.getElementById('nf-serie');
+  const msg=document.getElementById('nf-serie-absent-msg');
+  if(!inp) return;
+  if(checked){
+    inp.disabled=true;
+    inp.value='';
+    inp.placeholder='— généré automatiquement —';
+    inp.style.opacity='0.4';
+    if(msg) msg.style.display='block';
+  } else {
+    inp.disabled=false;
+    inp.value='';
+    inp.placeholder='ex: EL-2024-0123';
+    inp.style.opacity='1';
+    if(msg) msg.style.display='none';
+  }
+}
+
+async function createFauteuilInline(){
+  const clientId=parseInt(gv('f-client'));
+  if(!clientId){alert('Sélectionnez d'abord un client / distributeur.');return;}
+  const serieAbsent=document.getElementById('nf-serie-absent')?.checked;
+  const modele=gv('nf-modele');
+  const serie=serieAbsent
+    ? `INCONNU-${modele.replace(/\s+/g,'-').toUpperCase()}-${Date.now().toString().slice(-6)}`
+    : gv('nf-serie').trim();
+  if(!serie){alert('Le numéro de série est requis (ou cochez "Numéro absent").');return;}
+  const data={
+    client_id:clientId,
+    modele:gv('nf-modele'),
+    serie,
+    annee:parseInt(gv('nf-annee'))||new Date().getFullYear(),
+    couleur:gv('nf-couleur')||null,
+    date_achat:gv('nf-dateachat')||null,
+    duree_garantie_mois:parseInt(gv('nf-garduree'))||24,
+    num_facture:gv('nf-facture')||null,
+  };
+  try{
+    const f=await API.createFauteuil(data);
+    // Recharger les fauteuils du client et sélectionner le nouveau
+    const list=await API.fauteuils(clientId);
+    const sel=document.getElementById('f-fauteuil');
+    if(sel){
+      sel.innerHTML=list.map(ff=>`<option value="${ff.id}" ${ff.id===f.id?'selected':''}>${esc(ff.modele)} – ${esc(ff.serie)}</option>`).join('');
+    }
+    // Masquer le formulaire inline
+    const el=document.getElementById('new-fauteuil-inline');
+    if(el) el.style.display='none';
+    toast(`Fauteuil ${f.modele} (${f.serie}) créé et sélectionné`,'ti-wheelchair');
+  }catch(e){alert('Erreur : '+e.message);}
+}
+
 async function refreshFauteuilSelect(){
   const cid=parseInt(gv('f-client'));
   const list=cid?await API.fauteuils(cid):await API.fauteuils();
