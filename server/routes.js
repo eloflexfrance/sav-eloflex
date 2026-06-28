@@ -606,6 +606,41 @@ router.get('/vosfactures/status', async (req, res) => {
 });
 
 
+
+// DIAGNOSTIC VosFactures — à supprimer après vérification
+router.get('/debug/vf', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const token   = process.env.VOSFACTURES_API_TOKEN;
+    const account = process.env.VOSFACTURES_ACCOUNT;
+    if (!token || !account) return res.json({ error: 'Variables non définies', token: !!token, account: !!account });
+
+    const vfApi = axios.create({
+      baseURL: `https://${account}.vosfactures.fr`,
+      headers: { Accept: 'application/json' },
+      params: { api_token: token }
+    });
+
+    const [clients, products] = await Promise.all([
+      vfApi.get('/clients.json', { params: { page: 1, per_page: 100 } }).then(r => r.data).catch(e => ({ error: e.message })),
+      vfApi.get('/products.json', { params: { page: 1, per_page: 100 } }).then(r => r.data).catch(e => ({ error: e.message })),
+    ]);
+
+    res.json({
+      clients_type: typeof clients,
+      clients_is_array: Array.isArray(clients),
+      clients_count: Array.isArray(clients) ? clients.length : 'N/A',
+      clients_sample: Array.isArray(clients) ? clients.slice(0,2) : clients,
+      products_type: typeof products,
+      products_is_array: Array.isArray(products),
+      products_count: Array.isArray(products) ? products.length : 'N/A',
+      products_sample: Array.isArray(products) ? products.slice(0,2) : products,
+    });
+  } catch(e) {
+    res.status(500).json({ error: e.message, stack: e.stack });
+  }
+});
+
 // DIAGNOSTIC TEMPORAIRE — à supprimer après vérification
 router.get('/debug/env', (req, res) => {
   res.json({
