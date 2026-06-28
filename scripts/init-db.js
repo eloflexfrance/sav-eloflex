@@ -1,14 +1,15 @@
-// scripts/init-db.js — initialisation PostgreSQL
+// scripts/init-db.js
 require('dotenv').config();
-const { Pool } = require('pg');
+const { pool } = require('../server/db');
 
 async function initDB() {
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  });
+  console.log('⏳ Connexion à PostgreSQL...');
+  console.log('   DATABASE_URL définie :', !!process.env.DATABASE_URL);
+
   const client = await pool.connect();
   try {
+    console.log('✅ Connecté à PostgreSQL');
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS clients (
         id SERIAL PRIMARY KEY,
@@ -89,18 +90,23 @@ async function initDB() {
         cle TEXT PRIMARY KEY, valeur TEXT
       );
     `);
+    console.log('✅ Tables créées');
 
     // Paramètres par défaut
-    const defaults = [
+    for (const [cle, valeur] of [
       ['relance_jours','7'], ['stock_alerte_defaut','2'],
       ['mode_sombre','0'], ['nom_societe','Éloflex France'], ['portail_actif','1']
-    ];
-    for (const [cle, valeur] of defaults)
-      await client.query('INSERT INTO parametres (cle,valeur) VALUES ($1,$2) ON CONFLICT (cle) DO NOTHING', [cle, valeur]);
+    ]) {
+      await client.query(
+        'INSERT INTO parametres (cle,valeur) VALUES ($1,$2) ON CONFLICT (cle) DO NOTHING',
+        [cle, valeur]
+      );
+    }
 
-    // Données de démo (seulement si la table clients est vide)
-    const count = await client.query('SELECT COUNT(*) FROM clients');
-    if (parseInt(count.rows[0].count) === 0) {
+    // Données de démo uniquement si vide
+    const { rows } = await client.query('SELECT COUNT(*)::int AS n FROM clients');
+    if (rows[0].n === 0) {
+      console.log('⏳ Insertion des données de démo...');
       const c1 = await client.query(
         "INSERT INTO clients (nom,contact,email,tel,ville,type,token_portail) VALUES ($1,$2,$3,$4,$5,$6,md5(random()::text)) RETURNING id",
         ['Orthopédic Sud','Marie Dupont','marie@orthosud.fr','04 91 23 45 67','Marseille','Distributeur']
@@ -128,20 +134,25 @@ async function initDB() {
         ['JOY-V2-001','Joystick de remplacement V2','Eloflex AB','ELO-JOY-V2',130,4,2],
         ['ROU-FRN-01','Roue avant gauche+droite','Eloflex AB','ELO-ROA-KIT',55,8,3],
       ])
-        await client.query('INSERT INTO catalogue (ref,designation,fournisseur,ref_fournisseur,pxht,stock,stock_alerte) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',[ref,des,fou,reffou,px,stock,alerte]);
+        await client.query(
+          'INSERT INTO catalogue (ref,designation,fournisseur,ref_fournisseur,pxht,stock,stock_alerte) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING',
+          [ref,des,fou,reffou,px,stock,alerte]
+        );
       console.log('✅ Données de démo insérées');
+    } else {
+      console.log('ℹ️  Base déjà peuplée, données de démo ignorées');
     }
+
   } finally {
     client.release();
-    await pool.end();
   }
 }
 
-// Exécution directe (npm run init-db)
+// Exécution directe via npm run init-db
 if (require.main === module) {
   initDB()
-    .then(() => { console.log('✅ Base initialisée'); process.exit(0); })
-    .catch(e => { console.error('❌ Erreur :', e.message); process.exit(1); });
+    .then(() => { console.log('✅ Init terminée'); process.exit(0); })
+    .catch(e => { console.error('❌ Erreur init-db :', e.message); console.error(e.stack); process.exit(1); });
 }
 
 module.exports = { initDB };
