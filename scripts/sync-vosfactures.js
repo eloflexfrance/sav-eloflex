@@ -2,21 +2,20 @@
 require('dotenv').config();
 const axios = require('axios');
 const { pool } = require('../server/db');
-
-const VF_TOKEN   = process.env.VOSFACTURES_API_TOKEN;
-const VF_ACCOUNT = process.env.VOSFACTURES_ACCOUNT;
-
-if (!VF_TOKEN || !VF_ACCOUNT) {
-  console.error('❌ VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT requis dans .env');
-  process.exit(1);
+ 
+// Pas de process.exit ici — les variables sont vérifiées dans chaque fonction
+ 
+function getVfApi() {
+  const token   = process.env.VOSFACTURES_API_TOKEN;
+  const account = process.env.VOSFACTURES_ACCOUNT;
+  if (!token || !account) throw new Error('VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT non configurés');
+  return axios.create({
+    baseURL: `https://${account}.vosfactures.fr`,
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+    params:  { api_token: token }
+  });
 }
-
-const vfApi = axios.create({
-  baseURL: `https://${VF_ACCOUNT}.vosfactures.fr`,
-  headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-  params:  { api_token: VF_TOKEN }
-});
-
+ 
 async function log(type, status, message, records = 0) {
   try {
     const client = await pool.connect();
@@ -25,10 +24,11 @@ async function log(type, status, message, records = 0) {
       [type, status, message, records]
     );
     client.release();
-  } catch(e) { console.error('Erreur log:', e.message); }
+  } catch(e) { console.error('Erreur log sync:', e.message); }
 }
-
+ 
 async function syncClients() {
+  const vfApi = getVfApi();
   const client = await pool.connect();
   try {
     const { data } = await vfApi.get('/clients.json');
@@ -36,8 +36,8 @@ async function syncClients() {
     let count = 0;
     for (const c of clients) {
       await client.query(`
-        INSERT INTO clients (nom, email, tel, vf_id)
-        VALUES ($1,$2,$3,$4)
+        INSERT INTO clients (nom, email, tel, vf_id, token_portail)
+        VALUES ($1,$2,$3,$4,md5(random()::text))
         ON CONFLICT (vf_id) DO UPDATE SET nom=EXCLUDED.nom, email=EXCLUDED.email, tel=EXCLUDED.tel, updated_at=NOW()
       `, [c.name||c.shortcut||'—', c.email||null, c.phone||null, c.id]);
       count++;
@@ -49,8 +49,9 @@ async function syncClients() {
     throw e;
   } finally { client.release(); }
 }
-
+ 
 async function syncProducts() {
+  const vfApi = getVfApi();
   const client = await pool.connect();
   try {
     const { data } = await vfApi.get('/products.json');
@@ -71,16 +72,16 @@ async function syncProducts() {
     throw e;
   } finally { client.release(); }
 }
-
+ 
 async function syncInvoices() {
+  const vfApi = getVfApi();
   const client = await pool.connect();
   try {
     const { data } = await vfApi.get('/invoices.json', { params: { period: 'last_12_months' } });
     const invoices = Array.isArray(data) ? data : [];
     let count = 0;
     for (const inv of invoices) {
-      // Mettre à jour le num_facture sur le fauteuil si le numéro de série correspond
-      if (inv.buyer_name) {
+      if (inv.client_id) {
         await client.query(`
           UPDATE fauteuils SET num_facture=$1, vf_facture_id=$2, updated_at=NOW()
           WHERE num_facture IS NULL AND vf_facture_id IS NULL
@@ -96,5 +97,5 @@ async function syncInvoices() {
     throw e;
   } finally { client.release(); }
 }
-
+ 
 module.exports = { syncClients, syncProducts, syncInvoices };
