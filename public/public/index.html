@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAV Éloflex</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.5.0/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-logo"><i class="ti ti-wheelchair"></i>SAV Éloflex</div>
+      <nav class="nav-section">
+        <div class="nav-label">Principal</div>
+        <div class="nav-item" data-view="dashboard"><i class="ti ti-dashboard"></i>Tableau de bord</div>
+        <div class="nav-item" data-view="clients"><i class="ti ti-users"></i>Clients / Distributeurs</div>
+        <div class="nav-item" data-view="interventions"><i class="ti ti-tool"></i>Interventions</div>
+        <div class="nav-item" data-view="expeditions"><i class="ti ti-truck-delivery"></i>Expéditions <span id="badge-exp" class="nav-badge" style="display:none"></span></div>
+        <div class="nav-label">Ressources</div>
+        <div class="nav-item" data-view="catalogue"><i class="ti ti-box"></i>Catalogue pièces <span id="badge-stock" class="nav-badge danger" style="display:none"></span></div>
+        <div class="nav-label">Rapports</div>
+        <div class="nav-item" data-view="rapports"><i class="ti ti-chart-bar"></i>Rapports & exports</div>
+        <div class="nav-label">Système</div>
+        <div class="nav-item" data-view="parametres"><i class="ti ti-settings"></i>Paramètres</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="vf-status" class="vf-status"></div>
+        <button class="btn sm full" id="btn-sync" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>Sync VosFactures</button>
+        <button class="btn sm full dark-toggle" onclick="toggleDark()" style="margin-top:5px"><i class="ti ti-moon"></i>Mode sombre</button>
+      </div>
+    </div>
+    <div class="main">
+      <div class="topbar">
+        <div class="topbar-title" id="topbar-title">Tableau de bord</div>
+        <div id="topbar-actions" style="display:flex;gap:6px;align-items:center"></div>
+        <button class="btn sm" id="btn-alertes" onclick="setView('alertes')" style="position:relative;margin-left:6px">
+          <i class="ti ti-bell"></i><span id="badge-alertes" class="notif-dot" style="display:none"></span>
+        </button>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+  <div id="modal-area"></div>
+  <div id="toast-area"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/pdf.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
