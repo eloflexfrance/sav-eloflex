@@ -1,49 +1,25 @@
-// public/js/api.js v2
-const API = {
-  base: '/api',
-  async get(p){const r=await fetch(this.base+p);if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  async post(p,b){const r=await fetch(this.base+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  async put(p,b){const r=await fetch(this.base+p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  async patch(p,b){const r=await fetch(this.base+p,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  async del(p){const r=await fetch(this.base+p,{method:'DELETE'});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  stats:()=>API.get('/stats'),
-  clients:(q)=>API.get('/clients'+(q?`?q=${encodeURIComponent(q)}`:'')),
-  client:(id)=>API.get(`/clients/${id}`),
-  createClient:(d)=>API.post('/clients',d),
-  updateClient:(id,d)=>API.put(`/clients/${id}`,d),
-  deleteClient:(id)=>API.del(`/clients/${id}`),
-  regenererToken:(id)=>API.post(`/clients/${id}/regenerer-token`,{}),
-  fauteuils:(cid)=>API.get('/fauteuils'+(cid?`?client_id=${cid}`:'')),
-  fauteuil:(id)=>API.get(`/fauteuils/${id}`),
-  createFauteuil:(d)=>API.post('/fauteuils',d),
-  updateFauteuil:(id,d)=>API.put(`/fauteuils/${id}`,d),
-  deleteFauteuil:(id)=>API.del(`/fauteuils/${id}`),
-  interventions:(p)=>API.get('/interventions'+(p?'?'+new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([,v])=>v!=null&&v!==''))).toString():'')),
-  intervention:(id)=>API.get(`/interventions/${id}`),
-  createIntervention:(d)=>API.post('/interventions',d),
-  updateIntervention:(id,d)=>API.put(`/interventions/${id}`,d),
-  deleteIntervention:(id)=>API.del(`/interventions/${id}`),
-  commentaires:(id)=>API.get(`/interventions/${id}/commentaires`),
-  addCommentaire:(id,d)=>API.post(`/interventions/${id}/commentaires`,d),
-  deleteCommentaire:(id,cid)=>API.del(`/interventions/${id}/commentaires/${cid}`),
-  historique:(id)=>API.get(`/interventions/${id}/historique`),
-  photos:(id)=>API.get(`/interventions/${id}/photos`),
-  uploadPhotos:async(id,files,legende)=>{const fd=new FormData();for(const f of files)fd.append('photos',f);if(legende)fd.append('legende',legende);const r=await fetch(`/api/interventions/${id}/photos`,{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  updatePhotoLegende:(id,pid,legende)=>API.patch(`/interventions/${id}/photos/${pid}`,{legende}),
-  deletePhoto:(id,pid)=>API.del(`/interventions/${id}/photos/${pid}`),
-  expeditions:()=>API.get('/expeditions'),
-  catalogue:(q,alerte)=>API.get('/catalogue'+(q?`?q=${encodeURIComponent(q)}`:'')+(alerte?`${q?'&':'?'}alerte=1`:'')),
-  createPiece:(d)=>API.post('/catalogue',d),
-  updatePiece:(id,d)=>API.put(`/catalogue/${id}`,d),
-  deletePiece:(id)=>API.del(`/catalogue/${id}`),
-  alertes:()=>API.get('/alertes'),
-  marquerAlerteLue:(id)=>API.patch(`/alertes/${id}/lue`,{}),
-  marquerToutesLues:()=>API.patch('/alertes/lire-toutes',{}),
-  exportExcel:(type,params={})=>{const p=new URLSearchParams({type,...Object.fromEntries(Object.entries(params).filter(([,v])=>v))}).toString();window.open(`/api/export/excel?${p}`);},
-  parametres:()=>API.get('/parametres'),
-  saveParametres:(d)=>API.put('/parametres',d),
-  portail:(token)=>API.get(`/portail/${token}`),
-  vfStatus:()=>API.get('/vosfactures/status'),
-  vfSync:()=>API.post('/vosfactures/sync',{}),
-  vfLogs:()=>API.get('/vosfactures/logs'),
-};
+// public/js/app.js v2 — complet
+ 
+let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
+let CACHE = { catalogue:[], params:{} };
+let TMP_PRODUITS = [];
+ 
+const fd  = d => { if(!d)return'—'; const[y,m,day]=d.split('-'); return`${day}/${m}/${y}`; };
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const sc  = s => s==='Ouvert'?'ouvert':s==='Fermé'?'ferme':s==='En attente'?'attente':'ouvert';
+const $   = id => document.getElementById(id);
+const gv  = id => ($( id)||{}).value||'';
+ 
+function toast(msg,icon='ti-check',color=''){
+  $('toast-area').innerHTML=`<div class="toast" style="${color?'background:'+color:''}">${icon?`<i class="ti ${icon}"></i>`:''} ${esc(msg)}</div>`;
+  setTimeout(()=>{$('toast-area').innerHTML='';},3000);
+}
+function showModal(html){$('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`;}
+function closeModal(){$('modal-area').innerHTML='';}
+ 
+// Dark mode
+function toggleDark(){
+  document.body.classList.toggle('dark');
+  localStorage.setItem('dark', document.body.classList.contains('dark')?'1':'0');
+  API.saveParametres({mode_sombre: document.body.classList.contains('dark')?'1':'0'}).catch(()=>{});
+}
