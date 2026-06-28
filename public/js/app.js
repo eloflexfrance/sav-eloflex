@@ -6,7 +6,7 @@ let TMP_PRODUITS = [];
 
 const fd  = d => { if(!d)return'—'; const[y,m,day]=d.split('-'); return`${day}/${m}/${y}`; };
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const sc  = s => s==='Ouvert'?'ouvert':s==='Fermé'?'ferme':s==='En attente'?'attente':'ouvert';
+const sc  = s => s==='Ouvert'?'ouvert':s==='Fermé'?'ferme':s===t('db_attente')?'attente':'ouvert';
 const $   = id => document.getElementById(id);
 const gv  = id => ($( id)||{}).value||'';
 
@@ -16,6 +16,14 @@ function toast(msg,icon='ti-check',color=''){
 }
 function showModal(html){$('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`;}
 function closeModal(){$('modal-area').innerHTML='';}
+
+// Appliquer les traductions de la nav au chargement
+function applyNavTranslations(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key=el.dataset.i18n;
+    el.textContent=t(key);
+  });
+}
 
 // Dark mode
 function toggleDark(){
@@ -36,7 +44,7 @@ document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=
 async function render(){
   const t=$('topbar-title'), c=$('content'), a=$('topbar-actions');
   a.innerHTML='';
-  c.innerHTML='<div class="empty" style="padding-top:60px"><i class="ti ti-loader-2" style="font-size:28px;display:block;margin-bottom:8px"></i>Chargement…</div>';
+  c.innerHTML=`<div class="empty" style="padding-top:60px"><i class="ti ti-loader-2" style="font-size:28px;display:block;margin-bottom:8px"></i>${t("msg_chargement")}</div>`;
   try{
     if(STATE.view==='dashboard')          await renderDashboard(t,c,a);
     else if(STATE.view==='clients')       await renderClients(t,c,a);
@@ -63,7 +71,7 @@ async function refreshBadges(){
 
 // ── DASHBOARD ─────────────────────────────────────────────────────
 async function renderDashboard(t,c,a){
-  t.textContent='Tableau de bord';
+  t.textContent=t('nav_dashboard');
   const{stats:s,recentes,par_mois,pieces_top,par_technicien}=await API.stats();
   const maxMois=Math.max(...par_mois.map(m=>m.total),1);
   c.innerHTML=`
@@ -108,7 +116,7 @@ async function renderDashboard(t,c,a){
           <td>${fd(i.date)}</td><td>${esc(i.client_nom)}</td>
           <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
           <td>${esc(i.type)}</td>
-          <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'HG'}</span></td>
+          <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('badge_hg')}</span></td>
           <td><span class="badge ${sc(i.statut)}">${esc(i.statut)}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>
@@ -117,7 +125,7 @@ async function renderDashboard(t,c,a){
 
 // ── CLIENTS ───────────────────────────────────────────────────────
 async function renderClients(t,c,a){
-  t.textContent='Clients / Distributeurs';
+  t.textContent=t('nav_clients');
   a.innerHTML=`<input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderClients(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>Nouveau client</button>`;
   const list=await API.clients(STATE.q);
@@ -230,7 +238,7 @@ async function renderFauteuil(t,c,a){
         <div style="padding:10px;border-bottom:0.5px solid var(--border);cursor:pointer" onclick="viewIntervention(${i.id})" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
             <span style="font-weight:700;font-size:13px">${esc(i.type)}</span>
-            <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'HG'}</span>
+            <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('badge_hg')}</span>
             <span class="badge ${sc(i.statut)}">${esc(i.statut)}</span>
             <span style="margin-left:auto;font-size:11px;color:var(--text3)">${fd(i.date)}</span>
           </div>
@@ -247,7 +255,7 @@ async function renderFauteuil(t,c,a){
 
 // ── INTERVENTIONS ─────────────────────────────────────────────────
 async function renderInterventions(t,c,a){
-  t.textContent='Interventions';
+  t.textContent=t('db_interventions');
   a.innerHTML=`
     <input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <select class="search-bar" id="filter-statut" style="width:130px" onchange="renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
@@ -263,7 +271,7 @@ async function renderInterventions(t,c,a){
       <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
       <td>${esc(i.type)}</td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.description||'')}</td>
-      <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'HG'}</span></td>
+      <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('badge_hg')}</span></td>
       <td><span class="badge ${sc(i.statut)}">${esc(i.statut)}</span></td>
       <td>${esc(i.technicien||'')}</td>
       <td style="color:var(--text3);font-size:11px">${i.nb_photos||''}</td>
@@ -273,8 +281,8 @@ async function renderInterventions(t,c,a){
 
 // ── EXPÉDITIONS ───────────────────────────────────────────────────
 async function renderExpeditions(t,c,a){
-  t.textContent='Expéditions en cours';
-  a.innerHTML=`<button class="btn success" onclick="API.exportExcel('expeditions');toast('Téléchargement…','ti-download')"><i class="ti ti-file-spreadsheet"></i>Exporter Excel</button>`;
+  t.textContent=t('db_expeditions');
+  a.innerHTML=`<button class="btn success" onclick="API.exportExcel('expeditions');toast(t('msg_telechargement'),'ti-download')"><i class="ti ti-file-spreadsheet"></i>Exporter Excel</button>`;
   const list=await API.expeditions();
   c.innerHTML=`
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Interventions avec envoi enregistré mais sans retour, statut non fermé.</div>
@@ -295,10 +303,10 @@ async function renderExpeditions(t,c,a){
 
 // ── CATALOGUE ─────────────────────────────────────────────────────
 async function renderCatalogue(t,c,a){
-  t.textContent='Catalogue pièces';
+  t.textContent=t('cat_title');
   a.innerHTML=`
     <input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderCatalogue(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
-    <button class="btn" onclick="API.exportExcel('catalogue');toast('Téléchargement…','ti-download')"><i class="ti ti-file-spreadsheet"></i>Excel</button>
+    <button class="btn" onclick="API.exportExcel('catalogue');toast(t('msg_telechargement'),'ti-download')"><i class="ti ti-file-spreadsheet"></i>Excel</button>
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>Ajouter pièce</button>`;
   const [list, params]=await Promise.all([API.catalogue(STATE.q), API.parametres()]);
   CACHE.catalogue=list;
@@ -317,7 +325,7 @@ async function renderCatalogue(t,c,a){
 
 // ── RAPPORTS ──────────────────────────────────────────────────────
 async function renderRapports(t,c,a){
-  t.textContent='Rapports & exports';
+  t.textContent=t('rap_title');
   c.innerHTML=`
     <div class="grid-2" style="gap:14px">
       <div class="card">
@@ -348,12 +356,12 @@ async function renderRapports(t,c,a){
       </div>
     </div>`;
 }
-function exportExcel(type){ API.exportExcel(type,{date_from:gv('exp-from')||undefined,date_to:gv('exp-to')||undefined}); toast('Téléchargement en cours…','ti-download'); }
-function exportExcelFiltre(){ const s=gv('r-statut'),g=gv('r-garantie'); API.exportExcel('interventions',{statut:s||undefined,garantie:g!==''?g:undefined}); toast('Téléchargement…','ti-download'); }
+function exportExcel(type){ API.exportExcel(type,{date_from:gv('exp-from')||undefined,date_to:gv('exp-to')||undefined}); toast(t('msg_telechargement'),'ti-download'); }
+function exportExcelFiltre(){ const s=gv('r-statut'),g=gv('r-garantie'); API.exportExcel('interventions',{statut:s||undefined,garantie:g!==''?g:undefined}); toast(t('msg_telechargement'),'ti-download'); }
 
 // ── ALERTES ───────────────────────────────────────────────────────
 async function renderAlertes(t,c,a){
-  t.textContent='Alertes';
+  t.textContent=t('alertes_title');
   a.innerHTML=`<button class="btn" onclick="API.marquerToutesLues().then(()=>{refreshBadges();render();})"><i class="ti ti-checks"></i>Tout marquer comme lu</button>`;
   const list=await API.alertes();
   const icons={relance:'ti-clock',retour_manquant:'ti-truck-return',garantie_expire:'ti-shield-x',stock_faible:'ti-alert-triangle',stock_zero:'ti-circle-x',intervention_fermee:'ti-circle-check'};
@@ -371,8 +379,19 @@ async function renderAlertes(t,c,a){
 }
 
 // ── PARAMÈTRES ────────────────────────────────────────────────────
+function switchLang(lang){
+  setLang(lang);
+  applyNavTranslations();
+  render(); // Recharger la vue courante avec la nouvelle langue
+  // Mettre à jour les boutons visuellement
+  const fr=document.getElementById('btn-lang-fr');
+  const en=document.getElementById('btn-lang-en');
+  if(fr) fr.className='btn'+(lang==='fr'?' primary':'');
+  if(en) en.className='btn'+(lang==='en'?' primary':'');
+}
+
 async function renderParametres(t,c,a){
-  t.textContent='Paramètres';
+  t.textContent=t('param_title');
   a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>Enregistrer</button>`;
   const p=await API.parametres(); CACHE.params=p;
   c.innerHTML=`
@@ -425,12 +444,18 @@ async function renderParametres(t,c,a){
       <div class="form-group"><label class="form-label">Nom affiché dans les PDFs</label><input class="form-input" id="p-societe" value="${esc(p.nom_societe||'Éloflex France')}"></div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-moon"></i>Apparence</h3>
-      <div class="form-group"><label class="form-label">Mode sombre</label>
+      <h3><i class="ti ti-moon"></i>${t('param_apparence')}</h3>
+      <div class="form-group"><label class="form-label">${t('param_dark')}</label>
         <select class="form-input" id="p-dark" onchange="if(this.value==='1')document.body.classList.add('dark');else document.body.classList.remove('dark')">
-          <option value="0" ${p.mode_sombre!=='1'?'selected':''}>Clair</option>
-          <option value="1" ${p.mode_sombre==='1'?'selected':''}>Sombre</option>
+          <option value="0" ${p.mode_sombre!=='1'?'selected':''}>${t('param_dark_clair')}</option>
+          <option value="1" ${p.mode_sombre==='1'?'selected':''}>${t('param_dark_sombre')}</option>
         </select>
+      </div>
+      <div class="form-group"><label class="form-label">${t('param_langue')}</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn ${LANG==='fr'?'primary':''}" id="btn-lang-fr" onclick="switchLang('fr')" style="min-width:80px">🇫🇷 Français</button>
+          <button class="btn ${LANG==='en'?'primary':''}" id="btn-lang-en" onclick="switchLang('en')" style="min-width:80px">🇬🇧 English</button>
+        </div>
       </div>
     </div>`;
   API.vfStatus().then(s=>{const el=$('vf-status-detail');if(!el)return;el.innerHTML=s.configured?`<span style="color:var(--success)">✓ Compte : ${esc(s.account||'')}${s.last_sync?' — Dernière sync : '+s.last_sync.created_at?.slice(0,16).replace('T',' '):''}</span>`:`<span style="color:var(--danger)">⚠ Non configuré — renseigner VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT dans Render</span>`;}).catch(()=>{});
@@ -441,7 +466,7 @@ async function saveParametres(){
   await API.saveParametres(p);
   if(p.mode_sombre==='1')document.body.classList.add('dark');else document.body.classList.remove('dark');
   localStorage.setItem('dark',p.mode_sombre==='1'?'1':'0');
-  toast('Paramètres enregistrés');
+  toast(t('param_saved'));
 }
 
 // ── DÉTAIL INTERVENTION ───────────────────────────────────────────
@@ -458,7 +483,7 @@ async function viewIntervention(id){
     </div>
     <div class="modal-body">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-        <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Sous garantie':'Hors garantie'}</span>
+        <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('db_garantie'):t('db_hors_garantie')}</span>
         ${i.garantie_auto?'<span style="font-size:10px;color:var(--text3);align-self:center">détecté auto</span>':''}
         <span class="badge ${sc(i.statut)}">${esc(i.statut)}</span>
         <span style="font-size:11px;color:var(--text3);margin-left:auto;align-self:center">${fd(i.date)}</span>
@@ -505,7 +530,7 @@ async function viewIntervention(id){
       <div class="section-title"><i class="ti ti-message"></i>Commentaires (${(i.commentaires||[]).length})</div>
       <div id="commentaires-list">${renderCommentaires(i.commentaires||[],i.id)}</div>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <input class="form-input" id="new-comment" placeholder="Ajouter un commentaire…" style="flex:1" onkeydown="if(event.key==='Enter')addComment(${i.id})">
+        <input class="form-input" id="new-comment" placeholder=""+t('comment_placeholder')+"" style="flex:1" onkeydown="if(event.key==='Enter')addComment(${i.id})">
         <button class="btn primary" onclick="addComment(${i.id})"><i class="ti ti-send"></i>Envoyer</button>
       </div>
       <div class="divider"></div>
@@ -516,7 +541,7 @@ async function viewIntervention(id){
       <div id="historique-list" style="display:none">${renderHistorique(i.historique||[])}</div>
     </div>
     <div class="modal-footer">
-      <button class="btn danger" onclick="if(confirm('Supprimer cette intervention ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast('Supprimé','ti-trash');})"><i class="ti ti-trash"></i></button>
+      <button class="btn danger" onclick="if(confirm(t('confirm_suppr_inter')))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>
       <button class="btn" onclick="closeModal()">Fermer</button>
     </div>`);
 }
@@ -530,11 +555,11 @@ function renderCommentaires(comms,interId){
 }
 async function addComment(interId){
   const texte=gv('new-comment').trim(); if(!texte)return;
-  await API.addCommentaire(interId,{auteur:'Équipe SAV',texte});
+  await API.addCommentaire(interId,{auteur:t('comment_auteur'),texte});
   const comms=await API.commentaires(interId);
   $('commentaires-list').innerHTML=renderCommentaires(comms,interId);
   $('new-comment').value='';
-  toast('Commentaire ajouté','ti-message');
+  toast(t('msg_comment_ajoute'),'ti-message');
 }
 function renderHistorique(hist){
   if(!hist.length) return '<div style="font-size:12px;color:var(--text3)">Aucune modification enregistrée</div>';
@@ -582,7 +607,7 @@ async function handlePhotoFiles(files,interId){
 }
 function handlePhotoDrop(e,interId){e.preventDefault();$('photo-upload-zone').classList.remove('drag-over');if(e.dataTransfer.files.length)handlePhotoFiles(e.dataTransfer.files,interId);}
 function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:13px;color:var(--text2);margin-bottom:3px">Glisser-déposer des photos ici</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
-async function deletePhoto(interId,pid){if(!confirm('Supprimer cette photo ?'))return;await API.deletePhoto(interId,pid);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);toast('Photo supprimée','ti-trash');}
+async function deletePhoto(interId,pid){if(!confirm(t('confirm_suppr_photo')))return;await API.deletePhoto(interId,pid);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);toast(t('msg_photo_sup'),'ti-trash');}
 async function editPhotoLegende(interId,pid,cur){const l=prompt('Légende :',cur);if(l===null)return;await API.updatePhotoLegende(interId,pid,l);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);}
 
 let LB={filenames:[],idx:0};
@@ -618,8 +643,8 @@ function clientForm(d={}){return `<div class="grid-2">
 </div>`;}
 function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
 async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
-async function saveClient(id){const data={nom:gv('f-nom'),type:gv('f-type'),contact:gv('f-contact'),email:gv('f-email'),tel:gv('f-tel'),ville:gv('f-ville')};if(!data.nom){alert('Nom requis');return;}try{id?await API.updateClient(id,data):await API.createClient(data);toast(id?'Client mis à jour':'Client créé');closeModal();render();}catch(e){alert(e.message);}}
-async function deleteClient(id){if(!confirm('Supprimer ce client ?'))return;await API.deleteClient(id);toast('Supprimé','ti-trash');closeModal();setView('clients');}
+async function saveClient(id){const data={nom:gv('f-nom'),type:gv('f-type'),contact:gv('f-contact'),email:gv('f-email'),tel:gv('f-tel'),ville:gv('f-ville')};if(!data.nom){alert(t('msg_nom_requis'));return;}try{id?await API.updateClient(id,data):await API.createClient(data);toast(id?'Client mis à jour':'Client créé');closeModal();render();}catch(e){alert(e.message);}}
+async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;await API.deleteClient(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
 
 async function modalPortail(id,token){
   const base=window.location.origin;
@@ -629,13 +654,13 @@ async function modalPortail(id,token){
       <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Ce lien permet au client de suivre ses interventions en lecture seule.</p>
       <div class="portail-link"><i class="ti ti-external-link"></i><span id="portail-url">${esc(url)}</span></div>
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn primary" onclick="navigator.clipboard.writeText($('portail-url').textContent).then(()=>toast('Lien copié','ti-copy'))"><i class="ti ti-copy"></i>Copier</button>
+        <button class="btn primary" onclick="navigator.clipboard.writeText($('portail-url').textContent).then(()=>toast(t('portail_copied'),'ti-copy'))"><i class="ti ti-copy"></i>Copier</button>
         <button class="btn" onclick="regenererToken(${id})"><i class="ti ti-refresh"></i>Régénérer</button>
         <a href="${url}" target="_blank" class="btn"><i class="ti ti-external-link"></i>Ouvrir</a>
       </div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Fermer</button></div>`);}
-async function regenererToken(id){if(!confirm('Régénérer invalide l\'ancien lien. Continuer ?'))return;const r=await API.regenererToken(id);const url=`${window.location.origin}/portail.html?token=${r.token}`;$('portail-url').textContent=url;toast('Lien régénéré','ti-refresh');}
+async function regenererToken(id){if(!confirm('Régénérer invalide l\'ancien lien. Continuer ?'))return;const r=await API.regenererToken(id);const url=`${window.location.origin}/portail.html?token=${r.token}`;$('portail-url').textContent=url;toast(t('portail_regenerated'),'ti-refresh');}
 
 // ── MODALES FAUTEUILS ─────────────────────────────────────────────
 const MODELES=['Eloflex S','Eloflex M','Eloflex L','Eloflex M+','Eloflex XL'];
@@ -651,8 +676,8 @@ function fauteuilForm(d={}){return `<div class="grid-2">
 <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes">${esc(d.notes||'')}</textarea></div>`;}
 function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
 async function modalEditFauteuil(id){const f=await API.fauteuil(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
-async function saveFauteuil(id,clientId){const data={client_id:clientId,modele:gv('f-modele'),serie:gv('f-serie'),annee:parseInt(gv('f-annee')),couleur:gv('f-couleur'),date_achat:gv('f-dateachat'),duree_garantie_mois:parseInt(gv('f-garduree'))||24,num_facture:gv('f-facture'),notes:gv('f-notes')};if(!data.serie){alert('N° de série requis');return;}try{id?await API.updateFauteuil(id,data):await API.createFauteuil(data);toast(id?'Fauteuil mis à jour':'Fauteuil créé');closeModal();render();}catch(e){alert(e.message);}}
-async function deleteFauteuil(id,clientId){if(!confirm('Supprimer ce fauteuil et ses interventions ?'))return;await API.deleteFauteuil(id);toast('Supprimé','ti-trash');closeModal();setView('client',{clientId});}
+async function saveFauteuil(id,clientId){const data={client_id:clientId,modele:gv('f-modele'),serie:gv('f-serie'),annee:parseInt(gv('f-annee')),couleur:gv('f-couleur'),date_achat:gv('f-dateachat'),duree_garantie_mois:parseInt(gv('f-garduree'))||24,num_facture:gv('f-facture'),notes:gv('f-notes')};if(!data.serie){alert(t('msg_serie_requis'));return;}try{id?await API.updateFauteuil(id,data):await API.createFauteuil(data);toast(id?'Fauteuil mis à jour':'Fauteuil créé');closeModal();render();}catch(e){alert(e.message);}}
+async function deleteFauteuil(id,clientId){if(!confirm(t('confirm_suppr_fauteuil')))return;await API.deleteFauteuil(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('client',{clientId});}
 
 // ── MODALES INTERVENTIONS ─────────────────────────────────────────
 let TMP_CLIENTS = [];
@@ -680,7 +705,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
     <div class="grid-2">
       <div class="form-group"><label class="form-label">Client *</label>
         <div style="position:relative">
-          <input class="form-input" id="f-client-search" placeholder="Taper le nom du distributeur…"
+          <input class="form-input" id="f-client-search" placeholder=""+t('select_client')+""
             autocomplete="off"
             value="${d.client_id||clientId ? esc(clients.find(c=>c.id===(d.client_id||clientId))?.nom||'') : ''}"
             oninput="searchClients(this.value,TMP_CLIENTS)"
@@ -741,7 +766,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
       </div>
       <div class="form-group"><label class="form-label">Date *</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().slice(0,10)}"></div>
       <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map(tp=>`<option ${d.type===tp?'selected':''}>${tp}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Statut</label><select class="form-input" id="f-statut">${['Ouvert','En attente','Fermé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Statut</label><select class="form-input" id="f-statut">${['Ouvert',t('db_attente'),'Fermé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Technicien</label><input class="form-input" id="f-tech" value="${esc(d.technicien||'Frédéric')}"></div>
     </div>
     <div class="form-group"><label class="form-label">Garantie</label>
@@ -780,7 +805,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
     <div style="font-size:11px;color:var(--text3);margin-top:4px">Ce numéro sera affiché sur la fiche et permettra d'accéder directement au document dans VosFactures.</div>
   </div>
   <div class="modal-footer">
-    ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast('Supprimé','ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
+    ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
     <button class="btn" onclick="closeModal()">Annuler</button>
     <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?'Mettre à jour':'Enregistrer'}</button>
   </div>`;}
@@ -816,13 +841,13 @@ function toggleSerieAbsent(checked){
 
 async function createFauteuilInline(){
   const clientId=parseInt(gv('f-client'));
-  if(!clientId){alert("Sélectionnez d'abord un client / distributeur.");return;}
+  if(!clientId){alert(t("msg_client_requis"));return;}
   const serieAbsent=document.getElementById('nf-serie-absent')?.checked;
   const modele=gv('nf-modele');
   const serie=serieAbsent
     ? `INCONNU-${modele.replace(/\s+/g,'-').toUpperCase()}-${Date.now().toString().slice(-6)}`
     : gv('nf-serie').trim();
-  if(!serie){alert('Le numéro de série est requis (ou cochez "Numéro absent").');return;}
+  if(!serie){alert(t("msg_fauteuil_serie_requis"));return;}
   const data={
     client_id:clientId,
     modele:gv('nf-modele'),
@@ -920,7 +945,7 @@ function renderProduitsForm(){
       <div>
         ${i===0?'<div class="form-label">Désignation</div>':''}
         <div style="position:relative">
-          <input class="form-input piece-search" style="font-size:12px" placeholder="Taper nom ou référence…"
+          <input class="form-input piece-search" style="font-size:12px" placeholder=""+t('piece_search_placeholder')+""
             value="${esc(p.designation)}"
             oninput="TMP_PRODUITS[${i}].designation=this.value;searchPieces(${i},this.value)"
             onfocus="searchPieces(${i},this.value)"
@@ -936,7 +961,7 @@ function renderProduitsForm(){
 }
 async function saveIntervention(id){
   const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client'))||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau')||undefined,produits:TMP_PRODUITS};
-  if(!data.fauteuil_id||!data.date){alert('Fauteuil et date requis');return;}
+  if(!data.fauteuil_id||!data.date){alert(t('msg_fauteuil_client_requis'));return;}
   try{id?await API.updateIntervention(id,data):await API.createIntervention(data);TMP_PRODUITS=[];toast(id?'Intervention mise à jour':'Intervention créée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}
 }
 
@@ -973,15 +998,15 @@ async function modalPiece(id){
 async function savePiece(id){
   const stockActif=document.getElementById('f-stock-actif')?.checked!==false;
   const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2,stock_actif:stockActif};
-  if(!data.ref||!data.designation){alert('Référence et désignation requises');return;}
+  if(!data.ref||!data.designation){alert(t('msg_ref_requis'));return;}
   try{id?await API.updatePiece(id,data):await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}
 }
-async function deletePiece(id){if(!confirm('Supprimer cette pièce du catalogue ?'))return;await API.deletePiece(id);CACHE.catalogue=[];toast('Supprimé','ti-trash');closeModal();render();}
+async function deletePiece(id){if(!confirm(t('confirm_suppr_piece')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 
 // ── EXPORTS PDF ───────────────────────────────────────────────────
-async function exportInterventionPDF(id){const i=await API.intervention(id);PDF.intervention(i);toast('PDF généré','ti-file-type-pdf');}
-async function exportFauteuilPDF(id){const f=await API.fauteuil(id);PDF.fauteuil(f,f.interventions||[]);toast('PDF généré','ti-file-type-pdf');}
-async function exportClientPDF(id){const cl=await API.client(id);const inters=await API.interventions({client_id:id});PDF.client(cl,cl.fauteuils||[],inters);toast('PDF généré','ti-file-type-pdf');}
+async function exportInterventionPDF(id){const i=await API.intervention(id);PDF.intervention(i);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
+async function exportFauteuilPDF(id){const f=await API.fauteuil(id);PDF.fauteuil(f,f.interventions||[]);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
+async function exportClientPDF(id){const cl=await API.client(id);const inters=await API.interventions({client_id:id});PDF.client(cl,cl.fauteuils||[],inters);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
 
 // ── VOSFACTURES ───────────────────────────────────────────────────
 async function syncVosFactures(){
@@ -999,6 +1024,7 @@ async function loadVfStatus(){
 
 // ── INIT ──────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view==='dashboard'));
+applyNavTranslations();
 loadVfStatus();
 refreshBadges();
 setInterval(refreshBadges, 60000);

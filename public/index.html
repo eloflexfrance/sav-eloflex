@@ -13,16 +13,16 @@
       <div class="sidebar-logo"><i class="ti ti-wheelchair"></i>SAV Éloflex</div>
       <nav class="nav-section">
         <div class="nav-label">Principal</div>
-        <div class="nav-item" data-view="dashboard"><i class="ti ti-dashboard"></i>Tableau de bord</div>
-        <div class="nav-item" data-view="clients"><i class="ti ti-users"></i>Clients / Distributeurs</div>
-        <div class="nav-item" data-view="interventions"><i class="ti ti-tool"></i>Interventions</div>
-        <div class="nav-item" data-view="expeditions"><i class="ti ti-truck-delivery"></i>Expéditions <span id="badge-exp" class="nav-badge" style="display:none"></span></div>
+        <div class="nav-item" data-view="dashboard"><i class="ti ti-dashboard"></i><span data-i18n="nav_dashboard">Tableau de bord</span></div>
+        <div class="nav-item" data-view="clients"><i class="ti ti-users"></i><span data-i18n="nav_clients">Clients / Distributeurs</span></div>
+        <div class="nav-item" data-view="interventions"><i class="ti ti-tool"></i><span data-i18n="nav_interventions">Interventions</span></div>
+        <div class="nav-item" data-view="expeditions"><i class="ti ti-truck-delivery"></i><span data-i18n="nav_expeditions">Expéditions</span> <span id="badge-exp" class="nav-badge" style="display:none"></span></div>
         <div class="nav-label">Ressources</div>
-        <div class="nav-item" data-view="catalogue"><i class="ti ti-box"></i>Catalogue pièces <span id="badge-stock" class="nav-badge danger" style="display:none"></span></div>
+        <div class="nav-item" data-view="catalogue"><i class="ti ti-box"></i><span data-i18n="nav_catalogue">Catalogue pièces</span> <span id="badge-stock" class="nav-badge danger" style="display:none"></span></div>
         <div class="nav-label">Rapports</div>
-        <div class="nav-item" data-view="rapports"><i class="ti ti-chart-bar"></i>Rapports & exports</div>
+        <div class="nav-item" data-view="rapports"><i class="ti ti-chart-bar"></i><span data-i18n="nav_rapports">Rapports & exports</span></div>
         <div class="nav-label">Système</div>
-        <div class="nav-item" data-view="parametres"><i class="ti ti-settings"></i>Paramètres</div>
+        <div class="nav-item" data-view="parametres"><i class="ti ti-settings"></i><span data-i18n="nav_parametres">Paramètres</span></div>
       </nav>
       <div class="sidebar-footer">
         <div id="vf-status" class="vf-status"></div>
@@ -44,6 +44,7 @@
   <div id="modal-area"></div>
   <div id="toast-area"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="/js/i18n.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/pdf.js"></script>
   <script src="/js/app.js"></script>
