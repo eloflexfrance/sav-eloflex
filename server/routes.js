@@ -605,4 +605,16 @@ router.get('/vosfactures/status', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// DIAGNOSTIC TEMPORAIRE — à supprimer après vérification
+router.get('/debug/env', (req, res) => {
+  res.json({
+    VF_TOKEN_defini: !!process.env.VOSFACTURES_API_TOKEN,
+    VF_TOKEN_longueur: (process.env.VOSFACTURES_API_TOKEN||'').length,
+    VF_ACCOUNT: process.env.VOSFACTURES_ACCOUNT || 'NON DEFINI',
+    DATABASE_URL_defini: !!process.env.DATABASE_URL,
+    NODE_ENV: process.env.NODE_ENV
+  });
+});
+
 module.exports = router;
