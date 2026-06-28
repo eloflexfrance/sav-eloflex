@@ -816,7 +816,7 @@ function toggleSerieAbsent(checked){
 
 async function createFauteuilInline(){
   const clientId=parseInt(gv('f-client'));
-  if(!clientId){alert('Sélectionnez d'abord un client / distributeur.');return;}
+  if(!clientId){alert("Sélectionnez d'abord un client / distributeur.");return;}
   const serieAbsent=document.getElementById('nf-serie-absent')?.checked;
   const modele=gv('nf-modele');
   const serie=serieAbsent
