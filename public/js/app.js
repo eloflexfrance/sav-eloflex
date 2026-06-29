@@ -123,7 +123,7 @@ async function renderDashboard(t,c,a){
           <td class="mono" style="color:var(--accent);font-size:11px">${esc(i.num_sav||'—')}</td><td>${fd(i.date)}</td><td>${esc(i.client_nom)}</td>
           <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
           <td>${esc(i.type)}</td>
-          <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'HG'}</span></td>
+          <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'Hors garantie'}</span></td>
           <td><span class="badge ${sc(i.statut)}">${esc(i.statut)}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>
@@ -250,7 +250,7 @@ async function renderFauteuil(t,c,a){
         <div style="padding:10px;border-bottom:0.5px solid var(--border);cursor:pointer" onclick="viewIntervention(${i.id})" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
             <span style="font-weight:700;font-size:13px">${esc(i.type)}</span>
-            <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'HG'}</span>
+            <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'Hors garantie'}</span>
             <span class="badge ${sc(i.statut)}">${esc(i.statut)}</span>
             <span style="margin-left:auto;font-size:11px;color:var(--text3)">${fd(i.date)}</span>
           </div>
@@ -284,7 +284,7 @@ async function renderInterventions(t,c,a){
       <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
       <td>${esc(i.type)}</td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.description||'')}</td>
-      <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'HG'}</span></td>
+      <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'Hors garantie'}</span></td>
       <td><span class="badge ${sc(i.statut)}">${esc(i.statut)}</span></td>
       <td>${esc(i.technicien||'')}</td>
       <td style="text-align:center;color:var(--text3);font-size:11px">${i.nb_photos||''}</td>
