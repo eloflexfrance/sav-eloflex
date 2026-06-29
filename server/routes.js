@@ -767,7 +767,10 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
               const r=await pgClient.query('INSERT INTO clients (nom,email,tel,type,token_portail) VALUES ($1,$2,$3,$4,md5(random()::text)) RETURNING id',[nomClean,email||null,tel||null,'Distributeur']);
               clientId=r.rows[0].id; stats.clients++;
             }
-          } catch(e){stats.erreurs++;continue;}
+          } catch(e){
+            if(stats.erreurs < 3) console.error('[IMPORT EXCEL] Erreur client:', e.message);
+            stats.erreurs++;continue;
+          }
 
           // Fauteuils
           for(const serie of series){
@@ -784,12 +787,18 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
                 await pgClient.query('INSERT INTO fauteuils (client_id,modele,serie,annee,date_achat,num_facture,duree_garantie_mois) VALUES ($1,$2,$3,$4,$5,$6,24)',[clientId,modele||'Eloflex',sc,annee,dateAchat,factureNum]);
                 stats.fauteuils++;
               }
-            } catch(e){ if(!e.message.includes('unique')){stats.erreurs++;} else{stats.doublons++;} }
+            } catch(e){
+              if(!e.message.includes('unique')){
+                if(stats.erreurs < 5) console.error('[IMPORT EXCEL] Erreur fauteuil:', e.message, 'série:', sc);
+                stats.erreurs++;
+              } else { stats.doublons++; }
+            }
           }
         }
       }
     } finally { pgClient.release(); }
 
+    console.log('[IMPORT EXCEL] Résultat:', JSON.stringify(stats));
     res.json({ ok:true, stats, sheets: YEAR_SHEETS });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
