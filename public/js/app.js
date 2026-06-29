@@ -684,26 +684,105 @@ async function deleteFauteuil(id,clientId){if(!confirm('Supprimer ce fauteuil et
 
 async function modalNewIntervention(fauteuilId,clientId){
   TMP_PRODUITS=[];
-  const[clients,fauts]=await Promise.all([API.clients(),clientId?API.fauteuils(clientId):API.fauteuils()]);
+  const[clients,fauts]=await Promise.all([API.clients(),fauteuilId?API.fauteuils(clientId||null):Promise.resolve([])]);
   if(!CACHE.catalogue.length) CACHE.catalogue=await API.catalogue();
+  TMP_CLIENTS=clients;
   showModal(interForm(null,clients,fauts,fauteuilId,clientId));
   renderProduitsForm();
+  // Pré-remplir le fauteuil si fourni via la recherche rapide
+  if(fauteuilId){
+    const f=fauts.find(ff=>ff.id===fauteuilId);
+    if(f) selectFauteuilInter(f.id,f.modele||'',f.serie||'',f.client_id,f.client_nom||'');
+  }
 }
 async function modalEditIntervention(id){
   const i=await API.intervention(id);
   TMP_PRODUITS=JSON.parse(JSON.stringify(i.produits||[]));
-  const[clients,fauts]=await Promise.all([API.clients(),API.fauteuils(i.client_id)]);
+  const fauteuil=await API.fauteuil(i.fauteuil_id).catch(()=>null);
+  const fauteuilClientId=fauteuil?.client_id;
+  const[clients,fauts]=await Promise.all([API.clients(),API.fauteuils(fauteuilClientId||i.client_id)]);
   if(!CACHE.catalogue.length) CACHE.catalogue=await API.catalogue();
+  TMP_CLIENTS=clients;
   closeModal();
-  setTimeout(()=>{showModal(interForm(i,clients,fauts,i.fauteuil_id,i.client_id));renderProduitsForm();},50);
+  setTimeout(()=>{showModal(interForm(i,clients,fauts,i.fauteuil_id,i.client_id,fauteuilClientId));renderProduitsForm();},50);
 }
 
-function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return `
+function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){const d=i||{};const autreDistrib=clientId&&fauteuilClientId&&clientId!==fauteuilClientId;return `
   <div class="modal-header"><i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i><h2>${i?`Modifier #${i.id}`:'Nouvelle intervention'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body" style="max-height:74vh;overflow-y:auto">
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Client *</label><select class="form-input" id="f-client" onchange="refreshFauteuilSelect()"><option value="">-- Choisir --</option>${clients.map(c=>`<option value="${c.id}" ${c.id===clientId||c.id===d.client_id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Fauteuil *</label><select class="form-input" id="f-fauteuil">${fauteuils.map(f=>`<option value="${f.id}" ${f.id===fauteuilId||f.id===d.fauteuil_id?'selected':''}>${esc(f.modele)} – ${esc(f.serie)}</option>`).join('')}</select></div>
+      <!-- FAUTEUIL — recherche libre dans toute la base -->
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Fauteuil * <span style="font-size:11px;color:var(--text3);font-weight:400">(série, modèle ou distributeur)</span></span>
+          <button type="button" class="btn sm" style="font-size:10px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>Créer</button>
+        </label>
+        <div style="position:relative">
+          <input class="form-input" id="f-serie-search" autocomplete="off"
+            placeholder="Taper n° de série, modèle ou distributeur…"
+            value="${(()=>{const f=fauteuils.find(f=>f.id===(fauteuilId||d.fauteuil_id));return f?esc(f.modele+' — '+f.serie):'';})()}"
+            oninput="searchFauteuilInter(this.value)"
+            onfocus="if(this.value.length>=2)searchFauteuilInter(this.value)"
+            onblur="setTimeout(()=>{const dd=document.getElementById('fauteuil-inter-drop');if(dd)dd.style.display='none'},150)">
+          <input type="hidden" id="f-fauteuil" value="${fauteuilId||d.fauteuil_id||''}">
+          <div id="fauteuil-inter-drop" class="piece-dropdown" style="display:none"></div>
+        </div>
+        <!-- Création inline -->
+        <div id="new-fauteuil-inline" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-top:8px;border:1px dashed var(--border-s)">
+          <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Nouveau fauteuil</div>
+          <div class="grid-2" style="gap:6px">
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Modèle *</label>
+              <select class="form-input" id="nf-modele">${['Eloflex L','Eloflex F','Eloflex D2','Eloflex X','Eloflex P','Eloflex H','Eloflex C','Eloflex C3','Eloflex K','Eloflex R','Eloflex S1','Eloflex M+'].map(m=>`<option>${m}</option>`).join('')}</select>
+            </div>
+            <div class="form-group" style="margin-bottom:4px">
+              <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
+                <span>N° de série *</span>
+                <label style="display:flex;align-items:center;gap:4px;font-weight:400;font-size:11px;cursor:pointer">
+                  <input type="checkbox" id="nf-serie-absent" onchange="toggleSerieAbsent(this.checked)">Numéro absent
+                </label>
+              </label>
+              <input class="form-input mono" id="nf-serie" placeholder="ex: A06L2502011042">
+              <div id="nf-serie-absent-msg" style="display:none;font-size:11px;color:var(--warning);margin-top:3px"><i class="ti ti-alert-triangle" style="font-size:11px"></i> Numéro temporaire généré automatiquement</div>
+            </div>
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Date d'achat</label><input class="form-input" id="nf-dateachat" type="date"></div>
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Durée garantie (mois)</label><input class="form-input" id="nf-garduree" type="number" value="24"></div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button type="button" class="btn sm primary" onclick="createFauteuilInline()"><i class="ti ti-check"></i>Créer et sélectionner</button>
+            <button type="button" class="btn sm" onclick="toggleNewFauteuilInline()">Annuler</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- DISTRIBUTEUR — avec option "autre distributeur" -->
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Distributeur</span>
+          <label style="display:flex;align-items:center;gap:5px;font-weight:400;font-size:11px;cursor:pointer">
+            <input type="checkbox" id="f-autre-distrib" ${autreDistrib?"checked":""} onchange="toggleAutreDistrib(this.checked)">
+            <span>Intervention chez un autre distributeur</span>
+          </label>
+        </label>
+        <!-- Champ affiché par défaut : distributeur du fauteuil (lecture seule si pas coché) -->
+        <div id="distrib-readonly" style="display:${autreDistrib?'none':'flex'};align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:var(--radius);font-size:13px;border:1px solid var(--border)">
+          <i class="ti ti-users" style="color:var(--text3)"></i>
+          <span id="distrib-readonly-nom">${esc(clients.find(c=>c.id===(clientId||d.client_id))?.nom||'— sera renseigné depuis le fauteuil —')}</span>
+          <input type="hidden" id="f-client" value="${clientId||d.client_id||''}">
+        </div>
+        <!-- Champ de recherche : visible si "autre distributeur" coché -->
+        <div id="distrib-search-wrap" style="display:${autreDistrib?'block':'none'};position:relative">
+          <input class="form-input" id="f-client-search" autocomplete="off"
+            placeholder="Rechercher le distributeur…"
+            value="${autreDistrib ? esc(clients.find(c=>c.id===clientId)?.nom||'') : ''}"
+            oninput="document.getElementById('f-client').value='';searchClients(this.value,TMP_CLIENTS)"
+            onfocus="searchClients(this.value,TMP_CLIENTS)"
+            onblur="setTimeout(()=>{const dr=document.getElementById('client-drop');if(dr)dr.style.display='none'},150)">
+          <div id="client-drop" class="piece-dropdown" style="display:none"></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">
+          Cochez si le fauteuil est en intervention chez un distributeur différent de son propriétaire (démo, revente, SAV tiers…)
+        </div>
+      </div>
       <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().split('T')[0]}"></div>
       <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Statut</label><select class="form-input" id="f-statut">${['Ouvert','En attente','Fermé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -916,16 +995,42 @@ async function searchFauteuilInter(q){
     drop.style.display='block';
   }catch(e){}
 }
+function toggleAutreDistrib(checked){
+  const readonly=document.getElementById('distrib-readonly');
+  const searchWrap=document.getElementById('distrib-search-wrap');
+  const cb=document.getElementById('f-autre-distrib');
+  if(!readonly||!searchWrap)return;
+  if(checked){
+    // Passer en mode recherche libre
+    readonly.style.display='none';
+    searchWrap.style.display='block';
+    // Vider le client sélectionné pour forcer un nouveau choix
+    const hid=document.getElementById('f-client');if(hid)hid.value='';
+    setTimeout(()=>{const inp=document.getElementById('f-client-search');if(inp){inp.value='';inp.focus();}},50);
+  } else {
+    // Revenir au distributeur du fauteuil
+    searchWrap.style.display='none';
+    readonly.style.display='flex';
+    const inp=document.getElementById('f-client-search');if(inp)inp.value='';
+  }
+}
+
 function selectFauteuilInter(id,modele,serie,clientId,clientNom){
   const hid=document.getElementById('f-fauteuil');if(hid)hid.value=id;
   const inp=document.getElementById('f-serie-search');if(inp)inp.value=`${modele} — ${serie}`;
   const drop=document.getElementById('fauteuil-inter-drop');if(drop)drop.style.display='none';
-  // Pré-remplir distributeur si pas encore choisi
+  // Mettre à jour l'affichage du distributeur (mode lecture)
   const clientHid=document.getElementById('f-client');
-  const clientInp=document.getElementById('f-client-search');
-  if(clientId&&clientHid&&!clientHid.value){
-    clientHid.value=clientId;
-    if(clientInp)clientInp.value=clientNom;
+  const distribNom=document.getElementById('distrib-readonly-nom');
+  const autreDistrib=document.getElementById('f-autre-distrib');
+  if(!autreDistrib?.checked){
+    // Mode normal : afficher le distributeur du fauteuil
+    if(clientHid)clientHid.value=clientId||'';
+    if(distribNom)distribNom.textContent=clientNom||'—';
+    const readonly=document.getElementById('distrib-readonly');
+    if(readonly)readonly.style.display='flex';
+    const searchWrap=document.getElementById('distrib-search-wrap');
+    if(searchWrap)searchWrap.style.display='none';
   }
 }
 function toggleNewFauteuilInline(){
@@ -972,10 +1077,14 @@ function searchClients(q,allClients){
   drop.style.display='block';
 }
 async function selectClient(id,nom){
-  const inp=document.getElementById('f-client-search');const hid=document.getElementById('f-client');
-  if(inp)inp.value=nom;if(hid)hid.value=id;
+  const inp=document.getElementById('f-client-search');
+  const hid=document.getElementById('f-client');
+  if(inp)inp.value=nom;
+  if(hid)hid.value=id;
   const drop=document.getElementById('client-drop');if(drop)drop.style.display='none';
-  await refreshFauteuilSelect();
+  // En mode "autre distributeur" on ne recharge pas les fauteuils
+  const autreDistrib=document.getElementById('f-autre-distrib');
+  if(!autreDistrib?.checked) await refreshFauteuilSelect();
 }
 
 // ── PIÈCES — AUTOCOMPLÉTION ───────────────────────────────────────
