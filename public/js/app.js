@@ -489,6 +489,7 @@ async function viewIntervention(id){
       <i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i>
       <h2>${esc(i.num_sav||'#'+i.id)} — ${esc(i.type)}</h2>
       <button class="btn sm success" onclick="exportInterventionPDF(${i.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
+      <button class="btn sm" onclick="envoyerEmailInter(${i.id})" title="Envoyer notification au distributeur"><i class="ti ti-mail"></i></button>
       <button class="btn sm" onclick="modalEditIntervention(${i.id})"><i class="ti ti-edit"></i></button>
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
@@ -952,6 +953,66 @@ async function loadVfStatus(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
+
+// ── EMAIL NOTIFICATION ───────────────────────────────────────────
+async function envoyerEmailInter(id){
+  try{
+    const r=await API.sendEmailInter(id);
+    if(r.ok) toast(`Email envoyé à ${r.to}`,'ti-mail');
+    else toast(`Non envoyé : ${r.reason}`,'ti-mail-off');
+  }catch(e){alert('Erreur email : '+e.message);}
+}
+
+// ── RETOURS PIÈCES VERS SUÈDE ─────────────────────────────────────
+async function renderRetoursSuede(ttl,c,a){
+  ttl.textContent='Retours pièces — Suède';
+  a.innerHTML=`<button class="btn primary" onclick="modalRetour()"><i class="ti ti-plus"></i>Nouveau retour</button>`;
+  const list=await API.retoursSuede();
+  if(!list.length){c.innerHTML='<div class="empty"><i class="ti ti-package-off"></i><p>Aucun retour enregistré</p></div>';return;}
+  const sc={'En attente':'attente','Envoyé':'ouvert','Remboursé':'g','Refusé':'urgent'};
+  c.innerHTML=`<div class="table-wrap"><table class="t">
+    <thead><tr><th>N° retour</th><th>Date envoi</th><th>Description</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
+    <tbody>${list.map(r=>`<tr onclick="modalRetour(${r.id})">
+      <td class="mono" style="color:var(--accent)">${esc(r.num_retour||'—')}</td>
+      <td>${r.date_envoi?fd(r.date_envoi):'—'}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.description||'')}</td>
+      <td style="font-weight:700">${parseFloat(r.montant||0).toFixed(2)} €</td>
+      <td><span class="badge ${sc[r.statut]||''}">${esc(r.statut)}</span></td>
+      <td><button class="btn sm danger" onclick="event.stopPropagation();if(confirm('Supprimer ?'))API.deleteRetour(${r.id}).then(()=>{render();toast('Supprimé','ti-trash')})"><i class="ti ti-trash"></i></button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+async function modalRetour(id){
+  const d=id?await API.retoursSuede().then(l=>l.find(r=>r.id===id)||{}):{};
+  showModal(`<div class="modal-header"><i class="ti ti-package" style="font-size:18px;color:var(--accent)"></i><h2>${id?'Modifier retour':'Nouveau retour Suède'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body"><div class="grid-2">
+      <div class="form-group"><label class="form-label">N° retour</label><input class="form-input mono" id="r-num" placeholder="RET-2026-001" value="${esc(d.num_retour||'')}"></div>
+      <div class="form-group"><label class="form-label">Date envoi</label><input class="form-input" id="r-date" type="date" value="${d.date_envoi||''}"></div>
+      <div class="form-group" style="grid-column:1/-1"><label class="form-label">Description des pièces retournées</label><textarea class="form-input" id="r-desc" rows="3">${esc(d.description||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">Montant remboursement (€)</label><input class="form-input" id="r-montant" type="number" step="0.01" value="${parseFloat(d.montant||0).toFixed(2)}"></div>
+      <div class="form-group"><label class="form-label">Statut</label>
+        <select class="form-input" id="r-statut">
+          ${['En attente','Envoyé','Remboursé','Refusé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1"><label class="form-label">Notes</label><textarea class="form-input" id="r-notes" rows="2">${esc(d.notes||'')}</textarea></div>
+    </div></div>
+    <div class="modal-footer">
+      ${id?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteRetour(${id}).then(()=>{closeModal();render();toast('Supprimé','ti-trash')})"><i class="ti ti-trash"></i></button>`:''}
+      <button class="btn" onclick="closeModal()">Annuler</button>
+      <button class="btn primary" onclick="saveRetour(${id||'null'})"><i class="ti ti-check"></i>Enregistrer</button>
+    </div>`);
+}
+
+async function saveRetour(id){
+  const data={num_retour:gv('r-num'),date_envoi:gv('r-date')||null,description:gv('r-desc'),statut:gv('r-statut'),montant:parseFloat(gv('r-montant'))||0,notes:gv('r-notes')};
+  try{
+    id?await API.updateRetour(id,data):await API.createRetour(data);
+    toast(id?'Retour mis à jour':'Retour créé','ti-package');
+    closeModal();render();
+  }catch(e){alert(e.message);}
+}
 
 // ── LANGUE ───────────────────────────────────────────────────────
 let TMP_CLIENTS = [];

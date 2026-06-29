@@ -287,7 +287,7 @@ router.put('/interventions/:id', async (req, res) => {
     const old = await db.get('SELECT * FROM interventions WHERE id=$1', [req.params.id]);
     if (!old) return res.status(404).json({ error: 'Introuvable' });
     const { type, garantie, statut, description, notes, technicien,
-      envoi_transporteur, envoi_numero, envoi_date, retour_transporteur, retour_numero, retour_date, num_bordereau_vf, num_sav, produits } = req.body;
+      envoi_transporteur, envoi_numero, envoi_date, retour_transporteur, retour_numero, retour_date, num_bordereau_vf, num_sav, num_facture, produits } = req.body;
 
     const pgClient = await db.pool.connect();
     try {
@@ -295,10 +295,10 @@ router.put('/interventions/:id', async (req, res) => {
       await pgClient.query(
         `UPDATE interventions SET type=$1,garantie=$2,statut=$3,description=$4,notes=$5,technicien=$6,
           envoi_transporteur=$7,envoi_numero=$8,envoi_date=$9,retour_transporteur=$10,retour_numero=$11,retour_date=$12,
-          num_bordereau_vf=$13,num_sav=$14,updated_at=NOW() WHERE id=$15`,
+          num_bordereau_vf=$13,num_sav=$14,num_facture=COALESCE($15,num_facture),updated_at=NOW() WHERE id=$16`,
         [type, !!garantie, statut, description, notes, technicien,
          envoi_transporteur||null, envoi_numero||null, envoi_date||null,
-         retour_transporteur||null, retour_numero||null, retour_date||null, num_bordereau_vf||null, num_sav||null, req.params.id]
+         retour_transporteur||null, retour_numero||null, retour_date||null, num_bordereau_vf||null, num_sav||null, num_facture!==undefined?num_facture:undefined, req.params.id]
       );
       for (const [champ, anc, nouv] of [
         ['statut', old.statut, statut],
@@ -818,10 +818,11 @@ router.get('/recherche', async (req, res) => {
     if (!q || q.length < 2) return res.json({ fauteuils: [], clients: [] });
 
     const fauteuils = await db.all(`
-      SELECT f.*, c.nom AS client_nom, c.id AS client_id,
+      SELECT DISTINCT f.*, c.nom AS client_nom, c.id AS client_id,
         (SELECT COUNT(*)::int FROM interventions i WHERE i.fauteuil_id=f.id) AS nb_interventions
       FROM fauteuils f JOIN clients c ON c.id=f.client_id
-      WHERE f.serie ILIKE $1 OR f.modele ILIKE $1 OR c.nom ILIKE $1
+      LEFT JOIN interventions iv ON iv.fauteuil_id=f.id
+      WHERE f.serie ILIKE $1 OR f.modele ILIKE $1 OR c.nom ILIKE $1 OR iv.num_sav ILIKE $1
       ORDER BY f.updated_at DESC LIMIT 10
     `, [`%${q}%`]);
 
@@ -983,6 +984,94 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
 
     console.log('[IMPORT EXCEL] Résultat:', JSON.stringify(stats));
     res.json({ ok:true, stats, sheets: YEAR_SHEETS });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
+
+// ── RETOURS PIÈCES VERS SUÈDE ─────────────────────────────────────
+router.get('/retours-suede', async (req, res) => {
+  try {
+    const list = await db.all('SELECT * FROM retours_suede ORDER BY created_at DESC');
+    res.json(list);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/retours-suede', async (req, res) => {
+  try {
+    const { num_retour, date_envoi, description, statut, montant, notes, interventions_ids } = req.body;
+    const r = await db.run(
+      `INSERT INTO retours_suede (num_retour,date_envoi,description,statut,montant,notes,interventions_ids)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [num_retour||null, date_envoi||null, description||null, statut||'En attente',
+       parseFloat(montant)||0, notes||null, interventions_ids||null]
+    );
+    res.status(201).json(r);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/retours-suede/:id', async (req, res) => {
+  try {
+    const { num_retour, date_envoi, description, statut, montant, notes, interventions_ids } = req.body;
+    const r = await db.run(
+      `UPDATE retours_suede SET num_retour=$1,date_envoi=$2,description=$3,statut=$4,
+       montant=$5,notes=$6,interventions_ids=$7,updated_at=NOW() WHERE id=$8 RETURNING *`,
+      [num_retour||null, date_envoi||null, description||null, statut||'En attente',
+       parseFloat(montant)||0, notes||null, interventions_ids||null, req.params.id]
+    );
+    res.json(r);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/retours-suede/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM retours_suede WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── ENVOI EMAIL NOTIFICATION ──────────────────────────────────────
+router.post('/email/notification-intervention', async (req, res) => {
+  try {
+    const { intervention_id } = req.body;
+    const params = {};
+    const rows = await db.all('SELECT cle, valeur FROM parametres');
+    rows.forEach(r => params[r.cle] = r.valeur);
+    if (params.email_notifications !== '1') return res.json({ ok: false, reason: 'Notifications désactivées' });
+    if (!params.email_smtp_host || !params.email_smtp_user) return res.json({ ok: false, reason: 'SMTP non configuré' });
+
+    const i = await db.get(`
+      SELECT iv.*, c.nom AS client_nom, c.email AS client_email, f.modele, f.serie
+      FROM interventions iv
+      JOIN clients c ON c.id=iv.client_id
+      JOIN fauteuils f ON f.id=iv.fauteuil_id
+      WHERE iv.id=$1`, [intervention_id]);
+    if (!i || !i.client_email) return res.json({ ok: false, reason: "Pas d'email client" });
+
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: params.email_smtp_host, port: parseInt(params.email_smtp_port)||587,
+      secure: false, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass }
+    });
+
+    await transporter.sendMail({
+      from: params.email_from || params.email_smtp_user,
+      to: i.client_email,
+      subject: `[SAV Éloflex] ${i.num_sav||'Intervention #'+i.id} — ${i.statut}`,
+      html: `<div style="font-family:sans-serif;max-width:520px">
+        <h2 style="color:#1a3a5c">SAV Éloflex — Mise à jour</h2>
+        <p>Bonjour,</p>
+        <p>Votre dossier SAV <strong>${i.num_sav||'#'+i.id}</strong> concernant le fauteuil 
+        <strong>${i.modele} (${i.serie})</strong> a été mis à jour.</p>
+        <table style="border-collapse:collapse;width:100%;font-size:13px">
+          <tr><td style="padding:6px 10px;background:#f5f5f4;font-weight:600">Statut</td><td style="padding:6px 10px">${i.statut}</td></tr>
+          <tr><td style="padding:6px 10px;background:#f5f5f4;font-weight:600">Type</td><td style="padding:6px 10px">${i.type}</td></tr>
+          <tr><td style="padding:6px 10px;background:#f5f5f4;font-weight:600">Description</td><td style="padding:6px 10px">${i.description||'—'}</td></tr>
+        </table>
+        <p style="margin-top:16px;font-size:12px;color:#666">Éloflex France — Service Après-Vente</p>
+      </div>`
+    });
+    res.json({ ok: true, to: i.client_email });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

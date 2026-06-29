@@ -61,7 +61,7 @@
             ${interventions.length===0?'<div class="empty">Aucune intervention</div>':interventions.map(i=>`
               <div style="padding:12px;border-bottom:1px solid rgba(0,0,0,.06)">
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-                  <span style="font-weight:700">#${i.id} — ${esc(i.type)}</span>
+                  <span style="font-weight:700">${i.num_sav||'#'+i.id} — ${esc(i.type)}</span>
                   <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'Hors garantie'}</span>
                   <span class="badge ${sc(i.statut)}">${esc(i.statut)}</span>
                   <span style="margin-left:auto;font-size:11px;color:#9a9894">${fd(i.date)} — ${esc(i.modele)}</span>

@@ -116,7 +116,13 @@ async function initDB() {
       ['mode_sombre','0'], ['nom_societe','Éloflex France'], ['portail_actif','1'],
       ['sync_vf_auto','1'],
       ['app_url',''],
-      ['stock_gestion_active','1']
+      ['stock_gestion_active','1'],
+      ['email_notifications','0'],
+      ['email_smtp_host',''],
+      ['email_smtp_port','587'],
+      ['email_smtp_user',''],
+      ['email_smtp_pass',''],
+      ['email_from','']
     ]) {
       await client.query(
         'INSERT INTO parametres (cle,valeur) VALUES ($1,$2) ON CONFLICT (cle) DO NOTHING',
