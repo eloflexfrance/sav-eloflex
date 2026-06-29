@@ -784,9 +784,10 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
         </div>
       </div>
       <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().split('T')[0]}"></div>
+      <div class="form-group"><label class="form-label">N° SAV</label><input class="form-input mono" id="f-num-sav" placeholder="ex: SAV-2026-001" value="${esc(d.num_sav||'')}"></div>
       <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Statut</label><select class="form-input" id="f-statut">${['Ouvert','En attente','Fermé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Technicien</label><input class="form-input" id="f-tech" value="${esc(d.technicien||'Frédéric')}"></div>
+      <div class="form-group"><label class="form-label">Technicien</label><input class="form-input" id="f-tech" value="${esc(d.technicien||'Brice')}"></div>
     </div>
     <div class="form-group"><label class="form-label">Garantie</label>
       <div style="display:flex;gap:12px;margin-top:4px">
