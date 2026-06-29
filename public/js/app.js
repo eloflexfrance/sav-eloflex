@@ -49,6 +49,7 @@ async function render(){
     else if(STATE.view==='rapports')      await renderRapports(t,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(t,c,a);
     else if(STATE.view==='parametres')    await renderParametres(t,c,a);
+    else if(STATE.view==='retours-suede')  await renderRetoursSuede(t,c,a);
   }catch(e){c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`;}
 }
 
@@ -426,6 +427,23 @@ async function renderParametres(t,c,a){
       </div>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-mail"></i>Notifications email distributeurs</h3>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Envoie un email au distributeur quand vous cliquez sur ✉️ dans une fiche intervention.</div>
+      <div class="form-group"><label class="form-label">Notifications activées</label>
+        <select class="form-input" id="p-email-notif">
+          <option value="0" ${p.email_notifications!=='1'?'selected':''}>Désactivées</option>
+          <option value="1" ${p.email_notifications==='1'?'selected':''}>Activées</option>
+        </select>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Serveur SMTP</label><input class="form-input" id="p-smtp-host" placeholder="smtp.gmail.com" value="${esc(p.email_smtp_host||'')}"></div>
+        <div class="form-group"><label class="form-label">Port</label><input class="form-input" id="p-smtp-port" type="number" value="${p.email_smtp_port||587}"></div>
+        <div class="form-group"><label class="form-label">Utilisateur</label><input class="form-input" id="p-smtp-user" placeholder="sav@eloflex.fr" value="${esc(p.email_smtp_user||'')}"></div>
+        <div class="form-group"><label class="form-label">Mot de passe</label><input class="form-input" id="p-smtp-pass" type="password" placeholder="••••••••" value="${esc(p.email_smtp_pass||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Email expéditeur</label><input class="form-input" id="p-email-from" placeholder="SAV Éloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
+      </div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-building"></i>Informations société</h3>
       <div class="form-group"><label class="form-label">Nom affiché dans les PDFs</label>
         <input class="form-input" id="p-societe" value="${esc(p.nom_societe||'Éloflex France')}"></div>
@@ -469,9 +487,18 @@ async function saveParametres(){
   const p={
     relance_jours:gv('p-relance'),
     stock_alerte_defaut:gv('p-stock-alerte'),
+    stock_gestion_active:gv('p-stock-gestion')||'1',
     nom_societe:gv('p-societe'),
     portail_actif:gv('p-portail'),
-    mode_sombre:gv('p-dark')
+    mode_sombre:gv('p-dark'),
+    sync_vf_auto:gv('p-vf-auto')||'1',
+    app_url:gv('p-appurl')||'',
+    email_notifications:gv('p-email-notif')||'0',
+    email_smtp_host:gv('p-smtp-host')||'',
+    email_smtp_port:gv('p-smtp-port')||'587',
+    email_smtp_user:gv('p-smtp-user')||'',
+    email_smtp_pass:gv('p-smtp-pass')||'',
+    email_from:gv('p-email-from')||''
   };
   await API.saveParametres(p);
   if(p.mode_sombre==='1') document.body.classList.add('dark'); else document.body.classList.remove('dark');
