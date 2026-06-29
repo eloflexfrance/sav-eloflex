@@ -70,11 +70,149 @@ async function refreshBadges(){
 }
 
 // ── DASHBOARD ─────────────────────────────────────────────────────
+let QS_TIMER = null;
+
+function quickSearch(q) {
+  clearTimeout(QS_TIMER);
+  if (!q || q.length < 2) { clearQuickSearch(); return; }
+  QS_TIMER = setTimeout(async () => {
+    try {
+      const res = await API.recherche(q);
+      showQuickResults(res, q);
+    } catch(e) {}
+  }, 200);
+}
+
+function clearQuickSearch() {
+  const el = $('qs-results');
+  if (el) el.style.display = 'none';
+}
+
+function showQuickResults(res, q) {
+  const el = $('qs-results');
+  if (!el) return;
+  const { fauteuils = [], clients = [] } = res;
+
+  if (!fauteuils.length && !clients.length) {
+    el.innerHTML = `<div class="qs-empty"><i class="ti ti-search-off"></i> ${t('qs_no_result')} "<b>${esc(q)}</b>"</div>`;
+    el.style.display = 'block';
+    return;
+  }
+
+  let html = '';
+
+  if (fauteuils.length) {
+    html += `<div class="qs-section-label">${t('qs_fauteuils')}</div>`;
+    html += fauteuils.map(f => `
+      <div class="qs-item" onclick="quickSelectFauteuil(${f.id},${f.client_id},'${esc(f.serie)}','${esc(f.modele||'')}')">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent);flex-shrink:0"></i>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:13px">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;color:var(--text3);font-size:12px">${esc(f.serie)}</span></div>
+            <div style="font-size:12px;color:var(--text2)">${esc(f.client_nom)} ${f.date_achat?'— achat '+fd(f.date_achat):''}</div>
+          </div>
+          <div style="flex-shrink:0">
+            <span class="badge ${f.nb_interventions>0?'attente':'g'}" style="font-size:10px">${f.nb_interventions} inter.</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;padding-left:28px">
+          <button class="btn sm primary" onclick="event.stopPropagation();quickNewInter(${f.id},${f.client_id})"><i class="ti ti-plus"></i>${t('qs_new_inter')}</button>
+          <button class="btn sm" onclick="event.stopPropagation();setView('fauteuil',{fauteuilId:${f.id},clientId:${f.client_id}});clearQuickSearch();"><i class="ti ti-eye"></i>${t('qs_voir_fiche')}</button>
+        </div>
+      </div>`).join('');
+  }
+
+  if (clients.length) {
+    html += `<div class="qs-section-label" style="margin-top:4px">${t('nav_clients')}</div>`;
+    html += clients.map(c => `
+      <div class="qs-item" onclick="setView('client',{clientId:${c.id}});clearQuickSearch()">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="ti ti-users" style="font-size:18px;color:var(--accent);flex-shrink:0"></i>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:13px">${esc(c.nom)}</div>
+            <div style="font-size:12px;color:var(--text2)">${esc(c.ville||'')} — ${c.nb_fauteuils} fauteuil${c.nb_fauteuils!==1?'s':''}</div>
+          </div>
+          <button class="btn sm primary" onclick="event.stopPropagation();modalNewIntervention(null,${c.id});clearQuickSearch()"><i class="ti ti-plus"></i>${t('qs_new_inter')}</button>
+        </div>
+      </div>`).join('');
+  }
+
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+function quickSelectFauteuil(fauteuilId, clientId, serie, modele) {
+  // Ne rien faire au clic sur le conteneur — les boutons gèrent les actions
+}
+
+async function quickNewInter(fauteuilId, clientId) {
+  clearQuickSearch();
+  const inp = $('qs-input');
+  if (inp) inp.value = '';
+  await modalNewIntervention(fauteuilId, clientId);
+}
+
+async function importerExcel(file) {
+  if (!file) return;
+  const progress = $('qs-import-progress');
+  if (progress) {
+    progress.style.display = 'block';
+    progress.innerHTML = `<div class="card" style="padding:12px;display:flex;align-items:center;gap:10px"><i class="ti ti-loader-2" style="font-size:20px;color:var(--accent)"></i><span>${t('qs_import_loading')} <b>${esc(file.name)}</b>…</span></div>`;
+  }
+  try {
+    const res = await API.importExcel(file);
+    const s = res.stats;
+    if (progress) {
+      progress.innerHTML = `<div class="card" style="padding:12px;background:var(--success-bg);border-color:var(--success)">
+        <div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> ${t('qs_import_ok')} (${res.sheets.join(', ')})</div>
+        <div style="font-size:12px;display:flex;gap:16px;flex-wrap:wrap">
+          <span>✚ ${s.clients} ${t('qs_nouveaux_clients')}</span>
+          <span>✚ ${s.fauteuils} ${t('qs_nouveaux_fauteuils')}</span>
+          <span>↻ ${s.doublons} ${t('qs_maj')}</span>
+          <span style="color:var(--text3)">— ${s.ignores} ${t('qs_ignores')}</span>
+          ${s.erreurs?`<span style="color:var(--danger)">⚠ ${s.erreurs} erreurs</span>`:''}
+        </div>
+        <button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none';render()"><i class="ti ti-x"></i>${t('btn_fermer')}</button>
+      </div>`;
+    }
+    refreshBadges();
+  } catch(e) {
+    if (progress) {
+      progress.innerHTML = `<div class="card" style="padding:12px;background:var(--danger-bg);border-color:var(--danger)">
+        <div style="color:var(--danger);font-weight:700"><i class="ti ti-alert-circle"></i> ${t('msg_erreur')} : ${esc(e.message)}</div>
+        <button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>${t('btn_fermer')}</button>
+      </div>`;
+    }
+  }
+}
+
+// Fermer la recherche en cliquant ailleurs
+document.addEventListener('click', e => {
+  const qs = $('qs-results');
+  const inp = $('qs-input');
+  if (qs && !qs.contains(e.target) && e.target !== inp) clearQuickSearch();
+});
+
 async function renderDashboard(t,c,a){
   t.textContent=t('nav_dashboard');
   const{stats:s,recentes,par_mois,pieces_top,par_technicien}=await API.stats();
   const maxMois=Math.max(...par_mois.map(m=>m.total),1);
   c.innerHTML=`
+    <div class="quick-search-bar">
+      <div style="position:relative;flex:1;max-width:560px">
+        <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:16px;pointer-events:none"></i>
+        <input class="form-input" id="qs-input" placeholder="${t('qs_placeholder')}"
+          style="padding-left:34px;font-size:14px;border-radius:10px"
+          oninput="quickSearch(this.value)"
+          onkeydown="if(event.key==='Escape'){this.value='';clearQuickSearch();}">
+      </div>
+      <div id="qs-results" class="qs-results" style="display:none"></div>
+      <label class="btn" style="cursor:pointer;white-space:nowrap">
+        <i class="ti ti-file-import"></i>${t('qs_import_excel')}
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importerExcel(this.files[0])">
+      </label>
+    </div>
+    <div id="qs-import-progress" style="display:none;margin-bottom:12px"></div>
     <div class="grid-4" style="margin-bottom:12px">
       <div class="stat-card"><div class="stat-label">Interventions</div><div class="stat-value">${s.nb_interventions}</div></div>
       <div class="stat-card"><div class="stat-label">Ouvertes</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
@@ -232,6 +370,12 @@ async function renderFauteuil(t,c,a){
         </div>
       </div>
     </div>
+    <div class="card" id="card-factures-vf">
+      <div class="section-title"><i class="ti ti-receipt"></i>Factures VosFactures
+        <button class="btn sm" style="margin-left:auto;font-size:11px" onclick="chargerFacturesVF(${f.id})"><i class="ti ti-refresh"></i>Charger</button>
+      </div>
+      <div id="factures-vf-content" style="font-size:12px;color:var(--text3)">Cliquez sur "Charger" pour récupérer les factures liées à ce fauteuil depuis VosFactures.</div>
+    </div>
     <div class="card">
       <div class="section-title"><i class="ti ti-tool"></i>Interventions (${inters.length})</div>
       ${inters.length===0?'<div class="empty"><i class="ti ti-tool"></i>Aucune intervention</div>':inters.map(i=>`
@@ -251,6 +395,37 @@ async function renderFauteuil(t,c,a){
           </div>
         </div>`).join('')}
     </div>`;
+}
+
+async function chargerFacturesVF(fauteuilId) {
+  const el = document.getElementById('factures-vf-content');
+  if (!el) return;
+  el.innerHTML = '<i class="ti ti-loader-2"></i> Chargement depuis VosFactures…';
+  try {
+    const { factures, serie, num_facture, configured } = await API.facturesVF(fauteuilId);
+    if (!configured) {
+      el.innerHTML = '<span style="color:var(--text3)">VosFactures non configuré.</span>';
+      return;
+    }
+    if (!factures.length) {
+      el.innerHTML = `<span style="color:var(--text3)">Aucune facture trouvée pour la série <span class="mono">${esc(serie||'?')}</span>.</span>`;
+      return;
+    }
+    el.innerHTML = `
+      <table class="t">
+        <thead><tr><th>Numéro</th><th>Date</th><th>Client VF</th><th>Montant TTC</th><th>Statut</th><th></th></tr></thead>
+        <tbody>${factures.map(f=>`<tr>
+          <td class="mono" style="color:var(--accent)">${esc(f.numero)}</td>
+          <td>${f.date?fd(f.date.substring(0,10)):'—'}</td>
+          <td style="font-size:11px">${esc(f.client_nom||'')}</td>
+          <td style="font-weight:700">${f.montant_ttc?parseFloat(f.montant_ttc).toFixed(2)+' €':'—'}</td>
+          <td><span class="badge ${f.statut==='paid'?'g':'attente'}">${f.statut==='paid'?'Payée':'En attente'}</span></td>
+          <td><a href="${esc(f.url)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i>VF</a></td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--danger)">Erreur : ${esc(e.message)}</span>`;
+  }
 }
 
 // ── INTERVENTIONS ─────────────────────────────────────────────────
@@ -1009,6 +1184,25 @@ async function exportFauteuilPDF(id){const f=await API.fauteuil(id);PDF.fauteuil
 async function exportClientPDF(id){const cl=await API.client(id);const inters=await API.interventions({client_id:id});PDF.client(cl,cl.fauteuils||[],inters);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
 
 // ── VOSFACTURES ───────────────────────────────────────────────────
+async function syncHistorique(){
+  const el=document.getElementById('historique-progress');
+  if(el){el.style.display='block';el.innerHTML='<div class="card" style="padding:10px;font-size:12px"><i class="ti ti-loader-2"></i> Analyse de toutes les factures en cours… Cela peut prendre plusieurs minutes.</div>';}
+  try{
+    const r=await API.vfSyncHistorique();
+    if(el){el.innerHTML=`<div class="card" style="padding:10px;background:var(--success-bg);border-color:var(--success);font-size:12px">
+      <div style="font-weight:700;color:var(--success);margin-bottom:4px"><i class="ti ti-check"></i> Sync historique terminée</div>
+      <div>Clients : ${r.results.clients}</div>
+      <div>Produits : ${r.results.products}</div>
+      <div>Factures : ${r.results.invoices}</div>
+      <button class="btn sm" style="margin-top:6px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>Fermer</button>
+    </div>`;}
+    toast('Sync historique terminée','ti-history');
+  }catch(e){
+    if(el){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:12px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div>`;}
+    toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)');
+  }
+}
+
 async function syncVosFactures(){
   const btn=$('btn-sync');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i>Sync…';
   try{const r=await API.vfSync();toast(`Sync OK`,'ti-refresh');CACHE.catalogue=[];render();}

@@ -588,6 +588,62 @@ router.get('/portail/:token', async (req, res) => {
 });
 
 // ── VOSFACTURES ───────────────────────────────────────────────────
+
+// Sync historique complet VosFactures (toutes les années)
+router.post('/vosfactures/sync-historique', async (req, res) => {
+  const token = process.env.VOSFACTURES_API_TOKEN, account = process.env.VOSFACTURES_ACCOUNT;
+  if (!token || !account) return res.status(503).json({ error: 'VosFactures non configuré' });
+  try {
+    const { syncClients, syncProducts, syncInvoicesHistorique } = require('../scripts/sync-vosfactures');
+    const results = {};
+    try { results.clients  = await syncClients();            } catch(e) { results.clients  = `Erreur: ${e.message}`; }
+    try { results.products = await syncProducts();           } catch(e) { results.products = `Erreur: ${e.message}`; }
+    try { results.invoices = await syncInvoicesHistorique(); } catch(e) { results.invoices = `Erreur: ${e.message}`; }
+    res.json({ ok: true, results, synced_at: new Date().toISOString() });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Factures VosFactures liées à un fauteuil (via l'API VF en live)
+router.get('/fauteuils/:id/factures-vf', async (req, res) => {
+  try {
+    const f = await db.get('SELECT serie, num_facture, vf_facture_id FROM fauteuils WHERE id=$1', [req.params.id]);
+    if (!f) return res.status(404).json({ error: 'Fauteuil introuvable' });
+    if (!process.env.VOSFACTURES_API_TOKEN) return res.json({ factures: [], configured: false });
+
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+
+    // Chercher les factures mentionnant ce numéro de série
+    const factures = [];
+    if (f.serie) {
+      try {
+        const { data } = await vfApi.get('/invoices.json', {
+          params: { search: f.serie, per_page: 20 }
+        });
+        if (Array.isArray(data)) {
+          data.forEach(inv => {
+            factures.push({
+              id: inv.id,
+              numero: inv.number,
+              date: inv.issue_date || inv.sell_date,
+              client_nom: inv.buyer_name,
+              montant_ttc: inv.price_gross,
+              statut: inv.payment_status,
+              url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}`
+            });
+          });
+        }
+      } catch(e) { console.warn('Recherche factures VF :', e.message); }
+    }
+
+    res.json({ factures, serie: f.serie, num_facture: f.num_facture, configured: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/vosfactures/sync', async (req, res) => {
   const token = process.env.VOSFACTURES_API_TOKEN, account = process.env.VOSFACTURES_ACCOUNT;
   if (!token || !account) return res.status(503).json({ error: 'VosFactures non configuré' });
@@ -612,6 +668,136 @@ router.get('/vosfactures/status', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+
+
+// ── RECHERCHE RAPIDE (dashboard) ──────────────────────────────────
+router.get('/recherche', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q || q.length < 2) return res.json({ fauteuils: [], clients: [] });
+
+    const fauteuils = await db.all(`
+      SELECT f.*, c.nom AS client_nom, c.id AS client_id,
+        (SELECT COUNT(*)::int FROM interventions i WHERE i.fauteuil_id=f.id) AS nb_interventions
+      FROM fauteuils f JOIN clients c ON c.id=f.client_id
+      WHERE f.serie ILIKE $1 OR f.modele ILIKE $1 OR c.nom ILIKE $1
+      ORDER BY f.updated_at DESC LIMIT 10
+    `, [`%${q}%`]);
+
+    const clients = await db.all(`
+      SELECT c.*, COUNT(f.id)::int AS nb_fauteuils
+      FROM clients c LEFT JOIN fauteuils f ON f.client_id=c.id
+      WHERE c.nom ILIKE $1
+      GROUP BY c.id ORDER BY c.nom LIMIT 8
+    `, [`%${q}%`]);
+
+    res.json({ fauteuils, clients });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── IMPORT EXCEL (upload depuis l'interface) ───────────────────────
+router.post('/import/excel', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Fichier requis' });
+  try {
+    const XLSX = require('xlsx');
+    const path = require('path');
+    const { UPLOAD_DIR } = require('./uploads');
+    const filepath = req.file.path || path.join(UPLOAD_DIR, req.file.filename);
+
+    const wb = XLSX.readFile(filepath);
+    const YEAR_SHEETS = wb.SheetNames.filter(s => /^\d{4}$/.test(s)).sort();
+
+    let stats = { clients: 0, fauteuils: 0, doublons: 0, ignores: 0, erreurs: 0 };
+    const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{10,}|A\d{12,}|\d{9,12}[A-Z]?)\b/gi;
+
+    function normaliserModele(raw) {
+      if (!raw) return null;
+      const s = String(raw).replace(/\xa0/g,'').trim();
+      if (!s || s==='-') return null;
+      const MAP = {'L+':'Eloflex L+','L':'Eloflex L','F':'Eloflex F','D2':'Eloflex D2','X':'Eloflex X','P':'Eloflex P','H':'Eloflex H','C':'Eloflex C','C3':'Eloflex C3','K':'Eloflex K','R':'Eloflex R','S1':'Eloflex S1','M+':'Eloflex M+','W':'Eloflex W'};
+      for (const [k,v] of Object.entries(MAP)) { if (s.toUpperCase().startsWith(k.toUpperCase())) return v; }
+      return `Eloflex ${s.split(/[\s\-\/\(]/)[0]}`.substring(0,40);
+    }
+
+    function extraireSeries(raw) {
+      if (!raw || String(raw).trim()==='-') return [];
+      const s = String(raw).replace(/_x000D_/g,' ').replace(/\r?\n/g,' ').trim();
+      if (!s||s==='-') return [];
+      const found=[]; let m; const re = new RegExp(SERIE_RE.source, 'gi');
+      while((m=re.exec(s))!==null){const sr=m[1].trim().replace(/[_\s]+$/,'');if(sr.length>=6&&!found.includes(sr))found.push(sr);}
+      if(!found.length&&s.length>=6&&s!=='-'&&!/^\d{4,5}$/.test(s)){
+        s.split(/\s+[-–]\s+|\s{2,}|,/).map(p=>p.trim()).filter(p=>p.length>=6&&p!=='-').forEach(p=>{if(!found.includes(p))found.push(p.substring(0,30));});
+      }
+      return found;
+    }
+
+    function getColMap(header) {
+      const h = header.map(v=>v?String(v).toLowerCase().trim():'');
+      const find=(...keys)=>{for(const k of keys){const i=h.findIndex(v=>v.includes(k));if(i>=0)return i;}return -1;};
+      return {distrib:find('distributeur'),email:find('email','mail'),tel:find('téléphone','telephone'),modele:find('modèle','modele'),date:find('livraison'),serie:find('série','serie'),facture:find('facture')};
+    }
+
+    const pgClient = await db.pool.connect();
+    try {
+      for (const year of YEAR_SHEETS) {
+        const ws = wb.Sheets[year];
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:false});
+        if(!rows.length) continue;
+        const colMap = getColMap(rows[0]);
+
+        for (let i=1;i<rows.length;i++) {
+          const row=rows[i];
+          if(!row||!row.some(v=>v)) continue;
+          const get=(idx)=>idx>=0&&row[idx]?String(row[idx]).replace(/\xa0/g,'').trim():null;
+          const distribNom=get(colMap.distrib); const serieRaw=get(colMap.serie);
+          const modeleRaw=get(colMap.modele); const livraison=get(colMap.date);
+          const factureNum=get(colMap.facture); const email=get(colMap.email); const tel=get(colMap.tel);
+          if(!distribNom||distribNom==='-'){stats.ignores++;continue;}
+          const series=extraireSeries(serieRaw);
+          if(!series.length){stats.ignores++;continue;}
+          const modele=normaliserModele(modeleRaw);
+
+          // Client
+          let clientId;
+          try {
+            const nomClean=distribNom.replace(/\s*\(essai\)|\s*\(P\)|\s*\(demo\)/gi,'').trim();
+            const ex=await pgClient.query('SELECT id FROM clients WHERE LOWER(TRIM(nom))=LOWER($1)',[nomClean]);
+            if(ex.rows.length){
+              clientId=ex.rows[0].id;
+              if(email||tel) await pgClient.query('UPDATE clients SET email=COALESCE(NULLIF(email,\'\'),$1),tel=COALESCE(NULLIF(tel,\'\'),$2),updated_at=NOW() WHERE id=$3',[email,tel,clientId]);
+            } else {
+              const r=await pgClient.query('INSERT INTO clients (nom,email,tel,type,token_portail) VALUES ($1,$2,$3,$4,md5(random()::text)) RETURNING id',[nomClean,email||null,tel||null,'Distributeur']);
+              clientId=r.rows[0].id; stats.clients++;
+            }
+          } catch(e){stats.erreurs++;continue;}
+
+          // Fauteuils
+          for(const serie of series){
+            try {
+              const sc=serie.replace(/[_\s]+$/,'').replace(/_x000D_.*$/,'').trim();
+              if(sc.length<4) continue;
+              const annee=livraison?parseInt(livraison.substring(0,4)):parseInt(year);
+              const dateAchat=livraison?livraison.substring(0,10):null;
+              const ex=await pgClient.query('SELECT id FROM fauteuils WHERE serie=$1',[sc]);
+              if(ex.rows.length){
+                await pgClient.query('UPDATE fauteuils SET client_id=COALESCE(client_id,$1),modele=COALESCE(NULLIF(modele,\'\'),$2),annee=COALESCE(annee,$3),date_achat=COALESCE(date_achat,$4),num_facture=COALESCE(NULLIF(num_facture,\'\'),$5),updated_at=NOW() WHERE serie=$6',[clientId,modele,annee,dateAchat,factureNum,sc]);
+                stats.doublons++;
+              } else {
+                await pgClient.query('INSERT INTO fauteuils (client_id,modele,serie,annee,date_achat,num_facture,duree_garantie_mois) VALUES ($1,$2,$3,$4,$5,$6,24)',[clientId,modele||'Eloflex',sc,annee,dateAchat,factureNum]);
+                stats.fauteuils++;
+              }
+            } catch(e){ if(!e.message.includes('unique')){stats.erreurs++;} else{stats.doublons++;} }
+          }
+        }
+      }
+    } finally { pgClient.release(); }
+
+    // Nettoyer le fichier uploadé
+    try { require('fs').unlinkSync(filepath); } catch(e){}
+    res.json({ ok:true, stats, sheets: YEAR_SHEETS });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
 
 module.exports = router;

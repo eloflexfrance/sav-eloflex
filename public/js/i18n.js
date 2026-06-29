@@ -215,6 +215,8 @@ const TRANSLATIONS = {
     param_vf_on: 'Activée',
     param_vf_off: 'Désactivée',
     param_vf_sync: 'Synchroniser maintenant',
+    param_vf_historique: 'Sync historique complet',
+    param_vf_historique_hint: 'Analyse toutes les factures VosFactures pour extraire et rattacher les numéros de série. À faire une seule fois puis la sync quotidienne suffit.',
     param_cloudinary: 'Stockage photos (Cloudinary)',
     param_cloudinary_hint: 'Sans Cloudinary, les photos sont stockées sur le serveur et perdues à chaque redéploiement. Configurez Cloudinary dans les variables d\'environnement Render.',
     param_antiveille: 'Anti-veille (Render plan gratuit)',
@@ -329,6 +331,19 @@ const TRANSLATIONS = {
     select_fauteuil_vide: 'Aucun fauteuil pour ce client',
     catalogue_choisir: 'Taper nom ou référence…',
     tous_statuts: 'Tous statuts',
+    // Recherche rapide dashboard
+    qs_placeholder: 'Rechercher un fauteuil par n° de série, modèle ou distributeur…',
+    qs_new_inter: 'Nouvelle intervention',
+    qs_voir_fiche: 'Voir la fiche',
+    qs_fauteuils: 'Fauteuils',
+    qs_no_result: 'Aucun résultat pour',
+    qs_import_excel: 'Importer Excel',
+    qs_import_loading: 'Import en cours :',
+    qs_import_ok: 'Import réussi',
+    qs_nouveaux_clients: 'nouveaux clients',
+    qs_nouveaux_fauteuils: 'nouveaux fauteuils',
+    qs_maj: 'mis à jour',
+    qs_ignores: 'ignorés (accessoires)',
   },
 
   en: {
@@ -545,6 +560,8 @@ const TRANSLATIONS = {
     param_vf_on: 'Enabled',
     param_vf_off: 'Disabled',
     param_vf_sync: 'Sync now',
+    param_vf_historique: 'Full history sync',
+    param_vf_historique_hint: 'Analyses all VosFactures invoices to extract and link serial numbers. Run once, then daily sync is sufficient.',
     param_cloudinary: 'Photo storage (Cloudinary)',
     param_cloudinary_hint: 'Without Cloudinary, photos are stored on the server and lost on each redeployment. Configure Cloudinary in the Render environment variables.',
     param_antiveille: 'Keep-alive (Render free plan)',
@@ -659,6 +676,19 @@ const TRANSLATIONS = {
     select_fauteuil_vide: 'No wheelchair for this client',
     catalogue_choisir: 'Type name or reference…',
     tous_statuts: 'All statuses',
+    // Quick search dashboard
+    qs_placeholder: 'Search by serial no., model or distributor…',
+    qs_new_inter: 'New service order',
+    qs_voir_fiche: 'View record',
+    qs_fauteuils: 'Wheelchairs',
+    qs_no_result: 'No results for',
+    qs_import_excel: 'Import Excel',
+    qs_import_loading: 'Importing:',
+    qs_import_ok: 'Import successful',
+    qs_nouveaux_clients: 'new clients',
+    qs_nouveaux_fauteuils: 'new wheelchairs',
+    qs_maj: 'updated',
+    qs_ignores: 'ignored (accessories)',
   }
 };
 
