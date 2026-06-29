@@ -874,14 +874,23 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
     }
 
     // Convertir une date Excel (objet Date ou string ISO) en YYYY-MM-DD
+    // Rejeter les dates antérieures à 2010 (numéros de BDC interprétés comme dates)
     function toISODate(val) {
       if (!val) return null;
       if (val instanceof Date) {
-        return val.toISOString().substring(0, 10);
+        const iso = val.toISOString().substring(0, 10);
+        const year = parseInt(iso.substring(0, 4));
+        // Rejeter les dates aberrantes (< 2010 ou > aujourd'hui + 2 ans)
+        if (year < 2010 || year > new Date().getFullYear() + 2) return null;
+        return iso;
       }
       const s = String(val).trim();
       // Format ISO déjà correct
-      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const year = parseInt(s.substring(0, 4));
+        if (year < 2010 || year > new Date().getFullYear() + 2) return null;
+        return s.substring(0, 10);
+      }
       // Format DD-Mon ou DD-Mon-YY → ignorer (pas d'année fiable)
       return null;
     }
