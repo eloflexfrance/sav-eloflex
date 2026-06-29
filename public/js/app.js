@@ -42,20 +42,20 @@ function setView(v, extra={}){
 document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setView(n.dataset.view)));
 
 async function render(){
-  const t=$('topbar-title'), c=$('content'), a=$('topbar-actions');
+  const ttl=$('topbar-title'), c=$('content'), a=$('topbar-actions');
   a.innerHTML='';
   c.innerHTML=`<div class="empty" style="padding-top:60px"><i class="ti ti-loader-2" style="font-size:28px;display:block;margin-bottom:8px"></i>${t("msg_chargement")}</div>`;
   try{
-    if(STATE.view==='dashboard')          await renderDashboard(t,c,a);
-    else if(STATE.view==='clients')       await renderClients(t,c,a);
-    else if(STATE.view==='client')        await renderClient(t,c,a);
-    else if(STATE.view==='fauteuil')      await renderFauteuil(t,c,a);
-    else if(STATE.view==='interventions') await renderInterventions(t,c,a);
-    else if(STATE.view==='expeditions')   await renderExpeditions(t,c,a);
-    else if(STATE.view==='catalogue')     await renderCatalogue(t,c,a);
-    else if(STATE.view==='rapports')      await renderRapports(t,c,a);
-    else if(STATE.view==='alertes')       await renderAlertes(t,c,a);
-    else if(STATE.view==='parametres')    await renderParametres(t,c,a);
+    if(STATE.view==='dashboard')          await renderDashboard(ttl,c,a);
+    else if(STATE.view==='clients')       await renderClients(ttl,c,a);
+    else if(STATE.view==='client')        await renderClient(ttl,c,a);
+    else if(STATE.view==='fauteuil')      await renderFauteuil(ttl,c,a);
+    else if(STATE.view==='interventions') await renderInterventions(ttl,c,a);
+    else if(STATE.view==='expeditions')   await renderExpeditions(ttl,c,a);
+    else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
+    else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
+    else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
+    else if(STATE.view==='parametres')    await renderParametres(ttl,c,a);
   }catch(e){c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`;}
 }
 
@@ -193,8 +193,8 @@ document.addEventListener('click', e => {
   if (qs && !qs.contains(e.target) && e.target !== inp) clearQuickSearch();
 });
 
-async function renderDashboard(t,c,a){
-  t.textContent=t('nav_dashboard');
+async function renderDashboard(ttl,c,a){
+  ttl.textContent=t('nav_dashboard');
   const{stats:s,recentes,par_mois,pieces_top,par_technicien}=await API.stats();
   const maxMois=Math.max(...par_mois.map(m=>m.total),1);
   c.innerHTML=`
@@ -262,8 +262,8 @@ async function renderDashboard(t,c,a){
 }
 
 // ── CLIENTS ───────────────────────────────────────────────────────
-async function renderClients(t,c,a){
-  t.textContent=t('nav_clients');
+async function renderClients(ttl,c,a){
+  ttl.textContent=t('nav_clients');
   a.innerHTML=`<input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderClients(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>Nouveau client</button>`;
   const list=await API.clients(STATE.q);
@@ -278,9 +278,9 @@ async function renderClients(t,c,a){
   </table></div>`;
 }
 
-async function renderClient(t,c,a){
+async function renderClient(ttl,c,a){
   const cl=await API.client(STATE.clientId);
-  t.textContent=cl.nom;
+  ttl.textContent=cl.nom;
   a.innerHTML=`
     <button class="btn sm success" onclick="exportClientPDF(${cl.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
     <button class="btn sm" onclick="modalPortail(${cl.id},'${cl.token_portail||''}')"><i class="ti ti-link"></i>Portail</button>
@@ -338,10 +338,10 @@ function garantieChip(f){
   return `<span class="garantie-chip expired"><i class="ti ti-shield-x" style="font-size:12px"></i>Garantie expirée le ${fd(exp.toISOString().slice(0,10))}</span>`;
 }
 
-async function renderFauteuil(t,c,a){
+async function renderFauteuil(ttl,c,a){
   const f=await API.fauteuil(STATE.fauteuilId);
   const inters=f.interventions||[];
-  t.textContent=`${f.modele} — ${f.serie}`;
+  ttl.textContent=`${f.modele} — ${f.serie}`;
   a.innerHTML=`
     <button class="btn sm success" onclick="exportFauteuilPDF(${f.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
     <button class="btn sm" onclick="modalEditFauteuil(${f.id})"><i class="ti ti-edit"></i>Modifier</button>
@@ -429,8 +429,8 @@ async function chargerFacturesVF(fauteuilId) {
 }
 
 // ── INTERVENTIONS ─────────────────────────────────────────────────
-async function renderInterventions(t,c,a){
-  t.textContent=t('db_interventions');
+async function renderInterventions(ttl,c,a){
+  ttl.textContent=t('db_interventions');
   a.innerHTML=`
     <input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <select class="search-bar" id="filter-statut" style="width:130px" onchange="renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
@@ -455,8 +455,8 @@ async function renderInterventions(t,c,a){
 }
 
 // ── EXPÉDITIONS ───────────────────────────────────────────────────
-async function renderExpeditions(t,c,a){
-  t.textContent=t('db_expeditions');
+async function renderExpeditions(ttl,c,a){
+  ttl.textContent=t('db_expeditions');
   a.innerHTML=`<button class="btn success" onclick="API.exportExcel('expeditions');toast(t('msg_telechargement'),'ti-download')"><i class="ti ti-file-spreadsheet"></i>Exporter Excel</button>`;
   const list=await API.expeditions();
   c.innerHTML=`
@@ -477,8 +477,8 @@ async function renderExpeditions(t,c,a){
 }
 
 // ── CATALOGUE ─────────────────────────────────────────────────────
-async function renderCatalogue(t,c,a){
-  t.textContent=t('cat_title');
+async function renderCatalogue(ttl,c,a){
+  ttl.textContent=t('cat_title');
   a.innerHTML=`
     <input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderCatalogue(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <button class="btn" onclick="API.exportExcel('catalogue');toast(t('msg_telechargement'),'ti-download')"><i class="ti ti-file-spreadsheet"></i>Excel</button>
@@ -499,8 +499,8 @@ async function renderCatalogue(t,c,a){
 }
 
 // ── RAPPORTS ──────────────────────────────────────────────────────
-async function renderRapports(t,c,a){
-  t.textContent=t('rap_title');
+async function renderRapports(ttl,c,a){
+  ttl.textContent=t('rap_title');
   c.innerHTML=`
     <div class="grid-2" style="gap:14px">
       <div class="card">
@@ -535,8 +535,8 @@ function exportExcel(type){ API.exportExcel(type,{date_from:gv('exp-from')||unde
 function exportExcelFiltre(){ const s=gv('r-statut'),g=gv('r-garantie'); API.exportExcel('interventions',{statut:s||undefined,garantie:g!==''?g:undefined}); toast(t('msg_telechargement'),'ti-download'); }
 
 // ── ALERTES ───────────────────────────────────────────────────────
-async function renderAlertes(t,c,a){
-  t.textContent=t('alertes_title');
+async function renderAlertes(ttl,c,a){
+  ttl.textContent=t('alertes_title');
   a.innerHTML=`<button class="btn" onclick="API.marquerToutesLues().then(()=>{refreshBadges();render();})"><i class="ti ti-checks"></i>Tout marquer comme lu</button>`;
   const list=await API.alertes();
   const icons={relance:'ti-clock',retour_manquant:'ti-truck-return',garantie_expire:'ti-shield-x',stock_faible:'ti-alert-triangle',stock_zero:'ti-circle-x',intervention_fermee:'ti-circle-check'};
@@ -565,8 +565,8 @@ function switchLang(lang){
   if(en) en.className='btn'+(lang==='en'?' primary':'');
 }
 
-async function renderParametres(t,c,a){
-  t.textContent=t('param_title');
+async function renderParametres(ttl,c,a){
+  ttl.textContent=t('param_title');
   a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>Enregistrer</button>`;
   const p=await API.parametres(); CACHE.params=p;
   c.innerHTML=`
