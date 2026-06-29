@@ -1359,16 +1359,19 @@ function renderProduitsForm(){
     </div>`).join('');
 }
 async function saveIntervention(id){
-  // Résoudre le client_id — priorité au champ caché (sélection via dropdown)
-  // Si le texte visible ne correspond pas à la sélection, chercher par nom
+  // Résoudre le client_id :
+  // 1. Si champ caché rempli (sélection via dropdown) → utiliser cet ID
+  // 2. Sinon chercher par correspondance dans TMP_CLIENTS
   let clientId = parseInt(gv('f-client')) || undefined;
-  const searchText = (document.getElementById('f-client-search')?.value || '').trim();
-  if (!clientId && searchText) {
-    // Chercher dans la liste des clients en cache
-    const match = (TMP_CLIENTS || []).find(c =>
-      c.nom.toLowerCase() === searchText.toLowerCase()
-    );
-    if (match) clientId = match.id;
+  if (!clientId) {
+    const searchText = (document.getElementById('f-client-search')?.value || '').trim();
+    if (searchText) {
+      const match = (TMP_CLIENTS || []).find(c =>
+        c.nom.toLowerCase() === searchText.toLowerCase() ||
+        c.nom.toLowerCase().includes(searchText.toLowerCase())
+      );
+      if (match) clientId = match.id;
+    }
   }
   const data={
     fauteuil_id:parseInt(gv('f-fauteuil')),
