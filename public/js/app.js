@@ -122,9 +122,9 @@ async function renderDashboard(t,c,a){
     <div class="card">
       <div class="section-title"><i class="ti ti-tool"></i>Récentes activités</div>
       <div class="table-wrap"><table class="t">
-        <thead><tr><th>Date</th><th>Client</th><th>Modèle</th><th>Type</th><th>Garantie</th><th>Statut</th></tr></thead>
+        <thead><tr><th>N° SAV</th><th>Date</th><th>Client</th><th>Modèle</th><th>Type</th><th>Garantie</th><th>Statut</th></tr></thead>
         <tbody>${recentes.map(i=>`<tr onclick="viewIntervention(${i.id})">
-          <td>${fd(i.date)}</td><td>${esc(i.client_nom)}</td>
+          <td class="mono" style="color:var(--accent);font-size:11px">${esc(i.num_sav||'—')}</td><td>${fd(i.date)}</td><td>${esc(i.client_nom)}</td>
           <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
           <td>${esc(i.type)}</td>
           <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'HG'}</span></td>
@@ -282,9 +282,9 @@ async function renderInterventions(t,c,a){
   const statut=$('filter-statut')?.value||'';
   const list=await API.interventions({q:STATE.q||undefined, statut:statut||undefined});
   c.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>Date</th><th>Client</th><th>Modèle / Série</th><th>Type</th><th>Description</th><th>Garantie</th><th>Statut</th><th>Tech.</th><th style="text-align:center">  </th></tr></thead>
+    <thead><tr><th>N° SAV</th><th>Date</th><th>Client</th><th>Modèle / Série</th><th>Type</th><th>Description</th><th>Garantie</th><th>Statut</th><th>Tech.</th><th style="text-align:center">  </th></tr></thead>
     <tbody>${list.map(i=>`<tr onclick="viewIntervention(${i.id})">
-      <td>${fd(i.date)}</td><td>${esc(i.client_nom||'')}</td>
+      <td class="mono" style="color:var(--accent);font-size:11px">${esc(i.num_sav||'—')}</td><td>${fd(i.date)}</td><td>${esc(i.client_nom||'')}</td>
       <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
       <td>${esc(i.type)}</td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.description||'')}</td>
@@ -483,7 +483,7 @@ async function viewIntervention(id){
   showModal(`
     <div class="modal-header">
       <i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i>
-      <h2>${i.num_sav?esc(i.num_sav)+' — ':''}Intervention #${i.id} — ${esc(i.type)}</h2>
+      <h2>${esc(i.num_sav||'#'+i.id)} — ${esc(i.type)}</h2>
       <button class="btn sm success" onclick="exportInterventionPDF(${i.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
       <button class="btn sm" onclick="modalEditIntervention(${i.id})"><i class="ti ti-edit"></i></button>
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
@@ -708,7 +708,7 @@ async function modalEditIntervention(id){
 }
 
 function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){const d=i||{};const autreDistrib=clientId&&fauteuilClientId&&clientId!==fauteuilClientId;return `
-  <div class="modal-header"><i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i><h2>${i?`Modifier #${i.id}`:'Nouvelle intervention'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-header"><i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i><h2>${i?(i.num_sav?esc(i.num_sav):'#'+i.id):'Nouvelle intervention'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body" style="max-height:74vh;overflow-y:auto">
     <div class="grid-2">
       <!-- FAUTEUIL — recherche libre dans toute la base -->
