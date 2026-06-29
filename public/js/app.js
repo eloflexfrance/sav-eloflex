@@ -216,18 +216,18 @@ async function renderDashboard(ttl,c,a){
     <div class="grid-4" style="margin-bottom:12px">
       <div class="stat-card"><div class="stat-label">Interventions</div><div class="stat-value">${s.nb_interventions}</div></div>
       <div class="stat-card"><div class="stat-label">Ouvertes</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
-      <div class="stat-card"><div class="stat-label">En attente</div><div class="stat-value" style="color:var(--warning)">${s.attente}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_attente')}</div><div class="stat-value" style="color:var(--warning)">${s.attente}</div></div>
       <div class="stat-card"><div class="stat-label">Expéditions en cours</div><div class="stat-value" style="color:var(--accent)">${s.expeditions_cours}</div></div>
     </div>
     <div class="grid-4" style="margin-bottom:14px">
-      <div class="stat-card"><div class="stat-label">Sous garantie</div><div class="stat-value" style="color:var(--success)">${s.garantie}</div></div>
-      <div class="stat-card"><div class="stat-label">Hors garantie</div><div class="stat-value" style="color:var(--warning)">${s.hors_garantie}</div></div>
-      <div class="stat-card"><div class="stat-label">Pièces en alerte stock</div><div class="stat-value" style="color:${s.pieces_alerte>0?'var(--danger)':'var(--text)'}">${s.pieces_alerte}</div></div>
-      <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">Alertes non lues</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_garantie')}</div><div class="stat-value" style="color:var(--success)">${s.garantie}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_hors_garantie')}</div><div class="stat-value" style="color:var(--warning)">${s.hors_garantie}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_pieces_alerte')}</div><div class="stat-value" style="color:${s.pieces_alerte>0?'var(--danger)':'var(--text)'}">${s.pieces_alerte}</div></div>
+      <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">${t('db_alertes')}</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
     </div>
     <div class="grid-2" style="margin-bottom:14px">
       <div class="card">
-        <div class="section-title"><i class="ti ti-chart-bar"></i>Interventions / 12 mois</div>
+        <div class="section-title"><i class="ti ti-chart-bar"></i>${t('db_chart_title')}</div>
         <div class="chart-bar">
           ${par_mois.map(m=>`<div class="chart-bar-col">
             <div style="font-size:9px;color:var(--text3)">${m.total}</div>
@@ -237,17 +237,17 @@ async function renderDashboard(ttl,c,a){
         </div>
       </div>
       <div class="card">
-        <div class="section-title"><i class="ti ti-box"></i>Pièces les plus utilisées (6 mois)</div>
-        ${pieces_top.length===0?'<div style="font-size:12px;color:var(--text3)">Aucune donnée</div>':pieces_top.map(p=>`
+        <div class="section-title"><i class="ti ti-box"></i>${t('db_top_pieces')}</div>
+        ${pieces_top.length===0?`<div style="font-size:12px;color:var(--text3)">${t('msg_vide')}</div>`:pieces_top.map(p=>`
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
             <div style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.designation)}</div>
             <div style="font-weight:700;font-size:12px;color:var(--accent)">${p.total_utilise}×</div>
           </div>`).join('')}
-        ${par_technicien.length?`<div class="divider"></div><div class="section-title" style="margin-top:6px"><i class="ti ti-user"></i>Par technicien</div>${par_technicien.map(tt=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${esc(tt.technicien)}</span><span style="font-weight:700">${tt.total}</span></div>`).join('')}`:''}
+        ${par_technicien.length?`<div class="divider"></div><div class="section-title" style="margin-top:6px"><i class="ti ti-user"></i>${t('db_par_tech')}</div>${par_technicien.map(tt=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${esc(tt.technicien)}</span><span style="font-weight:700">${tt.total}</span></div>`).join('')}`:''}
       </div>
     </div>
     <div class="card">
-      <div class="section-title"><i class="ti ti-tool"></i>Récentes activités</div>
+      <div class="section-title"><i class="ti ti-tool"></i>${t('db_activites')}</div>
       <div class="table-wrap"><table class="t">
         <thead><tr><th>Date</th><th>Client</th><th>Modèle</th><th>Type</th><th>Garantie</th><th>Statut</th></tr></thead>
         <tbody>${recentes.map(i=>`<tr onclick="viewIntervention(${i.id})">
@@ -302,8 +302,8 @@ async function renderClient(ttl,c,a){
       <div class="card">
         <div class="section-title"><i class="ti ti-chart-bar"></i>Bilan SAV</div>
         <div class="grid-2">
-          <div class="stat-card"><div class="stat-label">Sous garantie</div><div class="stat-value" style="color:var(--success)">${s.garantie||0}</div></div>
-          <div class="stat-card"><div class="stat-label">Hors garantie</div><div class="stat-value" style="color:var(--warning)">${s.hors_garantie||0}</div></div>
+          <div class="stat-card"><div class="stat-label">${t('db_garantie')}</div><div class="stat-value" style="color:var(--success)">${s.garantie||0}</div></div>
+          <div class="stat-card"><div class="stat-label">${t('db_hors_garantie')}</div><div class="stat-value" style="color:var(--warning)">${s.hors_garantie||0}</div></div>
           <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${s.total||0}</div></div>
           <div class="stat-card"><div class="stat-label">Ouvertes</div><div class="stat-value" style="color:var(--accent)">${s.ouvert||0}</div></div>
         </div>
@@ -311,7 +311,7 @@ async function renderClient(ttl,c,a){
     </div>
     <div class="section-title" style="margin-bottom:8px"><i class="ti ti-wheelchair"></i>Fauteuils (${cl.fauteuils.length})</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-bottom:14px">
-      ${cl.fauteuils.length===0?'<div class="empty"><i class="ti ti-wheelchair"></i>Aucun fauteuil</div>':cl.fauteuils.map(f=>`
+      ${cl.fauteuils.length===0?`<div class="empty"><i class="ti ti-wheelchair"></i>${t('msg_aucun_fauteuil')}</div>`:cl.fauteuils.map(f=>`
         <div class="fauteuil-card" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${cl.id}})">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
             <div style="font-weight:700;font-size:13px"><i class="ti ti-wheelchair" style="font-size:13px;margin-right:3px"></i>${esc(f.modele)}</div>
@@ -332,7 +332,7 @@ async function renderClient(ttl,c,a){
 
 function garantieChip(f){
   const duree = f.duree_garantie_mois || 24;
-  if(!f.date_achat) return `<span class="garantie-chip unknown"><i class="ti ti-shield-off" style="font-size:12px"></i>Date d'achat inconnue — garantie ${duree} mois</span>`;
+  if(!f.date_achat) return `<span class="garantie-chip unknown"><i class="ti ti-shield-off" style="font-size:12px"></i>t('garantie_inconnue_date') ${duree} mois</span>`;
   const achat = new Date(f.date_achat);
   const exp = new Date(f.date_achat);
   exp.setMonth(exp.getMonth() + duree);
@@ -390,7 +390,7 @@ async function renderFauteuil(ttl,c,a){
     </div>
     <div class="card">
       <div class="section-title"><i class="ti ti-tool"></i>Interventions (${inters.length})</div>
-      ${inters.length===0?'<div class="empty"><i class="ti ti-tool"></i>Aucune intervention</div>':inters.map(i=>`
+      ${inters.length===0?`<div class="empty"><i class="ti ti-tool"></i>${t('msg_aucune_inter')}</div>`:inters.map(i=>`
         <div style="padding:10px;border-bottom:0.5px solid var(--border);cursor:pointer" onclick="viewIntervention(${i.id})" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
             <span style="font-weight:700;font-size:13px">${esc(i.type)}</span>
@@ -431,7 +431,7 @@ async function chargerFacturesVF(fauteuilId) {
           <td>${f.date?fd(f.date.substring(0,10)):'—'}</td>
           <td style="font-size:11px">${esc(f.client_nom||'')}</td>
           <td style="font-weight:700">${f.montant_ttc?parseFloat(f.montant_ttc).toFixed(2)+' €':'—'}</td>
-          <td><span class="badge ${f.statut==='paid'?'g':'attente'}">${f.statut==='paid'?'Payée':'En attente'}</span></td>
+          <td><span class="badge ${f.statut==='paid'?'g':'attente'}">${f.statut==='paid'?t('badge_paye'):t('db_attente')}</span></td>
           <td><a href="${esc(f.url)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i>VF</a></td>
         </tr>`).join('')}</tbody>
       </table>`;
@@ -446,7 +446,7 @@ async function renderInterventions(ttl,c,a){
   a.innerHTML=`
     <input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <select class="search-bar" id="filter-statut" style="width:130px" onchange="renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
-      <option value="">Tous statuts</option><option>Ouvert</option><option>En attente</option><option>Fermé</option>
+      ${[['','tous_statuts'],['Ouvert','inter_statut_ouvert'],['En attente','inter_statut_attente'],['Fermé','inter_statut_ferme']].map(([v,k])=>`<option value="${v}">${t(k)}</option>`).join('')}
     </select>
     <button class="btn primary" onclick="modalNewIntervention(null,null)"><i class="ti ti-plus"></i>Nouvelle</button>`;
   const statut=$('filter-statut')?.value||'';
@@ -531,10 +531,10 @@ async function renderRapports(ttl,c,a){
       <div class="card">
         <div class="section-title"><i class="ti ti-filter"></i>Export filtré</div>
         <div class="form-group"><label class="form-label">Statut</label>
-          <select class="form-input" id="r-statut"><option value="">Tous</option><option>Ouvert</option><option>En attente</option><option>Fermé</option></select>
+          <select class="form-input" id="r-statut">${[['',"rap_tous"],['Ouvert',"inter_statut_ouvert"],['En attente',"inter_statut_attente"],['Fermé',"inter_statut_ferme"]].map(([v,k])=>`<option value="${v}">${t(k)}</option>`).join('')}</select>
         </div>
         <div class="form-group"><label class="form-label">Garantie</label>
-          <select class="form-input" id="r-garantie"><option value="">Tous</option><option value="1">Sous garantie</option><option value="0">Hors garantie</option></select>
+          <select class="form-input" id="r-garantie">${[['','rap_tous'],['1','rap_sg'],['0','rap_hg']].map(([v,k])=>`<option value="${v}">${t(k)}</option>`).join('')}</select>
         </div>
         <button class="btn success" onclick="exportExcelFiltre()"><i class="ti ti-file-spreadsheet"></i>Export filtré</button>
         <div class="divider"></div>
@@ -579,7 +579,7 @@ function switchLang(lang){
 
 async function renderParametres(ttl,c,a){
   ttl.textContent=t('param_title');
-  a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>Enregistrer</button>`;
+  a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>`;
   const p=await API.parametres(); CACHE.params=p;
   c.innerHTML=`
     <div class="param-section">
@@ -709,8 +709,8 @@ async function viewIntervention(id){
       <div id="photo-gallery">${renderPhotoGallery(photos,i.id)}</div>
       <div id="photo-upload-zone" class="photo-drop-zone" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handlePhotoDrop(event,${i.id})">
         <i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:3px">Glisser-déposer des photos ici</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:3px">${t('photo_drop')}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${t('photo_formats')} — 15 Mo max</div>
         <label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir des fichiers<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${i.id})"></label>
       </div>
       <div class="divider"></div>
@@ -793,7 +793,7 @@ async function handlePhotoFiles(files,interId){
   }catch(e){zone.innerHTML=uploadZoneHTML(interId);toast('Erreur upload : '+e.message,'ti-alert-circle','var(--danger)');}
 }
 function handlePhotoDrop(e,interId){e.preventDefault();$('photo-upload-zone').classList.remove('drag-over');if(e.dataTransfer.files.length)handlePhotoFiles(e.dataTransfer.files,interId);}
-function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:13px;color:var(--text2);margin-bottom:3px">Glisser-déposer des photos ici</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
+function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:13px;color:var(--text2);margin-bottom:3px">${t('photo_drop')}</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">${t('photo_formats')}</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
 async function deletePhoto(interId,pid){if(!confirm(t('confirm_suppr_photo')))return;await API.deletePhoto(interId,pid);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);toast(t('msg_photo_sup'),'ti-trash');}
 async function editPhotoLegende(interId,pid,cur){const l=prompt('Légende :',cur);if(l===null)return;await API.updatePhotoLegende(interId,pid,l);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);}
 
@@ -828,8 +828,100 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
 </div>`;}
-function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
-async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
+function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>${t('clients_new')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalFusionnerClient(idCible) {
+  // Charger tous les clients pour choisir la source
+  const clients = await API.clients();
+  const cible = clients.find(c => c.id === idCible);
+  if (!cible) return;
+
+  // Filtrer la liste — exclure le client cible lui-même
+  const autres = clients.filter(c => c.id !== idCible);
+
+  showModal(`
+    <div class="modal-header">
+      <i class="ti ti-git-merge" style="font-size:18px;color:var(--accent)"></i>
+      <h2>Fusionner un doublon</h2>
+      <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--accent-bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:13px">
+        <div style="font-weight:700;color:var(--accent);margin-bottom:2px"><i class="ti ti-shield-check"></i> Client cible (celui qui sera conservé)</div>
+        <div>${esc(cible.nom)}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client doublon à fusionner (sera supprimé)</label>
+        <div style="position:relative">
+          <input class="form-input" id="fusion-search" placeholder="Taper le nom du doublon…" autocomplete="off"
+            oninput="searchFusionClient(this.value)" onfocus="searchFusionClient(this.value)"
+            onblur="setTimeout(()=>{const d=$('fusion-drop');if(d)d.style.display='none'},150)">
+          <input type="hidden" id="fusion-source-id">
+          <div id="fusion-drop" class="piece-dropdown" style="display:none"></div>
+        </div>
+        <div id="fusion-source-info" style="margin-top:6px;font-size:12px;color:var(--text3)"></div>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="fusion-vf-ignore" checked>
+          <span>Empêcher la sync VosFactures de recréer ce doublon</span>
+        </label>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;margin-left:20px">
+          Recommandé si le doublon vient de VosFactures. Le fauteuil restera dans VosFactures mais ne sera plus importé.
+        </div>
+      </div>
+      <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger)">
+        <i class="ti ti-alert-triangle"></i> Les fauteuils et interventions du doublon seront rattachés à <b>${esc(cible.nom)}</b>, puis le doublon sera supprimé définitivement.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
+      <button class="btn danger" onclick="confirmerFusion(${idCible})"><i class="ti ti-git-merge"></i>Fusionner et supprimer le doublon</button>
+    </div>`);
+
+  // Stocker la liste pour la recherche
+  window._FUSION_CLIENTS = autres;
+}
+
+function searchFusionClient(q) {
+  const drop = $('fusion-drop');
+  if (!drop) return;
+  const query = q.toLowerCase().trim();
+  const results = (query
+    ? (window._FUSION_CLIENTS||[]).filter(c => c.nom.toLowerCase().includes(query))
+    : (window._FUSION_CLIENTS||[])
+  ).slice(0, 12);
+  if (!results.length) { drop.style.display='none'; return; }
+  drop.innerHTML = results.map(c => `
+    <div class="piece-option" onmousedown="event.preventDefault();selectFusionSource(${c.id},'${c.nom.replace(/'/g,"\'")}',${c.nb_fauteuils||0})">
+      <div style="font-size:12px;font-weight:600">${esc(c.nom)}</div>
+      <div style="font-size:11px;color:var(--text3)">${c.nb_fauteuils||0} fauteuil(s) — ${esc(c.ville||'')}</div>
+    </div>`).join('');
+  drop.style.display = 'block';
+}
+
+function selectFusionSource(id, nom, nbFauteuils) {
+  const inp = $('fusion-search'); if(inp) inp.value = nom;
+  const hid = $('fusion-source-id'); if(hid) hid.value = id;
+  const drop = $('fusion-drop'); if(drop) drop.style.display='none';
+  const info = $('fusion-source-info');
+  if(info) info.innerHTML = `<span style="color:var(--warning)"><i class="ti ti-alert-triangle"></i> Ce doublon a <b>${nbFauteuils}</b> fauteuil(s) qui seront transférés.</span>`;
+}
+
+async function confirmerFusion(idCible) {
+  const idSource = parseInt(gv('fusion-source-id'));
+  if (!idSource) { alert('Veuillez sélectionner un doublon.'); return; }
+  const vfIgnore = document.getElementById('fusion-vf-ignore')?.checked !== false;
+  if (!confirm('Confirmer la fusion ? Le doublon sera supprimé définitivement.')) return;
+  try {
+    const r = await API.fusionnerClients(idCible, idSource, vfIgnore);
+    toast(`Fusion réussie — ${r.fauteuils_transferes} fauteuil(s) et ${r.interventions_transferees} intervention(s) transférés`, 'ti-git-merge');
+    closeModal();
+    CACHE.catalogue = [];
+    render();
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>${t('client_modifier')} client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveClient(id){const data={nom:gv('f-nom'),type:gv('f-type'),contact:gv('f-contact'),email:gv('f-email'),tel:gv('f-tel'),ville:gv('f-ville')};if(!data.nom){alert(t('msg_nom_requis'));return;}try{id?await API.updateClient(id,data):await API.createClient(data);toast(id?'Client mis à jour':'Client créé');closeModal();render();}catch(e){alert(e.message);}}
 async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;await API.deleteClient(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
 
@@ -861,8 +953,8 @@ function fauteuilForm(d={}){return `<div class="grid-2">
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">N° facture VosFactures</label><input class="form-input" id="f-facture" value="${esc(d.num_facture||'')}"></div>
 </div>
 <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes">${esc(d.notes||'')}</textarea></div>`;}
-function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
-async function modalEditFauteuil(id){const f=await API.fauteuil(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
+function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent)"></i><h2>${t('fauteuil_new')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditFauteuil(id){const f=await API.fauteuil(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>${t('fauteuil_edit')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveFauteuil(id,clientId){const data={client_id:clientId,modele:gv('f-modele'),serie:gv('f-serie'),annee:parseInt(gv('f-annee')),couleur:gv('f-couleur'),date_achat:gv('f-dateachat'),duree_garantie_mois:parseInt(gv('f-garduree'))||24,num_facture:gv('f-facture'),notes:gv('f-notes')};if(!data.serie){alert(t('msg_serie_requis'));return;}try{id?await API.updateFauteuil(id,data):await API.createFauteuil(data);toast(id?'Fauteuil mis à jour':'Fauteuil créé');closeModal();render();}catch(e){alert(e.message);}}
 async function deleteFauteuil(id,clientId){if(!confirm(t('confirm_suppr_fauteuil')))return;await API.deleteFauteuil(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('client',{clientId});}
 
@@ -908,7 +1000,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
           <button type="button" class="btn sm" style="font-size:10px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>Créer un fauteuil</button>
         </label>
         <select class="form-input" id="f-fauteuil">
-          ${fauteuils.length ? fauteuils.map(f=>`<option value="${f.id}" ${(f.id===fauteuilId||f.id===d.fauteuil_id)?'selected':''}>${esc(f.modele)} – ${esc(f.serie)}</option>`).join('') : '<option value="">— Aucun fauteuil (créez-en un ci-dessous) —</option>'}
+          ${fauteuils.length ? fauteuils.map(f=>`<option value="${f.id}" ${(f.id===fauteuilId||f.id===d.fauteuil_id)?'selected':''}>${esc(f.modele)} – ${esc(f.serie)}</option>`).join('') : `<option value="">${t('select_fauteuil_vide')}</option>`}
         </select>
         <div id="new-fauteuil-inline" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-top:8px;border:1px dashed var(--border-s)">
           <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Nouveau fauteuil</div>
@@ -947,19 +1039,19 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
           </div>
           <div style="display:flex;gap:6px;margin-top:4px">
             <button type="button" class="btn sm primary" onclick="createFauteuilInline()"><i class="ti ti-check"></i>Créer et sélectionner</button>
-            <button type="button" class="btn sm" onclick="toggleNewFauteuilInline()">Annuler</button>
+            <button type="button" class="btn sm" onclick="toggleNewFauteuilInline()">${t('btn_annuler')}</button>
           </div>
         </div>
       </div>
       <div class="form-group"><label class="form-label">Date *</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().slice(0,10)}"></div>
-      <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map(tp=>`<option ${d.type===tp?'selected':''}>${tp}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${t('inter_types').map(tp=>`<option ${d&&d.type===tp?'selected':''}>${tp}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Statut</label><select class="form-input" id="f-statut">${['Ouvert',t('db_attente'),'Fermé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">Technicien</label><input class="form-input" id="f-tech" value="${esc(d.technicien||'Frédéric')}"></div>
     </div>
     <div class="form-group"><label class="form-label">Garantie</label>
       <div style="display:flex;gap:12px;margin-top:4px">
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="garantie" value="1" ${!i||i.garantie?'checked':''}><span class="badge g">Sous garantie</span></label>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="garantie" value="0" ${i&&!i.garantie?'checked':''}><span class="badge hg">Hors garantie</span></label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="garantie" value="1" ${!i||i.garantie?'checked':''}><span class="badge g">${t('inter_sous_garantie')}</span></label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="garantie" value="0" ${i&&!i.garantie?'checked':''}><span class="badge hg">${t('inter_hors_garantie')}</span></label>
       </div>
     </div>
     <div class="form-group"><label class="form-label">Description *</label><textarea class="form-input" id="f-desc">${esc(d.description||'')}</textarea></div>
@@ -993,8 +1085,8 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
   </div>
   <div class="modal-footer">
     ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
-    <button class="btn" onclick="closeModal()">Annuler</button>
-    <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?'Mettre à jour':'Enregistrer'}</button>
+    <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
+    <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?t('btn_maj'):t('btn_enregistrer')}</button>
   </div>`;}
 function toggleNewFauteuilInline(){
   const el=document.getElementById('new-fauteuil-inline');
@@ -1065,7 +1157,7 @@ async function refreshFauteuilSelect(){
   const list=cid?await API.fauteuils(cid):await API.fauteuils();
   $('f-fauteuil').innerHTML=list.length
     ? list.map(f=>`<option value="${f.id}">${esc(f.modele)} – ${esc(f.serie)}</option>`).join('')
-    : '<option value="">Aucun fauteuil pour ce client</option>';
+    : `<option value="">${t('select_fauteuil_vide')}</option>`;
 }
 
 function searchClients(q, allClients){
@@ -1179,8 +1271,8 @@ async function modalPiece(id){
     </div></div>
     <div class="modal-footer">
       ${id?`<button class="btn danger" onclick="deletePiece(${id})"><i class="ti ti-trash"></i></button>`:''}
-      <button class="btn" onclick="closeModal()">Annuler</button>
-      <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>Enregistrer</button>
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
+      <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);}
 async function savePiece(id){
   const stockActif=document.getElementById('f-stock-actif')?.checked!==false;

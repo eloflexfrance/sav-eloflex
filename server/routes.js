@@ -743,6 +743,63 @@ router.get('/vosfactures/status', async (req, res) => {
 
 
 
+
+// ── FUSION DE CLIENTS ─────────────────────────────────────────────
+// Fusionner client_source dans client_cible (rattacher fauteuils + interventions)
+router.post('/clients/:id/fusionner', async (req, res) => {
+  const { client_source_id, vf_ignore_source } = req.body;
+  const clientCibleId  = parseInt(req.params.id);
+  const clientSourceId = parseInt(client_source_id);
+  if (!clientSourceId || clientSourceId === clientCibleId)
+    return res.status(400).json({ error: 'IDs invalides' });
+
+  const pgClient = await db.pool.connect();
+  try {
+    await pgClient.query('BEGIN');
+
+    // Rattacher tous les fauteuils du client source vers le client cible
+    const { rowCount: fauteuils } = await pgClient.query(
+      'UPDATE fauteuils SET client_id=$1, updated_at=NOW() WHERE client_id=$2',
+      [clientCibleId, clientSourceId]
+    );
+
+    // Rattacher toutes les interventions du client source vers le client cible
+    const { rowCount: interventions } = await pgClient.query(
+      'UPDATE interventions SET client_id=$1, updated_at=NOW() WHERE client_id=$2',
+      [clientCibleId, clientSourceId]
+    );
+
+    // Marquer le client source comme ignoré par la sync VF (si demandé)
+    if (vf_ignore_source) {
+      await pgClient.query(
+        'UPDATE clients SET vf_ignore=TRUE, updated_at=NOW() WHERE id=$1',
+        [clientSourceId]
+      );
+    }
+
+    // Supprimer le client source (maintenant vide)
+    await pgClient.query('DELETE FROM clients WHERE id=$1', [clientSourceId]);
+
+    await pgClient.query('COMMIT');
+    res.json({ ok: true, fauteuils_transferes: fauteuils, interventions_transferees: interventions });
+  } catch(e) {
+    await pgClient.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { pgClient.release(); }
+});
+
+// Marquer un client comme ignoré par la sync VF (sans le supprimer)
+router.post('/clients/:id/vf-ignore', async (req, res) => {
+  try {
+    const { ignore } = req.body;
+    await db.run(
+      'UPDATE clients SET vf_ignore=$1, updated_at=NOW() WHERE id=$2',
+      [!!ignore, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── RECHERCHE RAPIDE (dashboard) ──────────────────────────────────
 router.get('/recherche', async (req, res) => {
   try {

@@ -64,6 +64,8 @@ const TRANSLATIONS = {
     garantie_active: 'Garantie active',
     garantie_expiree: 'Garantie expirée le',
     garantie_inconnue: 'Garantie inconnue',
+    badge_paye: 'Payée',
+    garantie_inconnue_date: "Date d'achat inconnue — garantie",
 
     // Clients
     clients_title: 'Clients / Distributeurs',
@@ -409,6 +411,8 @@ const TRANSLATIONS = {
     garantie_active: 'Warranty active',
     garantie_expiree: 'Warranty expired on',
     garantie_inconnue: 'Warranty unknown',
+    badge_paye: 'Paid',
+    garantie_inconnue_date: 'Purchase date unknown — warranty',
 
     // Clients
     clients_title: 'Clients / Distributors',

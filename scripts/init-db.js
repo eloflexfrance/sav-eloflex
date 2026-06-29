@@ -15,7 +15,7 @@ async function initDB() {
         id SERIAL PRIMARY KEY,
         nom TEXT NOT NULL, contact TEXT, email TEXT, tel TEXT, ville TEXT,
         type TEXT DEFAULT 'Distributeur',
-        token_portail TEXT UNIQUE, vf_id BIGINT UNIQUE,
+        token_portail TEXT UNIQUE, vf_id BIGINT UNIQUE, vf_ignore BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS fauteuils (
@@ -98,6 +98,7 @@ async function initDB() {
       await client.query(`ALTER TABLE fauteuils ALTER COLUMN vf_facture_id TYPE BIGINT`);
       await client.query(`ALTER TABLE intervention_produits ALTER COLUMN vf_product_id TYPE BIGINT`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_actif BOOLEAN DEFAULT TRUE`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS vf_ignore BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_bordereau_vf TEXT`);
       // Nettoyer les date_achat mal formées (pas au format YYYY-MM-DD)
       await client.query(`UPDATE fauteuils SET date_achat = NULL WHERE date_achat IS NOT NULL AND date_achat !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`);

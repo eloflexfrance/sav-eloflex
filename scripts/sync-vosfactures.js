@@ -70,6 +70,7 @@ async function syncClients() {
           nom=EXCLUDED.nom, contact=EXCLUDED.contact,
           email=EXCLUDED.email, tel=EXCLUDED.tel,
           ville=EXCLUDED.ville, updated_at=NOW()
+        WHERE clients.vf_ignore = FALSE
       `, [nom, c.buyer_name||null, c.email||null, c.phone||c.mobile||null, c.city||null, 'Distributeur', c.id]);
       count++;
     }
