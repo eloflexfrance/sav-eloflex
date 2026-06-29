@@ -546,7 +546,7 @@ async function viewIntervention(id){
         <div><div class="stat-label">Technicien</div><div>${esc(i.technicien||'—')}</div></div>
       </div>
       <div class="form-group"><div class="form-label">Description</div><div style="font-size:12px;background:var(--bg);padding:8px;border-radius:var(--radius)">${esc(i.description||'—')}</div></div>
-      ${i.notes?`<div class="form-group"><div class="form-label">Notes</div><div style="font-size:12px;color:var(--text2)">${esc(i.notes)}</div></div>`:''}
+      ${i.notes?`<div class="form-group"><div class="form-label">Intervention réalisée</div><div style="font-size:12px;color:var(--text2)">${esc(i.notes)}</div></div>`:''}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-box"></i>Pièces</div>
       ${(i.produits||[]).length===0?'<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>':`
@@ -840,7 +840,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
       </div>
     </div>
     <div class="form-group"><label class="form-label">Description *</label><textarea class="form-input" id="f-desc">${esc(d.description||'')}</textarea></div>
-    <div class="form-group"><label class="form-label">Notes internes</label><textarea class="form-input" id="f-notes" style="min-height:52px">${esc(d.notes||'')}</textarea></div>
+    <div class="form-group"><label class="form-label">Intervention réalisée</label><textarea class="form-input" id="f-notes" style="min-height:52px">${esc(d.notes||'')}</textarea></div>
     <div class="divider"></div>
     <div class="section-title"><i class="ti ti-box"></i>Pièces utilisées</div>
     <div id="produits-list" style="margin-bottom:8px"></div>
