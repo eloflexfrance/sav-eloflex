@@ -331,11 +331,21 @@ async function renderClient(ttl,c,a){
 }
 
 function garantieChip(f){
-  if(!f.date_achat||!f.duree_garantie_mois) return '<span class="garantie-chip unknown">Garantie inconnue</span>';
-  const exp=new Date(f.date_achat); exp.setMonth(exp.getMonth()+(f.duree_garantie_mois||24));
-  const j=Math.ceil((exp-new Date())/86400000);
-  if(j>0) return `<span class="garantie-chip active"><i class="ti ti-shield-check" style="font-size:12px"></i>Garantie active (${j} j)</span>`;
-  return `<span class="garantie-chip expired"><i class="ti ti-shield-x" style="font-size:12px"></i>Garantie expirée le ${fd(exp.toISOString().slice(0,10))}</span>`;
+  const duree = f.duree_garantie_mois || 24;
+  if(!f.date_achat) return `<span class="garantie-chip unknown"><i class="ti ti-shield-off" style="font-size:12px"></i>Date d'achat inconnue — garantie ${duree} mois</span>`;
+  const achat = new Date(f.date_achat);
+  const exp = new Date(f.date_achat);
+  exp.setMonth(exp.getMonth() + duree);
+  const now = new Date();
+  const j = Math.ceil((exp - now) / 86400000);
+  const dateExpStr = fd(exp.toISOString().slice(0,10));
+  const dateAchatStr = fd(f.date_achat.slice(0,10));
+  if (j > 0) {
+    return `<span class="garantie-chip active"><i class="ti ti-shield-check" style="font-size:12px"></i>Garantie active — expire le ${dateExpStr} (${j} jour${j>1?'s':''})</span>`;
+  } else {
+    const jDepuis = Math.abs(j);
+    return `<span class="garantie-chip expired"><i class="ti ti-shield-x" style="font-size:12px"></i>Garantie expirée le ${dateExpStr} (il y a ${jDepuis} jour${jDepuis>1?'s':''})</span>`;
+  }
 }
 
 async function renderFauteuil(ttl,c,a){
@@ -360,6 +370,8 @@ async function renderFauteuil(ttl,c,a){
           ${f.date_achat?`<tr><td style="color:var(--text3);padding:3px 0">Date d'achat</td><td>${fd(f.date_achat)}</td></tr>`:''}
           ${f.num_facture?`<tr><td style="color:var(--text3);padding:3px 0">Facture</td><td><span class="mono" style="color:var(--accent)">${esc(f.num_facture)}</span></td></tr>`:''}
           <tr><td style="color:var(--text3);padding:3px 0">Garantie</td><td>${garantieChip(f)}</td></tr>
+          ${f.date_achat?`<tr><td style="color:var(--text3);padding:3px 0">Date d'achat</td><td>${fd(f.date_achat.slice(0,10))}</td></tr>`:''}
+          <tr><td style="color:var(--text3);padding:3px 0">Durée garantie</td><td>${f.duree_garantie_mois||24} mois (légale 2 ans)</td></tr>
         </table>
       </div>
       <div class="card">

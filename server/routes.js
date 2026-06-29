@@ -751,7 +751,7 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
   try {
     const XLSX = require('xlsx');
     // Lire depuis le buffer mémoire (memoryStorage)
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
     const YEAR_SHEETS = wb.SheetNames.filter(s => /^\d{4}$/.test(s)).sort();
 
     let stats = { clients: 0, fauteuils: 0, doublons: 0, ignores: 0, erreurs: 0 };
@@ -781,23 +781,49 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
     function getColMap(header) {
       const h = header.map(v=>v?String(v).toLowerCase().trim():'');
       const find=(...keys)=>{for(const k of keys){const i=h.findIndex(v=>v.includes(k));if(i>=0)return i;}return -1;};
-      return {distrib:find('distributeur'),email:find('email','mail'),tel:find('téléphone','telephone'),modele:find('modèle','modele'),date:find('livraison'),serie:find('série','serie'),facture:find('facture')};
+      return {
+        distrib:  find('distributeur'),
+        email:    find('email','mail'),
+        tel:      find('téléphone','telephone'),
+        modele:   find('modèle','modele'),
+        date_bdc: find('date'),         // Date du bon de commande
+        livraison:find('livraison'),    // Date de livraison
+        serie:    find('série','serie'),
+        facture:  find('facture')
+      };
+    }
+
+    // Convertir une date Excel (objet Date ou string ISO) en YYYY-MM-DD
+    function toISODate(val) {
+      if (!val) return null;
+      if (val instanceof Date) {
+        return val.toISOString().substring(0, 10);
+      }
+      const s = String(val).trim();
+      // Format ISO déjà correct
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+      // Format DD-Mon ou DD-Mon-YY → ignorer (pas d'année fiable)
+      return null;
     }
 
     const pgClient = await db.pool.connect();
     try {
       for (const year of YEAR_SHEETS) {
         const ws = wb.Sheets[year];
-        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:false});
+        const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
         if(!rows.length) continue;
         const colMap = getColMap(rows[0]);
 
         for (let i=1;i<rows.length;i++) {
           const row=rows[i];
           if(!row||!row.some(v=>v)) continue;
-          const get=(idx)=>idx>=0&&row[idx]?String(row[idx]).replace(/\xa0/g,'').trim():null;
+          const get=(idx)=>{
+            if(idx<0||row[idx]===null||row[idx]===undefined) return null;
+            if(row[idx] instanceof Date) return row[idx].toISOString().substring(0,10);
+            return String(row[idx]).replace(/\xa0/g,'').trim()||null;
+          };
           const distribNom=get(colMap.distrib); const serieRaw=get(colMap.serie);
-          const modeleRaw=get(colMap.modele); const livraison=get(colMap.date);
+          const modeleRaw=get(colMap.modele);
           const factureNum=get(colMap.facture); const email=get(colMap.email); const tel=get(colMap.tel);
           if(!distribNom||distribNom==='-'){stats.ignores++;continue;}
           const series=extraireSeries(serieRaw);
@@ -826,16 +852,15 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
             try {
               const sc=serie.replace(/[_\s]+$/,'').replace(/_x000D_.*$/,'').trim();
               if(sc.length<4) continue;
-              // Nettoyer la date — s'assurer qu'elle est au format YYYY-MM-DD
-              let dateAchat = null;
+              // Date d'achat = date BDC (date de commande) en priorité, sinon livraison
+              const dateBdc      = get(colMap.date_bdc);
+              const dateLivraison= get(colMap.livraison);
+              const dateSource   = dateBdc || dateLivraison;
+              let dateAchat = toISODate(dateSource);
+              // Si pas de date valide, construire une date approximative depuis l'année de l'onglet
               let annee = parseInt(year);
-              if (livraison) {
-                // Format ISO : 2026-01-12
-                if (/^\d{4}-\d{2}-\d{2}/.test(livraison)) {
-                  dateAchat = livraison.substring(0, 10);
-                  annee = parseInt(livraison.substring(0, 4));
-                }
-                // Format Excel court : "12-Jan" ou "12-Jan-26" → ignorer, utiliser l'année de l'onglet
+              if (dateAchat) {
+                annee = parseInt(dateAchat.substring(0, 4));
               }
               const ex=await pgClient.query('SELECT id FROM fauteuils WHERE serie=$1',[sc]);
               if(ex.rows.length){
