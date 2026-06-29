@@ -789,7 +789,7 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
               }
             } catch(e){
               if(!e.message.includes('unique')){
-                if(stats.erreurs < 5) console.error('[IMPORT EXCEL] Erreur fauteuil:', e.message, 'série:', sc);
+                if(stats.erreurs < 5) console.error('[IMPORT EXCEL] Erreur fauteuil:', e.message);
                 stats.erreurs++;
               } else { stats.doublons++; }
             }
