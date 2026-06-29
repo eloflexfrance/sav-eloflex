@@ -36,7 +36,7 @@ async function initDB() {
         statut TEXT NOT NULL DEFAULT 'Ouvert',
         description TEXT, notes TEXT, technicien TEXT,
         envoi_transporteur TEXT, envoi_numero TEXT, envoi_date TEXT,
-        retour_transporteur TEXT, retour_numero TEXT, retour_date TEXT,
+        retour_transporteur TEXT, retour_numero TEXT, retour_date TEXT, num_sav TEXT,
         num_bordereau_vf TEXT,
         relance_envoyee BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -100,6 +100,7 @@ async function initDB() {
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_actif BOOLEAN DEFAULT TRUE`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS vf_ignore BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_bordereau_vf TEXT`);
+      await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_sav TEXT`);
       // Nettoyer les date_achat mal formées (pas au format YYYY-MM-DD)
       await client.query(`UPDATE fauteuils SET date_achat = NULL WHERE date_achat IS NOT NULL AND date_achat !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`);
       // Nettoyer les dates aberrantes (avant 2010 = numéro BDC mal interprété)
