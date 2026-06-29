@@ -101,4 +101,23 @@ function getPhotoUrl(filename, isThumb = false) {
   return isThumb ? `/uploads/thumbs/${filename}` : `/uploads/${filename}`;
 }
 
-module.exports = { upload, makeThumb, deleteFiles, getPhotoUrl, savePhoto, UPLOAD_DIR, THUMB_DIR, USE_CLOUDINARY };
+// Upload spécifique pour les fichiers Excel (import)
+const uploadExcel = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'application/octet-stream'
+    ];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(file.mimetype) || ext === '.xlsx' || ext === '.xls') {
+      cb(null, true);
+    } else {
+      cb(new Error('Format non supporté. Utilisez un fichier Excel (.xlsx ou .xls)'));
+    }
+  },
+  limits: { fileSize: 50 * 1024 * 1024 } // 50 Mo max
+});
+
+module.exports = { upload, uploadExcel, makeThumb, deleteFiles, getPhotoUrl, savePhoto, UPLOAD_DIR, THUMB_DIR, USE_CLOUDINARY };

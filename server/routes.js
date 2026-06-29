@@ -3,7 +3,7 @@ const express  = require('express');
 const crypto   = require('crypto');
 const XLSX     = require('xlsx');
 const db       = require('./db');
-const { upload, makeThumb, deleteFiles } = require('./uploads');
+const { upload, uploadExcel, makeThumb, deleteFiles } = require('./uploads');
 const router   = express.Router();
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -697,15 +697,12 @@ router.get('/recherche', async (req, res) => {
 });
 
 // ── IMPORT EXCEL (upload depuis l'interface) ───────────────────────
-router.post('/import/excel', upload.single('file'), async (req, res) => {
+router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Fichier requis' });
   try {
     const XLSX = require('xlsx');
-    const path = require('path');
-    const { UPLOAD_DIR } = require('./uploads');
-    const filepath = req.file.path || path.join(UPLOAD_DIR, req.file.filename);
-
-    const wb = XLSX.readFile(filepath);
+    // Lire depuis le buffer mémoire (memoryStorage)
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
     const YEAR_SHEETS = wb.SheetNames.filter(s => /^\d{4}$/.test(s)).sort();
 
     let stats = { clients: 0, fauteuils: 0, doublons: 0, ignores: 0, erreurs: 0 };
@@ -793,8 +790,6 @@ router.post('/import/excel', upload.single('file'), async (req, res) => {
       }
     } finally { pgClient.release(); }
 
-    // Nettoyer le fichier uploadé
-    try { require('fs').unlinkSync(filepath); } catch(e){}
     res.json({ ok:true, stats, sheets: YEAR_SHEETS });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
