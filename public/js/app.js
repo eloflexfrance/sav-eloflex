@@ -827,6 +827,13 @@ function addProduitRow(){
   setTimeout(()=>{const inputs=document.querySelectorAll('.piece-search');if(inputs.length)inputs[inputs.length-1].focus();},50);
 }
 function removeProduit(i){TMP_PRODUITS.splice(i,1);renderProduitsForm();}
+function selectPieceResult(idx,resultIdx){
+  const p=(window._PIECE_RESULTS&&window._PIECE_RESULTS[idx])?window._PIECE_RESULTS[idx][resultIdx]:null;
+  if(!p) return;
+  TMP_PRODUITS[idx]={...TMP_PRODUITS[idx],ref:p.ref||'',designation:p.designation||'',pxht:parseFloat(p.pxht||0)};
+  renderProduitsForm();
+  setTimeout(()=>{const q=document.querySelectorAll('.piece-qte');if(q[idx])q[idx].focus();},50);
+}
 function selectCatalogueByItem(idx,item){
   TMP_PRODUITS[idx]={...TMP_PRODUITS[idx],ref:item.ref,designation:item.designation,pxht:parseFloat(item.pxht||0)};
   renderProduitsForm();
@@ -842,7 +849,10 @@ function searchPieces(idx,q){
     (p.ref_fournisseur&&p.ref_fournisseur.toLowerCase().includes(query))
   ).slice(0,12);
   if(!results.length){drop.style.display='none';return;}
-  drop.innerHTML=results.map(p=>`<div class="piece-option" onmousedown="event.preventDefault();selectCatalogueByItem(${idx},{ref:'${p.ref.replace(/'/g,"\'")}',designation:'${p.designation.replace(/'/g,"\'")}',pxht:${parseFloat(p.pxht||0)}})">
+  // Stocker les résultats dans une variable globale pour éviter les problèmes d'échappement
+  window._PIECE_RESULTS = window._PIECE_RESULTS || {};
+  window._PIECE_RESULTS[idx] = results;
+  drop.innerHTML=results.map((p,ri)=>`<div class="piece-option" onmousedown="event.preventDefault();selectPieceResult(${idx},${ri})">
     <div style="font-size:12px;font-weight:600">${esc(p.designation)}</div>
     <div style="font-size:11px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref)}</span><span style="margin-left:auto">${parseFloat(p.pxht||0).toFixed(2)} €</span></div>
   </div>`).join('');
