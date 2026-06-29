@@ -335,7 +335,7 @@ async function renderCatalogue(t,c,a){
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
       <td style="color:var(--text3)">${esc(p.fournisseur||'')}</td>
       <td class="mono">${esc(p.ref_fournisseur||'')}</td>
-      <td style="font-weight:700">${p.pxht.toFixed(2)} €</td>
+      <td style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>
       <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
       <td style="font-size:11px;color:var(--text3)">${p.stock_alerte}</td>
     </tr>`).join('')}</tbody>
@@ -479,7 +479,7 @@ async function saveParametres(){
 
 async function viewIntervention(id){
   const[i,photos]=await Promise.all([API.intervention(id),API.photos(id)]);
-  const total=(i.produits||[]).reduce((s,p)=>s+p.pxht*p.qte,0);
+  const total=(i.produits||[]).reduce((s,p)=>s+parseFloat(p.pxht||0)*p.qte,0);
   showModal(`
     <div class="modal-header">
       <i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i>
@@ -507,7 +507,7 @@ async function viewIntervention(id){
       <div class="section-title"><i class="ti ti-box"></i>Pièces</div>
       ${(i.produits||[]).length===0?'<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>':`
         <table class="t"><thead><tr><th>Désignation</th><th>Réf</th><th>Qté</th><th>PU HT</th><th>Total HT</th></tr></thead>
-        <tbody>${(i.produits||[]).map(p=>`<tr><td>${esc(p.designation)}</td><td class="mono">${esc(p.ref||'')}</td><td>${p.qte}</td><td>${p.pxht.toFixed(2)} €</td><td style="font-weight:700">${(p.pxht*p.qte).toFixed(2)} €</td></tr>`).join('')}</tbody></table>
+        <tbody>${(i.produits||[]).map(p=>`<tr><td>${esc(p.designation)}</td><td class="mono">${esc(p.ref||'')}</td><td>${p.qte}</td><td>${parseFloat(p.pxht||0).toFixed(2)} €</td><td style="font-weight:700">${(parseFloat(p.pxht||0)*p.qte).toFixed(2)} €</td></tr>`).join('')}</tbody></table>
         <div style="text-align:right;padding-top:6px;font-weight:700;font-size:13px">Total HT : ${total.toFixed(2)} €</div>`}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-send"></i>Expédition</div>
