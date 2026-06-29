@@ -99,6 +99,10 @@ async function initDB() {
       await client.query(`ALTER TABLE intervention_produits ALTER COLUMN vf_product_id TYPE BIGINT`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_actif BOOLEAN DEFAULT TRUE`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_bordereau_vf TEXT`);
+      // Nettoyer les date_achat mal formées (pas au format YYYY-MM-DD)
+      await client.query(`UPDATE fauteuils SET date_achat = NULL WHERE date_achat IS NOT NULL AND date_achat !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`);
+      // Nettoyer les envoi_date mal formées
+      await client.query(`UPDATE interventions SET envoi_date = NULL WHERE envoi_date IS NOT NULL AND envoi_date !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`);
     } catch(e) { /* déjà en BIGINT */ }
     console.log("✅ Tables créées");
 

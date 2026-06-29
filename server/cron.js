@@ -36,6 +36,7 @@ async function runDailyChecks() {
       `SELECT i.*,c.nom AS client_nom,f.modele FROM interventions i
        JOIN fauteuils f ON f.id=i.fauteuil_id JOIN clients c ON c.id=i.client_id
        WHERE i.statut IN ('Ouvert','En attente') AND i.relance_envoyee=false
+       AND i.updated_at IS NOT NULL
        AND NOW()-i.updated_at >= ($1 || ' days')::INTERVAL`, [relanceJours]
     );
     for (const i of enAttente) {
@@ -51,6 +52,7 @@ async function runDailyChecks() {
        WHERE i.envoi_numero IS NOT NULL AND i.envoi_numero!=''
          AND (i.retour_numero IS NULL OR i.retour_numero='')
          AND i.statut!='Fermé' AND i.envoi_date IS NOT NULL
+         AND i.envoi_date ~ '^\d{4}-\d{2}-\d{2}$'
          AND NOW()-i.envoi_date::date >= INTERVAL '14 days'`
     );
     for (const i of expSansRetour) {
@@ -62,6 +64,7 @@ async function runDailyChecks() {
     const expirent = await db.all(
       `SELECT f.*,c.nom AS client_nom FROM fauteuils f JOIN clients c ON c.id=f.client_id
        WHERE f.date_achat IS NOT NULL AND f.duree_garantie_mois IS NOT NULL
+         AND f.date_achat ~ '^\d{4}-\d{2}-\d{2}$'
          AND (f.date_achat::date + (f.duree_garantie_mois || ' months')::INTERVAL)
              BETWEEN NOW() AND NOW()+INTERVAL '30 days'`
     );

@@ -777,8 +777,17 @@ router.post('/import/excel', uploadExcel.single('file'), async (req, res) => {
             try {
               const sc=serie.replace(/[_\s]+$/,'').replace(/_x000D_.*$/,'').trim();
               if(sc.length<4) continue;
-              const annee=livraison?parseInt(livraison.substring(0,4)):parseInt(year);
-              const dateAchat=livraison?livraison.substring(0,10):null;
+              // Nettoyer la date — s'assurer qu'elle est au format YYYY-MM-DD
+              let dateAchat = null;
+              let annee = parseInt(year);
+              if (livraison) {
+                // Format ISO : 2026-01-12
+                if (/^\d{4}-\d{2}-\d{2}/.test(livraison)) {
+                  dateAchat = livraison.substring(0, 10);
+                  annee = parseInt(livraison.substring(0, 4));
+                }
+                // Format Excel court : "12-Jan" ou "12-Jan-26" → ignorer, utiliser l'année de l'onglet
+              }
               const ex=await pgClient.query('SELECT id FROM fauteuils WHERE serie=$1',[sc]);
               if(ex.rows.length){
                 await pgClient.query('UPDATE fauteuils SET client_id=COALESCE(client_id,$1),modele=COALESCE(NULLIF(modele,\'\'),$2),annee=COALESCE(annee,$3),date_achat=COALESCE(date_achat,$4),num_facture=COALESCE(NULLIF(num_facture,\'\'),$5),updated_at=NOW() WHERE serie=$6',[clientId,modele,annee,dateAchat,factureNum,sc]);
