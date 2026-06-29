@@ -108,6 +108,21 @@ async function initDB() {
       // Nettoyer les envoi_date mal formées
       await client.query(`UPDATE interventions SET envoi_date = NULL WHERE envoi_date IS NOT NULL AND envoi_date !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`);
     } catch(e) { /* déjà en BIGINT */ }
+
+    // Table retours pièces vers Suède
+    await client.query(`CREATE TABLE IF NOT EXISTS retours_suede (
+      id SERIAL PRIMARY KEY,
+      num_retour TEXT,
+      date_envoi TEXT,
+      description TEXT,
+      statut TEXT DEFAULT 'En attente',
+      montant NUMERIC DEFAULT 0,
+      notes TEXT,
+      interventions_ids INTEGER[],
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
     console.log("✅ Tables créées");
 
     // Paramètres par défaut
