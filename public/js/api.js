@@ -45,6 +45,7 @@ const API = {
   portail:(token)=>API.get(`/portail/${token}`),
   vfStatus:()=>API.get('/vosfactures/status'),
   vfSyncHistorique:()=>API.post('/vosfactures/sync-historique',{}),
+  vfSyncHistoriqueStatus:()=>API.get('/vosfactures/sync-historique/status'),
   facturesVF:(fauteuilId)=>API.get(`/fauteuils/${fauteuilId}/factures-vf`),
   recherche:(q)=>API.get(`/recherche?q=${encodeURIComponent(q)}`),
   importExcel:async(file)=>{const fd=new FormData();fd.append('file',file);const r=await fetch('/api/import/excel',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},

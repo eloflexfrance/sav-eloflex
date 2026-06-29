@@ -589,18 +589,41 @@ router.get('/portail/:token', async (req, res) => {
 
 // ── VOSFACTURES ───────────────────────────────────────────────────
 
-// Sync historique complet VosFactures (toutes les années)
+// Sync historique complet VosFactures — tourne en arrière-plan
+let SYNC_HISTORIQUE_STATUS = { running: false, progress: '', started_at: null, done: false, results: null, error: null };
+
 router.post('/vosfactures/sync-historique', async (req, res) => {
   const token = process.env.VOSFACTURES_API_TOKEN, account = process.env.VOSFACTURES_ACCOUNT;
   if (!token || !account) return res.status(503).json({ error: 'VosFactures non configuré' });
-  try {
-    const { syncClients, syncProducts, syncInvoicesHistorique } = require('../scripts/sync-vosfactures');
-    const results = {};
-    try { results.clients  = await syncClients();            } catch(e) { results.clients  = `Erreur: ${e.message}`; }
-    try { results.products = await syncProducts();           } catch(e) { results.products = `Erreur: ${e.message}`; }
-    try { results.invoices = await syncInvoicesHistorique(); } catch(e) { results.invoices = `Erreur: ${e.message}`; }
-    res.json({ ok: true, results, synced_at: new Date().toISOString() });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  if (SYNC_HISTORIQUE_STATUS.running) return res.json({ ok: true, already_running: true, status: SYNC_HISTORIQUE_STATUS });
+
+  // Répondre immédiatement — la sync tourne en arrière-plan
+  SYNC_HISTORIQUE_STATUS = { running: true, progress: 'Démarrage…', started_at: new Date().toISOString(), done: false, results: null, error: null };
+  res.json({ ok: true, background: true, status: SYNC_HISTORIQUE_STATUS });
+
+  // Lancer en arrière-plan
+  (async () => {
+    try {
+      const { syncClients, syncProducts, syncInvoicesHistorique } = require('../scripts/sync-vosfactures');
+      const results = {};
+      SYNC_HISTORIQUE_STATUS.progress = 'Sync clients…';
+      try { results.clients  = await syncClients();  } catch(e) { results.clients  = `Erreur: ${e.message}`; }
+      SYNC_HISTORIQUE_STATUS.progress = 'Sync produits…';
+      try { results.products = await syncProducts(); } catch(e) { results.products = `Erreur: ${e.message}`; }
+      SYNC_HISTORIQUE_STATUS.progress = 'Analyse des factures (peut prendre 10-20 min)…';
+      try { results.invoices = await syncInvoicesHistorique(); } catch(e) { results.invoices = `Erreur: ${e.message}`; }
+      SYNC_HISTORIQUE_STATUS = { running: false, done: true, progress: 'Terminé', results, started_at: SYNC_HISTORIQUE_STATUS.started_at, finished_at: new Date().toISOString(), error: null };
+      console.log('[SYNC HISTORIQUE] Terminée :', JSON.stringify(results));
+    } catch(e) {
+      SYNC_HISTORIQUE_STATUS = { running: false, done: true, progress: 'Erreur', results: null, error: e.message, started_at: SYNC_HISTORIQUE_STATUS.started_at };
+      console.error('[SYNC HISTORIQUE] Erreur :', e.message);
+    }
+  })();
+});
+
+// Statut de la sync historique
+router.get('/vosfactures/sync-historique/status', (req, res) => {
+  res.json(SYNC_HISTORIQUE_STATUS);
 });
 
 // Factures VosFactures liées à un fauteuil (via l'API VF en live)

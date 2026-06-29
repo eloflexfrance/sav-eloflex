@@ -1196,23 +1196,54 @@ async function exportFauteuilPDF(id){const f=await API.fauteuil(id);PDF.fauteuil
 async function exportClientPDF(id){const cl=await API.client(id);const inters=await API.interventions({client_id:id});PDF.client(cl,cl.fauteuils||[],inters);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
 
 // ── VOSFACTURES ───────────────────────────────────────────────────
+let SYNC_POLL_TIMER = null;
+
 async function syncHistorique(){
   const el=document.getElementById('historique-progress');
-  if(el){el.style.display='block';el.innerHTML='<div class="card" style="padding:10px;font-size:12px"><i class="ti ti-loader-2"></i> Analyse de toutes les factures en cours… Cela peut prendre plusieurs minutes.</div>';}
-  try{
-    const r=await API.vfSyncHistorique();
-    if(el){el.innerHTML=`<div class="card" style="padding:10px;background:var(--success-bg);border-color:var(--success);font-size:12px">
-      <div style="font-weight:700;color:var(--success);margin-bottom:4px"><i class="ti ti-check"></i> Sync historique terminée</div>
-      <div>Clients : ${r.results.clients}</div>
-      <div>Produits : ${r.results.products}</div>
-      <div>Factures : ${r.results.invoices}</div>
-      <button class="btn sm" style="margin-top:6px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>Fermer</button>
-    </div>`;}
-    toast('Sync historique terminée','ti-history');
-  }catch(e){
-    if(el){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:12px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div>`;}
-    toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)');
+  if(!el) return;
+  el.style.display='block';
+  el.innerHTML=`<div class="card" style="padding:10px;font-size:12px">
+    <div style="font-weight:600;margin-bottom:4px"><i class="ti ti-loader-2"></i> Sync historique lancée en arrière-plan…</div>
+    <div id="sync-histo-msg" style="color:var(--text3)">Démarrage…</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:4px">Cela peut prendre 10 à 20 minutes. Vous pouvez continuer à utiliser l'application.</div>
+  </div>`;
+  try {
+    await API.vfSyncHistorique();
+    pollSyncHistorique();
+  } catch(e) {
+    el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:12px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div>`;
   }
+}
+
+function pollSyncHistorique(){
+  clearInterval(SYNC_POLL_TIMER);
+  SYNC_POLL_TIMER = setInterval(async () => {
+    try {
+      const s = await API.vfSyncHistoriqueStatus();
+      const el = document.getElementById('historique-progress');
+      const msg = document.getElementById('sync-histo-msg');
+      if (!el) { clearInterval(SYNC_POLL_TIMER); return; }
+      if (msg) msg.textContent = s.progress || '…';
+      if (s.done) {
+        clearInterval(SYNC_POLL_TIMER);
+        if (s.error) {
+          el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:12px;color:var(--danger)">
+            <i class="ti ti-alert-circle"></i> Erreur : ${esc(s.error)}
+            <button class="btn sm" style="margin-top:6px;display:block" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>Fermer</button>
+          </div>`;
+        } else {
+          el.innerHTML=`<div class="card" style="padding:10px;background:var(--success-bg);border-color:var(--success);font-size:12px">
+            <div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> Sync historique terminée !</div>
+            <div>📋 Clients : ${esc(s.results?.clients||'—')}</div>
+            <div>📦 Produits : ${esc(s.results?.products||'—')}</div>
+            <div>🧾 Factures : ${esc(s.results?.invoices||'—')}</div>
+            <button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none';render()"><i class="ti ti-x"></i>Fermer</button>
+          </div>`;
+          toast('Sync historique terminée','ti-history');
+        }
+      }
+    } catch(e) { /* silencieux pendant le polling */ }
+  }, 5000); // vérifier toutes les 5 secondes
 }
 
 async function syncVosFactures(){
