@@ -463,6 +463,12 @@ async function renderParametres(t,c,a){
           <option value="1" ${p.mode_sombre==='1'?'selected':''}>Sombre</option>
         </select>
       </div>
+      <div class="form-group"><label class="form-label">Langue / Language</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn ${LANG==='fr'?'primary':''}" id="btn-lang-fr" onclick="switchLang('fr')" style="min-width:90px">🇫🇷 Français</button>
+          <button class="btn ${LANG==='en'?'primary':''}" id="btn-lang-en" onclick="switchLang('en')" style="min-width:90px">🇬🇧 English</button>
+        </div>
+      </div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-file-import"></i>Import historique Excel</h3>
