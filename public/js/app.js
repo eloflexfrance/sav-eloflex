@@ -1265,9 +1265,44 @@ function renderProduitsForm(){
     </div>`).join('');
 }
 async function saveIntervention(id){
-  const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client'))||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau')||undefined,mettre_a_jour_proprietaire:document.getElementById('f-maj-proprietaire')?.checked||false,produits:TMP_PRODUITS};
+  // Résoudre le client_id — priorité au champ caché (sélection via dropdown)
+  // Si le texte visible ne correspond pas à la sélection, chercher par nom
+  let clientId = parseInt(gv('f-client')) || undefined;
+  const searchText = (document.getElementById('f-client-search')?.value || '').trim();
+  if (!clientId && searchText) {
+    // Chercher dans la liste des clients en cache
+    const match = (TMP_CLIENTS || []).find(c =>
+      c.nom.toLowerCase() === searchText.toLowerCase()
+    );
+    if (match) clientId = match.id;
+  }
+  const data={
+    fauteuil_id:parseInt(gv('f-fauteuil')),
+    client_id:clientId,
+    date:gv('f-date'),
+    type:gv('f-type'),
+    statut:gv('f-statut'),
+    technicien:gv('f-tech'),
+    garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',
+    description:gv('f-desc'),
+    notes:gv('f-notes'),
+    envoi_transporteur:gv('f-env-trans'),
+    envoi_numero:gv('f-env-num'),
+    envoi_date:gv('f-env-date'),
+    retour_transporteur:gv('f-ret-trans'),
+    retour_numero:gv('f-ret-num'),
+    retour_date:gv('f-ret-date'),
+    num_bordereau_vf:gv('f-bordereau')||undefined,
+    mettre_a_jour_proprietaire:document.getElementById('f-maj-proprietaire')?.checked||false,
+    produits:TMP_PRODUITS
+  };
   if(!data.fauteuil_id||!data.date){alert(t('msg_fauteuil_client_requis'));return;}
-  try{id?await API.updateIntervention(id,data):await API.createIntervention(data);TMP_PRODUITS=[];toast(id?'Intervention mise à jour':'Intervention créée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}
+  try{
+    id ? await API.updateIntervention(id,data) : await API.createIntervention(data);
+    TMP_PRODUITS=[];
+    toast(id?t('msg_inter_maj'):t('msg_inter_cree'));
+    closeModal();render();refreshBadges();
+  }catch(e){alert(e.message);}
 }
 
 // ── MODALES CATALOGUE ─────────────────────────────────────────────
