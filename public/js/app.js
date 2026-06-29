@@ -80,12 +80,7 @@ async function renderDashboard(t,c,a){
           onkeydown="if(event.key==='Escape'){this.value='';clearQuickSearch();}">
       </div>
       <div id="qs-results" class="qs-results" style="display:none"></div>
-      <label class="btn" style="cursor:pointer;white-space:nowrap">
-        <i class="ti ti-file-import"></i>Importer Excel
-        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importerExcel(this.files[0])">
-      </label>
     </div>
-    <div id="qs-import-progress" style="display:none;margin-bottom:12px"></div>
     <div class="grid-4" style="margin-bottom:12px">
       <div class="stat-card"><div class="stat-label">Interventions</div><div class="stat-value">${s.nb_interventions}</div></div>
       <div class="stat-card"><div class="stat-label">Ouvertes</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
@@ -452,6 +447,15 @@ async function renderParametres(t,c,a){
       </div>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-file-import"></i>Import historique Excel</h3>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Importe les ventes depuis le fichier Excel historique (onglets par année). Les fauteuils et distributeurs existants sont mis à jour sans créer de doublons.</div>
+      <label class="btn" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
+        <i class="ti ti-file-import"></i>Choisir le fichier Excel à importer
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importerExcel(this.files[0])">
+      </label>
+      <div id="qs-import-progress" style="display:none;margin-top:10px"></div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-refresh"></i>VosFactures</h3>
       <div class="form-group"><label class="form-label">Statut</label>
         <div id="vf-status-detail" style="font-size:12px;color:var(--text2)">Vérification…</div>
@@ -498,7 +502,19 @@ async function viewIntervention(id){
       <div class="grid-2" style="font-size:12px;margin-bottom:12px">
         <div><div class="stat-label">Client</div><div style="font-weight:600">${esc(i.client_nom||'')}</div></div>
         <div><div class="stat-label">Fauteuil</div><div style="font-weight:600">${esc(i.modele)} – <span class="mono">${esc(i.serie)}</span></div></div>
-        ${i.num_facture?`<div><div class="stat-label">Facture VosFactures</div><div class="mono" style="color:var(--accent)">${esc(i.num_facture)}</div></div>`:''}
+        <div>
+          <div class="stat-label">Facture VosFactures
+            <button class="btn sm" style="padding:1px 6px;font-size:10px;margin-left:6px" onclick="toggleEditFacture(${i.id},'${esc(i.num_facture||'')}')"><i class="ti ti-edit" style="font-size:10px"></i></button>
+          </div>
+          <div id="facture-display-${i.id}">
+            ${i.num_facture?`<span class="mono" style="color:var(--accent)">${esc(i.num_facture)}</span>`:'<span style="color:var(--text3)">—</span>'}
+          </div>
+          <div id="facture-edit-${i.id}" style="display:none;display:flex;gap:6px;align-items:center;margin-top:4px">
+            <input class="form-input mono" id="facture-input-${i.id}" style="font-size:12px;padding:4px 8px;flex:1" placeholder="ex: 7574" value="${esc(i.num_facture||'')}">
+            <button class="btn sm primary" onclick="saveFactureInter(${i.id})"><i class="ti ti-check"></i></button>
+            <button class="btn sm" onclick="document.getElementById('facture-edit-${i.id}').style.display='none';document.getElementById('facture-display-${i.id}').style.display='block'"><i class="ti ti-x"></i></button>
+          </div>
+        </div>
         <div><div class="stat-label">Technicien</div><div>${esc(i.technicien||'—')}</div></div>
       </div>
       <div class="form-group"><div class="form-label">Description</div><div style="font-size:12px;background:var(--bg);padding:8px;border-radius:var(--radius)">${esc(i.description||'—')}</div></div>
@@ -1136,6 +1152,31 @@ async function selectClient(id,nom){
 }
 
 // ── FACTURES VF SUR FICHE FAUTEUIL ───────────────────────────────
+function toggleEditFacture(interId, currentVal){
+  const display = document.getElementById('facture-display-'+interId);
+  const edit    = document.getElementById('facture-edit-'+interId);
+  const input   = document.getElementById('facture-input-'+interId);
+  if(!display||!edit) return;
+  display.style.display = 'none';
+  edit.style.display    = 'flex';
+  if(input){ input.value = currentVal; input.focus(); input.select(); }
+}
+
+async function saveFactureInter(interId){
+  const input = document.getElementById('facture-input-'+interId);
+  if(!input) return;
+  const val = input.value.trim();
+  try {
+    await API.updateIntervention(interId, { num_facture: val || null });
+    // Mettre à jour l'affichage
+    const display = document.getElementById('facture-display-'+interId);
+    const edit    = document.getElementById('facture-edit-'+interId);
+    if(display){ display.innerHTML = val ? `<span class="mono" style="color:var(--accent)">${esc(val)}</span>` : '<span style="color:var(--text3)">—</span>'; display.style.display='block'; }
+    if(edit)    edit.style.display = 'none';
+    toast('Numéro de facture mis à jour','ti-receipt');
+  } catch(e) { alert('Erreur : '+e.message); }
+}
+
 async function chargerFacturesVF(fauteuilId){
   const el=document.getElementById('factures-vf-content');if(!el)return;
   el.innerHTML='<i class="ti ti-loader-2"></i> Chargement depuis VosFactures…';
