@@ -1085,6 +1085,14 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
   </div>
   <div class="modal-footer">
     ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
+    <div id="banner-proprietaire" style="display:none;width:100%;background:var(--warning-bg,#fff8e1);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;margin-bottom:8px;font-size:12px">
+      <div style="font-weight:600;color:var(--warning);margin-bottom:4px"><i class="ti ti-alert-triangle"></i> Ce fauteuil appartient à un autre distributeur</div>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="f-maj-proprietaire">
+        <span>Mettre à jour le propriétaire du fauteuil avec le distributeur sélectionné</span>
+      </label>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px;margin-left:20px">À cocher si le fauteuil a changé de distributeur (revente, démo, etc.)</div>
+    </div>
     <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
     <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?t('btn_maj'):t('btn_enregistrer')}</button>
   </div>`;}
@@ -1186,6 +1194,24 @@ async function selectClient(id, nom){
   const drop=document.getElementById('client-drop');
   if(drop) drop.style.display='none';
   await refreshFauteuilSelect();
+  checkProprietaireChange();
+}
+
+function checkProprietaireChange(){
+  const clientId = parseInt(gv('f-client'));
+  const fauteuilSel = document.getElementById('f-fauteuil');
+  const banner = document.getElementById('banner-proprietaire');
+  if (!banner || !fauteuilSel) return;
+  // Récupérer le client_id du fauteuil sélectionné depuis l'option data-attr
+  const opt = fauteuilSel.options[fauteuilSel.selectedIndex];
+  const fauteuilClientId = opt ? parseInt(opt.dataset.clientId||0) : 0;
+  if (clientId && fauteuilClientId && clientId !== fauteuilClientId) {
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+    const cb = document.getElementById('f-maj-proprietaire');
+    if (cb) cb.checked = false;
+  }
 }
 function addProduitRow(){TMP_PRODUITS.push({ref:'',designation:'',qte:1,pxht:0});renderProduitsForm();setTimeout(()=>{const inputs=document.querySelectorAll('.piece-search');if(inputs.length)inputs[inputs.length-1].focus();},50);}
 function removeProduit(i){TMP_PRODUITS.splice(i,1);renderProduitsForm();}
@@ -1239,7 +1265,7 @@ function renderProduitsForm(){
     </div>`).join('');
 }
 async function saveIntervention(id){
-  const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client'))||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau')||undefined,produits:TMP_PRODUITS};
+  const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client'))||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau')||undefined,mettre_a_jour_proprietaire:document.getElementById('f-maj-proprietaire')?.checked||false,produits:TMP_PRODUITS};
   if(!data.fauteuil_id||!data.date){alert(t('msg_fauteuil_client_requis'));return;}
   try{id?await API.updateIntervention(id,data):await API.createIntervention(data);TMP_PRODUITS=[];toast(id?'Intervention mise à jour':'Intervention créée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}
 }

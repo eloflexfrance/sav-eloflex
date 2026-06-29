@@ -226,7 +226,9 @@ router.get('/interventions/:id', async (req, res) => {
 router.post('/interventions', async (req, res) => {
   try {
     const { fauteuil_id, client_id, date, type, garantie, statut, description, notes, technicien,
-      envoi_transporteur, envoi_numero, envoi_date, retour_transporteur, retour_numero, retour_date, num_bordereau_vf, produits = [] } = req.body;
+      envoi_transporteur, envoi_numero, envoi_date, retour_transporteur, retour_numero, retour_date, num_bordereau_vf,
+      mettre_a_jour_proprietaire,
+      produits = [] } = req.body;
     if (!fauteuil_id || !date) return res.status(400).json({ error: 'fauteuil_id et date requis' });
     const faut = await db.get('SELECT client_id,date_achat,duree_garantie_mois FROM fauteuils WHERE id=$1', [fauteuil_id]);
     const cid  = client_id || faut?.client_id;
@@ -236,6 +238,15 @@ router.post('/interventions', async (req, res) => {
     let id;
     try {
       await pgClient.query('BEGIN');
+
+      // Mettre à jour le propriétaire du fauteuil si demandé ET si le client a changé
+      if (mettre_a_jour_proprietaire && client_id && faut && client_id !== faut.client_id) {
+        await pgClient.query(
+          'UPDATE fauteuils SET client_id=$1, updated_at=NOW() WHERE id=$2',
+          [client_id, fauteuil_id]
+        );
+      }
+
       const r = await pgClient.query(
         `INSERT INTO interventions (fauteuil_id,client_id,date,type,garantie,garantie_auto,statut,description,notes,technicien,
           envoi_transporteur,envoi_numero,envoi_date,retour_transporteur,retour_numero,retour_date,num_bordereau_vf)
