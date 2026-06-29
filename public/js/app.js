@@ -821,22 +821,52 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
   </div>`;}
 
 async function refreshFauteuilSelect(){const cid=parseInt(gv('f-client'));const list=cid?await API.fauteuils(cid):await API.fauteuils();$('f-fauteuil').innerHTML=list.map(f=>`<option value="${f.id}">${esc(f.modele)} – ${esc(f.serie)}</option>`).join('');}
-function addProduitRow(){TMP_PRODUITS.push({ref:'',designation:'',qte:1,pxht:0});renderProduitsForm();}
+function addProduitRow(){
+  TMP_PRODUITS.push({ref:'',designation:'',qte:1,pxht:0});
+  renderProduitsForm();
+  setTimeout(()=>{const inputs=document.querySelectorAll('.piece-search');if(inputs.length)inputs[inputs.length-1].focus();},50);
+}
 function removeProduit(i){TMP_PRODUITS.splice(i,1);renderProduitsForm();}
-function selectCatalogue(idx,val){if(!val)return;const p=CACHE.catalogue.find(c=>c.id===parseInt(val));if(p){TMP_PRODUITS[idx].ref=p.ref;TMP_PRODUITS[idx].designation=p.designation;TMP_PRODUITS[idx].pxht=p.pxht;renderProduitsForm();}}
+function selectCatalogueByItem(idx,item){
+  TMP_PRODUITS[idx]={...TMP_PRODUITS[idx],ref:item.ref,designation:item.designation,pxht:parseFloat(item.pxht||0)};
+  renderProduitsForm();
+  setTimeout(()=>{const q=document.querySelectorAll('.piece-qte');if(q[idx])q[idx].focus();},50);
+}
+function searchPieces(idx,q){
+  const drop=document.getElementById('piece-drop-'+idx);if(!drop)return;
+  const query=q.toLowerCase().trim();
+  if(!query){drop.style.display='none';return;}
+  const results=CACHE.catalogue.filter(p=>
+    p.designation.toLowerCase().includes(query)||
+    (p.ref&&p.ref.toLowerCase().includes(query))||
+    (p.ref_fournisseur&&p.ref_fournisseur.toLowerCase().includes(query))
+  ).slice(0,12);
+  if(!results.length){drop.style.display='none';return;}
+  drop.innerHTML=results.map(p=>`<div class="piece-option" onmousedown="event.preventDefault();selectCatalogueByItem(${idx},{ref:'${p.ref.replace(/'/g,"\'")}',designation:'${p.designation.replace(/'/g,"\'")}',pxht:${parseFloat(p.pxht||0)}})">
+    <div style="font-size:12px;font-weight:600">${esc(p.designation)}</div>
+    <div style="font-size:11px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref)}</span><span style="margin-left:auto">${parseFloat(p.pxht||0).toFixed(2)} €</span></div>
+  </div>`).join('');
+  drop.style.display='block';
+}
 function renderProduitsForm(){
   const el=$('produits-list');if(!el)return;
   if(!TMP_PRODUITS.length){el.innerHTML='<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>';return;}
   el.innerHTML=TMP_PRODUITS.map((p,i)=>`
-    <div style="display:grid;grid-template-columns:2fr 1fr 0.5fr 0.7fr auto;gap:5px;align-items:start;margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:2fr 0.8fr 0.5fr 0.7fr auto;gap:5px;align-items:start;margin-bottom:8px">
       <div>
         ${i===0?'<div class="form-label">Désignation</div>':''}
-        <select class="form-input" style="margin-bottom:3px;font-size:11px" onchange="selectCatalogue(${i},this.value)"><option value="">Choisir du catalogue…</option>${CACHE.catalogue.map(c=>`<option value="${c.id}">${esc(c.ref)} – ${esc(c.designation)}</option>`).join('')}</select>
-        <input class="form-input" style="font-size:12px" placeholder="Désignation" value="${esc(p.designation)}" oninput="TMP_PRODUITS[${i}].designation=this.value">
+        <div style="position:relative">
+          <input class="form-input piece-search" style="font-size:12px" placeholder="Taper nom ou référence…"
+            value="${esc(p.designation)}"
+            oninput="TMP_PRODUITS[${i}].designation=this.value;searchPieces(${i},this.value)"
+            onfocus="searchPieces(${i},this.value)"
+            onblur="setTimeout(()=>{const d=document.getElementById('piece-drop-${i}');if(d)d.style.display='none'},150)">
+          <div id="piece-drop-${i}" class="piece-dropdown" style="display:none"></div>
+        </div>
       </div>
-      <div>${i===0?'<div class="form-label">Réf</div>':''}<input class="form-input mono" value="${esc(p.ref)}" oninput="TMP_PRODUITS[${i}].ref=this.value"></div>
-      <div>${i===0?'<div class="form-label">Qté</div>':''}<input class="form-input" type="number" min="1" value="${p.qte}" oninput="TMP_PRODUITS[${i}].qte=parseInt(this.value)||1"></div>
-      <div>${i===0?'<div class="form-label">Prix HT</div>':''}<input class="form-input" type="number" step="0.01" value="${p.pxht}" oninput="TMP_PRODUITS[${i}].pxht=parseFloat(this.value)||0"></div>
+      <div>${i===0?'<div class="form-label">Réf</div>':''}<input class="form-input mono" style="font-size:11px" value="${esc(p.ref)}" oninput="TMP_PRODUITS[${i}].ref=this.value"></div>
+      <div>${i===0?'<div class="form-label">Qté</div>':''}<input class="form-input piece-qte" type="number" min="1" value="${p.qte}" oninput="TMP_PRODUITS[${i}].qte=parseInt(this.value)||1"></div>
+      <div>${i===0?'<div class="form-label">PU HT</div>':''}<input class="form-input" type="number" step="0.01" value="${parseFloat(p.pxht||0).toFixed(2)}" oninput="TMP_PRODUITS[${i}].pxht=parseFloat(this.value)||0"></div>
       <div style="${i===0?'padding-top:18px':''}"><button class="btn sm danger" onclick="removeProduit(${i})"><i class="ti ti-x"></i></button></div>
     </div>`).join('');
 }
@@ -1085,22 +1115,6 @@ async function selectClient(id,nom){
   // En mode "autre distributeur" on ne recharge pas les fauteuils
   const autreDistrib=document.getElementById('f-autre-distrib');
   if(!autreDistrib?.checked) await refreshFauteuilSelect();
-}
-
-// ── PIÈCES — AUTOCOMPLÉTION ───────────────────────────────────────
-function searchPieces(idx,q){
-  const drop=document.getElementById('piece-drop-'+idx);if(!drop)return;
-  const query=q.toLowerCase().trim();
-  if(!query){drop.style.display='none';return;}
-  const results=CACHE.catalogue.filter(p=>p.designation.toLowerCase().includes(query)||(p.ref&&p.ref.toLowerCase().includes(query))).slice(0,12);
-  if(!results.length){drop.style.display='none';return;}
-  drop.innerHTML=results.map(p=>`<div class="piece-option" onmousedown="event.preventDefault();selectCatalogueByItem(${idx},{ref:'${p.ref.replace(/'/g,"\'")}',designation:'${p.designation.replace(/'/g,"\'")}',pxht:${parseFloat(p.pxht||0)}})"><div style="font-size:12px;font-weight:600">${esc(p.designation)}</div><div style="font-size:11px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref)}</span><span style="margin-left:auto">${parseFloat(p.pxht||0).toFixed(2)} €</span></div></div>`).join('');
-  drop.style.display='block';
-}
-function selectCatalogueByItem(idx,item){
-  TMP_PRODUITS[idx]={...TMP_PRODUITS[idx],ref:item.ref,designation:item.designation,pxht:parseFloat(item.pxht||0)};
-  renderProduitsForm();
-  setTimeout(()=>{const q=document.querySelectorAll('.piece-qte');if(q[idx])q[idx].focus();},50);
 }
 
 // ── FACTURES VF SUR FICHE FAUTEUIL ───────────────────────────────
