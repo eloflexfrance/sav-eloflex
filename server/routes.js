@@ -617,28 +617,77 @@ router.get('/fauteuils/:id/factures-vf', async (req, res) => {
       params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
     });
 
-    // Chercher les factures mentionnant ce numéro de série
+    const SERIE_RE = new RegExp(
+      '\\b(' + (f.serie || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')\\b', 'i'
+    );
+
     const factures = [];
-    if (f.serie) {
+
+    // Stratégie 1 : si on a un numéro de facture direct, le récupérer
+    if (f.num_facture) {
       try {
         const { data } = await vfApi.get('/invoices.json', {
-          params: { search: f.serie, per_page: 20 }
+          params: { number: f.num_facture, per_page: 5 }
         });
         if (Array.isArray(data)) {
           data.forEach(inv => {
-            factures.push({
-              id: inv.id,
-              numero: inv.number,
-              date: inv.issue_date || inv.sell_date,
-              client_nom: inv.buyer_name,
-              montant_ttc: inv.price_gross,
-              statut: inv.payment_status,
-              url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}`
-            });
+            if (!factures.find(x => x.id === inv.id)) {
+              factures.push({
+                id: inv.id,
+                numero: inv.number,
+                date: inv.issue_date || inv.sell_date,
+                client_nom: inv.buyer_name,
+                montant_ttc: inv.price_gross,
+                statut: inv.payment_status,
+                url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}`,
+                source: 'numero_direct'
+              });
+            }
           });
         }
-      } catch(e) { console.warn('Recherche factures VF :', e.message); }
+      } catch(e) { console.warn('Facture par numéro :', e.message); }
     }
+
+    // Stratégie 2 : recherche par numéro de série dans les descriptions
+    if (f.serie && factures.length === 0) {
+      try {
+        // Chercher dans les descriptions de lignes (search_in=positions)
+        const { data } = await vfApi.get('/invoices.json', {
+          params: { search: f.serie, search_in: 'positions', per_page: 50 }
+        });
+        if (Array.isArray(data)) {
+          for (const inv of data) {
+            // Vérifier que la série est vraiment dans ce document (pas juste un faux positif)
+            let confirmed = false;
+            try {
+              const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
+              const positions = detail.positions || detail.invoice_items || [];
+              const texte = [
+                detail.description || '',
+                ...positions.map(p => `${p.name || ''} ${p.description || ''}`)
+              ].join(' ');
+              confirmed = SERIE_RE.test(texte);
+            } catch(e) { confirmed = true; } // En cas d'erreur, inclure quand même
+
+            if (confirmed && !factures.find(x => x.id === inv.id)) {
+              factures.push({
+                id: inv.id,
+                numero: inv.number,
+                date: inv.issue_date || inv.sell_date,
+                client_nom: inv.buyer_name,
+                montant_ttc: inv.price_gross,
+                statut: inv.payment_status,
+                url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}`,
+                source: 'recherche_serie'
+              });
+            }
+          }
+        }
+      } catch(e) { console.warn('Recherche série dans factures :', e.message); }
+    }
+
+    // Trier par date décroissante
+    factures.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
     res.json({ factures, serie: f.serie, num_facture: f.num_facture, configured: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
