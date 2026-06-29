@@ -813,6 +813,13 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
       <div class="form-group" style="margin-bottom:0"><label class="form-label">Date</label><input class="form-input" id="f-ret-date" type="date" value="${d.retour_date||''}"></div>
       <div class="form-group" style="margin-bottom:0;grid-column:1/-1"><label class="form-label">N° de suivi retour</label><input class="form-input" id="f-ret-num" value="${esc(d.retour_numero||'')}"></div>
     </div></div>
+    <div class="divider"></div>
+    <div class="section-title"><i class="ti ti-receipt"></i>Lien VosFactures</div>
+    <div class="form-group" style="margin-bottom:4px">
+      <label class="form-label">N° bordereau / bon de livraison VosFactures</label>
+      <input class="form-input mono" id="f-bordereau" placeholder="ex: BL-2026-0042" value="${esc(d.num_bordereau_vf||'')}">
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">Permet d'accéder directement au document dans VosFactures depuis la fiche intervention.</div>
+    </div>
   </div>
   <div class="modal-footer">
     ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast('Supprimé','ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
