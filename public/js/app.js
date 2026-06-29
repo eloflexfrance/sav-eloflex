@@ -963,11 +963,32 @@ let TMP_CLIENTS = [];
 
 async function modalNewIntervention(fauteuilId,clientId){
   TMP_PRODUITS=[];
-  const[clients,fauts]=await Promise.all([API.clients(),clientId?API.fauteuils(clientId):API.fauteuils()]);
+  // Charger le fauteuil pré-sélectionné si fourni, sinon liste vide
+  const[clients,fauts]=await Promise.all([
+    API.clients(),
+    fauteuilId ? API.fauteuils(clientId||null).then(l=>l.length?l:API.fauteuils()) : Promise.resolve([])
+  ]);
   if(!CACHE.catalogue.length) CACHE.catalogue=await API.catalogue();
   TMP_CLIENTS=clients;
+  // Si fauteuilId fourni, récupérer son info complète pour pré-remplir
+  let fauteuilPresel = null;
+  if (fauteuilId) {
+    fauteuilPresel = fauts.find(f=>f.id===fauteuilId);
+    if (!fauteuilPresel) {
+      try {
+        const res = await API.recherche('id:'+fauteuilId);
+        // Essai direct
+        const r = await fetch('/api/fauteuils/'+fauteuilId).then(r=>r.json()).catch(()=>null);
+        if (r && r.id) { fauteuilPresel = r; fauts.unshift(r); }
+      } catch(e) {}
+    }
+  }
   showModal(interForm(null,clients,fauts,fauteuilId,clientId));
   renderProduitsForm();
+  // Si fauteuil pré-sélectionné depuis la recherche rapide, remplir le champ
+  if (fauteuilId && fauteuilPresel) {
+    selectFauteuilInter(fauteuilPresel.id, fauteuilPresel.modele||'', fauteuilPresel.serie||'', fauteuilPresel.client_id, fauteuilPresel.client_nom||'');
+  }
 }
 async function modalEditIntervention(id){
   const i=await API.intervention(id);
@@ -978,30 +999,40 @@ async function modalEditIntervention(id){
   closeModal();
   setTimeout(()=>{showModal(interForm(i,clients,fauts,i.fauteuil_id,i.client_id));renderProduitsForm();},50);
 }
-function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return `
+function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};
+  // Trouver le fauteuil pré-sélectionné
+  const fautPresel = fauteuils.find(f=>f.id===(fauteuilId||d.fauteuil_id));
+  return `
   <div class="modal-header"><i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i><h2>${i?`Modifier #${i.id}`:'Nouvelle intervention'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body">
     <div class="grid-2">
-      <div class="form-group"><label class="form-label">Client *</label>
-        <div style="position:relative">
-          <input class="form-input" id="f-client-search" placeholder=""+t('select_client')+""
-            autocomplete="off"
-            value="${d.client_id||clientId ? esc(clients.find(c=>c.id===(d.client_id||clientId))?.nom||'') : ''}"
-            oninput="searchClients(this.value,TMP_CLIENTS)"
-            onfocus="searchClients(this.value,TMP_CLIENTS)"
-            onblur="setTimeout(()=>{const dr=document.getElementById('client-drop');if(dr)dr.style.display='none'},150)">
-          <input type="hidden" id="f-client" value="${d.client_id||clientId||''}">
-          <div id="client-drop" class="piece-dropdown" style="display:none"></div>
-        </div>
-      </div>
-      <div class="form-group">
+
+      <!-- FAUTEUIL EN PREMIER : recherche par série -->
+      <div class="form-group" style="grid-column:1/-1">
         <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
-          <span>Fauteuil *</span>
-          <button type="button" class="btn sm" style="font-size:10px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>Créer un fauteuil</button>
+          <span>Fauteuil * <span style="font-size:11px;color:var(--text3);font-weight:400">(recherche par n° de série, modèle ou distributeur)</span></span>
+          <button type="button" class="btn sm" style="font-size:10px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>Créer</button>
         </label>
-        <select class="form-input" id="f-fauteuil">
-          ${fauteuils.length ? fauteuils.map(f=>`<option value="${f.id}" ${(f.id===fauteuilId||f.id===d.fauteuil_id)?'selected':''}>${esc(f.modele)} – ${esc(f.serie)}</option>`).join('') : `<option value="">${t('select_fauteuil_vide')}</option>`}
-        </select>
+        <div style="position:relative">
+          <i class="ti ti-search" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none"></i>
+          <input class="form-input" id="f-serie-search" placeholder="Taper n° de série ou modèle…"
+            autocomplete="off" style="padding-left:30px"
+            value="${fautPresel ? esc(fautPresel.modele+' — '+fautPresel.serie) : ''}"
+            oninput="searchFauteuilInter(this.value)"
+            onfocus="searchFauteuilInter(this.value)"
+            onblur="setTimeout(()=>{const d=document.getElementById('fauteuil-inter-drop');if(d)d.style.display='none'},150)">
+          <input type="hidden" id="f-fauteuil" value="${fauteuilId||d.fauteuil_id||''}">
+          <div id="fauteuil-inter-drop" class="piece-dropdown" style="display:none"></div>
+        </div>
+        <!-- Info fauteuil sélectionné -->
+        <div id="fauteuil-inter-info" style="margin-top:6px;display:${fautPresel?'block':'none'}">
+          ${fautPresel ? `<div style="font-size:12px;background:var(--bg);border-radius:6px;padding:6px 10px;display:flex;gap:12px;flex-wrap:wrap">
+            <span><b>${esc(fautPresel.modele||'')}</b></span>
+            <span class="mono" style="color:var(--accent)">${esc(fautPresel.serie||'')}</span>
+            <span style="color:var(--text3)">${esc(fautPresel.client_nom||'')}</span>
+          </div>` : ''}
+        </div>
+        <div id="new-fauteuil-inline" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-top:8px;border:1px dashed var(--border-s)">
         <div id="new-fauteuil-inline" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-top:8px;border:1px dashed var(--border-s)">
           <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Nouveau fauteuil</div>
           <div class="grid-2" style="gap:6px">
@@ -1096,6 +1127,69 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId){const d=i||{};return
     <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
     <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?t('btn_maj'):t('btn_enregistrer')}</button>
   </div>`;}
+async function searchFauteuilInter(q){
+  const drop = document.getElementById('fauteuil-inter-drop');
+  if (!drop) return;
+  const query = q.trim();
+  if (query.length < 2) { drop.style.display='none'; return; }
+  try {
+    const res = await API.recherche(query);
+    const fauteuils = res.fauteuils || [];
+    if (!fauteuils.length) {
+      drop.innerHTML = `<div class="qs-empty" style="padding:10px 12px;font-size:12px;color:var(--text3)">Aucun fauteuil trouvé — utilisez "+ Créer" pour en ajouter un</div>`;
+      drop.style.display = 'block';
+      return;
+    }
+    drop.innerHTML = fauteuils.map(f => `
+      <div class="piece-option" onmousedown="event.preventDefault();selectFauteuilInter(${f.id},'${esc(f.modele||'')}','${esc(f.serie||'')}',${f.client_id||'null'},'${esc(f.client_nom||'')}')">
+        <div style="font-size:13px;font-weight:700">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;font-size:12px;color:var(--accent)">${esc(f.serie)}</span></div>
+        <div style="font-size:11px;color:var(--text3)">${esc(f.client_nom||'')}${f.date_achat?' — achat '+fd(f.date_achat):''}</div>
+      </div>`).join('');
+    drop.style.display = 'block';
+  } catch(e) {}
+}
+
+function selectFauteuilInter(id, modele, serie, clientId, clientNom){
+  // Mettre à jour le champ caché fauteuil
+  const hid = document.getElementById('f-fauteuil');
+  if (hid) hid.value = id;
+
+  // Mettre à jour le champ visible de recherche
+  const inp = document.getElementById('f-serie-search');
+  if (inp) inp.value = `${modele} — ${serie}`;
+
+  // Masquer le dropdown
+  const drop = document.getElementById('fauteuil-inter-drop');
+  if (drop) drop.style.display = 'none';
+
+  // Afficher l'info fauteuil
+  const info = document.getElementById('fauteuil-inter-info');
+  if (info) {
+    info.style.display = 'block';
+    info.innerHTML = `<div style="font-size:12px;background:var(--bg);border-radius:6px;padding:6px 10px;display:flex;gap:12px;flex-wrap:wrap">
+      <span><b>${esc(modele)}</b></span>
+      <span class="mono" style="color:var(--accent)">${esc(serie)}</span>
+      <span style="color:var(--text3)">${esc(clientNom)}</span>
+    </div>`;
+  }
+
+  // Pré-remplir le client si pas encore renseigné
+  const clientHid = document.getElementById('f-client');
+  const clientInp = document.getElementById('f-client-search');
+  if (clientId && clientHid && (!clientHid.value || clientHid.value === 'null')) {
+    clientHid.value = clientId;
+    if (clientInp) clientInp.value = clientNom;
+  } else if (clientId && clientHid && clientHid.value && parseInt(clientHid.value) !== clientId) {
+    // Client différent — laisser le client actuel et afficher le bandeau
+    checkProprietaireChange();
+    return;
+  } else if (clientId && clientHid) {
+    clientHid.value = clientId;
+    if (clientInp) clientInp.value = clientNom;
+  }
+  checkProprietaireChange();
+}
+
 function toggleNewFauteuilInline(){
   const el=document.getElementById('new-fauteuil-inline');
   if(!el) return;
