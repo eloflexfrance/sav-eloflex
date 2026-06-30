@@ -139,6 +139,40 @@ async function initDB() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
 
+    // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
+    await client.query(`CREATE TABLE IF NOT EXISTS commandes (
+      id SERIAL PRIMARY KEY,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      fauteuil_id INTEGER REFERENCES fauteuils(id) ON DELETE SET NULL,
+      annee_onglet INTEGER,
+      groupe TEXT,
+      distributeur_nom TEXT NOT NULL,
+      modele TEXT,
+      accessoire TEXT,
+      bdc TEXT,
+      date_commande TEXT,
+      vf_order_id TEXT,
+      client_final TEXT,
+      num_suivi TEXT,
+      date_livraison TEXT,
+      num_serie TEXT,
+      num_facture TEXT,
+      vf_invoice_id BIGINT,
+      invoice_se TEXT,
+      informations TEXT,
+      statut TEXT DEFAULT 'Auto',
+      import_key TEXT UNIQUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_client ON commandes(client_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_distrib ON commandes(distributeur_nom)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_bdc ON commandes(bdc)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_serie ON commandes(num_serie)`);
+    try {
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_commande_id BIGINT UNIQUE`);
+    } catch(e) { /* déjà présente */ }
+
     console.log("✅ Tables créées");
 
     // Paramètres par défaut

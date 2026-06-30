@@ -1,6 +1,7 @@
 // public/js/app.js v2
 
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
+let CMD_FILTERS = { annee:'', statut:'', groupe:'', distributeur:'', q:'' };
 let CACHE = { catalogue:[], params:{} };
 let TMP_PRODUITS = [];
 
@@ -52,6 +53,7 @@ async function render(){
     else if(STATE.view==='fauteuil') await renderFauteuil(ttl,c,a);
     else if(STATE.view==='interventions') await renderInterventions(ttl,c,a);
     else if(STATE.view==='expeditions')   await renderExpeditions(ttl,c,a);
+    else if(STATE.view==='commandes')     await renderCommandes(ttl,c,a);
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
@@ -349,6 +351,138 @@ async function renderExpeditions(ttl,c,a){
         <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
       </tr>`).join('')}</tbody>
     </table></div>`}`;
+}
+
+// ── COMMANDES (suivi distributeurs) ─────────────────────────────────
+const cmdStatutClass = s => s==='Livré'?'g':s==='Expédié'?'attente':'urgent';
+
+async function renderCommandes(ttl,c,a){
+  ttl.textContent=t('cmd_title')||'Suivi des commandes';
+  a.innerHTML=`<button class="btn success" onclick="API.exportExcel('commandes')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')||'Excel'}</button>
+    <button class="btn" onclick="syncCommandesVF()"><i class="ti ti-refresh"></i>${t('cmd_sync_vf')||'Synchroniser VosFactures'}</button>
+    <button class="btn primary" onclick="modalCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>`;
+
+  const stats = await API.commandesStats();
+  const years = Object.keys(stats.par_annee||{}).sort((x,y)=>y-x);
+
+  c.innerHTML=`
+    <div class="cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
+      <div class="card"><div style="font-size:22px;font-weight:700">${stats.total}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_total')||'Total commandes'}</div></div>
+      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--danger,#d33)">${stats.en_preparation}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_en_prep')||'En préparation'}</div></div>
+      <div class="card"><div style="font-size:22px;font-weight:700;color:#d8a32a">${stats.expedie}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_expedie')||'Expédiées'}</div></div>
+      <div class="card"><div style="font-size:22px;font-weight:700;color:#2a9d4d">${stats.livre}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_livre')||'Livrées'}</div></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <input class="search-bar" style="max-width:240px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série, suivi...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;renderCommandesTable()">
+      <select id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;renderCommandesTable()">
+        <option value="">${t('cmd_toutes_annees')||'Toutes années'}</option>
+        ${years.map(y=>`<option value="${y}" ${CMD_FILTERS.annee==y?'selected':''}>${y}</option>`).join('')}
+      </select>
+      <select id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable()">
+        <option value="">${t('cmd_tous_statuts')||'Tous statuts'}</option>
+        <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
+        <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
+        <option value="Livré" ${CMD_FILTERS.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
+      </select>
+      <input placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable()" style="max-width:200px">
+    </div>
+    <div id="cmd-table-wrap"></div>`;
+  await renderCommandesTable();
+}
+
+async function renderCommandesTable(){
+  const wrap=$('cmd-table-wrap'); if(!wrap) return;
+  wrap.innerHTML=`<div class="empty" style="padding-top:30px"><i class="ti ti-loader-2"></i>${t('msg_chargement')}</div>`;
+  const res = await API.commandes({
+    annee: CMD_FILTERS.annee, statut: CMD_FILTERS.statut,
+    distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 300
+  });
+  const list = res.rows||[];
+  if(!list.length){ wrap.innerHTML=`<div class="empty"><i class="ti ti-clipboard-list"></i>${t('cmd_empty')||'Aucune commande trouvée'}</div>`; return; }
+  wrap.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">${res.total} ${t('cmd_resultats')||'résultat(s)'}</div>
+    <div class="table-wrap"><table class="t">
+      <thead><tr>
+        <th>${t('col_date')||'Date'}</th><th>${t('col_client')||'Distributeur'}</th>
+        <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
+        <th>${t('cmd_suivi')||'N° suivi'}</th><th>${t('cmd_serie')||'N° série'}</th>
+        <th>${t('col_statut')||'Statut'}</th>
+      </tr></thead>
+      <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
+        <td>${fd(cm.date_commande)}</td>
+        <td>${esc(cm.distributeur_nom)}</td>
+        <td class="mono">${esc(cm.bdc||'')}</td>
+        <td>${esc(cm.modele||cm.accessoire||'')}</td>
+        <td class="mono">${esc(cm.num_suivi||'')}</td>
+        <td class="mono">${esc(cm.num_serie||'')}</td>
+        <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+async function modalCommande(id){
+  let cm = id ? await API.commande(id) : {};
+  showModal(`
+    <h3 style="margin-bottom:14px">${id?(t('cmd_edit')||'Modifier la commande'):(t('cmd_add')||'Nouvelle commande')}</h3>
+    <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <label>${t('col_client')||'Distributeur'} *<input id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required></label>
+      <label>${t('cmd_groupe')||'Groupe'}<input id="cmd-groupe" value="${esc(cm.groupe||'')}"></label>
+      <label>${t('cmd_modele')||'Modèle'}<input id="cmd-modele" value="${esc(cm.modele||'')}"></label>
+      <label>${t('cmd_accessoire')||'Accessoire'}<input id="cmd-accessoire" value="${esc(cm.accessoire||'')}"></label>
+      <label>${t('cmd_bdc')||'Bdc'}<input id="cmd-bdc" value="${esc(cm.bdc||'')}"></label>
+      <label>${t('col_date')||'Date commande'}<input id="cmd-date" type="date" value="${cm.date_commande||''}"></label>
+      <label>${t('cmd_client_final')||'Client final'}<input id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></label>
+      <label>${t('cmd_suivi')||'N° suivi'}<input id="cmd-suivi" value="${esc(cm.num_suivi||'')}"></label>
+      <label>${t('cmd_date_livraison')||'Date livraison'}<input id="cmd-livraison" type="date" value="${cm.date_livraison||''}"></label>
+      <label>${t('cmd_serie')||'N° série'}<input id="cmd-serie" value="${esc(cm.num_serie||'')}"></label>
+      <label>${t('cmd_facture')||'N° facture'}<input id="cmd-facture" value="${esc(cm.num_facture||'')}"></label>
+      <label>${t('cmd_statut')||'Statut'}
+        <select id="cmd-statut">
+          <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto')||'Auto (calculé)'}</option>
+          <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
+          <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
+          <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
+          <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
+        </select>
+      </label>
+      <label style="grid-column:1/-1">${t('cmd_infos')||'Informations'}<textarea id="cmd-infos" rows="2">${esc(cm.informations||'')}</textarea></label>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:16px">
+      <div>${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i>${t('btn_supprimer')||'Supprimer'}</button>`:''}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
+        <button class="btn primary" onclick="enregistrerCommande(${id||'null'})">${t('btn_enregistrer')||'Enregistrer'}</button>
+      </div>
+    </div>`);
+}
+
+async function enregistrerCommande(id){
+  const d = {
+    distributeur_nom: gv('cmd-distrib'), groupe: gv('cmd-groupe'), modele: gv('cmd-modele'),
+    accessoire: gv('cmd-accessoire'), bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
+    client_final: gv('cmd-clientfinal'), num_suivi: gv('cmd-suivi'), date_livraison: gv('cmd-livraison')||null,
+    num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
+    informations: gv('cmd-infos')
+  };
+  if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','#d33'); return; }
+  try{
+    if(id) await API.updateCommande(id,d); else await API.createCommande(d);
+    closeModal(); toast(t('msg_enregistre')||'Enregistré'); renderCommandesTable();
+  }catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
+}
+
+async function supprimerCommande(id){
+  if(!confirm(t('cmd_confirm_suppr')||'Supprimer cette commande ?')) return;
+  try{ await API.deleteCommande(id); closeModal(); toast(t('msg_supprime')||'Supprimé'); renderCommandesTable(); }
+  catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
+}
+
+async function syncCommandesVF(){
+  toast(t('cmd_sync_en_cours')||'Synchronisation VosFactures en cours…','ti-loader-2');
+  try{
+    const r = await API.vfSyncCommandes();
+    toast(r.message||(t('cmd_sync_ok')||'Synchronisation terminée'));
+    renderCommandesTable();
+  }catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
 }
 
 // ── CATALOGUE ─────────────────────────────────────────────────────

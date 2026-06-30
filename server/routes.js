@@ -551,6 +551,16 @@ router.get('/export/excel', async (req, res) => {
         'Nom': c.nom, 'Contact': c.contact||'', 'Email': c.email||'', 'Téléphone': c.tel||'', 'Ville': c.ville||'', 'Type': c.type
       }))), 'Clients');
     }
+    if (type === 'commandes' || type === 'complet') {
+      const cmds = await db.all(`SELECT cmd.*, c.nom AS client_nom FROM commandes cmd LEFT JOIN clients c ON c.id=cmd.client_id ORDER BY cmd.date_commande DESC`);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cmds.map(cm => ({
+        'Année': cm.annee_onglet, 'Groupe': cm.groupe || '', 'Distributeur': cm.distributeur_nom,
+        'Modèle': cm.modele || '', 'Accessoire': cm.accessoire || '', 'Bdc': cm.bdc || '',
+        'Date commande': cm.date_commande || '', 'Client final': cm.client_final || '',
+        'N° suivi': cm.num_suivi || '', 'Date livraison': cm.date_livraison || '',
+        'N° série': cm.num_serie || '', 'Facture': cm.num_facture || '', 'Informations': cm.informations || ''
+      }))), 'Commandes');
+    }
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Disposition', `attachment; filename="sav_eloflex_${new Date().toISOString().slice(0,10)}.xlsx"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -622,7 +632,7 @@ router.post('/vosfactures/sync-historique', async (req, res) => {
   // Lancer en arrière-plan
   (async () => {
     try {
-      const { syncClients, syncProducts, syncInvoicesHistorique } = require('../scripts/sync-vosfactures');
+      const { syncClients, syncProducts, syncInvoicesHistorique, syncCommandesHistorique } = require('../scripts/sync-vosfactures');
       const results = {};
       SYNC_HISTORIQUE_STATUS.progress = 'Sync clients…';
       try { results.clients  = await syncClients();  } catch(e) { results.clients  = `Erreur: ${e.message}`; }
@@ -630,6 +640,8 @@ router.post('/vosfactures/sync-historique', async (req, res) => {
       try { results.products = await syncProducts(); } catch(e) { results.products = `Erreur: ${e.message}`; }
       SYNC_HISTORIQUE_STATUS.progress = 'Analyse des factures (peut prendre 10-20 min)…';
       try { results.invoices = await syncInvoicesHistorique(); } catch(e) { results.invoices = `Erreur: ${e.message}`; }
+      SYNC_HISTORIQUE_STATUS.progress = 'Analyse des bons de commande…';
+      try { results.commandes = await syncCommandesHistorique(); } catch(e) { results.commandes = `Erreur: ${e.message}`; }
       SYNC_HISTORIQUE_STATUS = { running: false, done: true, progress: 'Terminé', results, started_at: SYNC_HISTORIQUE_STATUS.started_at, finished_at: new Date().toISOString(), error: null };
       console.log('[SYNC HISTORIQUE] Terminée :', JSON.stringify(results));
     } catch(e) {
@@ -738,14 +750,27 @@ router.post('/vosfactures/sync', async (req, res) => {
   const token = process.env.VOSFACTURES_API_TOKEN, account = process.env.VOSFACTURES_ACCOUNT;
   if (!token || !account) return res.status(503).json({ error: 'VosFactures non configuré' });
   try {
-    const { syncClients, syncProducts, syncInvoices } = require('../scripts/sync-vosfactures');
+    const { syncClients, syncProducts, syncInvoices, syncCommandesVF } = require('../scripts/sync-vosfactures');
     const results = {};
     try { results.clients  = await syncClients();  } catch(e) { results.clients  = `Erreur: ${e.message}`; }
     try { results.products = await syncProducts(); } catch(e) { results.products = `Erreur: ${e.message}`; }
     try { results.invoices = await syncInvoices(); } catch(e) { results.invoices = `Erreur: ${e.message}`; }
+    try { results.commandes = await syncCommandesVF(); } catch(e) { results.commandes = `Erreur: ${e.message}`; }
     res.json({ ok: true, results, synced_at: new Date().toISOString() });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// Sync rapide des seuls bons de commande (depuis l'écran Suivi commandes)
+router.post('/vosfactures/sync-commandes', async (req, res) => {
+  const token = process.env.VOSFACTURES_API_TOKEN, account = process.env.VOSFACTURES_ACCOUNT;
+  if (!token || !account) return res.status(503).json({ error: 'VosFactures non configuré' });
+  try {
+    const { syncCommandesVF } = require('../scripts/sync-vosfactures');
+    const message = await syncCommandesVF(req.query.historique === '1');
+    res.json({ ok: true, message, synced_at: new Date().toISOString() });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/vosfactures/logs', async (req, res) => {
   try { res.json(await db.all('SELECT * FROM sync_log ORDER BY created_at DESC LIMIT 50')); }
   catch (e) { res.status(500).json({ error: e.message }); }
@@ -1172,5 +1197,133 @@ router.post('/email/notification-intervention', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── COMMANDES ─────────────────────────────────────────────────────
+function statutCommande(cmd) {
+  if (cmd.statut && cmd.statut !== 'Auto') return cmd.statut;
+  if (cmd.date_livraison) return 'Livré';
+  if (cmd.num_suivi) return 'Expédié';
+  return 'En préparation';
+}
+
+router.get('/commandes', async (req, res) => {
+  try {
+    const { distributeur, client_id, statut, annee, groupe, q, date_from, date_to, page = 1, per_page = 100 } = req.query;
+    let sql = `SELECT cmd.*, c.nom AS client_nom, c.ville AS client_ville
+               FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
+    const conds = [], p = [];
+    let idx = 0;
+    if (client_id)   { conds.push(`cmd.client_id=$${++idx}`); p.push(client_id); }
+    if (distributeur){ conds.push(`cmd.distributeur_nom ILIKE $${++idx}`); p.push(`%${distributeur}%`); }
+    if (annee)       { conds.push(`cmd.annee_onglet=$${++idx}`); p.push(parseInt(annee)); }
+    if (groupe)      { conds.push(`cmd.groupe=$${++idx}`); p.push(groupe); }
+    if (date_from)   { conds.push(`cmd.date_commande>=$${++idx}`); p.push(date_from); }
+    if (date_to)     { conds.push(`cmd.date_commande<=$${++idx}`); p.push(date_to); }
+    if (q) {
+      const qq = `%${q}%`;
+      conds.push(`(cmd.distributeur_nom ILIKE $${++idx} OR cmd.bdc ILIKE $${idx} OR cmd.num_serie ILIKE $${idx} OR cmd.num_suivi ILIKE $${idx} OR cmd.client_final ILIKE $${idx} OR cmd.num_facture ILIKE $${idx})`);
+      p.push(qq);
+    }
+    if (conds.length) sql += ' WHERE ' + conds.join(' AND ');
+    sql += ' ORDER BY cmd.date_commande DESC NULLS LAST, cmd.id DESC';
+    let rows = await db.all(sql, p);
+    rows = rows.map(r => ({ ...r, statut_calc: statutCommande(r) }));
+    if (statut) rows = rows.filter(r => r.statut_calc === statut);
+    const total = rows.length;
+    const pp = Math.min(parseInt(per_page) || 100, 500);
+    const startIdx = (Math.max(parseInt(page) || 1, 1) - 1) * pp;
+    res.json({ total, page: parseInt(page) || 1, per_page: pp, rows: rows.slice(startIdx, startIdx + pp) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/commandes/stats', async (req, res) => {
+  try {
+    const rows = await db.all('SELECT * FROM commandes');
+    const calc = rows.map(statutCommande);
+    const parAnnee = {};
+    rows.forEach(r => { parAnnee[r.annee_onglet] = (parAnnee[r.annee_onglet] || 0) + 1; });
+    const parGroupe = {};
+    rows.forEach(r => { if (r.groupe) parGroupe[r.groupe] = (parGroupe[r.groupe] || 0) + 1; });
+    const topDistributeurs = {};
+    rows.forEach(r => { topDistributeurs[r.distributeur_nom] = (topDistributeurs[r.distributeur_nom] || 0) + 1; });
+    res.json({
+      total: rows.length,
+      en_preparation: calc.filter(s => s === 'En préparation').length,
+      expedie: calc.filter(s => s === 'Expédié').length,
+      livre: calc.filter(s => s === 'Livré').length,
+      par_annee: parAnnee,
+      par_groupe: parGroupe,
+      top_distributeurs: Object.entries(topDistributeurs).sort((a, b) => b[1] - a[1]).slice(0, 10)
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/commandes/:id', async (req, res) => {
+  try {
+    const row = await db.get(
+      `SELECT cmd.*, c.nom AS client_nom, c.ville AS client_ville, c.email AS client_email, c.tel AS client_tel
+       FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id WHERE cmd.id=$1`, [req.params.id]
+    );
+    if (!row) return res.status(404).json({ error: 'Commande introuvable' });
+    res.json({ ...row, statut_calc: statutCommande(row) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/commandes', async (req, res) => {
+  try {
+    const d = req.body;
+    if (!d.distributeur_nom) return res.status(400).json({ error: 'distributeur_nom requis' });
+    let clientId = d.client_id || null;
+    if (!clientId) {
+      const existing = await db.get('SELECT id FROM clients WHERE LOWER(TRIM(nom))=LOWER($1)', [d.distributeur_nom]);
+      if (existing) clientId = existing.id;
+      else {
+        const c = await db.run(
+          `INSERT INTO clients (nom, email, tel, type, token_portail) VALUES ($1,$2,$3,'Distributeur',md5(random()::text)) RETURNING id`,
+          [d.distributeur_nom, d.email || null, d.tel || null]
+        );
+        clientId = c.id;
+      }
+    }
+    const row = await db.run(
+      `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, accessoire,
+        bdc, date_commande, vf_order_id, client_final, num_suivi, date_livraison, num_serie, num_facture,
+        invoice_se, informations, statut)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+      [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
+       d.distributeur_nom, d.modele || null, d.accessoire || null, d.bdc || null, d.date_commande || null,
+       d.vf_order_id || null, d.client_final || null, d.num_suivi || null, d.date_livraison || null,
+       d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto']
+    );
+    res.status(201).json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/commandes/:id', async (req, res) => {
+  try {
+    const d = req.body;
+    const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'accessoire',
+      'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'date_livraison', 'num_serie',
+      'num_facture', 'invoice_se', 'informations', 'statut'];
+    const sets = [], p = [];
+    let idx = 0;
+    for (const champ of champs) {
+      if (d[champ] !== undefined) { sets.push(`${champ}=$${++idx}`); p.push(d[champ] === '' ? null : d[champ]); }
+    }
+    if (!sets.length) return res.status(400).json({ error: 'Aucun champ à mettre à jour' });
+    sets.push(`updated_at=NOW()`);
+    p.push(req.params.id);
+    const row = await db.run(`UPDATE commandes SET ${sets.join(', ')} WHERE id=$${++idx} RETURNING *`, p);
+    if (!row) return res.status(404).json({ error: 'Commande introuvable' });
+    res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/commandes/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM commandes WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 module.exports = router;

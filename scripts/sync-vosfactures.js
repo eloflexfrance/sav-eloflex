@@ -261,4 +261,121 @@ async function syncInvoicesHistorique() {
   return syncInvoices(true);
 }
 
-module.exports = { syncClients, syncProducts, syncInvoices, syncInvoicesHistorique };
+// ── Sync commandes (bons de commande client, kind=client_order) ───
+async function syncCommandesVF(fullHistory = false) {
+  const vfApi  = getVfApi();
+  const client = await pool.connect();
+  try {
+    console.log(`⏳ Sync commandes (bons de commande client) (${fullHistory ? 'historique complet' : '12 derniers mois'})...`);
+
+    const params = { kind: 'client_order', ...(fullHistory ? {} : { period: 'last_12_months' }) };
+    const orders = await fetchAllPages(vfApi, '/invoices.json', params);
+    console.log(`  Total : ${orders.length} bons de commande à analyser`);
+
+    let count = 0, created = 0, updated = 0, skipped = 0;
+
+    for (const o of orders) {
+      count++;
+
+      // 1. Détail complet (positions, client, dates)
+      let detail = null;
+      try {
+        const { data } = await vfApi.get(`/invoices/${o.id}.json`);
+        detail = data;
+      } catch (e) {
+        console.warn(`  ⚠️ Bon de commande ${o.id} inaccessible : ${e.message}`);
+        skipped++;
+        continue;
+      }
+
+      const positions = detail.positions || detail.invoice_items || [];
+      const texteComplet = [
+        detail.description || '',
+        ...positions.map(p => [p.name || '', p.description || ''].join(' '))
+      ].join(' ');
+
+      const series       = extraireSeriesDeTexte(texteComplet);
+      const numSerie      = series[0] || null;
+      const modeleRaw      = positions[0]?.name || '';
+      const modele         = devinerModele(modeleRaw, texteComplet);
+      const accessoire     = positions.length > 1
+        ? positions.slice(1).map(p => p.name).filter(Boolean).join(', ')
+        : null;
+      const nomDistrib     = detail.buyer_name || o.buyer_name || '—';
+      const dateCommande   = (detail.issue_date || detail.sell_date || '').slice(0, 10) || null;
+      const annee          = dateCommande ? parseInt(dateCommande.slice(0, 4)) : null;
+
+      // 2. Client : retrouver via vf_id, sinon par nom, sinon créer
+      let clientId = null;
+      if (detail.client_id) {
+        const vfClient = await client.query('SELECT id FROM clients WHERE vf_id=$1', [detail.client_id]);
+        if (vfClient.rows.length) clientId = vfClient.rows[0].id;
+      }
+      if (!clientId) {
+        const existing = await client.query('SELECT id FROM clients WHERE LOWER(TRIM(nom))=LOWER($1)', [nomDistrib]);
+        if (existing.rows.length) clientId = existing.rows[0].id;
+        else {
+          try {
+            const r = await client.query(
+              `INSERT INTO clients (nom, type, token_portail, vf_id) VALUES ($1,'Distributeur',md5(random()::text),$2)
+               ON CONFLICT (vf_id) DO UPDATE SET nom=EXCLUDED.nom RETURNING id`,
+              [nomDistrib, detail.client_id || null]
+            );
+            clientId = r.rows[0]?.id || null;
+          } catch (e) { /* client_id déjà existant avec un autre nom — on continue sans clientId */ }
+        }
+      }
+
+      // 3. Fauteuil déjà connu via la série
+      let fauteuilId = null;
+      if (numSerie) {
+        const f = await client.query('SELECT id FROM fauteuils WHERE serie=$1', [numSerie]);
+        if (f.rows.length) fauteuilId = f.rows[0].id;
+      }
+
+      // 4. Upsert dans commandes (clé d'idempotence = vf_commande_id, l'id du document VF)
+      try {
+        const res = await client.query(`
+          INSERT INTO commandes (
+            client_id, fauteuil_id, annee_onglet, distributeur_nom, modele, accessoire,
+            bdc, date_commande, vf_order_id, num_serie, informations, vf_commande_id
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          ON CONFLICT (vf_commande_id) DO UPDATE SET
+            distributeur_nom = EXCLUDED.distributeur_nom,
+            modele           = EXCLUDED.modele,
+            accessoire       = EXCLUDED.accessoire,
+            bdc              = EXCLUDED.bdc,
+            date_commande    = EXCLUDED.date_commande,
+            vf_order_id      = EXCLUDED.vf_order_id,
+            num_serie        = COALESCE(commandes.num_serie, EXCLUDED.num_serie),
+            fauteuil_id       = COALESCE(commandes.fauteuil_id, EXCLUDED.fauteuil_id),
+            updated_at        = NOW()
+          RETURNING (xmax = 0) AS inserted
+        `, [clientId, fauteuilId, annee, nomDistrib, modele, accessoire,
+            o.number || null, dateCommande, o.oid ? String(o.oid) : null,
+            numSerie, detail.description || null, o.id]);
+        if (res.rows[0].inserted) created++; else updated++;
+      } catch (e) {
+        console.warn(`  ⚠️ Commande VF ${o.id} : ${e.message}`);
+        skipped++;
+      }
+
+      if (count % 50 === 0) {
+        console.log(`  ... ${count}/${orders.length} bons de commande traités`);
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
+
+    const msg = `${count} bons de commande analysés, ${created} créés, ${updated} mis à jour${skipped ? `, ${skipped} ignorés` : ''}`;
+    console.log(`  ✅ ${msg}`);
+    await log('commandes', 'ok', msg, count);
+    return msg;
+  } catch (e) { await log('commandes', 'error', e.message); throw e; }
+  finally { client.release(); }
+}
+
+async function syncCommandesHistorique() {
+  return syncCommandesVF(true);
+}
+
+module.exports = { syncClients, syncProducts, syncInvoices, syncInvoicesHistorique, syncCommandesVF, syncCommandesHistorique };
