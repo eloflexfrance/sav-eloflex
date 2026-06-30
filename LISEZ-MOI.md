@@ -2,6 +2,14 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Classement "pièces vendues" : exclusion des frais d'envoi + recherche élargie**
+Les lignes "Frais d'envoi..." (avec ou sans poids) restent visibles dans le
+détail de chaque commande, mais sont désormais exclues du classement "Top
+10 pièces vendues" — ce ne sont pas des pièces. La recherche de l'écran
+"Suivi commandes" (barre "Rechercher...") couvre maintenant aussi les
+champs Modèle et Accessoire, pour retrouver facilement une commande à
+partir d'un libellé de pièce.
+
 **30/06 — Tableau de bord : top pièces vendues + fauteuils électriques (nouveau)**
 Le graphique "Interventions / 12 mois" est remplacé par "Top 10 pièces
 détachées vendues", calculé à partir des bons de commande VosFactures

@@ -520,7 +520,10 @@ router.get('/stats', async (req, res) => {
         for (const item of apresDeuxPoints.split(',')) {
           const m = item.trim().match(/^(.*?)(?:\s*×\s*(\d+))?$/);
           if (!m || !m[1]) continue;
-          const nom = m[1].trim();
+          // "Frais d'envoi..." reste dans le détail de la commande mais n'a pas sa place
+          // dans un classement de pièces vendues (ce n'est pas une pièce).
+          if (/frais\s*d['’]?envoi/i.test(m[1])) continue;
+          const nom = m[1].trim().replace(/\s+/g, ' ');
           if (!nom) continue;
           const qte = m[2] ? parseInt(m[2]) : 1;
           totauxPieces[nom] = (totauxPieces[nom] || 0) + qte;
@@ -1269,7 +1272,7 @@ router.get('/commandes', async (req, res) => {
     if (date_to)     { conds.push(`cmd.date_commande<=$${++idx}`); p.push(date_to); }
     if (q) {
       const qq = `%${q}%`;
-      conds.push(`(cmd.distributeur_nom ILIKE $${++idx} OR cmd.bdc ILIKE $${idx} OR cmd.num_serie ILIKE $${idx} OR cmd.num_suivi ILIKE $${idx} OR cmd.client_final ILIKE $${idx} OR cmd.num_facture ILIKE $${idx})`);
+      conds.push(`(cmd.distributeur_nom ILIKE $${++idx} OR cmd.bdc ILIKE $${idx} OR cmd.num_serie ILIKE $${idx} OR cmd.num_suivi ILIKE $${idx} OR cmd.client_final ILIKE $${idx} OR cmd.num_facture ILIKE $${idx} OR cmd.modele ILIKE $${idx} OR cmd.accessoire ILIKE $${idx})`);
       p.push(qq);
     }
     if (conds.length) sql += ' WHERE ' + conds.join(' AND ');
