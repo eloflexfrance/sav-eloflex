@@ -2,6 +2,23 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Exclusion affinée des lignes "frais d'envoi"**
+Règle corrigée : seules les lignes "frais d'envoi" accompagnées d'un poids
+(ex: "Frais d'envoi - 0,8 kg") sont exclues du détail — ce sont de pures
+lignes de coût postal sans info utile. Les lignes "frais d'envoi" SANS
+poids, comme "Frais d'envoi et retour - Tests recharges 2 batteries", sont
+conservées car elles contiennent une info opérationnelle. Règle dans
+`EXCLUSIONS_ACCESSOIRES` (`scripts/sync-vosfactures.js`), facile à étendre.
+**Reclique sur "Synchroniser VosFactures"** après redéploiement.
+
+**30/06 — Colonne Quantité remplacée par une icône Info**
+La colonne "Quantité" du tableau récapitulatif est masquée ; à la place, une
+icône (ⓘ) apparaît à droite de chaque ligne uniquement si la commande a du
+texte dans "Informations" — survole-la pour lire le contenu sans ouvrir la
+fiche. La quantité reste visible, juste déplacée : un petit "×N" apparaît
+à côté du modèle quand elle est supérieure à 1 (pour ne pas la perdre).
+Dis-moi si tu préfères que je l'enlève complètement de là aussi.
+
 **30/06 — Accessoires regroupés par catégorie (nouveau)**
 Les accessoires/pièces d'un bon de commande sont maintenant regroupés par
 catégorie (Batteries, Chargeurs, Moteurs, Supports, Roues & freins, Commande

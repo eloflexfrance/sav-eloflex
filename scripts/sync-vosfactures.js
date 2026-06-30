@@ -253,6 +253,18 @@ function categoriserAccessoire(nom) {
   return 'Autres pièces';
 }
 
+// ── Lignes systématiquement exclues du détail (accessoires/pièces) ──
+// Liste extensible : chaque entrée est une fonction (nom) => booléen.
+const EXCLUSIONS_ACCESSOIRES = [
+  // Frais d'envoi accompagnés d'un poids (ex: "Frais d'envoi - 0,8 kg") = pure ligne de coût postal, sans info utile.
+  // Les lignes "frais d'envoi" SANS poids (ex: "Frais d'envoi et retour - Tests recharges 2 batteries")
+  // contiennent une info opérationnelle utile et sont donc conservées.
+  (nom) => /frais\s*d['’]?envoi/i.test(nom) && /\d+([.,]\d+)?\s*kgs?\b/i.test(nom),
+];
+function estLigneExclue(nom) {
+  return EXCLUSIONS_ACCESSOIRES.some(fn => fn(nom || ''));
+}
+
 function devinerModele(nom, texte) {
   const MAP = {
     'Eloflex L': /\bL\+?\b|\beloflex l\b/i,
@@ -318,8 +330,9 @@ async function syncCommandesVF(fullHistory = false) {
       // Repère la ligne du fauteuil = celle dont le nom contient "Eloflex" (marque) ;
       // évite la fausse détection par lettre isolée (L, F, H...) sur tout le texte du document.
       const ligneFauteuil = positions.find(p => /eloflex/i.test(p.name || ''))
-        || positions.find(p => parseFloat(p.total_price_gross || p.price_net || p.price || 0) > 0)
-        || positions[0] || null;
+        || positions.find(p => !estLigneExclue(p.name || '') && parseFloat(p.total_price_gross || p.price_net || p.price || 0) > 0)
+        || positions.find(p => !estLigneExclue(p.name || ''))
+        || null;
       const modele         = ligneFauteuil?.name?.trim() || null;
       const quantite       = ligneFauteuil ? (parseInt(ligneFauteuil.quantity) || 1) : 1;
 
@@ -329,6 +342,7 @@ async function syncCommandesVF(fullHistory = false) {
         if (p === ligneFauteuil) continue;
         const nom = (p.name || '').trim();
         if (!nom) continue;
+        if (estLigneExclue(nom)) continue;
         const qte = parseInt(p.quantity) || 1;
         const cat = categoriserAccessoire(nom);
         const label = qte > 1 ? `${nom} ×${qte}` : nom;

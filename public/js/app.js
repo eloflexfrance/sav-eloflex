@@ -403,19 +403,19 @@ async function renderCommandesTable(){
     <div class="table-wrap"><table class="t">
       <thead><tr>
         <th>${t('col_date')||'Date'}</th><th>${t('col_client')||'Distributeur'}</th>
-        <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th><th>${t('cmd_quantite')||'Qté'}</th>
+        <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th><th>${t('cmd_serie')||'N° série'}</th>
-        <th>${t('col_statut')||'Statut'}</th>
+        <th>${t('col_statut')||'Statut'}</th><th style="text-align:center">  </th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
         <td>${fd(cm.date_commande)}</td>
         <td>${esc(cm.distributeur_nom)}</td>
         <td class="mono">${esc(cm.bdc||'')}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}</td>
-        <td style="text-align:center">${cm.quantite&&cm.quantite>1?cm.quantite:''}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}</td>
         <td class="mono">${esc(cm.num_suivi||'')}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
         <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
+        <td style="text-align:center">${cm.informations?`<i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
 }
