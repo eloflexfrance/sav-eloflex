@@ -42,6 +42,49 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ storage, fileFilter, limits: { fileSize: 15 * 1024 * 1024 } });
 
+// ── Preuve de livraison (PDF généralement, parfois photo du bon signé) ──
+const LIVRAISON_DIR = path.join(UPLOAD_DIR, 'livraisons');
+if (!fs.existsSync(LIVRAISON_DIR)) fs.mkdirSync(LIVRAISON_DIR, { recursive: true });
+
+const livraisonStorage = USE_CLOUDINARY
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: (req, file, cb) => cb(null, LIVRAISON_DIR),
+      filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
+        cb(null, `livraison_${req.params.id}_${Date.now()}${ext}`);
+      }
+    });
+
+const uploadPreuveLivraison = multer({
+  storage: livraisonStorage,
+  fileFilter: (req, file, cb) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Format non supporté. Utilisez un PDF, JPEG ou PNG.'));
+  },
+  limits: { fileSize: 15 * 1024 * 1024 }
+});
+
+async function savePreuveLivraison(file, commandeId) {
+  if (USE_CLOUDINARY) {
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: `sav-eloflex/livraisons`, resource_type: 'auto', public_id: `livraison_${commandeId}_${Date.now()}` },
+        (err, result) => err ? reject(err) : resolve(result)
+      );
+      stream.end(file.buffer);
+    });
+    return { filename: result.public_id, url: result.secure_url, taille: file.size, mime: file.mimetype, storage: 'cloudinary' };
+  }
+  return { filename: file.filename, url: `/uploads/livraisons/${file.filename}`, taille: file.size, mime: file.mimetype, storage: 'local' };
+}
+
+function deletePreuveLivraisonFile(filename, storage) {
+  if (storage === 'cloudinary') { cloudinary.uploader.destroy(filename, { resource_type: 'auto' }).catch(()=>{}); return; }
+  try { const f = path.join(LIVRAISON_DIR, filename); if (fs.existsSync(f)) fs.unlinkSync(f); } catch(e) {}
+}
+
 // Upload vers Cloudinary ou disque
 async function savePhoto(file, interId) {
   if (USE_CLOUDINARY) {
@@ -120,4 +163,4 @@ const uploadExcel = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50 Mo max
 });
 
-module.exports = { upload, uploadExcel, makeThumb, deleteFiles, getPhotoUrl, savePhoto, UPLOAD_DIR, THUMB_DIR, USE_CLOUDINARY };
+module.exports = { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, getPhotoUrl, savePhoto, savePreuveLivraison, deletePreuveLivraisonFile, UPLOAD_DIR, THUMB_DIR, USE_CLOUDINARY };

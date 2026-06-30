@@ -70,4 +70,6 @@ const API = {
   vfSyncCommandes:(historique=false)=>API.post(`/vosfactures/sync-commandes${historique?'?historique=1':''}`,{}),
   commandeFacturesSuggestions:(id)=>API.get(`/commandes/${id}/factures-vf-suggestions`),
   vfFactureLookup:(numero)=>API.get(`/vosfactures/facture-lookup?numero=${encodeURIComponent(numero)}`),
+  uploadPreuveLivraison:async(id,file)=>{const fd=new FormData();fd.append('fichier',file);const r=await fetch(`/api/commandes/${id}/preuve-livraison`,{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
+  deletePreuveLivraison:(id)=>API.del(`/commandes/${id}/preuve-livraison`),
 };

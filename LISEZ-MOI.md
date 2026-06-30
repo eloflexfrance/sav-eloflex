@@ -2,6 +2,18 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Preuve de livraison (nouveau)**
+Une fois une commande passée au statut "Livré" (manuellement, ou
+automatiquement dès qu'une date de livraison est renseignée), une zone
+apparaît dans sa fiche pour uploader un justificatif (PDF, JPEG ou PNG —
+bon de livraison signé, capture transporteur, etc.). Le fichier est stocké
+sur Cloudinary si configuré (mêmes identifiants que pour les photos
+d'intervention), sinon sur le disque local du serveur dans
+`public/uploads/livraisons/`. Un lien "Voir le document" apparaît ensuite
+dans la fiche, avec possibilité de le supprimer/remplacer. Nouveau fichier
+`server/uploads.js` (modifié, à copier en plus des autres). Migration
+automatique des colonnes au démarrage.
+
 **30/06 — Lien de suivi colis (nouveau)**
 Ajout d'une colonne `transporteur` (migration automatique). Dans la fiche
 commande, un sélecteur "Transporteur" (Chronopost / Colissimo (La Poste) /
@@ -88,6 +100,7 @@ Copie ces 8 fichiers en écrasant ceux du repo (ils remplacent les versions exis
 - scripts/import-commandes.js    (NOUVEAU — import de l'historique Excel)
 - scripts/sync-vosfactures.js    (modifié — ajoute `syncCommandesVF()` / `syncCommandesHistorique()`)
 - server/routes.js                (modifié — ajoute les routes /api/commandes/* + sync VF)
+- server/uploads.js                (modifié — ajoute le stockage de la preuve de livraison)
 - public/js/api.js                (modifié — ajoute les appels API commandes + sync)
 - public/js/app.js                (modifié — ajoute l'écran "Suivi commandes" + bouton sync)
 - public/js/i18n.js               (modifié — ajoute les traductions FR/EN)

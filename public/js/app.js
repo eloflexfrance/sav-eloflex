@@ -506,7 +506,7 @@ async function modalCommande(id){
           </select>
         </div>
         <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-6px"></div>
-        <div class="form-group"><label class="form-label">${t('cmd_date_livraison')||'Date livraison'}</label><input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}"></div>
+        <div class="form-group"><label class="form-label">${t('cmd_date_livraison')||'Date livraison'}</label><input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison()"></div>
         <div class="form-group"><label class="form-label">${t('cmd_serie')||'N° série'}</label><input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}"></div>
         <div class="form-group">
           <label class="form-label">${t('cmd_facture')||'N° facture'}</label>
@@ -517,7 +517,7 @@ async function modalCommande(id){
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label">${t('cmd_statut')||'Statut'}</label>
-          <select class="form-input" id="cmd-statut">
+          <select class="form-input" id="cmd-statut" onchange="majZonePreuveLivraison()">
             <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto')||'Auto (calculé)'}</option>
             <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
             <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
@@ -527,6 +527,7 @@ async function modalCommande(id){
         </div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_infos')||'Informations'}</label><textarea class="form-input" id="cmd-infos" rows="2">${esc(cm.informations||'')}</textarea></div>
       </div>
+      <div id="cmd-preuve-zone"></div>
       ${id?`<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
         <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i>${t('cmd_chercher_vf')||'Chercher une facture VosFactures à rattacher'}</button>
         <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
@@ -537,7 +538,65 @@ async function modalCommande(id){
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
+  window._CMD_ID = id || null;
+  window._CMD_PREUVE = id ? { url: cm.preuve_livraison_url, mime: cm.preuve_livraison_mime, taille: cm.preuve_livraison_taille } : {};
   majLienSuiviModal();
+  majZonePreuveLivraison();
+}
+
+function commandeEstLivree(){
+  const sel = gv('cmd-statut');
+  if (sel === 'Livré') return true;
+  if ((sel === 'Auto' || !sel) && gv('cmd-livraison')) return true;
+  return false;
+}
+
+function majZonePreuveLivraison(){
+  const zone = $('cmd-preuve-zone'); if(!zone) return;
+  if(!window._CMD_ID || !commandeEstLivree()){ zone.innerHTML=''; return; }
+  const p = window._CMD_PREUVE || {};
+  if(p.url){
+    const taille = p.taille ? ' ('+(p.taille/1024).toFixed(0)+' Ko)' : '';
+    zone.innerHTML = `<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
+      <div class="form-label" style="margin-bottom:8px">${t('cmd_preuve_livraison')||'Preuve de livraison'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:0.5px solid var(--border-s);border-radius:var(--radius)">
+        <a href="${p.url}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;color:var(--accent);text-decoration:none">
+          <i class="ti ${p.mime==='application/pdf'?'ti-file-type-pdf':'ti-photo'}" style="font-size:20px"></i>
+          <span style="font-size:13px">${t('cmd_voir_preuve')||'Voir le document'}${taille}</span>
+        </a>
+        <button class="btn sm danger" type="button" onmousedown="supprimerPreuveLivraison(${window._CMD_ID})"><i class="ti ti-trash"></i></button>
+      </div>
+    </div>`;
+  } else {
+    zone.innerHTML = `<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
+      <div class="form-label" style="margin-bottom:8px">${t('cmd_preuve_livraison')||'Preuve de livraison'}</div>
+      <label class="btn sm" style="cursor:pointer;display:inline-flex">
+        <i class="ti ti-upload"></i>${t('cmd_uploader_preuve')||'Uploader la preuve (PDF, JPEG, PNG)'}
+        <input type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="uploaderPreuveLivraison(this.files[0])">
+      </label>
+    </div>`;
+  }
+}
+
+async function uploaderPreuveLivraison(file){
+  if(!file || !window._CMD_ID) return;
+  toast(t('cmd_upload_en_cours')||'Envoi en cours…','ti-loader-2');
+  try{
+    const updated = await API.uploadPreuveLivraison(window._CMD_ID, file);
+    window._CMD_PREUVE = { url: updated.preuve_livraison_url, mime: updated.preuve_livraison_mime, taille: updated.preuve_livraison_taille };
+    majZonePreuveLivraison();
+    toast(t('cmd_preuve_envoyee')||'Preuve de livraison enregistrée');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function supprimerPreuveLivraison(id){
+  if(!confirm(t('cmd_confirm_suppr_preuve')||'Supprimer la preuve de livraison ?')) return;
+  try{
+    await API.deletePreuveLivraison(id);
+    window._CMD_PREUVE = {};
+    majZonePreuveLivraison();
+    toast(t('msg_supprime')||'Supprimé');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 async function chercherFacturesVF(id){

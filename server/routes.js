@@ -3,7 +3,7 @@ const express  = require('express');
 const crypto   = require('crypto');
 const XLSX     = require('xlsx');
 const db       = require('./db');
-const { upload, uploadExcel, makeThumb, deleteFiles } = require('./uploads');
+const { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, savePreuveLivraison, deletePreuveLivraisonFile } = require('./uploads');
 const router   = express.Router();
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -1410,6 +1410,46 @@ router.get('/vosfactures/facture-lookup', async (req, res) => {
       buyer_name: inv.buyer_name,
       montant_ttc: inv.price_gross
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Preuve de livraison (PDF généralement, parfois photo du bon signé)
+router.post('/commandes/:id/preuve-livraison', uploadPreuveLivraison.single('fichier'), async (req, res) => {
+  try {
+    const cmd = await db.get('SELECT * FROM commandes WHERE id=$1', [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu' });
+
+    // Si une preuve existait déjà, on la remplace (supprime l'ancienne)
+    if (cmd.preuve_livraison_filename) {
+      deletePreuveLivraisonFile(cmd.preuve_livraison_filename, cmd.preuve_livraison_storage);
+    }
+
+    const saved = await savePreuveLivraison(req.file, req.params.id);
+    const row = await db.run(
+      `UPDATE commandes SET preuve_livraison_filename=$1, preuve_livraison_url=$2, preuve_livraison_mime=$3,
+        preuve_livraison_taille=$4, preuve_livraison_storage=$5, preuve_livraison_uploaded_at=NOW(), updated_at=NOW()
+       WHERE id=$6 RETURNING *`,
+      [saved.filename, saved.url, saved.mime, saved.taille, saved.storage, req.params.id]
+    );
+    res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/commandes/:id/preuve-livraison', async (req, res) => {
+  try {
+    const cmd = await db.get('SELECT * FROM commandes WHERE id=$1', [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    if (cmd.preuve_livraison_filename) {
+      deletePreuveLivraisonFile(cmd.preuve_livraison_filename, cmd.preuve_livraison_storage);
+    }
+    const row = await db.run(
+      `UPDATE commandes SET preuve_livraison_filename=NULL, preuve_livraison_url=NULL, preuve_livraison_mime=NULL,
+        preuve_livraison_taille=NULL, preuve_livraison_storage=NULL, preuve_livraison_uploaded_at=NULL, updated_at=NOW()
+       WHERE id=$1 RETURNING *`,
+      [req.params.id]
+    );
+    res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

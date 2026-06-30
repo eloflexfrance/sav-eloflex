@@ -163,6 +163,12 @@ async function initDB() {
       invoice_se TEXT,
       informations TEXT,
       statut TEXT DEFAULT 'Auto',
+      preuve_livraison_filename TEXT,
+      preuve_livraison_url TEXT,
+      preuve_livraison_mime TEXT,
+      preuve_livraison_taille INTEGER,
+      preuve_livraison_storage TEXT,
+      preuve_livraison_uploaded_at TIMESTAMPTZ,
       import_key TEXT UNIQUE,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -175,6 +181,12 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_commande_id BIGINT UNIQUE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS quantite INTEGER DEFAULT 1`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS transporteur TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_filename TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_url TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_mime TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_taille INTEGER`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_storage TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_uploaded_at TIMESTAMPTZ`);
     } catch(e) { /* déjà présentes */ }
 
     console.log("✅ Tables créées");
