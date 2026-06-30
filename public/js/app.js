@@ -159,7 +159,7 @@ async function chargerCommandesDashboard(){
   if(!el) return;
   try{
     const stats = await API.commandesStats();
-    const res = await API.commandes({statut:'En préparation', per_page:5});
+    const res = await API.commandes({statut:'En préparation', per_page:8});
     const list = res.rows||[];
     el.innerHTML=`
       <div class="grid-4" style="margin-bottom:12px">
