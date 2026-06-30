@@ -555,7 +555,7 @@ router.get('/export/excel', async (req, res) => {
       const cmds = await db.all(`SELECT cmd.*, c.nom AS client_nom FROM commandes cmd LEFT JOIN clients c ON c.id=cmd.client_id ORDER BY cmd.date_commande DESC`);
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cmds.map(cm => ({
         'Année': cm.annee_onglet, 'Groupe': cm.groupe || '', 'Distributeur': cm.distributeur_nom,
-        'Modèle': cm.modele || '', 'Accessoire': cm.accessoire || '', 'Bdc': cm.bdc || '',
+        'Modèle': cm.modele || '', 'Quantité': cm.quantite || 1, 'Accessoire': cm.accessoire || '', 'Bdc': cm.bdc || '',
         'Date commande': cm.date_commande || '', 'Client final': cm.client_final || '',
         'N° suivi': cm.num_suivi || '', 'Date livraison': cm.date_livraison || '',
         'N° série': cm.num_serie || '', 'Facture': cm.num_facture || '', 'Informations': cm.informations || ''
@@ -1286,12 +1286,12 @@ router.post('/commandes', async (req, res) => {
       }
     }
     const row = await db.run(
-      `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, accessoire,
+      `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, quantite, accessoire,
         bdc, date_commande, vf_order_id, client_final, num_suivi, date_livraison, num_serie, num_facture,
         invoice_se, informations, statut)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
-       d.distributeur_nom, d.modele || null, d.accessoire || null, d.bdc || null, d.date_commande || null,
+       d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.num_suivi || null, d.date_livraison || null,
        d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto']
     );
@@ -1302,7 +1302,7 @@ router.post('/commandes', async (req, res) => {
 router.put('/commandes/:id', async (req, res) => {
   try {
     const d = req.body;
-    const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'accessoire',
+    const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'quantite', 'accessoire',
       'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'date_livraison', 'num_serie',
       'num_facture', 'invoice_se', 'informations', 'statut'];
     const sets = [], p = [];

@@ -302,9 +302,15 @@ async function syncCommandesVF(fullHistory = false) {
         || positions.find(p => parseFloat(p.total_price_gross || p.price_net || p.price || 0) > 0)
         || positions[0] || null;
       const modele         = ligneFauteuil?.name?.trim() || null;
+      const quantite       = ligneFauteuil ? (parseInt(ligneFauteuil.quantity) || 1) : 1;
       const accessoire     = positions
         .filter(p => p !== ligneFauteuil)
-        .map(p => p.name)
+        .map(p => {
+          const nom = (p.name || '').trim();
+          if (!nom) return null;
+          const qte = parseInt(p.quantity) || 1;
+          return qte > 1 ? `${nom} ×${qte}` : nom;
+        })
         .filter(Boolean)
         .join(', ') || null;
       const nomDistrib     = detail.buyer_name || o.buyer_name || '—';
@@ -343,12 +349,13 @@ async function syncCommandesVF(fullHistory = false) {
       try {
         const res = await client.query(`
           INSERT INTO commandes (
-            client_id, fauteuil_id, annee_onglet, distributeur_nom, modele, accessoire,
+            client_id, fauteuil_id, annee_onglet, distributeur_nom, modele, quantite, accessoire,
             bdc, date_commande, vf_order_id, num_serie, informations, vf_commande_id
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
           ON CONFLICT (vf_commande_id) DO UPDATE SET
             distributeur_nom = EXCLUDED.distributeur_nom,
             modele           = EXCLUDED.modele,
+            quantite         = EXCLUDED.quantite,
             accessoire       = EXCLUDED.accessoire,
             bdc              = EXCLUDED.bdc,
             date_commande    = EXCLUDED.date_commande,
@@ -357,7 +364,7 @@ async function syncCommandesVF(fullHistory = false) {
             fauteuil_id       = COALESCE(commandes.fauteuil_id, EXCLUDED.fauteuil_id),
             updated_at        = NOW()
           RETURNING (xmax = 0) AS inserted
-        `, [clientId, fauteuilId, annee, nomDistrib, modele, accessoire,
+        `, [clientId, fauteuilId, annee, nomDistrib, modele, quantite, accessoire,
             o.number || null, dateCommande, o.oid ? String(o.oid) : null,
             numSerie, detail.description || null, o.id]);
         if (res.rows[0].inserted) created++; else updated++;

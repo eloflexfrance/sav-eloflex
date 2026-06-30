@@ -403,7 +403,7 @@ async function renderCommandesTable(){
     <div class="table-wrap"><table class="t">
       <thead><tr>
         <th>${t('col_date')||'Date'}</th><th>${t('col_client')||'Distributeur'}</th>
-        <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
+        <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th><th>${t('cmd_quantite')||'Qté'}</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th><th>${t('cmd_serie')||'N° série'}</th>
         <th>${t('col_statut')||'Statut'}</th>
       </tr></thead>
@@ -412,6 +412,7 @@ async function renderCommandesTable(){
         <td>${esc(cm.distributeur_nom)}</td>
         <td class="mono">${esc(cm.bdc||'')}</td>
         <td>${esc(cm.modele||cm.accessoire||'')}</td>
+        <td style="text-align:center">${cm.quantite&&cm.quantite>1?cm.quantite:''}</td>
         <td class="mono">${esc(cm.num_suivi||'')}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
         <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
@@ -432,8 +433,9 @@ async function modalCommande(id){
         <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label><input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required></div>
         <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_accessoire')||'Accessoire'}</label><input class="form-input" id="cmd-accessoire" value="${esc(cm.accessoire||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('cmd_quantite')||'Quantité'}</label><input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'}</label><input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_accessoire')||'Accessoire'}</label><input class="form-input" id="cmd-accessoire" value="${esc(cm.accessoire||'')}"></div>
         <div class="form-group"><label class="form-label">${t('col_date')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_client_final')||'Client final'}</label><input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_suivi')||'N° suivi'}</label><input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}"></div>
@@ -517,6 +519,7 @@ async function lookupFactureVF(){
 async function enregistrerCommande(id){
   const d = {
     distributeur_nom: gv('cmd-distrib'), groupe: gv('cmd-groupe'), modele: gv('cmd-modele'),
+    quantite: parseInt(gv('cmd-quantite'))||1,
     accessoire: gv('cmd-accessoire'), bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
     client_final: gv('cmd-clientfinal'), num_suivi: gv('cmd-suivi'), date_livraison: gv('cmd-livraison')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),

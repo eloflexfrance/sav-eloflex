@@ -2,6 +2,14 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Quantités (nouveau)**
+Ajout d'une colonne `quantite` sur les commandes (migration automatique au
+démarrage). La sync VosFactures récupère désormais la quantité de la ligne
+fauteuil, et ajoute "×N" à côté de chaque accessoire/pièce dont la quantité
+est supérieure à 1. Visible dans le tableau, modifiable dans la fiche, et
+exporté dans l'Excel. **Reclique sur "Synchroniser VosFactures"** après
+redéploiement pour rétro-remplir les commandes déjà importées.
+
 **30/06 — Modale "Commande" mal stylée**
 Le formulaire d'édition d'une commande utilisait une grille ad hoc au lieu
 des classes CSS du reste de l'app (`.modal-header`, `.form-group`,

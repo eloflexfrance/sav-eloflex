@@ -148,6 +148,7 @@ async function initDB() {
       groupe TEXT,
       distributeur_nom TEXT NOT NULL,
       modele TEXT,
+      quantite INTEGER DEFAULT 1,
       accessoire TEXT,
       bdc TEXT,
       date_commande TEXT,
@@ -171,7 +172,8 @@ async function initDB() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_serie ON commandes(num_serie)`);
     try {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_commande_id BIGINT UNIQUE`);
-    } catch(e) { /* déjà présente */ }
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS quantite INTEGER DEFAULT 1`);
+    } catch(e) { /* déjà présentes */ }
 
     console.log("✅ Tables créées");
 
