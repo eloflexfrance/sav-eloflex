@@ -296,11 +296,17 @@ async function syncCommandesVF(fullHistory = false) {
 
       const series       = extraireSeriesDeTexte(texteComplet);
       const numSerie      = series[0] || null;
-      const modeleRaw      = positions[0]?.name || '';
-      const modele         = devinerModele(modeleRaw, texteComplet);
-      const accessoire     = positions.length > 1
-        ? positions.slice(1).map(p => p.name).filter(Boolean).join(', ')
-        : null;
+      // Repère la ligne du fauteuil = celle dont le nom contient "Eloflex" (marque) ;
+      // évite la fausse détection par lettre isolée (L, F, H...) sur tout le texte du document.
+      const ligneFauteuil = positions.find(p => /eloflex/i.test(p.name || ''))
+        || positions.find(p => parseFloat(p.total_price_gross || p.price_net || p.price || 0) > 0)
+        || positions[0] || null;
+      const modele         = ligneFauteuil?.name?.trim() || null;
+      const accessoire     = positions
+        .filter(p => p !== ligneFauteuil)
+        .map(p => p.name)
+        .filter(Boolean)
+        .join(', ') || null;
       const nomDistrib     = detail.buyer_name || o.buyer_name || '—';
       const dateCommande   = (detail.issue_date || detail.sell_date || '').slice(0, 10) || null;
       const annee          = dateCommande ? parseInt(dateCommande.slice(0, 4)) : null;
