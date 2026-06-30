@@ -2,6 +2,14 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Synthèse "Suivi commandes" sur le tableau de bord (nouveau)**
+Ajout d'une carte dédiée sur le tableau de bord, bien distincte du bloc
+Interventions : 4 compteurs (Total / En préparation / Expédié / Livré) +
+les 5 commandes "En préparation" les plus récentes, avec un bouton "Voir
+toutes les commandes" vers l'écran complet. Placée entre "Récentes
+activités" (interventions) et "Transferts fauteuils", dans le même style
+visuel que ce dernier.
+
 **30/06 — Exclusion affinée des lignes "frais d'envoi"**
 Règle corrigée : seules les lignes "frais d'envoi" accompagnées d'un poids
 (ex: "Frais d'envoi - 0,8 kg") sont exclues du détail — ce sont de pures

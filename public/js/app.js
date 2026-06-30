@@ -139,12 +139,44 @@ async function renderDashboard(ttl,c,a){
       </table></div>
     </div>
     <div class="card" style="margin-top:14px">
+      <div class="section-title"><i class="ti ti-clipboard-list"></i>${t('cmd_title')||'Suivi des commandes'}
+        <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
+      </div>
+      <div id="dash-commandes">${t('msg_chargement')}</div>
+    </div>
+    <div class="card" style="margin-top:14px">
       <div class="section-title"><i class="ti ti-arrows-exchange"></i>${t('transferts_en_cours')}
         <button class="btn sm" style="margin-left:auto" onclick="setView('transferts')"><i class="ti ti-arrow-right"></i>${t('transferts_voir_tout')}</button>
       </div>
       <div id="dash-transferts">${t('msg_chargement')}</div>
     </div>`;
   chargerTransfertsDashboard();
+  chargerCommandesDashboard();
+}
+
+async function chargerCommandesDashboard(){
+  const el=document.getElementById('dash-commandes');
+  if(!el) return;
+  try{
+    const stats = await API.commandesStats();
+    const res = await API.commandes({statut:'En préparation', per_page:5});
+    const list = res.rows||[];
+    el.innerHTML=`
+      <div class="grid-4" style="margin-bottom:12px">
+        <div class="stat-card"><div class="stat-label">${t('cmd_total')||'Total commandes'}</div><div class="stat-value">${stats.total}</div></div>
+        <div class="stat-card"><div class="stat-label">${t('cmd_en_prep')||'En préparation'}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
+        <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
+        <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
+      </div>
+      ${!list.length?`<div style="font-size:12px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
+      <div class="table-wrap"><table class="t">
+        <thead><tr><th>${t('col_date')||'Date'}</th><th>${t('col_client')||'Distributeur'}</th><th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th></tr></thead>
+        <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
+          <td>${fd(cm.date_commande)}</td><td>${esc(cm.distributeur_nom)}</td>
+          <td class="mono">${esc(cm.bdc||'')}</td><td>${esc(cm.modele||'')}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`}`;
+  }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 async function chargerTransfertsDashboard(){
