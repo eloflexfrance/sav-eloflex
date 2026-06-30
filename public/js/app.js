@@ -5,6 +5,13 @@ let CACHE = { catalogue:[], params:{} };
 let TMP_PRODUITS = [];
 
 const fd  = d => { if(!d)return'—'; const[y,m,day]=d.split('-'); return`${day}/${m}/${y}`; };
+const moisLabel = ym => {
+  const[y,m]=ym.split('-');
+  const namesFr=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
+  const namesEn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const names=(typeof LANG!=='undefined'&&LANG==='en')?namesEn:namesFr;
+  return `${names[parseInt(m,10)-1]} ${y.slice(2)}`;
+};
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const sc  = s => s===t('inter_statut_ouvert')?'ouvert':s===t('inter_statut_ferme')?'ferme':s===t('inter_statut_attente')?'attente':'ouvert';
 const $   = id => document.getElementById(id);
@@ -98,10 +105,10 @@ async function renderDashboard(ttl,c,a){
       <div class="card">
         <div class="section-title"><i class="ti ti-chart-bar"></i>${t('db_chart_title')}</div>
         <div class="chart-bar">
-          ${par_mois.map(m=>`<div class="chart-bar-col">
+          ${par_mois.map(m=>`<div class="chart-bar-col" title="${moisLabel(m.mois)} : ${m.total} intervention${m.total!==1?'s':''}">
             <div style="font-size:9px;color:var(--text3)">${m.total}</div>
-            <div class="chart-bar-fill" style="height:${Math.round(m.total/maxMois*70)}px;background:var(--accent)"></div>
-            <div class="chart-bar-label">${m.mois.slice(5)}</div>
+            <div class="chart-bar-fill" style="height:${m.total>0?Math.max(Math.round(m.total/maxMois*70),4):2}px;background:${m.total>0?'var(--accent)':'var(--border)'}"></div>
+            <div class="chart-bar-label">${moisLabel(m.mois)}</div>
           </div>`).join('')}
         </div>
       </div>

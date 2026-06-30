@@ -485,11 +485,18 @@ router.get('/stats', async (req, res) => {
        ORDER BY i.updated_at DESC LIMIT 8`
     );
     const par_mois = await db.all(
-      `SELECT to_char(date::date,'YYYY-MM') AS mois, COUNT(*)::int AS total,
-        SUM(CASE WHEN garantie THEN 1 ELSE 0 END)::int AS garantie,
-        SUM(CASE WHEN NOT garantie THEN 1 ELSE 0 END)::int AS hors_garantie
-       FROM interventions WHERE date::date >= NOW()-INTERVAL '12 months'
-       GROUP BY mois ORDER BY mois`
+      `SELECT to_char(mois_serie,'YYYY-MM') AS mois,
+        COALESCE(COUNT(i.id),0)::int AS total,
+        COALESCE(SUM(CASE WHEN i.garantie THEN 1 ELSE 0 END),0)::int AS garantie,
+        COALESCE(SUM(CASE WHEN i.garantie=false THEN 1 ELSE 0 END),0)::int AS hors_garantie
+       FROM generate_series(
+         date_trunc('month', NOW() - INTERVAL '11 months'),
+         date_trunc('month', NOW()),
+         INTERVAL '1 month'
+       ) AS mois_serie
+       LEFT JOIN interventions i
+         ON to_char(i.date::date,'YYYY-MM') = to_char(mois_serie,'YYYY-MM')
+       GROUP BY mois_serie ORDER BY mois_serie`
     );
     const pieces_top = await db.all(
       `SELECT ip.ref,ip.designation,SUM(ip.qte)::int AS total_utilise
