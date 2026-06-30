@@ -422,45 +422,51 @@ async function renderCommandesTable(){
 async function modalCommande(id){
   let cm = id ? await API.commande(id) : {};
   showModal(`
-    <h3 style="margin-bottom:14px">${id?(t('cmd_edit')||'Modifier la commande'):(t('cmd_add')||'Nouvelle commande')}</h3>
-    <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <label>${t('col_client')||'Distributeur'} *<input id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required></label>
-      <label>${t('cmd_groupe')||'Groupe'}<input id="cmd-groupe" value="${esc(cm.groupe||'')}"></label>
-      <label>${t('cmd_modele')||'Modèle'}<input id="cmd-modele" value="${esc(cm.modele||'')}"></label>
-      <label>${t('cmd_accessoire')||'Accessoire'}<input id="cmd-accessoire" value="${esc(cm.accessoire||'')}"></label>
-      <label>${t('cmd_bdc')||'Bdc'}<input id="cmd-bdc" value="${esc(cm.bdc||'')}"></label>
-      <label>${t('col_date')||'Date commande'}<input id="cmd-date" type="date" value="${cm.date_commande||''}"></label>
-      <label>${t('cmd_client_final')||'Client final'}<input id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></label>
-      <label>${t('cmd_suivi')||'N° suivi'}<input id="cmd-suivi" value="${esc(cm.num_suivi||'')}"></label>
-      <label>${t('cmd_date_livraison')||'Date livraison'}<input id="cmd-livraison" type="date" value="${cm.date_livraison||''}"></label>
-      <label>${t('cmd_serie')||'N° série'}<input id="cmd-serie" value="${esc(cm.num_serie||'')}"></label>
-      <label>${t('cmd_facture')||'N° facture'}
-        <div style="display:flex;gap:6px">
-          <input id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1">
-          <button class="btn" type="button" title="${t('cmd_recuperer_serie')||'Récupérer le n° de série depuis cette facture'}" onmousedown="lookupFactureVF()"><i class="ti ti-search"></i></button>
-        </div>
-      </label>
-      <label>${t('cmd_statut')||'Statut'}
-        <select id="cmd-statut">
-          <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto')||'Auto (calculé)'}</option>
-          <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
-          <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
-          <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
-          <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
-        </select>
-      </label>
-      <label style="grid-column:1/-1">${t('cmd_infos')||'Informations'}<textarea id="cmd-infos" rows="2">${esc(cm.informations||'')}</textarea></label>
+    <div class="modal-header">
+      <i class="ti ti-clipboard-list" style="font-size:18px;color:var(--accent)"></i>
+      <h2>${id?(t('cmd_edit')||'Modifier la commande'):(t('cmd_add')||'Nouvelle commande')}</h2>
+      <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
-    ${id?`<div id="cmd-vf-suggest" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#eee)">
-      <button class="btn" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i>${t('cmd_chercher_vf')||'Chercher une facture VosFactures à rattacher'}</button>
-      <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
-    </div>`:''}
-    <div style="display:flex;justify-content:space-between;margin-top:16px">
-      <div>${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i>${t('btn_supprimer')||'Supprimer'}</button>`:''}</div>
-      <div style="display:flex;gap:8px">
-        <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
-        <button class="btn primary" onclick="enregistrerCommande(${id||'null'})">${t('btn_enregistrer')||'Enregistrer'}</button>
+    <div class="modal-body">
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label><input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required></div>
+        <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_accessoire')||'Accessoire'}</label><input class="form-input" id="cmd-accessoire" value="${esc(cm.accessoire||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'}</label><input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('col_date')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_client_final')||'Client final'}</label><input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('cmd_suivi')||'N° suivi'}</label><input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('cmd_date_livraison')||'Date livraison'}</label><input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}"></div>
+        <div class="form-group"><label class="form-label">${t('cmd_serie')||'N° série'}</label><input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}"></div>
+        <div class="form-group">
+          <label class="form-label">${t('cmd_facture')||'N° facture'}</label>
+          <div style="display:flex;gap:6px">
+            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1">
+            <button class="btn sm" type="button" title="${t('cmd_recuperer_serie')||'Récupérer le n° de série depuis cette facture'}" onmousedown="lookupFactureVF()"><i class="ti ti-search"></i></button>
+          </div>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">${t('cmd_statut')||'Statut'}</label>
+          <select class="form-input" id="cmd-statut">
+            <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto')||'Auto (calculé)'}</option>
+            <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
+            <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
+            <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
+            <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_infos')||'Informations'}</label><textarea class="form-input" id="cmd-infos" rows="2">${esc(cm.informations||'')}</textarea></div>
       </div>
+      ${id?`<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
+        <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i>${t('cmd_chercher_vf')||'Chercher une facture VosFactures à rattacher'}</button>
+        <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
+      </div>`:''}
+    </div>
+    <div class="modal-footer">
+      ${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i>${t('btn_supprimer')||'Supprimer'}</button>`:''}
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
+      <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
 }
 
@@ -472,20 +478,20 @@ async function chercherFacturesVF(id){
     if(!r.configured){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${t('cmd_vf_non_configure')||'VosFactures non configuré'}</div>`; return; }
     if(r.reason){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${esc(r.reason)}</div>`; return; }
     if(!r.factures||!r.factures.length){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${t('cmd_vf_aucune')||'Aucune facture récente trouvée pour ce distributeur'}</div>`; return; }
-    zone.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${t('cmd_vf_choisir')||'Choisis la facture correspondante (à confirmer toi-même, aucun lien automatique fiable côté VosFactures) :'}</div>
+    zone.innerHTML=`<div class="form-label" style="margin-bottom:8px">${t('cmd_vf_choisir')||'Choisis la facture correspondante (à confirmer toi-même, aucun lien automatique fiable côté VosFactures) :'}</div>
       <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto">
         ${r.factures.map((f,i)=>{
           window._VF_SUGGEST=window._VF_SUGGEST||{}; window._VF_SUGGEST[i]=f;
-          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--border,#eee);border-radius:6px">
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:0.5px solid var(--border-s);border-radius:var(--radius)">
             <div>
-              <div style="font-weight:600">${esc(f.numero||('#'+f.id))} — ${fd(f.date)}</div>
+              <div style="font-size:13px;font-weight:600">${esc(f.numero||('#'+f.id))} — ${fd(f.date)}</div>
               <div style="font-size:11px;color:var(--text3)">${f.num_serie?('N° série : '+esc(f.num_serie)):(t('cmd_vf_sans_serie')||'Pas de série détectée')}${f.montant_ttc?' · '+parseFloat(f.montant_ttc).toFixed(2)+' €':''}</div>
             </div>
-            <button class="btn" type="button" onmousedown="appliquerFactureVF(${i})">${t('cmd_vf_utiliser')||'Utiliser'}</button>
+            <button class="btn sm" type="button" onmousedown="appliquerFactureVF(${i})">${t('cmd_vf_utiliser')||'Utiliser'}</button>
           </div>`;
         }).join('')}
       </div>`;
-  }catch(e){ zone.innerHTML=`<div style="font-size:12px;color:#d33">${esc(e.message)}</div>`; }
+  }catch(e){ zone.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 function appliquerFactureVF(i){
@@ -497,15 +503,15 @@ function appliquerFactureVF(i){
 
 async function lookupFactureVF(){
   const numero = gv('cmd-facture').trim();
-  if(!numero){ toast(t('cmd_vf_numero_requis')||'Indique d\u2019abord un n° de facture','ti-alert-circle','#d33'); return; }
+  if(!numero){ toast(t('cmd_vf_numero_requis')||'Indique d\u2019abord un n° de facture','ti-alert-circle','var(--danger)'); return; }
   toast(t('cmd_vf_recherche_en_cours')||'Recherche dans VosFactures…','ti-loader-2');
   try{
     const r = await API.vfFactureLookup(numero);
-    if(!r.configured){ toast(t('cmd_vf_non_configure')||'VosFactures non configuré','ti-alert-circle','#d33'); return; }
-    if(!r.found){ toast(t('cmd_vf_facture_introuvable')||'Facture introuvable dans VosFactures','ti-alert-circle','#d33'); return; }
+    if(!r.configured){ toast(t('cmd_vf_non_configure')||'VosFactures non configuré','ti-alert-circle','var(--danger)'); return; }
+    if(!r.found){ toast(t('cmd_vf_facture_introuvable')||'Facture introuvable dans VosFactures','ti-alert-circle','var(--danger)'); return; }
     if(r.num_serie){ $('cmd-serie').value=r.num_serie; toast(t('cmd_vf_serie_recuperee')||'N° de série récupéré'); }
-    else toast(t('cmd_vf_sans_serie')||'Pas de série détectée dans cette facture','ti-alert-circle','#d33');
-  }catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
+    else toast(t('cmd_vf_sans_serie')||'Pas de série détectée dans cette facture','ti-alert-circle','var(--danger)');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 async function enregistrerCommande(id){
@@ -516,17 +522,17 @@ async function enregistrerCommande(id){
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
     informations: gv('cmd-infos')
   };
-  if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','#d33'); return; }
+  if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
     if(id) await API.updateCommande(id,d); else await API.createCommande(d);
     closeModal(); toast(t('msg_enregistre')||'Enregistré'); render();
-  }catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 async function supprimerCommande(id){
   if(!confirm(t('cmd_confirm_suppr')||'Supprimer cette commande ?')) return;
   try{ await API.deleteCommande(id); closeModal(); toast(t('msg_supprime')||'Supprimé'); render(); }
-  catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
+  catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 async function syncCommandesVF(){
@@ -535,7 +541,7 @@ async function syncCommandesVF(){
     const r = await API.vfSyncCommandes();
     toast(r.message||(t('cmd_sync_ok')||'Synchronisation terminée'));
     render();
-  }catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 // ── CATALOGUE ─────────────────────────────────────────────────────

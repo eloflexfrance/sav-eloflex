@@ -2,6 +2,13 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Modale "Commande" mal stylée**
+Le formulaire d'édition d'une commande utilisait une grille ad hoc au lieu
+des classes CSS du reste de l'app (`.modal-header`, `.form-group`,
+`.form-label`, `.form-input`...), d'où le rendu brut sans espacement.
+Corrigé dans `public/js/app.js` : la modale reprend maintenant exactement le
+même habillage que les autres fiches (pièces, fauteuils...).
+
 **30/06 — Détection de modèle erronée ("Eloflex L" partout)**
 La sync VosFactures devinait le modèle du fauteuil en testant des lettres
 isolées (L, F, H, D2...) sur tout le texte du document (accessoires, notes,
