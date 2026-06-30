@@ -35,21 +35,21 @@ function setView(v, extra={}){
 document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setView(n.dataset.view)));
 
 async function render(){
-  const t=$('topbar-title'),c=$('content'),a=$('topbar-actions');
+  const ttl=$('topbar-title'),c=$('content'),a=$('topbar-actions');
   a.innerHTML='';
-  c.innerHTML='<div class="empty" style="padding-top:60px"><i class="ti ti-loader-2" style="font-size:28px;display:block;margin-bottom:8px"></i>Chargement…</div>';
+  c.innerHTML=`<div class="empty" style="padding-top:60px"><i class="ti ti-loader-2" style="font-size:28px;display:block;margin-bottom:8px"></i>${t('msg_chargement')}</div>`;
   try{
-    if(STATE.view==='dashboard')     await renderDashboard(t,c,a);
-    else if(STATE.view==='clients')  await renderClients(t,c,a);
-    else if(STATE.view==='client')   await renderClient(t,c,a);
-    else if(STATE.view==='fauteuil') await renderFauteuil(t,c,a);
-    else if(STATE.view==='interventions') await renderInterventions(t,c,a);
-    else if(STATE.view==='expeditions')   await renderExpeditions(t,c,a);
-    else if(STATE.view==='catalogue')     await renderCatalogue(t,c,a);
-    else if(STATE.view==='rapports')      await renderRapports(t,c,a);
-    else if(STATE.view==='alertes')       await renderAlertes(t,c,a);
-    else if(STATE.view==='parametres')    await renderParametres(t,c,a);
-    else if(STATE.view==='retours-suede')  await renderRetoursSuede(t,c,a);
+    if(STATE.view==='dashboard')     await renderDashboard(ttl,c,a);
+    else if(STATE.view==='clients')  await renderClients(ttl,c,a);
+    else if(STATE.view==='client')   await renderClient(ttl,c,a);
+    else if(STATE.view==='fauteuil') await renderFauteuil(ttl,c,a);
+    else if(STATE.view==='interventions') await renderInterventions(ttl,c,a);
+    else if(STATE.view==='expeditions')   await renderExpeditions(ttl,c,a);
+    else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
+    else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
+    else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
+    else if(STATE.view==='parametres')    await renderParametres(ttl,c,a);
+    else if(STATE.view==='retours-suede')  await renderRetoursSuede(ttl,c,a);
   }catch(e){c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`;}
 }
 
@@ -67,8 +67,8 @@ async function refreshBadges(){
 
 // ── DASHBOARD ────────────────────────────────────────────────────
 
-async function renderDashboard(t,c,a){
-  t.textContent=t('nav_dashboard');
+async function renderDashboard(ttl,c,a){
+  ttl.textContent=t('nav_dashboard');
   const{stats:s,recentes,par_mois,pieces_top,par_technicien}=await API.stats();
   const maxMois=Math.max(...par_mois.map(m=>m.total),1);
   c.innerHTML=`
@@ -112,7 +112,7 @@ async function renderDashboard(t,c,a){
             <div style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.designation)}</div>
             <div style="font-weight:700;font-size:12px;color:var(--accent)">${p.total_utilise}×</div>
           </div>`).join('')}
-        ${par_technicien.length?`<div class="divider"></div><div class="section-title" style="margin-top:8px"><i class="ti ti-user"></i>${t('db_par_tech')}</div>${par_technicien.map(t=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${esc(t.technicien)}</span><span style="font-weight:700">${t.total}</span></div>`).join('')}`:''}
+        ${par_technicien.length?`<div class="divider"></div><div class="section-title" style="margin-top:8px"><i class="ti ti-user"></i>${t('db_par_tech')}</div>${par_technicien.map(tech=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${esc(tech.technicien)}</span><span style="font-weight:700">${tech.total}</span></div>`).join('')}`:''}
       </div>
     </div>
     <div class="card">
@@ -132,8 +132,8 @@ async function renderDashboard(t,c,a){
 
 // ── CLIENTS ───────────────────────────────────────────────────────
 
-async function renderClients(t,c,a){
-  t.textContent=t('nav_clients');
+async function renderClients(ttl,c,a){
+  ttl.textContent=t('nav_clients');
   a.innerHTML=`<input class="search-bar" placeholder=""+t('cat_search')+"" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderClients(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>`;
   const list=await API.clients(STATE.q);
@@ -148,9 +148,9 @@ async function renderClients(t,c,a){
   </table></div>`;
 }
 
-async function renderClient(t,c,a){
+async function renderClient(ttl,c,a){
   const cl=await API.client(STATE.clientId);
-  t.textContent=cl.nom;
+  ttl.textContent=cl.nom;
   a.innerHTML=`
     <button class="btn sm success" onclick="exportClientPDF(${cl.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
     <button class="btn sm" onclick="modalPortail(${cl.id},'${cl.token_portail||''}')"><i class="ti ti-link"></i>Portail</button>
@@ -211,10 +211,10 @@ function garantieChip(f){
   return `<span class="garantie-chip expired"><i class="ti ti-shield-x" style="font-size:12px"></i>Garantie expirée le ${fd(exp.toISOString().slice(0,10))}</span>`;
 }
 
-async function renderFauteuil(t,c,a){
+async function renderFauteuil(ttl,c,a){
   const f=await API.fauteuil(STATE.fauteuilId);
   const inters=f.interventions||[];
-  t.textContent=`${f.modele} — ${f.serie}`;
+  ttl.textContent=`${f.modele} — ${f.serie}`;
   a.innerHTML=`
     <button class="btn sm success" onclick="exportFauteuilPDF(${f.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
     <button class="btn sm" onclick="modalEditFauteuil(${f.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
@@ -267,8 +267,8 @@ async function renderFauteuil(t,c,a){
 
 // ── INTERVENTIONS ─────────────────────────────────────────────────
 
-async function renderInterventions(t,c,a){
-  t.textContent=t('nav_interventions');
+async function renderInterventions(ttl,c,a){
+  ttl.textContent=t('nav_interventions');
   a.innerHTML=`
     <input class="search-bar" placeholder=""+t('cat_search')+"" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <select class="search-bar" id="filter-statut" onchange="renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))" style="width:130px">
@@ -294,8 +294,8 @@ async function renderInterventions(t,c,a){
 
 // ── EXPÉDITIONS ───────────────────────────────────────────────────
 
-async function renderExpeditions(t,c,a){
-  t.textContent=t('exp_title');
+async function renderExpeditions(ttl,c,a){
+  ttl.textContent=t('exp_title');
   a.innerHTML=`<button class="btn success" onclick="API.exportExcel('expeditions')"><i class="ti ti-file-spreadsheet"></i>${t('rap_export_excel')}</button>`;
   const list=await API.expeditions();
   c.innerHTML=`
@@ -317,8 +317,8 @@ async function renderExpeditions(t,c,a){
 
 // ── CATALOGUE ─────────────────────────────────────────────────────
 
-async function renderCatalogue(t,c,a){
-  t.textContent=t('cat_title');
+async function renderCatalogue(ttl,c,a){
+  ttl.textContent=t('cat_title');
   a.innerHTML=`
     <input class="search-bar" placeholder="${t('cat_search')}" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderCatalogue(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')}</button>
@@ -340,8 +340,8 @@ async function renderCatalogue(t,c,a){
 
 // ── RAPPORTS ──────────────────────────────────────────────────────
 
-async function renderRapports(t,c,a){
-  t.textContent=t('rap_title');
+async function renderRapports(ttl,c,a){
+  ttl.textContent=t('rap_title');
   c.innerHTML=`
     <div class="grid-2" style="gap:14px">
       <div class="card">
@@ -389,8 +389,8 @@ function exportExcelFiltre(){
 
 // ── ALERTES ───────────────────────────────────────────────────────
 
-async function renderAlertes(t,c,a){
-  t.textContent=t('alertes_title');
+async function renderAlertes(ttl,c,a){
+  ttl.textContent=t('alertes_title');
   a.innerHTML=`<button class="btn" onclick="API.marquerToutesLues().then(()=>{refreshBadges();render();})"><i class="ti ti-checks"></i>${t('alertes_tout_lire')}</button>`;
   const list=await API.alertes();
   const icons={relance:'ti-clock',retour_manquant:'ti-truck-return',garantie_expire:'ti-shield-x',stock_faible:'ti-alert-triangle',stock_zero:'ti-circle-x',intervention_fermee:'ti-circle-check'};
@@ -411,8 +411,8 @@ async function renderAlertes(t,c,a){
 
 // ── PARAMÈTRES ────────────────────────────────────────────────────
 
-async function renderParametres(t,c,a){
-  t.textContent=t('param_title');
+async function renderParametres(ttl,c,a){
+  ttl.textContent=t('param_title');
   a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>`;
   const p=await API.parametres();
   CACHE.params=p;
