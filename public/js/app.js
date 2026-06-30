@@ -6,7 +6,7 @@ let TMP_PRODUITS = [];
 
 const fd  = d => { if(!d)return'—'; const[y,m,day]=d.split('-'); return`${day}/${m}/${y}`; };
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const sc  = s => s==='Ouvert'?'ouvert':s==='Fermé'?'ferme':s==='En attente'?'attente':'ouvert';
+const sc  = s => s===t('inter_statut_ouvert')?'ouvert':s===t('inter_statut_ferme')?'ferme':s===t('inter_statut_attente')?'attente':'ouvert';
 const $   = id => document.getElementById(id);
 const gv  = id => ($( id)||{}).value||'';
 
@@ -68,14 +68,14 @@ async function refreshBadges(){
 // ── DASHBOARD ────────────────────────────────────────────────────
 
 async function renderDashboard(t,c,a){
-  t.textContent='Tableau de bord';
+  t.textContent=t('nav_dashboard');
   const{stats:s,recentes,par_mois,pieces_top,par_technicien}=await API.stats();
   const maxMois=Math.max(...par_mois.map(m=>m.total),1);
   c.innerHTML=`
     <div class="quick-search-bar">
       <div style="position:relative;flex:1;max-width:560px">
         <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:16px;pointer-events:none"></i>
-        <input class="form-input" id="qs-input" placeholder="Rechercher un fauteuil par n° de série, modèle ou distributeur…"
+        <input class="form-input" id="qs-input" placeholder="${t('qs_placeholder')}"
           style="padding-left:34px;font-size:14px;border-radius:10px"
           oninput="quickSearch(this.value)"
           onkeydown="if(event.key==='Escape'){this.value='';clearQuickSearch();}">
@@ -83,20 +83,20 @@ async function renderDashboard(t,c,a){
       <div id="qs-results" class="qs-results" style="display:none"></div>
     </div>
     <div class="grid-4" style="margin-bottom:12px">
-      <div class="stat-card"><div class="stat-label">Interventions</div><div class="stat-value">${s.nb_interventions}</div></div>
-      <div class="stat-card"><div class="stat-label">Ouvertes</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
-      <div class="stat-card"><div class="stat-label">En attente</div><div class="stat-value" style="color:var(--warning)">${s.attente}</div></div>
-      <div class="stat-card"><div class="stat-label">Expéditions en cours</div><div class="stat-value" style="color:var(--accent)">${s.expeditions_cours}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_interventions')}</div><div class="stat-value">${s.nb_interventions}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_ouvertes')}</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_attente')}</div><div class="stat-value" style="color:var(--warning)">${s.attente}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_expeditions')}</div><div class="stat-value" style="color:var(--accent)">${s.expeditions_cours}</div></div>
     </div>
     <div class="grid-4" style="margin-bottom:14px">
-      <div class="stat-card"><div class="stat-label">Sous garantie</div><div class="stat-value" style="color:var(--success)">${s.garantie}</div></div>
-      <div class="stat-card"><div class="stat-label">Hors garantie</div><div class="stat-value" style="color:var(--warning)">${s.hors_garantie}</div></div>
-      <div class="stat-card"><div class="stat-label">Pièces en alerte stock</div><div class="stat-value" style="color:${s.pieces_alerte>0?'var(--danger)':'var(--text)'}">${s.pieces_alerte}</div></div>
-      <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">Alertes non lues</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_garantie')}</div><div class="stat-value" style="color:var(--success)">${s.garantie}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_hors_garantie')}</div><div class="stat-value" style="color:var(--warning)">${s.hors_garantie}</div></div>
+      <div class="stat-card"><div class="stat-label">${t('db_pieces_alerte')}</div><div class="stat-value" style="color:${s.pieces_alerte>0?'var(--danger)':'var(--text)'}">${s.pieces_alerte}</div></div>
+      <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">${t('db_alertes')}</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
     </div>
     <div class="grid-2" style="margin-bottom:14px">
       <div class="card">
-        <div class="section-title"><i class="ti ti-chart-bar"></i>Interventions / 12 mois</div>
+        <div class="section-title"><i class="ti ti-chart-bar"></i>${t('db_chart_title')}</div>
         <div class="chart-bar">
           ${par_mois.map(m=>`<div class="chart-bar-col">
             <div style="font-size:9px;color:var(--text3)">${m.total}</div>
@@ -106,25 +106,25 @@ async function renderDashboard(t,c,a){
         </div>
       </div>
       <div class="card">
-        <div class="section-title"><i class="ti ti-box"></i>Pièces les plus utilisées (6 mois)</div>
-        ${pieces_top.length===0?'<div style="font-size:12px;color:var(--text3)">Aucune donnée</div>':pieces_top.map(p=>`
+        <div class="section-title"><i class="ti ti-box"></i>${t('db_top_pieces')}</div>
+        ${pieces_top.length===0?`<div style="font-size:12px;color:var(--text3)">${t('msg_vide')}</div>`:pieces_top.map(p=>`
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
             <div style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.designation)}</div>
             <div style="font-weight:700;font-size:12px;color:var(--accent)">${p.total_utilise}×</div>
           </div>`).join('')}
-        ${par_technicien.length?`<div class="divider"></div><div class="section-title" style="margin-top:8px"><i class="ti ti-user"></i>Par technicien</div>${par_technicien.map(t=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${esc(t.technicien)}</span><span style="font-weight:700">${t.total}</span></div>`).join('')}`:''}
+        ${par_technicien.length?`<div class="divider"></div><div class="section-title" style="margin-top:8px"><i class="ti ti-user"></i>${t('db_par_tech')}</div>${par_technicien.map(t=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${esc(t.technicien)}</span><span style="font-weight:700">${t.total}</span></div>`).join('')}`:''}
       </div>
     </div>
     <div class="card">
-      <div class="section-title"><i class="ti ti-tool"></i>Récentes activités</div>
+      <div class="section-title"><i class="ti ti-tool"></i>${t('db_activites')}</div>
       <div class="table-wrap"><table class="t">
-        <thead><tr><th>N° SAV</th><th>Date</th><th>Client</th><th>Modèle</th><th>Type</th><th>Garantie</th><th>Statut</th></tr></thead>
+        <thead><tr><th>N° SAV</th><th>${t('col_date')}</th><th>${t('col_client')}</th><th>${t('col_modele')}</th><th>${t('col_type')}</th><th>${t('col_garantie')}</th><th>${t('col_statut')}</th></tr></thead>
         <tbody>${recentes.map(i=>`<tr onclick="viewIntervention(${i.id})">
           <td class="mono" style="color:var(--accent);font-size:11px">${esc(i.num_sav||'—')}</td><td>${fd(i.date)}</td><td>${esc(i.client_nom)}</td>
           <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
-          <td>${esc(i.type)}</td>
-          <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'Hors garantie'}</span></td>
-          <td><span class="badge ${sc(i.statut)}">${esc(i.statut)}</span></td>
+          <td>${traduireType(i.type)}</td>
+          <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('garantie_expiree')}</span></td>
+          <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>`;
@@ -133,12 +133,12 @@ async function renderDashboard(t,c,a){
 // ── CLIENTS ───────────────────────────────────────────────────────
 
 async function renderClients(t,c,a){
-  t.textContent='Clients / Distributeurs';
-  a.innerHTML=`<input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderClients(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
-    <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>Nouveau client</button>`;
+  t.textContent=t('nav_clients');
+  a.innerHTML=`<input class="search-bar" placeholder=""+t('cat_search')+"" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderClients(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
+    <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>`;
   const list=await API.clients(STATE.q);
   c.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>Distributeur</th><th>Contact</th><th>Ville</th><th>Fauteuils</th><th>Interventions</th><th></th></tr></thead>
+    <thead><tr><th>${t('col_distributeur')}</th><th>${t('col_contact')}</th><th>${t('col_ville')}</th><th>${t('col_fauteuils')}</th><th>${t('col_interventions')}</th><th></th></tr></thead>
     <tbody>${list.map(cl=>`<tr onclick="setView('client',{clientId:${cl.id}})">
       <td><div style="font-weight:600">${esc(cl.nom)}</div><div style="font-size:11px;color:var(--text3)">${esc(cl.type)}</div></td>
       <td><div>${esc(cl.contact||'')}</div><div style="font-size:11px;color:var(--text3)">${esc(cl.email||'')}</div></td>
@@ -166,7 +166,7 @@ async function renderClient(t,c,a){
           ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Ville',cl.ville],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
-          <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>Modifier</button>
+          <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
         </div>
       </div>
       <div class="card">
@@ -181,7 +181,7 @@ async function renderClient(t,c,a){
     </div>
     <div class="section-title" style="margin-bottom:8px"><i class="ti ti-wheelchair"></i>Fauteuils (${cl.fauteuils.length})</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px">
-      ${cl.fauteuils.length===0?'<div class="empty"><i class="ti ti-wheelchair"></i>Aucun fauteuil</div>':cl.fauteuils.map(f=>`
+      ${cl.fauteuils.length===0?`<div class="empty"><i class="ti ti-wheelchair"></i>${t('msg_aucun_fauteuil')}</div>`:cl.fauteuils.map(f=>`
         <div class="fauteuil-card" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${cl.id}})">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
             <div style="font-weight:700;font-size:13px"><i class="ti ti-wheelchair" style="font-size:13px;margin-right:3px"></i>${esc(f.modele)}</div>
@@ -217,7 +217,7 @@ async function renderFauteuil(t,c,a){
   t.textContent=`${f.modele} — ${f.serie}`;
   a.innerHTML=`
     <button class="btn sm success" onclick="exportFauteuilPDF(${f.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
-    <button class="btn sm" onclick="modalEditFauteuil(${f.id})"><i class="ti ti-edit"></i>Modifier</button>
+    <button class="btn sm" onclick="modalEditFauteuil(${f.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
     <button class="btn sm primary" onclick="modalNewIntervention(${f.id},${f.client_id})"><i class="ti ti-plus"></i>Intervention</button>`;
   c.innerHTML=`
     <div class="breadcrumb">
@@ -246,12 +246,12 @@ async function renderFauteuil(t,c,a){
     </div>
     <div class="card">
       <div class="section-title"><i class="ti ti-tool"></i>Interventions (${inters.length})</div>
-      ${inters.length===0?'<div class="empty"><i class="ti ti-tool"></i>Aucune intervention</div>':inters.map(i=>`
+      ${inters.length===0?`<div class="empty"><i class="ti ti-tool"></i>${t('msg_aucune_inter')}</div>`:inters.map(i=>`
         <div style="padding:10px;border-bottom:0.5px solid var(--border);cursor:pointer" onclick="viewIntervention(${i.id})" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
-            <span style="font-weight:700;font-size:13px">${esc(i.type)}</span>
-            <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'Hors garantie'}</span>
-            <span class="badge ${sc(i.statut)}">${esc(i.statut)}</span>
+            <span style="font-weight:700;font-size:13px">${traduireType(i.type)}</span>
+            <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('garantie_expiree')}</span>
+            <span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span>
             <span style="margin-left:auto;font-size:11px;color:var(--text3)">${fd(i.date)}</span>
           </div>
           <div style="font-size:12px;color:var(--text2)">${esc(i.description||'')}</div>
@@ -268,24 +268,24 @@ async function renderFauteuil(t,c,a){
 // ── INTERVENTIONS ─────────────────────────────────────────────────
 
 async function renderInterventions(t,c,a){
-  t.textContent='Interventions';
+  t.textContent=t('nav_interventions');
   a.innerHTML=`
-    <input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
+    <input class="search-bar" placeholder=""+t('cat_search')+"" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <select class="search-bar" id="filter-statut" onchange="renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))" style="width:130px">
-      <option value="">Tous statuts</option><option>Ouvert</option><option>En attente</option><option>Fermé</option>
+      <option value="">${t('tous_statuts')}</option><option value="Ouvert">${t('inter_statut_ouvert')}</option><option value="En attente">${t('inter_statut_attente')}</option><option value="Fermé">${t('inter_statut_ferme')}</option>
     </select>
-    <button class="btn primary" onclick="modalNewIntervention(null,null)"><i class="ti ti-plus"></i>Nouvelle</button>`;
+    <button class="btn primary" onclick="modalNewIntervention(null,null)"><i class="ti ti-plus"></i>${t('inter_new')}</button>`;
   const statut=$('filter-statut')?.value||'';
   const list=await API.interventions({q:STATE.q||undefined, statut:statut||undefined});
   c.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>N° SAV</th><th>Date</th><th>Client</th><th>Modèle / Série</th><th>Type</th><th>Description</th><th>Garantie</th><th>Statut</th><th>Tech.</th><th style="text-align:center">  </th></tr></thead>
+    <thead><tr><th>N° SAV</th><th>${t('col_date')}</th><th>${t('col_client')}</th><th>${t('col_modele')} / ${t('col_serie')}</th><th>${t('col_type')}</th><th>${t('col_description')}</th><th>${t('col_garantie')}</th><th>${t('col_statut')}</th><th>${t('col_technicien')}</th><th style="text-align:center">  </th></tr></thead>
     <tbody>${list.map(i=>`<tr onclick="viewIntervention(${i.id})">
       <td class="mono" style="color:var(--accent);font-size:11px">${esc(i.num_sav||'—')}</td><td>${fd(i.date)}</td><td>${esc(i.client_nom||'')}</td>
       <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
-      <td>${esc(i.type)}</td>
+      <td>${esc(traduireType(i.type))}</td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.description||'')}</td>
-      <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Garantie':'Hors garantie'}</span></td>
-      <td><span class="badge ${sc(i.statut)}">${esc(i.statut)}</span></td>
+      <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('garantie_expiree')}</span></td>
+      <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
       <td>${esc(i.technicien||'')}</td>
       <td style="text-align:center;color:var(--text3);font-size:11px">${i.nb_photos||''}</td>
     </tr>`).join('')}</tbody>
@@ -295,14 +295,14 @@ async function renderInterventions(t,c,a){
 // ── EXPÉDITIONS ───────────────────────────────────────────────────
 
 async function renderExpeditions(t,c,a){
-  t.textContent='Expéditions en cours';
-  a.innerHTML=`<button class="btn success" onclick="API.exportExcel('expeditions')"><i class="ti ti-file-spreadsheet"></i>Exporter Excel</button>`;
+  t.textContent=t('exp_title');
+  a.innerHTML=`<button class="btn success" onclick="API.exportExcel('expeditions')"><i class="ti ti-file-spreadsheet"></i>${t('rap_export_excel')}</button>`;
   const list=await API.expeditions();
   c.innerHTML=`
-    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Interventions avec envoi enregistré mais sans retour, statut non fermé.</div>
-    ${list.length===0?'<div class="empty"><i class="ti ti-truck-delivery"></i>Aucune expédition en attente de retour</div>':`
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">${t('exp_subtitle')}</div>
+    ${list.length===0?`<div class="empty"><i class="ti ti-truck-delivery"></i>${t('exp_empty')}</div>`:`
     <div class="table-wrap"><table class="t">
-      <thead><tr><th>N°</th><th>Client</th><th>Fauteuil</th><th>Transporteur</th><th>N° suivi envoi</th><th>Date envoi</th><th>Jours attente</th><th>Statut</th></tr></thead>
+      <thead><tr><th>N°</th><th>${t('col_client')}</th><th>${t('inter_fauteuil').replace(' *','')}</th><th>${t('col_transporteur')}</th><th>${t('col_suivi')}</th><th>${t('col_date_envoi')}</th><th>${t('col_jours')}</th><th>${t('col_statut')}</th></tr></thead>
       <tbody>${list.map(i=>`<tr onclick="viewIntervention(${i.id})">
         <td>#${i.id}</td><td>${esc(i.client_nom)}</td>
         <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
@@ -310,7 +310,7 @@ async function renderExpeditions(t,c,a){
         <td class="mono">${esc(i.envoi_numero||'')}</td>
         <td>${fd(i.envoi_date)}</td>
         <td><span class="badge ${(i.jours_attente||0)>10?'urgent':(i.jours_attente||0)>5?'attente':'g'}">${i.jours_attente!=null?i.jours_attente+' j':'—'}</span></td>
-        <td><span class="badge ${sc(i.statut)}">${esc(i.statut)}</span></td>
+        <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
       </tr>`).join('')}</tbody>
     </table></div>`}`;
 }
@@ -318,15 +318,15 @@ async function renderExpeditions(t,c,a){
 // ── CATALOGUE ─────────────────────────────────────────────────────
 
 async function renderCatalogue(t,c,a){
-  t.textContent='Catalogue pièces';
+  t.textContent=t('cat_title');
   a.innerHTML=`
-    <input class="search-bar" placeholder="Rechercher..." value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderCatalogue(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
-    <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>Excel</button>
-    <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>Ajouter pièce</button>`;
+    <input class="search-bar" placeholder="${t('cat_search')}" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderCatalogue(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
+    <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')}</button>
+    <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>`;
   const list=await API.catalogue(STATE.q);
   CACHE.catalogue=list;
   c.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>Référence</th><th>Désignation</th><th>Fournisseur</th><th>Réf fournisseur</th><th>Prix HT</th><th>Stock</th><th>Seuil</th></tr></thead>
+    <thead><tr><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_fournisseur')}</th><th>${t('col_ref_fou')}</th><th>${t('col_prix')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th></tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
       <td style="color:var(--text3)">${esc(p.fournisseur||'')}</td>
@@ -341,7 +341,7 @@ async function renderCatalogue(t,c,a){
 // ── RAPPORTS ──────────────────────────────────────────────────────
 
 async function renderRapports(t,c,a){
-  t.textContent='Rapports & exports';
+  t.textContent=t('rap_title');
   c.innerHTML=`
     <div class="grid-2" style="gap:14px">
       <div class="card">
@@ -390,12 +390,12 @@ function exportExcelFiltre(){
 // ── ALERTES ───────────────────────────────────────────────────────
 
 async function renderAlertes(t,c,a){
-  t.textContent='Alertes';
-  a.innerHTML=`<button class="btn" onclick="API.marquerToutesLues().then(()=>{refreshBadges();render();})"><i class="ti ti-checks"></i>Tout marquer comme lu</button>`;
+  t.textContent=t('alertes_title');
+  a.innerHTML=`<button class="btn" onclick="API.marquerToutesLues().then(()=>{refreshBadges();render();})"><i class="ti ti-checks"></i>${t('alertes_tout_lire')}</button>`;
   const list=await API.alertes();
   const icons={relance:'ti-clock',retour_manquant:'ti-truck-return',garantie_expire:'ti-shield-x',stock_faible:'ti-alert-triangle',stock_zero:'ti-circle-x',intervention_fermee:'ti-circle-check'};
   const colors={relance:'var(--warning)',retour_manquant:'var(--accent)',garantie_expire:'var(--danger)',stock_faible:'var(--warning)',stock_zero:'var(--danger)',intervention_fermee:'var(--success)'};
-  c.innerHTML=list.length===0?'<div class="empty"><i class="ti ti-bell-off"></i>Aucune alerte non lue</div>':
+  c.innerHTML=list.length===0?`<div class="empty"><i class="ti ti-bell-off"></i>${t('alertes_empty')}</div>`:
     `<div class="card">${list.map(al=>`
       <div class="alerte-row">
         <div class="alerte-icon" style="background:${colors[al.type]||'var(--accent)'}20;color:${colors[al.type]||'var(--accent)'}">
@@ -412,58 +412,58 @@ async function renderAlertes(t,c,a){
 // ── PARAMÈTRES ────────────────────────────────────────────────────
 
 async function renderParametres(t,c,a){
-  t.textContent='Paramètres';
-  a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>Enregistrer</button>`;
+  t.textContent=t('param_title');
+  a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>`;
   const p=await API.parametres();
   CACHE.params=p;
   c.innerHTML=`
     <div class="param-section">
-      <h3><i class="ti ti-bell"></i>Notifications & alertes automatiques</h3>
+      <h3><i class="ti ti-bell"></i>${t('param_alertes')}</h3>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Relance après (jours sans mise à jour)</label>
+        <div class="form-group"><label class="form-label">${t('param_relance')}</label>
           <input class="form-input" id="p-relance" type="number" min="1" value="${p.relance_jours||7}"></div>
-        <div class="form-group"><label class="form-label">Seuil stock alerte par défaut</label>
+        <div class="form-group"><label class="form-label">${t('param_stock_seuil')}</label>
           <input class="form-input" id="p-stock-alerte" type="number" min="0" value="${p.stock_alerte_defaut||2}"></div>
       </div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-mail"></i>Notifications email distributeurs</h3>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Envoie un email au distributeur quand vous cliquez sur ✉️ dans une fiche intervention.</div>
-      <div class="form-group"><label class="form-label">Notifications activées</label>
+      <h3><i class="ti ti-mail"></i>${t('param_email_title')}</h3>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">${t('param_email_hint')}</div>
+      <div class="form-group"><label class="form-label">${t('param_email_active')}</label>
         <select class="form-input" id="p-email-notif">
-          <option value="0" ${p.email_notifications!=='1'?'selected':''}>Désactivées</option>
-          <option value="1" ${p.email_notifications==='1'?'selected':''}>Activées</option>
+          <option value="0" ${p.email_notifications!=='1'?'selected':''}>${t('param_email_off')}</option>
+          <option value="1" ${p.email_notifications==='1'?'selected':''}>${t('param_email_on')}</option>
         </select>
       </div>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Serveur SMTP</label><input class="form-input" id="p-smtp-host" placeholder="smtp.gmail.com" value="${esc(p.email_smtp_host||'')}"></div>
-        <div class="form-group"><label class="form-label">Port</label><input class="form-input" id="p-smtp-port" type="number" value="${p.email_smtp_port||587}"></div>
-        <div class="form-group"><label class="form-label">Utilisateur</label><input class="form-input" id="p-smtp-user" placeholder="sav@eloflex.fr" value="${esc(p.email_smtp_user||'')}"></div>
-        <div class="form-group"><label class="form-label">Mot de passe</label><input class="form-input" id="p-smtp-pass" type="password" placeholder="••••••••" value="${esc(p.email_smtp_pass||'')}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Email expéditeur</label><input class="form-input" id="p-email-from" placeholder="SAV Éloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('param_smtp_server')}</label><input class="form-input" id="p-smtp-host" placeholder="smtp.gmail.com" value="${esc(p.email_smtp_host||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('param_smtp_port')}</label><input class="form-input" id="p-smtp-port" type="number" value="${p.email_smtp_port||587}"></div>
+        <div class="form-group"><label class="form-label">${t('param_smtp_user')}</label><input class="form-input" id="p-smtp-user" placeholder="sav@eloflex.fr" value="${esc(p.email_smtp_user||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('param_smtp_pass')}</label><input class="form-input" id="p-smtp-pass" type="password" placeholder="••••••••" value="${esc(p.email_smtp_pass||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('param_email_from')}</label><input class="form-input" id="p-email-from" placeholder="SAV Éloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
       </div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-building"></i>Informations société</h3>
-      <div class="form-group"><label class="form-label">Nom affiché dans les PDFs</label>
+      <h3><i class="ti ti-building"></i>${t('param_societe')}</h3>
+      <div class="form-group"><label class="form-label">${t('param_nom_societe')}</label>
         <input class="form-input" id="p-societe" value="${esc(p.nom_societe||'Éloflex France')}"></div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-globe"></i>Portail client</h3>
-      <div class="form-group"><label class="form-label">Portail client activé</label>
-        <select class="form-input" id="p-portail"><option value="1" ${p.portail_actif==='1'?'selected':''}>Activé</option><option value="0" ${p.portail_actif!=='1'?'selected':''}>Désactivé</option></select>
+      <h3><i class="ti ti-globe"></i>${t('param_portail')}</h3>
+      <div class="form-group"><label class="form-label">${t('param_portail')}</label>
+        <select class="form-input" id="p-portail"><option value="1" ${p.portail_actif==='1'?'selected':''}>${t('param_portail_on')}</option><option value="0" ${p.portail_actif!=='1'?'selected':''}>${t('param_portail_off')}</option></select>
       </div>
-      <div style="font-size:12px;color:var(--text2)">Chaque client dispose d'un lien unique pour suivre ses interventions en lecture seule. Accessible depuis la fiche client.</div>
+      <div style="font-size:12px;color:var(--text2)">${t('param_portail_hint')}</div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-moon"></i>Apparence</h3>
-      <div class="form-group"><label class="form-label">Mode sombre</label>
+      <h3><i class="ti ti-moon"></i>${t('param_apparence')}</h3>
+      <div class="form-group"><label class="form-label">${t('param_dark')}</label>
         <select class="form-input" id="p-dark" onchange="if(this.value==='1')document.body.classList.add('dark');else document.body.classList.remove('dark')">
-          <option value="0" ${p.mode_sombre!=='1'?'selected':''}>Clair</option>
-          <option value="1" ${p.mode_sombre==='1'?'selected':''}>Sombre</option>
+          <option value="0" ${p.mode_sombre!=='1'?'selected':''}>${t('param_dark_clair')}</option>
+          <option value="1" ${p.mode_sombre==='1'?'selected':''}>${t('param_dark_sombre')}</option>
         </select>
       </div>
-      <div class="form-group"><label class="form-label">Langue / Language</label>
+      <div class="form-group"><label class="form-label">${t('param_langue')}</label>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="btn ${LANG==='fr'?'primary':''}" id="btn-lang-fr" onclick="switchLang('fr')" style="min-width:90px">🇫🇷 Français</button>
           <button class="btn ${LANG==='en'?'primary':''}" id="btn-lang-en" onclick="switchLang('en')" style="min-width:90px">🇬🇧 English</button>
@@ -471,20 +471,20 @@ async function renderParametres(t,c,a){
       </div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-file-import"></i>Import historique Excel</h3>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Importe les ventes depuis le fichier Excel historique (onglets par année). Les fauteuils et distributeurs existants sont mis à jour sans créer de doublons.</div>
+      <h3><i class="ti ti-file-import"></i>${t('param_import_title')}</h3>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px">${t('param_import_hint')}</div>
       <label class="btn" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
-        <i class="ti ti-file-import"></i>Choisir le fichier Excel à importer
+        <i class="ti ti-file-import"></i>${t('param_import_choose')}
         <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importerExcel(this.files[0])">
       </label>
       <div id="qs-import-progress" style="display:none;margin-top:10px"></div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-refresh"></i>VosFactures</h3>
-      <div class="form-group"><label class="form-label">Statut</label>
-        <div id="vf-status-detail" style="font-size:12px;color:var(--text2)">Vérification…</div>
+      <h3><i class="ti ti-refresh"></i>${t('param_vf')}</h3>
+      <div class="form-group"><label class="form-label">${t('param_vf_status')}</label>
+        <div id="vf-status-detail" style="font-size:12px;color:var(--text2)">${t('param_vf_checking')}</div>
       </div>
-      <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>Synchroniser maintenant</button>
+      <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>${t('param_vf_sync')}</button>
     </div>`;
   API.vfStatus().then(s=>{const el=$('vf-status-detail');if(el)el.innerHTML=s.configured?`<span style="color:var(--success)">✓ Compte configuré : ${esc(s.account||'')}${s.last_sync?' — Dernière sync : '+s.last_sync.created_at?.slice(0,16).replace('T',' '):''}</span>`:`<span style="color:var(--danger)">⚠ Non configuré — renseigner VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT dans .env</span>`;}).catch(()=>{});
 }
@@ -509,7 +509,7 @@ async function saveParametres(){
   await API.saveParametres(p);
   if(p.mode_sombre==='1') document.body.classList.add('dark'); else document.body.classList.remove('dark');
   localStorage.setItem('dark', p.mode_sombre==='1'?'1':'0');
-  toast('Paramètres enregistrés','ti-check');
+  toast(t('param_saved'),'ti-check');
 }
 
 // ── DÉTAIL INTERVENTION ───────────────────────────────────────────
@@ -520,7 +520,7 @@ async function viewIntervention(id){
   showModal(`
     <div class="modal-header">
       <i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i>
-      <h2>${esc(i.num_sav||'#'+i.id)} — ${esc(i.type)}</h2>
+      <h2>${esc(i.num_sav||'#'+i.id)} — ${traduireType(i.type)}</h2>
       <button class="btn sm success" onclick="exportInterventionPDF(${i.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
       <button class="btn sm" onclick="envoyerEmailInter(${i.id})" title="Envoyer notification au distributeur"><i class="ti ti-mail"></i></button>
       <button class="btn sm" onclick="modalEditIntervention(${i.id})"><i class="ti ti-edit"></i></button>
@@ -530,7 +530,7 @@ async function viewIntervention(id){
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
         <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Sous garantie':'Hors garantie'}</span>
         ${i.garantie_auto?'<span style="font-size:10px;color:var(--text3)">détecté auto</span>':''}
-        <span class="badge ${sc(i.statut)}">${esc(i.statut)}</span>
+        <span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span>
         <span style="font-size:11px;color:var(--text3);margin-left:auto">${fd(i.date)}</span>
       </div>
       <div class="grid-2" style="font-size:12px;margin-bottom:12px">
@@ -556,7 +556,7 @@ async function viewIntervention(id){
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-box"></i>Pièces</div>
       ${(i.produits||[]).length===0?'<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>':`
-        <table class="t"><thead><tr><th>Désignation</th><th>Réf</th><th>Qté</th><th>PU HT</th><th>Total HT</th></tr></thead>
+        <table class="t"><thead><tr><th>${t('col_designation')}</th><th>Réf</th><th>Qté</th><th>PU HT</th><th>Total HT</th></tr></thead>
         <tbody>${(i.produits||[]).map(p=>`<tr><td>${esc(p.designation)}</td><td class="mono">${esc(p.ref||'')}</td><td>${p.qte}</td><td>${parseFloat(p.pxht||0).toFixed(2)} €</td><td style="font-weight:700">${(parseFloat(p.pxht||0)*p.qte).toFixed(2)} €</td></tr>`).join('')}</tbody></table>
         <div style="text-align:right;padding-top:6px;font-weight:700;font-size:13px">Total HT : ${total.toFixed(2)} €</div>`}
       <div class="divider"></div>
@@ -585,7 +585,7 @@ async function viewIntervention(id){
       <div id="historique-list" style="display:none">${renderHistorique(i.historique||[])}</div>
     </div>
     <div class="modal-footer">
-      <button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast('Supprimé','ti-trash');})"><i class="ti ti-trash"></i></button>
+      <button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>
       <button class="btn" onclick="closeModal()">Fermer</button>
     </div>`);
 }
@@ -692,10 +692,10 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
 </div>`;}
-function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
-async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
+function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveClient(id){const data={nom:gv('f-nom'),type:gv('f-type'),contact:gv('f-contact'),email:gv('f-email'),tel:gv('f-tel'),ville:gv('f-ville')};if(!data.nom){alert('Nom requis');return;}try{if(id)await API.updateClient(id,data);else await API.createClient(data);toast(id?'Client mis à jour':'Client créé');closeModal();render();}catch(e){alert(e.message);}}
-async function deleteClient(id){if(!confirm('Supprimer ce client ?'))return;await API.deleteClient(id);toast('Supprimé','ti-trash');closeModal();setView('clients');}
+async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;await API.deleteClient(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
 
 async function modalPortail(id,token){
   const base=window.location.origin;
@@ -725,10 +725,10 @@ function fauteuilForm(d={}){const mods=['Eloflex S','Eloflex M','Eloflex L','Elo
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">N° facture VosFactures</label><input class="form-input" id="f-facture" value="${esc(d.num_facture||'')}"></div>
 </div>
 <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes">${esc(d.notes||'')}</textarea></div>`;}
-function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
-async function modalEditFauteuil(id){const f=await API.fauteuil(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">Annuler</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>Enregistrer</button></div>`);}
+function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditFauteuil(id){const f=await API.fauteuil(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveFauteuil(id,clientId){const data={client_id:clientId,modele:gv('f-modele'),serie:gv('f-serie'),annee:parseInt(gv('f-annee')),couleur:gv('f-couleur'),date_achat:gv('f-dateachat'),duree_garantie_mois:parseInt(gv('f-garduree'))||24,num_facture:gv('f-facture'),notes:gv('f-notes')};if(!data.serie){alert('N° de série requis');return;}try{if(id)await API.updateFauteuil(id,data);else await API.createFauteuil(data);toast(id?'Fauteuil mis à jour':'Fauteuil créé');closeModal();render();}catch(e){alert(e.message);}}
-async function deleteFauteuil(id,clientId){if(!confirm('Supprimer ce fauteuil et ses interventions ?'))return;await API.deleteFauteuil(id);toast('Supprimé','ti-trash');closeModal();setView('client',{clientId});}
+async function deleteFauteuil(id,clientId){if(!confirm(t('confirm_suppr_fauteuil')))return;await API.deleteFauteuil(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('client',{clientId});}
 
 // ── MODALES INTERVENTIONS ─────────────────────────────────────────
 
@@ -758,7 +758,7 @@ async function modalEditIntervention(id){
 }
 
 function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){const d=i||{};const autreDistrib=clientId&&fauteuilClientId&&clientId!==fauteuilClientId;return `
-  <div class="modal-header"><i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i><h2>${i?(i.num_sav?esc(i.num_sav):'#'+i.id):'Nouvelle intervention'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-header"><i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i><h2>${i?(i.num_sav?esc(i.num_sav):'#'+i.id):t('inter_nouvelle')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body" style="max-height:74vh;overflow-y:auto">
     <div class="grid-2">
       <!-- FAUTEUIL — recherche libre dans toute la base -->
@@ -799,7 +799,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
           </div>
           <div style="display:flex;gap:6px;margin-top:4px">
             <button type="button" class="btn sm primary" onclick="createFauteuilInline()"><i class="ti ti-check"></i>Créer et sélectionner</button>
-            <button type="button" class="btn sm" onclick="toggleNewFauteuilInline()">Annuler</button>
+            <button type="button" class="btn sm" onclick="toggleNewFauteuilInline()">${t('btn_annuler')}</button>
           </div>
         </div>
       </div>
@@ -833,35 +833,35 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
           Cochez si le fauteuil est en intervention chez un distributeur différent de son propriétaire (démo, revente, SAV tiers…)
         </div>
       </div>
-      <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().split('T')[0]}"></div>
+      <div class="form-group"><label class="form-label">${t('col_date')}</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().split('T')[0]}"></div>
       <div class="form-group"><label class="form-label">N° SAV</label><input class="form-input mono" id="f-num-sav" placeholder="ex: SAV-2026-001" value="${esc(d.num_sav||'')}"></div>
-      <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Statut</label><select class="form-input" id="f-statut">${['Ouvert','En attente','Fermé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Technicien</label><input class="form-input" id="f-tech" value="${esc(d.technicien||'Brice')}"></div>
+      <div class="form-group"><label class="form-label">${t('col_type')}</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map((v,idx)=>`<option value="${v}" ${d.type===v?'selected':''}>${t('inter_types')[idx]}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">${t('col_statut')}</label><select class="form-input" id="f-statut">${[['Ouvert','inter_statut_ouvert'],['En attente','inter_statut_attente'],['Fermé','inter_statut_ferme']].map(([v,k])=>`<option value="${v}" ${d.statut===v?'selected':''}>${t(k)}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">${t('col_technicien')}</label><input class="form-input" id="f-tech" value="${esc(d.technicien||'Brice')}"></div>
     </div>
-    <div class="form-group"><label class="form-label">Garantie</label>
+    <div class="form-group"><label class="form-label">${t('col_garantie')}</label>
       <div style="display:flex;gap:12px;margin-top:4px">
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="garantie" value="1" ${!i||i.garantie?'checked':''}> <span class="badge g">Sous garantie</span></label>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="garantie" value="0" ${i&&!i.garantie?'checked':''}> <span class="badge hg">Hors garantie</span></label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="garantie" value="1" ${!i||i.garantie?'checked':''}> <span class="badge g">${t('inter_sous_garantie')}</span></label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:12px"><input type="radio" name="garantie" value="0" ${i&&!i.garantie?'checked':''}> <span class="badge hg">${t('inter_hors_garantie')}</span></label>
       </div>
     </div>
-    <div class="form-group"><label class="form-label">Description *</label><textarea class="form-input" id="f-desc">${esc(d.description||'')}</textarea></div>
-    <div class="form-group"><label class="form-label">Intervention réalisée</label><textarea class="form-input" id="f-notes" style="min-height:52px">${esc(d.notes||'')}</textarea></div>
+    <div class="form-group"><label class="form-label">${t('inter_desc')}</label><textarea class="form-input" id="f-desc">${esc(d.description||'')}</textarea></div>
+    <div class="form-group"><label class="form-label">${t('intervention_realisee')}</label><textarea class="form-input" id="f-notes" style="min-height:52px">${esc(d.notes||'')}</textarea></div>
     <div class="divider"></div>
-    <div class="section-title"><i class="ti ti-box"></i>Pièces utilisées</div>
+    <div class="section-title"><i class="ti ti-box"></i>${t('inter_pieces')}</div>
     <div id="produits-list" style="margin-bottom:8px"></div>
-    <button class="btn sm" onclick="addProduitRow()"><i class="ti ti-plus"></i>Ajouter une pièce</button>
+    <button class="btn sm" onclick="addProduitRow()"><i class="ti ti-plus"></i>${t('inter_add_piece')}</button>
     <div class="divider"></div>
-    <div class="section-title"><i class="ti ti-send"></i>Expédition</div>
+    <div class="section-title"><i class="ti ti-send"></i>${t('inter_expedition')}</div>
     <div class="tracking-block"><div class="grid-2">
-      <div class="form-group" style="margin-bottom:0"><label class="form-label">Transporteur</label><select class="form-input" id="f-env-trans"><option value="">-- Aucun --</option><option ${d.envoi_transporteur==='La Poste'?'selected':''}>La Poste</option><option ${d.envoi_transporteur==='Chronopost'?'selected':''}>Chronopost</option></select></div>
-      <div class="form-group" style="margin-bottom:0"><label class="form-label">Date</label><input class="form-input" id="f-env-date" type="date" value="${d.envoi_date||''}"></div>
-      <div class="form-group" style="margin-bottom:0;grid-column:1/-1"><label class="form-label">N° de suivi</label><input class="form-input" id="f-env-num" value="${esc(d.envoi_numero||'')}"></div>
+      <div class="form-group" style="margin-bottom:0"><label class="form-label">${t('col_transporteur')}</label><select class="form-input" id="f-env-trans"><option value="">${t('select_aucun')}</option><option ${d.envoi_transporteur==='La Poste'?'selected':''}>La Poste</option><option ${d.envoi_transporteur==='Chronopost'?'selected':''}>Chronopost</option></select></div>
+      <div class="form-group" style="margin-bottom:0"><label class="form-label">${t('col_date')}</label><input class="form-input" id="f-env-date" type="date" value="${d.envoi_date||''}"></div>
+      <div class="form-group" style="margin-bottom:0;grid-column:1/-1"><label class="form-label">${t('col_suivi')}</label><input class="form-input" id="f-env-num" value="${esc(d.envoi_numero||'')}"></div>
     </div></div>
-    <div class="section-title" style="margin-top:4px"><i class="ti ti-arrow-back-up"></i>Retour</div>
+    <div class="section-title" style="margin-top:4px"><i class="ti ti-arrow-back-up"></i>${t('inter_retour')}</div>
     <div class="tracking-block"><div class="grid-2">
-      <div class="form-group" style="margin-bottom:0"><label class="form-label">Transporteur</label><select class="form-input" id="f-ret-trans"><option value="">-- Aucun --</option><option ${d.retour_transporteur==='La Poste'?'selected':''}>La Poste</option><option ${d.retour_transporteur==='Chronopost'?'selected':''}>Chronopost</option></select></div>
-      <div class="form-group" style="margin-bottom:0"><label class="form-label">Date</label><input class="form-input" id="f-ret-date" type="date" value="${d.retour_date||''}"></div>
+      <div class="form-group" style="margin-bottom:0"><label class="form-label">${t('col_transporteur')}</label><select class="form-input" id="f-ret-trans"><option value="">${t('select_aucun')}</option><option ${d.retour_transporteur==='La Poste'?'selected':''}>La Poste</option><option ${d.retour_transporteur==='Chronopost'?'selected':''}>Chronopost</option></select></div>
+      <div class="form-group" style="margin-bottom:0"><label class="form-label">${t('col_date')}</label><input class="form-input" id="f-ret-date" type="date" value="${d.retour_date||''}"></div>
       <div class="form-group" style="margin-bottom:0;grid-column:1/-1"><label class="form-label">N° de suivi retour</label><input class="form-input" id="f-ret-num" value="${esc(d.retour_numero||'')}"></div>
     </div></div>
     <div class="divider"></div>
@@ -873,8 +873,8 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
     </div>
   </div>
   <div class="modal-footer">
-    ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast('Supprimé','ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
-    <button class="btn" onclick="closeModal()">Annuler</button>
+    ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
+    <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
     <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?'Mettre à jour':'Enregistrer'}</button>
   </div>`;}
 
@@ -961,17 +961,17 @@ async function modalPiece(id){
     </div></div>
     <div class="modal-footer">
       ${id?`<button class="btn danger" onclick="deletePiece(${id})"><i class="ti ti-trash"></i></button>`:''}
-      <button class="btn" onclick="closeModal()">Annuler</button>
-      <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>Enregistrer</button>
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
+      <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);}
 async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(!data.ref||!data.designation){alert('Référence et désignation requises');return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
-async function deletePiece(id){if(!confirm('Supprimer ?'))return;await API.deletePiece(id);CACHE.catalogue=[];toast('Supprimé','ti-trash');closeModal();render();}
+async function deletePiece(id){if(!confirm('Supprimer ?'))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 
 // ── EXPORTS PDF ───────────────────────────────────────────────────
 
-async function exportInterventionPDF(id){const i=await API.intervention(id);PDF.intervention(i);toast('PDF généré','ti-file-type-pdf');}
-async function exportFauteuilPDF(id){const f=await API.fauteuil(id);PDF.fauteuil(f,f.interventions||[]);toast('PDF généré','ti-file-type-pdf');}
-async function exportClientPDF(id){const cl=await API.client(id);const inters=await API.interventions({client_id:id});PDF.client(cl,cl.fauteuils||[],inters);toast('PDF généré','ti-file-type-pdf');}
+async function exportInterventionPDF(id){const i=await API.intervention(id);PDF.intervention(i);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
+async function exportFauteuilPDF(id){const f=await API.fauteuil(id);PDF.fauteuil(f,f.interventions||[]);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
+async function exportClientPDF(id){const cl=await API.client(id);const inters=await API.interventions({client_id:id});PDF.client(cl,cl.fauteuils||[],inters);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
 
 // ── VOSFACTURES ───────────────────────────────────────────────────
 
@@ -998,43 +998,44 @@ async function envoyerEmailInter(id){
 
 // ── RETOURS PIÈCES VERS SUÈDE ─────────────────────────────────────
 async function renderRetoursSuede(ttl,c,a){
-  ttl.textContent='Retours pièces — Suède';
-  a.innerHTML=`<button class="btn primary" onclick="modalRetour()"><i class="ti ti-plus"></i>Nouveau retour</button>`;
+  ttl.textContent=t('retours_title');
+  a.innerHTML=`<button class="btn primary" onclick="modalRetour()"><i class="ti ti-plus"></i>${t('retours_new')}</button>`;
   const list=await API.retoursSuede();
-  if(!list.length){c.innerHTML='<div class="empty"><i class="ti ti-package-off"></i><p>Aucun retour enregistré</p></div>';return;}
-  const sc={'En attente':'attente','Envoyé':'ouvert','Remboursé':'g','Refusé':'urgent'};
+  if(!list.length){c.innerHTML=`<div class="empty"><i class="ti ti-package-off"></i><p>${t('retours_empty')}</p></div>`;return;}
+  const scR={'En attente':'attente','Envoyé':'ouvert','Remboursé':'g','Refusé':'urgent'};
+  const stTr={'En attente':t('retours_statut_attente'),'Envoyé':t('retours_statut_envoye'),'Remboursé':t('retours_statut_rembourse'),'Refusé':t('retours_statut_refuse')};
   c.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>N° retour</th><th>Date envoi</th><th>Description</th><th>Montant</th><th>Statut</th><th></th></tr></thead>
+    <thead><tr><th>${t('retours_num')}</th><th>${t('col_date_envoi')}</th><th>${t('col_description')}</th><th>${t('retours_montant')}</th><th>${t('col_statut')}</th><th></th></tr></thead>
     <tbody>${list.map(r=>`<tr onclick="modalRetour(${r.id})">
       <td class="mono" style="color:var(--accent)">${esc(r.num_retour||'—')}</td>
       <td>${r.date_envoi?fd(r.date_envoi):'—'}</td>
       <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.description||'')}</td>
       <td style="font-weight:700">${parseFloat(r.montant||0).toFixed(2)} €</td>
-      <td><span class="badge ${sc[r.statut]||''}">${esc(r.statut)}</span></td>
-      <td><button class="btn sm danger" onclick="event.stopPropagation();if(confirm('Supprimer ?'))API.deleteRetour(${r.id}).then(()=>{render();toast('Supprimé','ti-trash')})"><i class="ti ti-trash"></i></button></td>
+      <td><span class="badge ${scR[r.statut]||''}">${stTr[r.statut]||esc(r.statut)}</span></td>
+      <td><button class="btn sm danger" onclick="event.stopPropagation();if(confirm(t('retours_confirm_suppr')))API.deleteRetour(${r.id}).then(()=>{render();toast(t('msg_supprime'),'ti-trash')})"><i class="ti ti-trash"></i></button></td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
 
 async function modalRetour(id){
   const d=id?await API.retoursSuede().then(l=>l.find(r=>r.id===id)||{}):{};
-  showModal(`<div class="modal-header"><i class="ti ti-package" style="font-size:18px;color:var(--accent)"></i><h2>${id?'Modifier retour':'Nouveau retour Suède'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-package" style="font-size:18px;color:var(--accent)"></i><h2>${id?t('retours_modal_edit'):t('retours_modal_new')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="grid-2">
-      <div class="form-group"><label class="form-label">N° retour</label><input class="form-input mono" id="r-num" placeholder="RET-2026-001" value="${esc(d.num_retour||'')}"></div>
-      <div class="form-group"><label class="form-label">Date envoi</label><input class="form-input" id="r-date" type="date" value="${d.date_envoi||''}"></div>
-      <div class="form-group" style="grid-column:1/-1"><label class="form-label">Description des pièces retournées</label><textarea class="form-input" id="r-desc" rows="3">${esc(d.description||'')}</textarea></div>
-      <div class="form-group"><label class="form-label">Montant remboursement (€)</label><input class="form-input" id="r-montant" type="number" step="0.01" value="${parseFloat(d.montant||0).toFixed(2)}"></div>
-      <div class="form-group"><label class="form-label">Statut</label>
+      <div class="form-group"><label class="form-label">${t('retours_num')}</label><input class="form-input mono" id="r-num" placeholder="RET-2026-001" value="${esc(d.num_retour||'')}"></div>
+      <div class="form-group"><label class="form-label">${t('col_date_envoi')}</label><input class="form-input" id="r-date" type="date" value="${d.date_envoi||''}"></div>
+      <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('retours_desc_label')}</label><textarea class="form-input" id="r-desc" rows="3">${esc(d.description||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">${t('retours_montant')} (€)</label><input class="form-input" id="r-montant" type="number" step="0.01" value="${parseFloat(d.montant||0).toFixed(2)}"></div>
+      <div class="form-group"><label class="form-label">${t('col_statut')}</label>
         <select class="form-input" id="r-statut">
-          ${['En attente','Envoyé','Remboursé','Refusé'].map(s=>`<option ${d.statut===s?'selected':''}>${s}</option>`).join('')}
+          ${[['En attente','retours_statut_attente'],['Envoyé','retours_statut_envoye'],['Remboursé','retours_statut_rembourse'],['Refusé','retours_statut_refuse']].map(([v,k])=>`<option value="${v}" ${d.statut===v?'selected':''}>${t(k)}</option>`).join('')}
         </select>
       </div>
       <div class="form-group" style="grid-column:1/-1"><label class="form-label">Notes</label><textarea class="form-input" id="r-notes" rows="2">${esc(d.notes||'')}</textarea></div>
     </div></div>
     <div class="modal-footer">
-      ${id?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteRetour(${id}).then(()=>{closeModal();render();toast('Supprimé','ti-trash')})"><i class="ti ti-trash"></i></button>`:''}
-      <button class="btn" onclick="closeModal()">Annuler</button>
-      <button class="btn primary" onclick="saveRetour(${id||'null'})"><i class="ti ti-check"></i>Enregistrer</button>
+      ${id?`<button class="btn danger" onclick="if(confirm(t('retours_confirm_suppr')))API.deleteRetour(${id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash')})"><i class="ti ti-trash"></i></button>`:''}
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
+      <button class="btn primary" onclick="saveRetour(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);
 }
 
@@ -1278,13 +1279,13 @@ async function chargerFacturesVF(fauteuilId){
     const{factures,serie,configured}=await API.facturesVF(fauteuilId);
     if(!configured){el.innerHTML='<span style="color:var(--text3)">VosFactures non configuré.</span>';return;}
     if(!factures.length){el.innerHTML=`<span style="color:var(--text3)">Aucune facture trouvée pour la série <span class="mono">${esc(serie||'?')}</span>.</span>`;return;}
-    el.innerHTML=`<table class="t"><thead><tr><th>Numéro</th><th>Date</th><th>Client VF</th><th>Montant TTC</th><th>Statut</th><th></th></tr></thead>
+    el.innerHTML=`<table class="t"><thead><tr><th>Numéro</th><th>${t('col_date')}</th><th>Client VF</th><th>Montant TTC</th><th>${t('col_statut')}</th><th></th></tr></thead>
       <tbody>${factures.map(f=>`<tr>
         <td class="mono" style="color:var(--accent)">${esc(f.numero)}</td>
         <td>${f.date?fd(f.date.substring(0,10)):'—'}</td>
         <td style="font-size:11px">${esc(f.client_nom||'')}</td>
         <td style="font-weight:700">${f.montant_ttc?parseFloat(f.montant_ttc).toFixed(2)+' €':'—'}</td>
-        <td><span class="badge ${f.statut==='paid'?'g':'attente'}">${f.statut==='paid'?'Payée':'En attente'}</span></td>
+        <td><span class="badge ${f.statut==='paid'?'g':'attente'}">${f.statut==='paid'?'Payée':t('inter_statut_attente')}</span></td>
         <td><a href="${esc(f.url)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i>VF</a></td>
       </tr>`).join('')}</tbody></table>`;
   }catch(e){el.innerHTML=`<span style="color:var(--danger)">Erreur : ${esc(e.message)}</span>`;}
@@ -1341,7 +1342,7 @@ async function modalFusionnerClient(idCible){
       <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger)"><i class="ti ti-alert-triangle"></i> Les fauteuils et interventions du doublon seront transférés vers <b>${esc(cible.nom)}</b>, puis le doublon sera supprimé.</div>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="closeModal()">Annuler</button>
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn danger" onclick="confirmerFusion(${idCible})"><i class="ti ti-git-merge"></i>Fusionner et supprimer</button>
     </div>`);
 }

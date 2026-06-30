@@ -31,6 +31,7 @@ const TRANSLATIONS = {
     // Tableau commun
     col_date: 'Date',
     col_client: 'Client',
+    col_distributeur: 'Distributeur',
     col_modele: 'Modèle',
     col_serie: 'N° série',
     col_type: 'Type',
@@ -117,6 +118,7 @@ const TRANSLATIONS = {
     inter_tech: 'Technicien',
     inter_desc: 'Description *',
     inter_notes: 'Notes internes',
+    intervention_realisee: 'Intervention réalisée',
     inter_pieces: 'Pièces utilisées',
     inter_add_piece: 'Ajouter une pièce',
     inter_expedition: 'Expédition',
@@ -194,6 +196,19 @@ const TRANSLATIONS = {
     rap_hg: 'Hors garantie',
     rap_pdf: 'PDFs individuels',
     rap_pdf_hint: 'Les PDFs se génèrent depuis chaque fiche client, fauteuil ou intervention via le bouton PDF correspondant.',
+    retours_title: 'Retours pièces — Suède',
+    retours_new: 'Nouveau retour',
+    retours_empty: 'Aucun retour enregistré',
+    retours_num: 'N° retour',
+    retours_montant: 'Montant',
+    retours_desc_label: 'Description des pièces retournées',
+    retours_modal_new: 'Nouveau retour Suède',
+    retours_modal_edit: 'Modifier retour',
+    retours_statut_attente: 'En attente',
+    retours_statut_envoye: 'Envoyé',
+    retours_statut_rembourse: 'Remboursé',
+    retours_statut_refuse: 'Refusé',
+    retours_confirm_suppr: 'Supprimer ce retour ?',
 
     // Alertes
     alertes_title: 'Alertes',
@@ -217,6 +232,22 @@ const TRANSLATIONS = {
     param_vf_on: 'Activée',
     param_vf_off: 'Désactivée',
     param_vf_sync: 'Synchroniser maintenant',
+    param_email_title: 'Notifications email distributeurs',
+    param_email_hint: 'Envoie un email au distributeur quand vous cliquez sur ✉️ dans une fiche intervention.',
+    param_email_active: 'Notifications activées',
+    param_email_on: 'Activées',
+    param_email_off: 'Désactivées',
+    param_smtp_server: 'Serveur SMTP',
+    param_smtp_port: 'Port',
+    param_smtp_user: 'Utilisateur',
+    param_smtp_pass: 'Mot de passe',
+    param_email_from: 'Email expéditeur',
+    param_portail_hint: "Chaque client dispose d'un lien unique pour suivre ses interventions en lecture seule. Accessible depuis la fiche client.",
+    param_import_title: 'Import historique Excel',
+    param_import_hint: 'Importe les ventes depuis le fichier Excel historique (onglets par année). Les fauteuils et distributeurs existants sont mis à jour sans créer de doublons.',
+    param_import_choose: 'Choisir le fichier Excel à importer',
+    param_vf_status: 'Statut',
+    param_vf_checking: 'Vérification…',
     param_vf_historique: 'Sync historique complet',
     param_vf_historique_hint: 'Analyse toutes les factures VosFactures pour extraire et rattacher les numéros de série. À faire une seule fois puis la sync quotidienne suffit.',
     param_cloudinary: 'Stockage photos (Cloudinary)',
@@ -379,6 +410,7 @@ const TRANSLATIONS = {
     col_date: 'Date',
     col_client: 'Client',
     col_modele: 'Model',
+    col_distributeur: 'Distributor',
     col_serie: 'Serial no.',
     col_type: 'Type',
     col_garantie: 'Warranty',
@@ -464,6 +496,7 @@ const TRANSLATIONS = {
     inter_tech: 'Technician',
     inter_desc: 'Description *',
     inter_notes: 'Internal notes',
+    intervention_realisee: 'Work performed',
     inter_pieces: 'Parts used',
     inter_add_piece: 'Add a part',
     inter_expedition: 'Outbound shipment',
@@ -541,6 +574,19 @@ const TRANSLATIONS = {
     rap_hg: 'Out of warranty',
     rap_pdf: 'Individual PDFs',
     rap_pdf_hint: 'PDFs are generated from each client, wheelchair or service order record via the PDF button.',
+    retours_title: 'Parts returns — Sweden',
+    retours_new: 'New return',
+    retours_empty: 'No return recorded',
+    retours_num: 'Return no.',
+    retours_montant: 'Amount',
+    retours_desc_label: 'Description of returned parts',
+    retours_modal_new: 'New Sweden return',
+    retours_modal_edit: 'Edit return',
+    retours_statut_attente: 'Pending',
+    retours_statut_envoye: 'Sent',
+    retours_statut_rembourse: 'Refunded',
+    retours_statut_refuse: 'Refused',
+    retours_confirm_suppr: 'Delete this return?',
 
     // Alertes
     alertes_title: 'Alerts',
@@ -564,6 +610,22 @@ const TRANSLATIONS = {
     param_vf_on: 'Enabled',
     param_vf_off: 'Disabled',
     param_vf_sync: 'Sync now',
+    param_email_title: 'Distributor email notifications',
+    param_email_hint: 'Sends an email to the distributor when you click ✉️ on a service order record.',
+    param_email_active: 'Notifications enabled',
+    param_email_on: 'Enabled',
+    param_email_off: 'Disabled',
+    param_smtp_server: 'SMTP server',
+    param_smtp_port: 'Port',
+    param_smtp_user: 'Username',
+    param_smtp_pass: 'Password',
+    param_email_from: 'Sender email',
+    param_portail_hint: 'Each client has a unique link to track their service orders in read-only mode. Accessible from the client record.',
+    param_import_title: 'Excel history import',
+    param_import_hint: 'Imports sales from the historical Excel file (tabs by year). Existing wheelchairs and distributors are updated without creating duplicates.',
+    param_import_choose: 'Choose the Excel file to import',
+    param_vf_status: 'Status',
+    param_vf_checking: 'Checking…',
     param_vf_historique: 'Full history sync',
     param_vf_historique_hint: 'Analyses all VosFactures invoices to extract and link serial numbers. Run once, then daily sync is sufficient.',
     param_cloudinary: 'Photo storage (Cloudinary)',
@@ -709,4 +771,19 @@ function t(key) {
 function setLang(lang) {
   LANG = lang;
   localStorage.setItem('lang', lang);
+}
+
+// Traduit une valeur métier stockée en base (toujours en FR) vers la langue active
+function traduireStatut(statut) {
+  const map = { 'Ouvert': 'inter_statut_ouvert', 'En attente': 'inter_statut_attente', 'Fermé': 'inter_statut_ferme' };
+  return map[statut] ? t(map[statut]) : (statut || '');
+}
+function traduireType(type) {
+  const frTypes = ['Réparation', 'Maintenance', 'Diagnostic', 'Échange standard'];
+  const idx = frTypes.indexOf(type);
+  if (idx === -1) return type || '';
+  return t('inter_types')[idx] || type;
+}
+function traduireGarantieBadge(estGarantie) {
+  return estGarantie ? t('badge_garantie') : t('garantie_expiree');
 }
