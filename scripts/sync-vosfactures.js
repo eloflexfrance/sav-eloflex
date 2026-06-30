@@ -234,6 +234,25 @@ async function syncInvoices(fullHistory = false) {
 }
 
 // ── Deviner le modèle depuis le texte d'une ligne de facture ──────
+// ── Catégorisation des accessoires/pièces (par mots-clés du nom produit) ──
+// Ordre important : les catégories les plus spécifiques/contextuelles d'abord
+// (ex: "Chargeur batterie" doit aller dans Chargeurs, pas Batteries ;
+// "Support de roue" doit aller dans Supports, pas Roues & freins).
+const CATEGORIES_ACCESSOIRES = [
+  { label: 'Frais & services',      re: /\bfrais|transport|\bport\b|\btest|retour\b|main[\s-]?d['’]?œuvre|forfait/i },
+  { label: 'Chargeurs',             re: /\bchargeur/i },
+  { label: 'Moteurs',               re: /\bmoteur/i },
+  { label: 'Supports',              re: /\bsupport/i },
+  { label: 'Roues & freins',        re: /\broue|pneu|frein/i },
+  { label: 'Commande & électronique', re: /\bmanette|joystick|boitier|bo[iî]tier|câble|carte\s*électronique|écran|module/i },
+  { label: 'Confort & assise',      re: /\bcoussin|housse|dossier|accoudoir|assise|repose[-\s]?jambe|repose[-\s]?pied|repose[-\s]?t[êe]te/i },
+  { label: 'Batteries',             re: /\bbatterie/i },
+];
+function categoriserAccessoire(nom) {
+  for (const c of CATEGORIES_ACCESSOIRES) if (c.re.test(nom)) return c.label;
+  return 'Autres pièces';
+}
+
 function devinerModele(nom, texte) {
   const MAP = {
     'Eloflex L': /\bL\+?\b|\beloflex l\b/i,
@@ -303,16 +322,21 @@ async function syncCommandesVF(fullHistory = false) {
         || positions[0] || null;
       const modele         = ligneFauteuil?.name?.trim() || null;
       const quantite       = ligneFauteuil ? (parseInt(ligneFauteuil.quantity) || 1) : 1;
-      const accessoire     = positions
-        .filter(p => p !== ligneFauteuil)
-        .map(p => {
-          const nom = (p.name || '').trim();
-          if (!nom) return null;
-          const qte = parseInt(p.quantity) || 1;
-          return qte > 1 ? `${nom} ×${qte}` : nom;
-        })
-        .filter(Boolean)
-        .join(', ') || null;
+
+      // Regroupe les lignes accessoires/pièces par catégorie (Batteries, Chargeurs, Supports...)
+      const groupesAccessoires = {};
+      for (const p of positions) {
+        if (p === ligneFauteuil) continue;
+        const nom = (p.name || '').trim();
+        if (!nom) continue;
+        const qte = parseInt(p.quantity) || 1;
+        const cat = categoriserAccessoire(nom);
+        const label = qte > 1 ? `${nom} ×${qte}` : nom;
+        (groupesAccessoires[cat] = groupesAccessoires[cat] || []).push(label);
+      }
+      const accessoire = Object.keys(groupesAccessoires).length
+        ? Object.entries(groupesAccessoires).map(([cat, items]) => `${cat} : ${items.join(', ')}`).join('\n')
+        : null;
       const nomDistrib     = detail.buyer_name || o.buyer_name || '—';
       const dateCommande   = (detail.issue_date || detail.sell_date || '').slice(0, 10) || null;
       const annee          = dateCommande ? parseInt(dateCommande.slice(0, 4)) : null;

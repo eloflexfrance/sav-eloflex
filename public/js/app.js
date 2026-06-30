@@ -411,7 +411,7 @@ async function renderCommandesTable(){
         <td>${fd(cm.date_commande)}</td>
         <td>${esc(cm.distributeur_nom)}</td>
         <td class="mono">${esc(cm.bdc||'')}</td>
-        <td>${esc(cm.modele||cm.accessoire||'')}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}</td>
         <td style="text-align:center">${cm.quantite&&cm.quantite>1?cm.quantite:''}</td>
         <td class="mono">${esc(cm.num_suivi||'')}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
@@ -435,7 +435,7 @@ async function modalCommande(id){
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_quantite')||'Quantité'}</label><input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'}</label><input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_accessoire')||'Accessoire'}</label><input class="form-input" id="cmd-accessoire" value="${esc(cm.accessoire||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_accessoire')||'Accessoire'}</label><textarea class="form-input" id="cmd-accessoire" rows="3" style="white-space:pre-wrap">${esc(cm.accessoire||'')}</textarea></div>
         <div class="form-group"><label class="form-label">${t('col_date')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_client_final')||'Client final'}</label><input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_suivi')||'N° suivi'}</label><input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}"></div>

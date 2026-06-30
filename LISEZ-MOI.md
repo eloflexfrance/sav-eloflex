@@ -2,6 +2,17 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Accessoires regroupés par catégorie (nouveau)**
+Les accessoires/pièces d'un bon de commande sont maintenant regroupés par
+catégorie (Batteries, Chargeurs, Moteurs, Supports, Roues & freins, Commande
+& électronique, Confort & assise, Frais & services, Autres pièces) au lieu
+d'une simple liste à plat, avec la quantité de chaque ligne. La
+catégorisation se fait par mots-clés sur le nom du produit (testée sur tes
+vrais libellés VosFactures). Le champ "Accessoire" de la fiche commande est
+passé en zone de texte multi-lignes pour bien l'afficher. **Reclique sur
+"Synchroniser VosFactures"** après redéploiement pour réorganiser les
+commandes déjà importées.
+
 **30/06 — Quantités (nouveau)**
 Ajout d'une colonne `quantite` sur les commandes (migration automatique au
 démarrage). La sync VosFactures récupère désormais la quantité de la ligne
