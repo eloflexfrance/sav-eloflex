@@ -57,6 +57,7 @@ async function render(){
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
     else if(STATE.view==='parametres')    await renderParametres(ttl,c,a);
     else if(STATE.view==='retours-suede')  await renderRetoursSuede(ttl,c,a);
+    else if(STATE.view==='transferts')     await renderTransferts(ttl,c,a);
   }catch(e){c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`;}
 }
 
@@ -134,7 +135,35 @@ async function renderDashboard(ttl,c,a){
           <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <div class="section-title"><i class="ti ti-arrows-exchange"></i>${t('transferts_en_cours')}
+        <button class="btn sm" style="margin-left:auto" onclick="setView('transferts')"><i class="ti ti-arrow-right"></i>${t('transferts_voir_tout')}</button>
+      </div>
+      <div id="dash-transferts">${t('msg_chargement')}</div>
     </div>`;
+  chargerTransfertsDashboard();
+}
+
+async function chargerTransfertsDashboard(){
+  const el=document.getElementById('dash-transferts');
+  if(!el) return;
+  try{
+    const list=(await API.transferts()).filter(tr=>tr.statut!=='Arrivé'&&tr.statut!=='Annulé');
+    if(!list.length){ el.innerHTML=`<div style="font-size:12px;color:var(--text3)">${t('transferts_empty')}</div>`; return; }
+    const scT={'En préparation':'attente','En transit':'ouvert'};
+    const stTr={'En préparation':t('transferts_statut_prep'),'En transit':t('transferts_statut_transit')};
+    el.innerHTML=`<div class="table-wrap"><table class="t">
+      <thead><tr><th>${t('transferts_fauteuil')}</th><th>${t('transferts_depart')}</th><th>${t('transferts_arrivee')}</th><th>${t('transferts_num_suivi')}</th><th>${t('col_statut')}</th></tr></thead>
+      <tbody>${list.slice(0,5).map(tr=>`<tr onclick="modalTransfert(${tr.id})" style="cursor:pointer">
+        <td><div>${esc(tr.modele||'')}</div><div class="mono" style="color:var(--text3);font-size:11px">${esc(tr.serie||'')}</div></td>
+        <td>${esc(tr.client_depart_nom||'—')}</td>
+        <td>${esc(tr.client_arrivee_nom||'—')}</td>
+        <td class="mono" style="font-size:11px">${esc(tr.num_suivi||'—')}</td>
+        <td><span class="badge ${scT[tr.statut]||''}">${stTr[tr.statut]||esc(tr.statut)}</span></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 // ── CLIENTS ───────────────────────────────────────────────────────
@@ -1051,6 +1080,183 @@ async function saveRetour(id){
   try{
     id?await API.updateRetour(id,data):await API.createRetour(data);
     toast(id?'Retour mis à jour':'Retour créé','ti-package');
+    closeModal();render();
+  }catch(e){alert(e.message);}
+}
+
+// ── TRANSFERTS FAUTEUILS (modèles d'exposition) ────────────────────
+async function renderTransferts(ttl,c,a){
+  ttl.textContent=t('transferts_title');
+  a.innerHTML=`<button class="btn primary" onclick="modalTransfert()"><i class="ti ti-plus"></i>${t('transferts_new')}</button>`;
+  const list=await API.transferts();
+  c.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:12px">${t('transferts_subtitle')}</div>`;
+  if(!list.length){c.innerHTML+=`<div class="empty"><i class="ti ti-arrows-exchange"></i><p>${t('transferts_empty')}</p></div>`;return;}
+  const scT={'En préparation':'attente','En transit':'ouvert','Arrivé':'g','Annulé':'urgent'};
+  const stTr={'En préparation':t('transferts_statut_prep'),'En transit':t('transferts_statut_transit'),'Arrivé':t('transferts_statut_arrive'),'Annulé':t('transferts_statut_annule')};
+  c.innerHTML+=`<div class="table-wrap"><table class="t">
+    <thead><tr><th>${t('transferts_fauteuil').replace(' *','')}</th><th>${t('transferts_depart')}</th><th>${t('transferts_date_depart')}</th><th>${t('transferts_arrivee')}</th><th>${t('transferts_date_arrivee')}</th><th>${t('col_transporteur')}</th><th>${t('transferts_num_suivi')}</th><th>${t('col_statut')}</th><th></th></tr></thead>
+    <tbody>${list.map(tr=>`<tr onclick="modalTransfert(${tr.id})">
+      <td><div style="font-weight:600">${esc(tr.modele||'—')}</div><div class="mono" style="color:var(--text3);font-size:11px">${esc(tr.serie||'')}</div></td>
+      <td>${esc(tr.client_depart_nom||'—')}</td>
+      <td>${tr.date_depart?fd(tr.date_depart):'—'}</td>
+      <td>${esc(tr.client_arrivee_nom||'—')}</td>
+      <td>${tr.date_arrivee?fd(tr.date_arrivee):'—'}</td>
+      <td>${esc(tr.transporteur||'—')}</td>
+      <td class="mono" style="font-size:11px">${esc(tr.num_suivi||'—')}</td>
+      <td><span class="badge ${scT[tr.statut]||''}">${stTr[tr.statut]||esc(tr.statut)}</span></td>
+      <td><button class="btn sm danger" onclick="event.stopPropagation();if(confirm(t('transferts_confirm_suppr')))API.deleteTransfert(${tr.id}).then(()=>{render();toast(t('msg_supprime'),'ti-trash')})"><i class="ti ti-trash"></i></button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+async function modalTransfert(id){
+  const d = id ? await API.transfert(id) : {};
+  TMP_CLIENTS = await API.clients();
+  showModal(`<div class="modal-header"><i class="ti ti-arrows-exchange" style="font-size:18px;color:var(--accent)"></i><h2>${id?t('transferts_modal_edit'):t('transferts_modal_new')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">${t('transferts_fauteuil')}</label>
+        <div style="position:relative">
+          <input class="form-input" id="tr-fauteuil-search" autocomplete="off"
+            placeholder="Taper n° de série, modèle ou distributeur…"
+            value="${d.modele?esc(d.modele+' — '+d.serie):''}"
+            oninput="searchFauteuilTransfert(this.value)"
+            onfocus="if(this.value.length>=2)searchFauteuilTransfert(this.value)"
+            onblur="setTimeout(()=>{const dd=document.getElementById('tr-fauteuil-drop');if(dd)dd.style.display='none'},150)">
+          <input type="hidden" id="tr-fauteuil-id" value="${d.fauteuil_id||''}">
+          <div id="tr-fauteuil-drop" class="piece-dropdown" style="display:none"></div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">${t('transferts_client_depart')}</label>
+          <div style="position:relative">
+            <input class="form-input" id="tr-depart-search" autocomplete="off"
+              placeholder="${t('select_client')}"
+              value="${d.client_depart_nom?esc(d.client_depart_nom):''}"
+              oninput="document.getElementById('tr-depart-id').value='';searchClientsTransfert(this.value,'depart')"
+              onfocus="searchClientsTransfert(this.value,'depart')"
+              onblur="setTimeout(()=>{const dd=document.getElementById('tr-depart-drop');if(dd)dd.style.display='none'},150)">
+            <input type="hidden" id="tr-depart-id" value="${d.client_depart_id||''}">
+            <div id="tr-depart-drop" class="piece-dropdown" style="display:none"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('transferts_client_arrivee')}</label>
+          <div style="position:relative">
+            <input class="form-input" id="tr-arrivee-search" autocomplete="off"
+              placeholder="${t('select_client')}"
+              value="${d.client_arrivee_nom?esc(d.client_arrivee_nom):''}"
+              oninput="document.getElementById('tr-arrivee-id').value='';searchClientsTransfert(this.value,'arrivee')"
+              onfocus="searchClientsTransfert(this.value,'arrivee')"
+              onblur="setTimeout(()=>{const dd=document.getElementById('tr-arrivee-drop');if(dd)dd.style.display='none'},150)">
+            <input type="hidden" id="tr-arrivee-id" value="${d.client_arrivee_id||''}">
+            <div id="tr-arrivee-drop" class="piece-dropdown" style="display:none"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('transferts_date_depart')}</label>
+          <input class="form-input" id="tr-date-depart" type="date" value="${d.date_depart||''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('transferts_date_arrivee')}</label>
+          <input class="form-input" id="tr-date-arrivee" type="date" value="${d.date_arrivee||''}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('transferts_transporteur')}</label>
+          <select class="form-input" id="tr-transporteur">
+            <option value="">${t('select_aucun')}</option>
+            <option value="DSV" ${d.transporteur==='DSV'?'selected':''}>${t('transferts_dsv')}</option>
+            <option value="Autre" ${d.transporteur==='Autre'?'selected':''}>${t('transferts_autre')}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">${t('transferts_num_suivi')}</label>
+          <input class="form-input mono" id="tr-num-suivi" value="${esc(d.num_suivi||'')}">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">${t('col_statut')}</label>
+          <select class="form-input" id="tr-statut" onchange="document.getElementById('tr-arrive-hint').style.display=this.value==='Arrivé'?'block':'none'">
+            ${[['En préparation','transferts_statut_prep'],['En transit','transferts_statut_transit'],['Arrivé','transferts_statut_arrive'],['Annulé','transferts_statut_annule']].map(([v,k])=>`<option value="${v}" ${d.statut===v?'selected':''}>${t(k)}</option>`).join('')}
+          </select>
+          <div id="tr-arrive-hint" style="display:${d.statut==='Arrivé'?'block':'none'};font-size:11px;color:var(--warning);margin-top:4px"><i class="ti ti-alert-triangle"></i> ${t('transferts_arrive_hint')}</div>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label">Notes</label>
+          <textarea class="form-input" id="tr-notes" rows="2">${esc(d.notes||'')}</textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      ${id?`<button class="btn danger" onclick="if(confirm(t('transferts_confirm_suppr')))API.deleteTransfert(${id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash')})"><i class="ti ti-trash"></i></button>`:''}
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
+      <button class="btn primary" onclick="saveTransfert(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
+    </div>`);
+}
+
+async function searchFauteuilTransfert(q){
+  const drop=document.getElementById('tr-fauteuil-drop');
+  if(!drop)return;
+  if(!q||q.trim().length<2){drop.style.display='none';return;}
+  try{
+    const res=await API.recherche(q.trim());
+    const fauteuils=res.fauteuils||[];
+    if(!fauteuils.length){drop.innerHTML=`<div class="qs-empty" style="padding:10px 12px;font-size:12px;color:var(--text3)">${t('qs_no_result')} "${esc(q)}"</div>`;drop.style.display='block';return;}
+    drop.innerHTML=fauteuils.map(f=>`<div class="piece-option" onmousedown="event.preventDefault();selectFauteuilTransfert(${f.id},'${esc(f.modele||'')}','${esc(f.serie||'')}',${f.client_id||'null'},'${esc(f.client_nom||'')}')">
+      <div style="font-size:13px;font-weight:700">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;font-size:12px;color:var(--accent)">${esc(f.serie)}</span></div>
+      <div style="font-size:11px;color:var(--text3)">${esc(f.client_nom||'')}</div>
+    </div>`).join('');
+    drop.style.display='block';
+  }catch(e){}
+}
+
+function selectFauteuilTransfert(id,modele,serie,clientId,clientNom){
+  document.getElementById('tr-fauteuil-id').value=id;
+  document.getElementById('tr-fauteuil-search').value=`${modele} — ${serie}`;
+  document.getElementById('tr-fauteuil-drop').style.display='none';
+  // Pré-remplir le distributeur de départ si vide
+  const departId=document.getElementById('tr-depart-id');
+  const departInp=document.getElementById('tr-depart-search');
+  if(clientId&&departId&&!departId.value){
+    departId.value=clientId;
+    if(departInp)departInp.value=clientNom;
+  }
+}
+
+function searchClientsTransfert(q,which){
+  const drop=document.getElementById(`tr-${which}-drop`);
+  if(!drop)return;
+  const query=(q||'').toLowerCase().trim();
+  const results=(query?TMP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(query)):TMP_CLIENTS).slice(0,15);
+  if(!results.length){drop.style.display='none';return;}
+  drop.innerHTML=results.map(c=>`<div class="piece-option" onmousedown="event.preventDefault();selectClientTransfert(${c.id},'${c.nom.replace(/'/g,"\\'")}','${which}')">
+    <div style="font-size:12px;font-weight:600">${esc(c.nom)}</div>
+    <div style="font-size:11px;color:var(--text3)">${esc(c.ville||'')}</div>
+  </div>`).join('');
+  drop.style.display='block';
+}
+
+function selectClientTransfert(id,nom,which){
+  document.getElementById(`tr-${which}-id`).value=id;
+  document.getElementById(`tr-${which}-search`).value=nom;
+  document.getElementById(`tr-${which}-drop`).style.display='none';
+}
+
+async function saveTransfert(id){
+  const fauteuilId=parseInt(gv('tr-fauteuil-id'));
+  const departId=parseInt(gv('tr-depart-id'));
+  const arriveeId=parseInt(gv('tr-arrivee-id'));
+  if(!fauteuilId||!departId||!arriveeId){alert(t('transferts_fauteuil')+' / '+t('transferts_client_depart')+' / '+t('transferts_client_arrivee'));return;}
+  const data={
+    fauteuil_id:fauteuilId, client_depart_id:departId, client_arrivee_id:arriveeId,
+    date_depart:gv('tr-date-depart')||null, date_arrivee:gv('tr-date-arrivee')||null,
+    transporteur:gv('tr-transporteur')||null, num_suivi:gv('tr-num-suivi')||null,
+    statut:gv('tr-statut'), notes:gv('tr-notes')
+  };
+  try{
+    id?await API.updateTransfert(id,data):await API.createTransfert(data);
+    toast(id?t('msg_inter_maj'):t('msg_inter_cree'),'ti-arrows-exchange');
     closeModal();render();
   }catch(e){alert(e.message);}
 }

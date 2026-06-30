@@ -1037,6 +1037,96 @@ router.delete('/retours-suede/:id', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── TRANSFERTS FAUTEUILS (modèles d'exposition) ───────────────────
+router.get('/transferts', async (req, res) => {
+  try {
+    const list = await db.all(`
+      SELECT tr.*, f.modele, f.serie,
+        cd.nom AS client_depart_nom, ca.nom AS client_arrivee_nom
+      FROM transferts_fauteuils tr
+      LEFT JOIN fauteuils f ON f.id=tr.fauteuil_id
+      LEFT JOIN clients cd ON cd.id=tr.client_depart_id
+      LEFT JOIN clients ca ON ca.id=tr.client_arrivee_id
+      ORDER BY tr.created_at DESC
+    `);
+    res.json(list);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/transferts/:id', async (req, res) => {
+  try {
+    const t = await db.get(`
+      SELECT tr.*, f.modele, f.serie,
+        cd.nom AS client_depart_nom, ca.nom AS client_arrivee_nom
+      FROM transferts_fauteuils tr
+      LEFT JOIN fauteuils f ON f.id=tr.fauteuil_id
+      LEFT JOIN clients cd ON cd.id=tr.client_depart_id
+      LEFT JOIN clients ca ON ca.id=tr.client_arrivee_id
+      WHERE tr.id=$1
+    `, [req.params.id]);
+    if (!t) return res.status(404).json({ error: 'Transfert introuvable' });
+    res.json(t);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/transferts', async (req, res) => {
+  try {
+    const { fauteuil_id, client_depart_id, client_arrivee_id, date_depart, date_arrivee,
+      transporteur, num_suivi, statut, notes } = req.body;
+    if (!fauteuil_id || !client_depart_id || !client_arrivee_id)
+      return res.status(400).json({ error: 'Fauteuil, distributeur départ et distributeur arrivée requis' });
+
+    const r = await db.run(
+      `INSERT INTO transferts_fauteuils
+        (fauteuil_id,client_depart_id,client_arrivee_id,date_depart,date_arrivee,transporteur,num_suivi,statut,notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [fauteuil_id, client_depart_id, client_arrivee_id, date_depart||null, date_arrivee||null,
+       transporteur||null, num_suivi||null, statut||'En préparation', notes||null]
+    );
+
+    // Si le transfert est déjà marqué "Arrivé", mettre à jour le propriétaire du fauteuil
+    if (statut === 'Arrivé') {
+      await db.run('UPDATE fauteuils SET client_id=$1, updated_at=NOW() WHERE id=$2',
+        [client_arrivee_id, fauteuil_id]);
+    }
+
+    res.status(201).json(r);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/transferts/:id', async (req, res) => {
+  try {
+    const { fauteuil_id, client_depart_id, client_arrivee_id, date_depart, date_arrivee,
+      transporteur, num_suivi, statut, notes } = req.body;
+
+    const before = await db.get('SELECT statut, fauteuil_id, client_arrivee_id FROM transferts_fauteuils WHERE id=$1', [req.params.id]);
+
+    const r = await db.run(
+      `UPDATE transferts_fauteuils SET
+        fauteuil_id=$1,client_depart_id=$2,client_arrivee_id=$3,date_depart=$4,date_arrivee=$5,
+        transporteur=$6,num_suivi=$7,statut=$8,notes=$9,updated_at=NOW()
+       WHERE id=$10 RETURNING *`,
+      [fauteuil_id, client_depart_id, client_arrivee_id, date_depart||null, date_arrivee||null,
+       transporteur||null, num_suivi||null, statut||'En préparation', notes||null, req.params.id]
+    );
+
+    // Si le statut passe à "Arrivé" (transition), rattacher le fauteuil au nouveau distributeur
+    if (statut === 'Arrivé' && before?.statut !== 'Arrivé') {
+      await db.run('UPDATE fauteuils SET client_id=$1, updated_at=NOW() WHERE id=$2',
+        [client_arrivee_id, fauteuil_id]);
+    }
+
+    res.json(r);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/transferts/:id', async (req, res) => {
+  try {
+    await db.run('DELETE FROM transferts_fauteuils WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── ENVOI EMAIL NOTIFICATION ──────────────────────────────────────
 router.post('/email/notification-intervention', async (req, res) => {
   try {

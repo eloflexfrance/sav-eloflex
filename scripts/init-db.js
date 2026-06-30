@@ -123,6 +123,22 @@ async function initDB() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
 
+    // Table transferts de fauteuils (modèles d'exposition) entre distributeurs
+    await client.query(`CREATE TABLE IF NOT EXISTS transferts_fauteuils (
+      id SERIAL PRIMARY KEY,
+      fauteuil_id INTEGER REFERENCES fauteuils(id) ON DELETE SET NULL,
+      client_depart_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      client_arrivee_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      date_depart TEXT,
+      date_arrivee TEXT,
+      transporteur TEXT,
+      num_suivi TEXT,
+      statut TEXT DEFAULT 'En préparation',
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
     console.log("✅ Tables créées");
 
     // Paramètres par défaut
