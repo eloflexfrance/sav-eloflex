@@ -2,6 +2,17 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Nouveau statut "Problème" (nouveau)**
+Ajout d'un statut "Problème" pour signaler les commandes ayant un souci de
+livraison (colis perdu, endommagé, refusé...). Disponible dans le menu
+déroulant Statut de chaque commande, dans le filtre de l'écran "Suivi
+commandes", et compté à part dans les compteurs (écran commandes + tableau
+de bord), affiché en rouge dès qu'il y en a au moins une. Au passage, j'ai
+ajusté les couleurs : "En préparation" passe en bleu neutre pour ne plus se
+confondre visuellement avec "Problème" (rouge, réservé aux cas qui
+nécessitent vraiment ton attention), et "Annulé" passe en gris/jaune
+discret.
+
 **30/06 — Preuve de livraison (nouveau)**
 Une fois une commande passée au statut "Livré" (manuellement, ou
 automatiquement dès qu'une date de livraison est renseignée), une zone
