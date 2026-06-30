@@ -388,6 +388,29 @@ async function renderExpeditions(ttl,c,a){
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
 const cmdStatutClass = s => s==='Livré'?'g':s==='Expédié'?'attente':'urgent';
 
+// Génère le lien de suivi officiel du transporteur à partir du n° de suivi.
+// Renvoie null si transporteur inconnu/"Autre" ou n° vide (pas de lien à générer dans ce cas).
+function lienSuiviColis(transporteur, numero){
+  if(!transporteur || !numero) return null;
+  const n = encodeURIComponent(numero.trim());
+  switch(transporteur){
+    case 'Chronopost':  return `https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=${n}&langue=fr`;
+    case 'Colissimo':   return `https://www.laposte.fr/outils/suivre-vos-envois?code=${n}`;
+    case 'DB Schenker': return `https://www.dbschenker.com/app/tracking-public/?refNumber=${n}&language_region=fr-FR_FR`;
+    case 'UPS':          return `https://www.ups.com/track?loc=fr_FR&tracknum=${n}`;
+    default: return null;
+  }
+}
+
+function majLienSuiviModal(){
+  const wrap = $('cmd-lien-suivi-wrap'); if(!wrap) return;
+  const numero = gv('cmd-suivi'), transporteur = gv('cmd-transporteur');
+  const lien = lienSuiviColis(transporteur, numero);
+  wrap.innerHTML = lien
+    ? `<a href="${lien}" target="_blank" rel="noopener" class="btn sm" style="display:inline-flex"><i class="ti ti-external-link"></i>${t('cmd_suivre_colis')||'Suivre le colis'}</a>`
+    : '';
+}
+
 async function renderCommandes(ttl,c,a){
   ttl.textContent=t('cmd_title')||'Suivi des commandes';
   a.innerHTML=`<button class="btn success" onclick="API.exportExcel('commandes')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')||'Excel'}</button>
@@ -444,7 +467,7 @@ async function renderCommandesTable(){
         <td>${esc(cm.distributeur_nom)}</td>
         <td class="mono">${esc(cm.bdc||'')}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}</td>
-        <td class="mono">${esc(cm.num_suivi||'')}</td>
+        <td class="mono">${esc(cm.num_suivi||'')}${(()=>{const l=lienSuiviColis(cm.transporteur,cm.num_suivi);return l?` <a href="${l}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre le colis'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'';})()}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
         <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
         <td style="text-align:center">${cm.informations?`<i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}</td>
@@ -470,7 +493,19 @@ async function modalCommande(id){
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_accessoire')||'Accessoire'}</label><textarea class="form-input" id="cmd-accessoire" rows="3" style="white-space:pre-wrap">${esc(cm.accessoire||'')}</textarea></div>
         <div class="form-group"><label class="form-label">${t('col_date')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_client_final')||'Client final'}</label><input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></div>
-        <div class="form-group"><label class="form-label">${t('cmd_suivi')||'N° suivi'}</label><input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('cmd_suivi')||'N° suivi'}</label><input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal()"></div>
+        <div class="form-group">
+          <label class="form-label">${t('cmd_transporteur')||'Transporteur'}</label>
+          <select class="form-input" id="cmd-transporteur" onchange="majLienSuiviModal()">
+            <option value="">${t('cmd_transporteur_choisir')||'— Choisir —'}</option>
+            <option value="Chronopost" ${cm.transporteur==='Chronopost'?'selected':''}>Chronopost</option>
+            <option value="Colissimo" ${cm.transporteur==='Colissimo'?'selected':''}>Colissimo (La Poste)</option>
+            <option value="DB Schenker" ${cm.transporteur==='DB Schenker'?'selected':''}>DB Schenker</option>
+            <option value="UPS" ${cm.transporteur==='UPS'?'selected':''}>UPS</option>
+            <option value="Autre" ${cm.transporteur==='Autre'?'selected':''}>${t('cmd_transporteur_autre')||'Autre'}</option>
+          </select>
+        </div>
+        <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-6px"></div>
         <div class="form-group"><label class="form-label">${t('cmd_date_livraison')||'Date livraison'}</label><input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_serie')||'N° série'}</label><input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}"></div>
         <div class="form-group">
@@ -502,6 +537,7 @@ async function modalCommande(id){
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
+  majLienSuiviModal();
 }
 
 async function chercherFacturesVF(id){
@@ -553,7 +589,7 @@ async function enregistrerCommande(id){
     distributeur_nom: gv('cmd-distrib'), groupe: gv('cmd-groupe'), modele: gv('cmd-modele'),
     quantite: parseInt(gv('cmd-quantite'))||1,
     accessoire: gv('cmd-accessoire'), bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
-    client_final: gv('cmd-clientfinal'), num_suivi: gv('cmd-suivi'), date_livraison: gv('cmd-livraison')||null,
+    client_final: gv('cmd-clientfinal'), num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null, date_livraison: gv('cmd-livraison')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
     informations: gv('cmd-infos')
   };

@@ -155,6 +155,7 @@ async function initDB() {
       vf_order_id TEXT,
       client_final TEXT,
       num_suivi TEXT,
+      transporteur TEXT,
       date_livraison TEXT,
       num_serie TEXT,
       num_facture TEXT,
@@ -173,6 +174,7 @@ async function initDB() {
     try {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_commande_id BIGINT UNIQUE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS quantite INTEGER DEFAULT 1`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS transporteur TEXT`);
     } catch(e) { /* déjà présentes */ }
 
     console.log("✅ Tables créées");

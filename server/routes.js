@@ -1287,12 +1287,12 @@ router.post('/commandes', async (req, res) => {
     }
     const row = await db.run(
       `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, quantite, accessoire,
-        bdc, date_commande, vf_order_id, client_final, num_suivi, date_livraison, num_serie, num_facture,
+        bdc, date_commande, vf_order_id, client_final, num_suivi, transporteur, date_livraison, num_serie, num_facture,
         invoice_se, informations, statut)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
-       d.vf_order_id || null, d.client_final || null, d.num_suivi || null, d.date_livraison || null,
+       d.vf_order_id || null, d.client_final || null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
        d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto']
     );
     res.status(201).json(row);
@@ -1303,7 +1303,7 @@ router.put('/commandes/:id', async (req, res) => {
   try {
     const d = req.body;
     const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'quantite', 'accessoire',
-      'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'date_livraison', 'num_serie',
+      'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_livraison', 'num_serie',
       'num_facture', 'invoice_se', 'informations', 'statut'];
     const sets = [], p = [];
     let idx = 0;

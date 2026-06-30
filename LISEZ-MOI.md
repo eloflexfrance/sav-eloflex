@@ -2,6 +2,16 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Lien de suivi colis (nouveau)**
+Ajout d'une colonne `transporteur` (migration automatique). Dans la fiche
+commande, un sélecteur "Transporteur" (Chronopost / Colissimo (La Poste) /
+DB Schenker / UPS / Autre) apparaît à côté du N° suivi ; dès que les deux
+sont renseignés, un bouton "Suivre le colis" s'affiche, qui ouvre la page de
+suivi officielle du transporteur avec le numéro pré-rempli. Le même lien
+apparaît aussi en icône directement dans le tableau récapitulatif, sans
+ouvrir la fiche. URLs de suivi vérifiées (Chronopost, La Poste/Colissimo,
+UPS, DB Schenker) — "Autre" n'affiche pas de lien (pas de format universel).
+
 **30/06 — Synthèse "Suivi commandes" sur le tableau de bord (nouveau)**
 Ajout d'une carte dédiée sur le tableau de bord, bien distincte du bloc
 Interventions : 4 compteurs (Total / En préparation / Expédié / Livré) +
