@@ -47,6 +47,13 @@ const TRANSLATIONS = {
     cmd_sync_vf: 'Synchroniser VosFactures',
     cmd_sync_en_cours: 'Synchronisation VosFactures en cours…',
     cmd_sync_ok: 'Synchronisation terminée',
+    cmd_chercher_vf: 'Chercher une facture VosFactures à rattacher',
+    cmd_vf_non_configure: 'VosFactures non configuré',
+    cmd_vf_aucune: 'Aucune facture récente trouvée pour ce distributeur',
+    cmd_vf_choisir: 'Choisis la facture correspondante (à confirmer toi-même, aucun lien automatique fiable côté VosFactures) :',
+    cmd_vf_sans_serie: 'Pas de série détectée',
+    cmd_vf_utiliser: 'Utiliser',
+    cmd_vf_applique: 'Facture rattachée — vérifie puis enregistre',
 
     // Dashboard
     db_interventions: 'Interventions',
@@ -484,6 +491,13 @@ const TRANSLATIONS = {
     cmd_sync_vf: 'Sync VosFactures',
     cmd_sync_en_cours: 'Syncing with VosFactures…',
     cmd_sync_ok: 'Sync complete',
+    cmd_chercher_vf: 'Search a VosFactures invoice to link',
+    cmd_vf_non_configure: 'VosFactures not configured',
+    cmd_vf_aucune: 'No recent invoice found for this distributor',
+    cmd_vf_choisir: 'Pick the matching invoice (confirm yourself, no reliable automatic link on the VosFactures side):',
+    cmd_vf_sans_serie: 'No serial number detected',
+    cmd_vf_utiliser: 'Use',
+    cmd_vf_applique: 'Invoice linked — review then save',
 
     // Dashboard
     db_interventions: 'Service orders',

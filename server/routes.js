@@ -1326,4 +1326,53 @@ router.delete('/commandes/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Suggestions de factures VosFactures pour rattacher manuellement n° de série / facture
+// (pas de lien fiable automatique bon de commande -> facture côté VosFactures : confirmation humaine requise)
+router.get('/commandes/:id/factures-vf-suggestions', async (req, res) => {
+  try {
+    const cmd = await db.get(
+      `SELECT cmd.*, c.vf_id FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id WHERE cmd.id=$1`,
+      [req.params.id]
+    );
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
+      return res.json({ factures: [], configured: false });
+    }
+    if (!cmd.vf_id) {
+      return res.json({ factures: [], configured: true, reason: 'Distributeur non lié à un client VosFactures' });
+    }
+
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+
+    const { data } = await vfApi.get('/invoices.json', {
+      params: { client_id: cmd.vf_id, kind: 'vat', per_page: 15, order: 'issue_date.desc' }
+    });
+
+    const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
+    const factures = (Array.isArray(data) ? data : []).slice(0, 10).map(inv => ({
+      id: inv.id, numero: inv.number, date: inv.issue_date || inv.sell_date,
+      montant_ttc: inv.price_gross,
+      url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}`
+    }));
+
+    // Tente d'extraire un n° de série pour chaque facture candidate (détail)
+    for (const f of factures) {
+      try {
+        const { data: detail } = await vfApi.get(`/invoices/${f.id}.json`);
+        const positions = detail.positions || detail.invoice_items || [];
+        const texte = [detail.description || '', ...positions.map(p => [p.name || '', p.description || ''].join(' '))].join(' ');
+        const m = texte.match(SERIE_RE);
+        f.num_serie = m ? m[0].trim() : null;
+      } catch (e) { f.num_serie = null; }
+    }
+
+    res.json({ factures, configured: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

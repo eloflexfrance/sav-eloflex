@@ -446,6 +446,10 @@ async function modalCommande(id){
       </label>
       <label style="grid-column:1/-1">${t('cmd_infos')||'Informations'}<textarea id="cmd-infos" rows="2">${esc(cm.informations||'')}</textarea></label>
     </div>
+    ${id?`<div id="cmd-vf-suggest" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#eee)">
+      <button class="btn" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i>${t('cmd_chercher_vf')||'Chercher une facture VosFactures à rattacher'}</button>
+      <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
+    </div>`:''}
     <div style="display:flex;justify-content:space-between;margin-top:16px">
       <div>${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i>${t('btn_supprimer')||'Supprimer'}</button>`:''}</div>
       <div style="display:flex;gap:8px">
@@ -453,6 +457,37 @@ async function modalCommande(id){
         <button class="btn primary" onclick="enregistrerCommande(${id||'null'})">${t('btn_enregistrer')||'Enregistrer'}</button>
       </div>
     </div>`);
+}
+
+async function chercherFacturesVF(id){
+  const zone=$('cmd-vf-suggest-list');
+  zone.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${t('msg_chargement')}</div>`;
+  try{
+    const r = await API.commandeFacturesSuggestions(id);
+    if(!r.configured){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${t('cmd_vf_non_configure')||'VosFactures non configuré'}</div>`; return; }
+    if(r.reason){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${esc(r.reason)}</div>`; return; }
+    if(!r.factures||!r.factures.length){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${t('cmd_vf_aucune')||'Aucune facture récente trouvée pour ce distributeur'}</div>`; return; }
+    zone.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:6px">${t('cmd_vf_choisir')||'Choisis la facture correspondante (à confirmer toi-même, aucun lien automatique fiable côté VosFactures) :'}</div>
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto">
+        ${r.factures.map((f,i)=>{
+          window._VF_SUGGEST=window._VF_SUGGEST||{}; window._VF_SUGGEST[i]=f;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid var(--border,#eee);border-radius:6px">
+            <div>
+              <div style="font-weight:600">${esc(f.numero||('#'+f.id))} — ${fd(f.date)}</div>
+              <div style="font-size:11px;color:var(--text3)">${f.num_serie?('N° série : '+esc(f.num_serie)):(t('cmd_vf_sans_serie')||'Pas de série détectée')}${f.montant_ttc?' · '+parseFloat(f.montant_ttc).toFixed(2)+' €':''}</div>
+            </div>
+            <button class="btn" type="button" onmousedown="appliquerFactureVF(${i})">${t('cmd_vf_utiliser')||'Utiliser'}</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }catch(e){ zone.innerHTML=`<div style="font-size:12px;color:#d33">${esc(e.message)}</div>`; }
+}
+
+function appliquerFactureVF(i){
+  const f = (window._VF_SUGGEST||{})[i]; if(!f) return;
+  if($('cmd-facture')) $('cmd-facture').value = f.numero || '';
+  if(f.num_serie && $('cmd-serie')) $('cmd-serie').value = f.num_serie;
+  toast(t('cmd_vf_applique')||'Facture rattachée — vérifie puis enregistre');
 }
 
 async function enregistrerCommande(id){

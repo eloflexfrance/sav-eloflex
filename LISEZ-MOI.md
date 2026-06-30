@@ -1,16 +1,23 @@
 # Module "Suivi des commandes" — intégration dans sav-eloflex
 
-## ⚠️ Correctif du 30/06 (déjà inclus dans ce ZIP)
+## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
-Bug corrigé : après une synchronisation VosFactures (ou un ajout/suppression
-manuelle), seul le tableau se rafraîchissait — les 4 compteurs en haut
-("Total / En préparation / Expédié / Livré") et la liste déroulante des
-années restaient figés sur l'état d'avant la synchro (donc à 0 / vide), même
-si le tableau lui-même affichait bien les commandes. C'est corrigé dans
-`public/js/app.js` : ces trois actions déclenchent maintenant un
-rafraîchissement complet de l'écran. **Si tu avais déjà déployé une version
-précédente, redéploie simplement ce fichier** (ou tout le ZIP, c'est sans
-risque, idempotent).
+**30/06 — Détection de modèle erronée ("Eloflex L" partout)**
+La sync VosFactures devinait le modèle du fauteuil en testant des lettres
+isolées (L, F, H, D2...) sur tout le texte du document (accessoires, notes,
+adresse...). La lettre "L" matchait quasi systématiquement en premier
+(tailles d'accessoires, fragments de texte...), d'où la sur-représentation
+de "Eloflex L". Corrigé dans `scripts/sync-vosfactures.js` : on repère
+maintenant la ligne du document dont le nom contient littéralement
+"Eloflex" (la ligne du fauteuil) et on utilise son nom tel quel, sans
+devinette par motif. **Après avoir redéployé, reclique sur "Synchroniser
+VosFactures"** : la sync est idempotente (upsert), donc elle va corriger les
+402 commandes déjà importées avec le bon modèle, sans doublon.
+
+**30/06 — Compteurs et filtre année figés à 0**
+Après une synchronisation (ou un ajout/suppression manuelle), seul le
+tableau se rafraîchissait — les 4 compteurs et la liste des années
+restaient figés sur l'état d'avant l'action. Corrigé dans `public/js/app.js`.
 
 ## 1. Fichiers à copier dans ton repo
 
@@ -105,7 +112,25 @@ Nouvel onglet **"Suivi commandes"** dans la barre latérale :
   présence d'un n° de suivi ou d'une date de livraison, mais modifiable
   manuellement (ex: "Annulé").
 
-## 6. Pour la suite (non fait, à discuter si tu veux)
+## 6. Rattachement facture/n° de série (NOUVEAU — manuel, volontairement)
+
+À l'étape "bon de commande", VosFactures n'a pas encore de n° de série
+(affecté seulement à la facturation), et il n'existe pas de lien fiable
+automatique entre un bon de commande et la facture qui en découle (vérifié :
+seul le champ `oid` permettrait ça, mais tu ne le ressaisis pas
+systématiquement). Plutôt que de deviner et risquer de rattacher la mauvaise
+facture à la mauvaise commande (un distributeur a souvent plusieurs
+commandes ouvertes en même temps), j'ai ajouté un rattachement **manuel
+assisté** :
+
+Dans la fiche d'une commande déjà enregistrée, un bouton "Chercher une
+facture VosFactures à rattacher" interroge en direct les factures récentes
+du distributeur concerné, tente d'en extraire le n° de série, et te les
+liste pour que tu cliques sur la bonne (n° de facture + série pré-remplis
+dans le formulaire, à toi de vérifier puis d'enregistrer). Rien n'est
+appliqué automatiquement sans ton clic.
+
+## 7. Pour la suite (non fait, à discuter si tu veux)
 
 - Alerte automatique sur les commandes "en préparation" depuis trop longtemps
   (sur le modèle de l'alerte stock existante).

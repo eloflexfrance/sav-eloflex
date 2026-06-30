@@ -68,4 +68,5 @@ const API = {
   updateCommande:(id,d)=>API.put(`/commandes/${id}`,d),
   deleteCommande:(id)=>API.del(`/commandes/${id}`),
   vfSyncCommandes:(historique=false)=>API.post(`/vosfactures/sync-commandes${historique?'?historique=1':''}`,{}),
+  commandeFacturesSuggestions:(id)=>API.get(`/commandes/${id}/factures-vf-suggestions`),
 };
