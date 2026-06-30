@@ -1,5 +1,17 @@
 # Module "Suivi des commandes" — intégration dans sav-eloflex
 
+## ⚠️ Correctif du 30/06 (déjà inclus dans ce ZIP)
+
+Bug corrigé : après une synchronisation VosFactures (ou un ajout/suppression
+manuelle), seul le tableau se rafraîchissait — les 4 compteurs en haut
+("Total / En préparation / Expédié / Livré") et la liste déroulante des
+années restaient figés sur l'état d'avant la synchro (donc à 0 / vide), même
+si le tableau lui-même affichait bien les commandes. C'est corrigé dans
+`public/js/app.js` : ces trois actions déclenchent maintenant un
+rafraîchissement complet de l'écran. **Si tu avais déjà déployé une version
+précédente, redéploie simplement ce fichier** (ou tout le ZIP, c'est sans
+risque, idempotent).
+
 ## 1. Fichiers à copier dans ton repo
 
 Copie ces 8 fichiers en écrasant ceux du repo (ils remplacent les versions existantes ; import-commandes.js est nouveau) :

@@ -466,13 +466,13 @@ async function enregistrerCommande(id){
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','#d33'); return; }
   try{
     if(id) await API.updateCommande(id,d); else await API.createCommande(d);
-    closeModal(); toast(t('msg_enregistre')||'Enregistré'); renderCommandesTable();
+    closeModal(); toast(t('msg_enregistre')||'Enregistré'); render();
   }catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
 }
 
 async function supprimerCommande(id){
   if(!confirm(t('cmd_confirm_suppr')||'Supprimer cette commande ?')) return;
-  try{ await API.deleteCommande(id); closeModal(); toast(t('msg_supprime')||'Supprimé'); renderCommandesTable(); }
+  try{ await API.deleteCommande(id); closeModal(); toast(t('msg_supprime')||'Supprimé'); render(); }
   catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
 }
 
@@ -481,7 +481,7 @@ async function syncCommandesVF(){
   try{
     const r = await API.vfSyncCommandes();
     toast(r.message||(t('cmd_sync_ok')||'Synchronisation terminée'));
-    renderCommandesTable();
+    render();
   }catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
 }
 
