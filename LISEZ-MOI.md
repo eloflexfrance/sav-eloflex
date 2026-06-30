@@ -2,6 +2,14 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Retour en arrière sur le tableau de bord**
+Le tableau de bord est revenu à son état d'origine : graphique "Interventions
+/ 12 mois" à gauche, "Pièces les plus utilisées (interventions)" +
+répartition par technicien à droite. Les cartes "Top 10 pièces détachées
+vendues" et "Fauteuils électriques vendus" ont été retirées (côté affichage
+et calcul serveur). La recherche élargie (Modèle/Accessoire) sur l'écran
+"Suivi commandes" reste en place, c'est indépendant et toujours utile.
+
 **30/06 — Classement "pièces vendues" : exclusion des frais d'envoi + recherche élargie**
 Les lignes "Frais d'envoi..." (avec ou sans poids) restent visibles dans le
 détail de chaque commande, mais sont désormais exclues du classement "Top

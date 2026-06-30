@@ -84,8 +84,6 @@ const TRANSLATIONS = {
     db_alertes: 'Alertes non lues',
     db_chart_title: 'Interventions / 12 mois',
     db_top_pieces: 'Pièces les plus utilisées (6 mois)',
-    db_top_pieces_vendues: 'Top 10 pièces détachées vendues (depuis janvier)',
-    db_fauteuils_electriques: 'Fauteuils électriques vendus (depuis janvier)',
     db_par_tech: 'Par technicien',
     db_activites: 'Récentes activités',
 
@@ -548,8 +546,6 @@ const TRANSLATIONS = {
     db_alertes: 'Unread alerts',
     db_chart_title: 'Service orders / 12 months',
     db_top_pieces: 'Most used parts (6 months)',
-    db_top_pieces_vendues: 'Top 10 best-selling spare parts (year to date)',
-    db_fauteuils_electriques: 'Electric wheelchairs sold (year to date)',
     db_par_tech: 'By technician',
     db_activites: 'Recent activity',
 
