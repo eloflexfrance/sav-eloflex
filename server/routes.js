@@ -507,7 +507,55 @@ router.get('/stats', async (req, res) => {
     const par_technicien = await db.all(
       'SELECT technicien,COUNT(*)::int AS total FROM interventions WHERE technicien IS NOT NULL GROUP BY technicien ORDER BY total DESC'
     );
-    res.json({ stats, recentes, par_mois, pieces_top, par_technicien });
+
+    // ── Top 10 pièces détachées vendues (issu des bons de commande VosFactures) ──
+    const debutAnnee = `${new Date().getFullYear()}-01-01`;
+    const cmdAccessoires = await db.all(
+      `SELECT accessoire FROM commandes WHERE accessoire IS NOT NULL AND date_commande >= $1`, [debutAnnee]
+    );
+    const totauxPieces = {};
+    for (const row of cmdAccessoires) {
+      for (const ligne of row.accessoire.split('\n')) {
+        const apresDeuxPoints = ligne.includes(' : ') ? ligne.split(' : ').slice(1).join(' : ') : ligne;
+        for (const item of apresDeuxPoints.split(',')) {
+          const m = item.trim().match(/^(.*?)(?:\s*×\s*(\d+))?$/);
+          if (!m || !m[1]) continue;
+          const nom = m[1].trim();
+          if (!nom) continue;
+          const qte = m[2] ? parseInt(m[2]) : 1;
+          totauxPieces[nom] = (totauxPieces[nom] || 0) + qte;
+        }
+      }
+    }
+    const pieces_vendues_top = Object.entries(totauxPieces)
+      .sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([designation, total]) => ({ designation, total }));
+
+    // ── Fauteuils roulants électriques vendus (lignes "Eloflex" des commandes, avec ou sans accessoires) ──
+    function extraireModeleCourt(modele) {
+      let m = modele.match(/eloflex\s+mod[èe]le\s+(\S+)/i);
+      if (m) return `Eloflex ${m[1].toUpperCase()}`;
+      m = modele.match(/eloflex\s+(\S+)/i);
+      if (m) return `Eloflex ${m[1].toUpperCase()}`;
+      return modele.split(' - ')[0].trim();
+    }
+    const cmdFauteuils = await db.all(
+      `SELECT modele, quantite FROM commandes WHERE modele ILIKE '%eloflex%' AND date_commande >= $1`, [debutAnnee]
+    );
+    const totauxFauteuils = {};
+    let totalFauteuilsElectriques = 0;
+    for (const row of cmdFauteuils) {
+      const code = extraireModeleCourt(row.modele);
+      const qte  = row.quantite || 1;
+      totauxFauteuils[code] = (totauxFauteuils[code] || 0) + qte;
+      totalFauteuilsElectriques += qte;
+    }
+    const fauteuils_electriques = {
+      total: totalFauteuilsElectriques,
+      par_modele: Object.entries(totauxFauteuils).sort((a, b) => b[1] - a[1]).map(([modele, total]) => ({ modele, total }))
+    };
+
+    res.json({ stats, recentes, par_mois, pieces_top, par_technicien, pieces_vendues_top, fauteuils_electriques });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

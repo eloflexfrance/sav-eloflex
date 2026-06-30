@@ -79,8 +79,7 @@ async function refreshBadges(){
 
 async function renderDashboard(ttl,c,a){
   ttl.textContent=t('nav_dashboard');
-  const{stats:s,recentes,par_mois,pieces_top,par_technicien}=await API.stats();
-  const maxMois=Math.max(...par_mois.map(m=>m.total),1);
+  const{stats:s,recentes,par_mois,pieces_top,par_technicien,pieces_vendues_top,fauteuils_electriques}=await API.stats();
   c.innerHTML=`
     <div class="quick-search-bar">
       <div style="position:relative;flex:1;max-width:560px">
@@ -104,16 +103,14 @@ async function renderDashboard(ttl,c,a){
       <div class="stat-card"><div class="stat-label">${t('db_pieces_alerte')}</div><div class="stat-value" style="color:${s.pieces_alerte>0?'var(--danger)':'var(--text)'}">${s.pieces_alerte}</div></div>
       <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">${t('db_alertes')}</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
     </div>
-    <div class="grid-2" style="margin-bottom:14px">
+    <div class="grid-3" style="margin-bottom:14px">
       <div class="card">
-        <div class="section-title"><i class="ti ti-chart-bar"></i>${t('db_chart_title')}</div>
-        <div class="chart-bar">
-          ${par_mois.map(m=>`<div class="chart-bar-col" title="${moisLabel(m.mois)} : ${m.total} intervention${m.total!==1?'s':''}">
-            <div style="font-size:9px;color:var(--text3)">${m.total}</div>
-            <div class="chart-bar-fill" style="height:${m.total>0?Math.max(Math.round(m.total/maxMois*70),4):2}px;background:${m.total>0?'var(--accent)':'var(--border)'}"></div>
-            <div class="chart-bar-label">${moisLabel(m.mois)}</div>
+        <div class="section-title"><i class="ti ti-package"></i>${t('db_top_pieces_vendues')||'Top 10 pièces détachées vendues'}</div>
+        ${(!pieces_vendues_top||pieces_vendues_top.length===0)?`<div style="font-size:12px;color:var(--text3)">${t('msg_vide')}</div>`:pieces_vendues_top.map(p=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.designation)}">${esc(p.designation)}</div>
+            <div style="font-weight:700;font-size:12px;color:var(--accent)">${p.total}×</div>
           </div>`).join('')}
-        </div>
       </div>
       <div class="card">
         <div class="section-title"><i class="ti ti-box"></i>${t('db_top_pieces')}</div>
@@ -123,6 +120,14 @@ async function renderDashboard(ttl,c,a){
             <div style="font-weight:700;font-size:12px;color:var(--accent)">${p.total_utilise}×</div>
           </div>`).join('')}
         ${par_technicien.length?`<div class="divider"></div><div class="section-title" style="margin-top:8px"><i class="ti ti-user"></i>${t('db_par_tech')}</div>${par_technicien.map(tech=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${esc(tech.technicien)}</span><span style="font-weight:700">${tech.total}</span></div>`).join('')}`:''}
+      </div>
+      <div class="card">
+        <div class="section-title"><i class="ti ti-wheelchair"></i>${t('db_fauteuils_electriques')||'Fauteuils électriques vendus'}</div>
+        <div style="font-size:26px;font-weight:700;margin-bottom:8px">${(fauteuils_electriques&&fauteuils_electriques.total)||0}</div>
+        ${(!fauteuils_electriques||!fauteuils_electriques.par_modele||!fauteuils_electriques.par_modele.length)?`<div style="font-size:12px;color:var(--text3)">${t('msg_vide')}</div>`:fauteuils_electriques.par_modele.map(f=>`
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+            <span>${esc(f.modele)}</span><span style="font-weight:700">${f.total}</span>
+          </div>`).join('')}
       </div>
     </div>
     <div class="card">

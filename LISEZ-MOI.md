@@ -2,6 +2,18 @@
 
 ## ⚠️ Correctifs (déjà inclus dans ce ZIP)
 
+**30/06 — Tableau de bord : top pièces vendues + fauteuils électriques (nouveau)**
+Le graphique "Interventions / 12 mois" est remplacé par "Top 10 pièces
+détachées vendues", calculé à partir des bons de commande VosFactures
+(champ `accessoire`) **depuis le 1er janvier de l'année en cours**. Une 3ème
+carte "Fauteuils électriques vendus (depuis janvier)" est ajoutée à côté
+(total + détail par modèle Eloflex L/D2/F/...), même période, basée sur les
+commandes dont la ligne fauteuil contient "Eloflex" — qu'elles aient ou non
+des accessoires associés. La carte "Pièces les plus utilisées
+(interventions)" existante n'a pas changé, juste repositionnée à côté des
+deux nouvelles pour les comparer en un coup d'œil. J'ai testé les deux
+algorithmes d'agrégation sur des données réalistes avant de livrer.
+
 **30/06 — Nouveau statut "Problème" (nouveau)**
 Ajout d'un statut "Problème" pour signaler les commandes ayant un souci de
 livraison (colis perdu, endommagé, refusé...). Disponible dans le menu
