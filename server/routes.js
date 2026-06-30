@@ -1375,4 +1375,42 @@ router.get('/commandes/:id/factures-vf-suggestions', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Recherche directe d'une facture VosFactures par son numéro exact (saisi côté commande)
+// — beaucoup plus fiable que les suggestions, puisque le n° de facture correspond 1:1
+// au document VosFactures (confirmé par l'utilisateur).
+router.get('/vosfactures/facture-lookup', async (req, res) => {
+  try {
+    const numero = (req.query.numero || '').trim();
+    if (!numero) return res.status(400).json({ error: 'Paramètre numero requis' });
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
+      return res.json({ configured: false });
+    }
+
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+
+    const { data } = await vfApi.get('/invoices.json', { params: { number: numero, per_page: 5 } });
+    const inv = Array.isArray(data) ? data.find(d => String(d.number).trim() === numero) || data[0] : null;
+    if (!inv) return res.json({ configured: true, found: false });
+
+    const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
+    const positions = detail.positions || detail.invoice_items || [];
+    const texte = [detail.description || '', ...positions.map(p => [p.name || '', p.description || ''].join(' '))].join(' ');
+    const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
+    const m = texte.match(SERIE_RE);
+
+    res.json({
+      configured: true, found: true,
+      numero: inv.number, date: inv.issue_date || inv.sell_date,
+      num_serie: m ? m[0].trim() : null,
+      buyer_name: inv.buyer_name,
+      montant_ttc: inv.price_gross
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

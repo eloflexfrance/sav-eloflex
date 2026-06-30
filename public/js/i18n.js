@@ -54,6 +54,11 @@ const TRANSLATIONS = {
     cmd_vf_sans_serie: 'Pas de série détectée',
     cmd_vf_utiliser: 'Utiliser',
     cmd_vf_applique: 'Facture rattachée — vérifie puis enregistre',
+    cmd_recuperer_serie: 'Récupérer le n° de série depuis cette facture',
+    cmd_vf_numero_requis: 'Indique d\u2019abord un n° de facture',
+    cmd_vf_recherche_en_cours: 'Recherche dans VosFactures…',
+    cmd_vf_facture_introuvable: 'Facture introuvable dans VosFactures',
+    cmd_vf_serie_recuperee: 'N° de série récupéré',
 
     // Dashboard
     db_interventions: 'Interventions',
@@ -498,6 +503,11 @@ const TRANSLATIONS = {
     cmd_vf_sans_serie: 'No serial number detected',
     cmd_vf_utiliser: 'Use',
     cmd_vf_applique: 'Invoice linked — review then save',
+    cmd_recuperer_serie: 'Fetch the serial number from this invoice',
+    cmd_vf_numero_requis: 'Enter an invoice number first',
+    cmd_vf_recherche_en_cours: 'Searching VosFactures…',
+    cmd_vf_facture_introuvable: 'Invoice not found in VosFactures',
+    cmd_vf_serie_recuperee: 'Serial number retrieved',
 
     // Dashboard
     db_interventions: 'Service orders',

@@ -434,7 +434,12 @@ async function modalCommande(id){
       <label>${t('cmd_suivi')||'N° suivi'}<input id="cmd-suivi" value="${esc(cm.num_suivi||'')}"></label>
       <label>${t('cmd_date_livraison')||'Date livraison'}<input id="cmd-livraison" type="date" value="${cm.date_livraison||''}"></label>
       <label>${t('cmd_serie')||'N° série'}<input id="cmd-serie" value="${esc(cm.num_serie||'')}"></label>
-      <label>${t('cmd_facture')||'N° facture'}<input id="cmd-facture" value="${esc(cm.num_facture||'')}"></label>
+      <label>${t('cmd_facture')||'N° facture'}
+        <div style="display:flex;gap:6px">
+          <input id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1">
+          <button class="btn" type="button" title="${t('cmd_recuperer_serie')||'Récupérer le n° de série depuis cette facture'}" onmousedown="lookupFactureVF()"><i class="ti ti-search"></i></button>
+        </div>
+      </label>
       <label>${t('cmd_statut')||'Statut'}
         <select id="cmd-statut">
           <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto')||'Auto (calculé)'}</option>
@@ -488,6 +493,19 @@ function appliquerFactureVF(i){
   if($('cmd-facture')) $('cmd-facture').value = f.numero || '';
   if(f.num_serie && $('cmd-serie')) $('cmd-serie').value = f.num_serie;
   toast(t('cmd_vf_applique')||'Facture rattachée — vérifie puis enregistre');
+}
+
+async function lookupFactureVF(){
+  const numero = gv('cmd-facture').trim();
+  if(!numero){ toast(t('cmd_vf_numero_requis')||'Indique d\u2019abord un n° de facture','ti-alert-circle','#d33'); return; }
+  toast(t('cmd_vf_recherche_en_cours')||'Recherche dans VosFactures…','ti-loader-2');
+  try{
+    const r = await API.vfFactureLookup(numero);
+    if(!r.configured){ toast(t('cmd_vf_non_configure')||'VosFactures non configuré','ti-alert-circle','#d33'); return; }
+    if(!r.found){ toast(t('cmd_vf_facture_introuvable')||'Facture introuvable dans VosFactures','ti-alert-circle','#d33'); return; }
+    if(r.num_serie){ $('cmd-serie').value=r.num_serie; toast(t('cmd_vf_serie_recuperee')||'N° de série récupéré'); }
+    else toast(t('cmd_vf_sans_serie')||'Pas de série détectée dans cette facture','ti-alert-circle','#d33');
+  }catch(e){ toast(e.message,'ti-alert-circle','#d33'); }
 }
 
 async function enregistrerCommande(id){

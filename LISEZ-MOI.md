@@ -130,6 +130,14 @@ liste pour que tu cliques sur la bonne (n° de facture + série pré-remplis
 dans le formulaire, à toi de vérifier puis d'enregistrer). Rien n'est
 appliqué automatiquement sans ton clic.
 
+**Raccourci ajouté** : comme tu as confirmé que la colonne "Facture" de ton
+Excel correspond 1:1 au numéro de facture VosFactures, j'ai ajouté une petite
+loupe à côté du champ "N° facture" dans la fiche commande. Si tu connais déjà
+ce numéro (tapé à la main, ou collé depuis une autre source), un clic va
+chercher directement CETTE facture précise dans VosFactures (recherche
+exacte par numéro, pas une liste à parcourir) et remplir automatiquement le
+n° de série s'il en trouve un dans les lignes du document.
+
 ## 7. Pour la suite (non fait, à discuter si tu veux)
 
 - Alerte automatique sur les commandes "en préparation" depuis trop longtemps
