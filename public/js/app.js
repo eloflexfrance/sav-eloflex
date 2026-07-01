@@ -40,7 +40,7 @@ const MODULES = [
 function hasAccess(module) {
   if (isAdmin()) return true;
   const p = (CURRENT_USER?.permissions || {})[module];
-  return p === 'write' || p === 'read';
+  return p === 'write' || p === 'read';  // 'hidden', 'none', undefined = bloqué
 }
 function canWrite(module) {
   if (isAdmin()) return true;
@@ -220,6 +220,10 @@ async function renderDashboard(ttl,c,a){
 async function chargerCommandesDashboard(){
   const el=document.getElementById('dash-commandes');
   if(!el) return;
+  // Masquer la carte si l'utilisateur a ce module en "Masquée"
+  if(!isAdmin() && !hasAccess('commandes')){
+    el.closest('.card')?.remove(); return;
+  }
   try{
     const stats = await API.commandesStats();
     const res = await API.commandes({statut:'En préparation', per_page:8});
@@ -246,6 +250,9 @@ async function chargerCommandesDashboard(){
 async function chargerExpeditionsPiecesDashboard(){
   const el=document.getElementById('dash-exp-pieces');
   if(!el) return;
+  if(!isAdmin() && !hasAccess('commandes') && !hasAccess('expeditions')){
+    el.closest('.card')?.remove(); return;
+  }
   try{
     // Récupère suffisamment de commandes pour filtrer côté front
     // (pas de filtre q pour ne pas brider les résultats)
@@ -287,6 +294,9 @@ async function chargerExpeditionsPiecesDashboard(){
 
 async function chargerTransfertsDashboard(){  const el=document.getElementById('dash-transferts');
   if(!el) return;
+  if(!isAdmin() && !hasAccess('transferts')){
+    el.closest('.card')?.remove(); return;
+  }
   try{
     const list=(await API.transferts()).filter(tr=>tr.statut!=='Arrivé'&&tr.statut!=='Annulé');
     if(!list.length){ el.innerHTML=`<div style="font-size:12px;color:var(--text3)">${t('transferts_empty')}</div>`; return; }
@@ -1022,13 +1032,15 @@ function _permGrid(perms={}){
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="background:var(--bg)">
         <th style="padding:6px 10px;text-align:left;font-weight:600;color:var(--text2)">Module</th>
-        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--success);width:110px">Accès complet</th>
-        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--warning);width:110px">Lecture seule</th>
+        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--success);width:100px">Accès complet</th>
+        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--warning);width:100px">Lecture seule</th>
+        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--text3);width:90px">Masquée</th>
       </tr></thead>
       <tbody>${MODULES.map((m,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
         <td style="padding:7px 10px">${m.label}</td>
-        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="write" ${perms[m.key]==='write'?'checked':''}></td>
-        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="read"  ${perms[m.key]==='read'?'checked':''}></td>
+        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="write"  ${perms[m.key]==='write'?'checked':''}></td>
+        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="read"   ${perms[m.key]==='read'?'checked':''}></td>
+        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="hidden" ${perms[m.key]==='hidden'||perms[m.key]==='none'||!perms[m.key]?'checked':''}></td>
       </tr>`).join('')}</tbody>
     </table>
   </div>`;
@@ -1038,7 +1050,7 @@ function _collectPerms(){
   const p={};
   MODULES.forEach(m=>{
     const checked=document.querySelector(`input[name="perm-${m.key}"]:checked`);
-    p[m.key]=checked?checked.value:'none';
+    p[m.key]=checked?checked.value:'hidden';
   });
   return p;
 }
@@ -1056,7 +1068,13 @@ function modalNouvelUtilisateur(){
       <div class="grid-2">
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">Prénom et nom *</label><input class="form-input" id="nu-nom" placeholder="Frédéric Dijd"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse e-mail *</label><input class="form-input" id="nu-email" type="email" placeholder="frederic@eloflex.fr"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Mot de passe * <span style="font-size:10px;color:var(--text2)">(8 car. min.)</span></label><input class="form-input" id="nu-mdp" type="password" placeholder="••••••••"></div>
+        <div class="form-group"><label class="form-label">Mot de passe * <span style="font-size:10px;color:var(--text2)">(8 car. min.)</span></label><input class="form-input" id="nu-mdp" type="password" placeholder="••••••••"></div>
+        <div class="form-group"><label class="form-label">Langue de l'interface</label>
+          <select class="form-input" id="nu-langue">
+            <option value="fr">🇫🇷 Français</option>
+            <option value="en">🇬🇧 English</option>
+          </select>
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius)">
         <input type="checkbox" id="nu-admin" onchange="_onAdminToggle()" style="width:16px;height:16px;cursor:pointer">
@@ -1074,12 +1092,12 @@ function modalNouvelUtilisateur(){
 }
 
 async function creerUtilisateur(){
-  const nom=gv('nu-nom'), email=gv('nu-email'), mot_de_passe=gv('nu-mdp');
+  const nom=gv('nu-nom'), email=gv('nu-email'), mot_de_passe=gv('nu-mdp'), langue=gv('nu-langue')||'fr';
   const admin=!!document.getElementById('nu-admin')?.checked;
   const permissions=admin?{}:_collectPerms();
   if(!nom||!email||!mot_de_passe){ toast('Nom, email et mot de passe sont requis.','ti-alert-circle','var(--danger)'); return; }
   try{
-    await API.createUser({nom, email, mot_de_passe, admin, permissions});
+    await API.createUser({nom, email, mot_de_passe, admin, permissions, langue});
     closeModal(); toast(`Compte créé pour ${nom}`); chargerListeUtilisateurs();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
@@ -1095,7 +1113,13 @@ async function modalEditerUtilisateur(id){
       <div class="grid-2">
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">Prénom et nom</label><input class="form-input" id="eu-nom" value="${esc(user.nom)}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">E-mail</label><input class="form-input" id="eu-email" type="email" value="${esc(user.email)}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Statut</label>
+        <div class="form-group"><label class="form-label">Langue de l'interface</label>
+          <select class="form-input" id="eu-langue">
+            <option value="fr" ${(user.langue||'fr')==='fr'?'selected':''}>🇫🇷 Français</option>
+            <option value="en" ${user.langue==='en'?'selected':''}>🇬🇧 English</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Statut</label>
           <select class="form-input" id="eu-actif">
             <option value="1" ${user.actif?'selected':''}>Actif</option>
             <option value="0" ${!user.actif?'selected':''}>Désactivé</option>
@@ -1120,8 +1144,9 @@ async function modalEditerUtilisateur(id){
 async function enregistrerUtilisateur(id){
   const admin=!!document.getElementById('eu-admin')?.checked;
   const permissions=admin?{}:_collectPerms();
+  const langue=gv('eu-langue')||'fr';
   try{
-    await API.updateUser(id, { nom:gv('eu-nom'), email:gv('eu-email'), admin, permissions, actif: gv('eu-actif')==='1' });
+    await API.updateUser(id, { nom:gv('eu-nom'), email:gv('eu-email'), admin, permissions, langue, actif: gv('eu-actif')==='1' });
     closeModal(); toast('Utilisateur mis à jour'); chargerListeUtilisateurs();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
@@ -1904,10 +1929,10 @@ function applyNavTranslations(){
   });
 }
 
-function switchLang(lang){
+function switchLang(lang, doRender=true){
   setLang(lang);
   applyNavTranslations();
-  render();
+  if(doRender) render();
 }
 
 // ── RECHERCHE RAPIDE DASHBOARD ────────────────────────────────────
@@ -2249,6 +2274,10 @@ applyNavTranslations();
   } catch(e) {
     window.location.href = '/login';
     return;
+  }
+  // Appliquer la langue de l'utilisateur (override la préférence navigateur)
+  if(CURRENT_USER.langue && CURRENT_USER.langue !== (typeof LANG !== 'undefined' ? LANG : 'fr')){
+    switchLang(CURRENT_USER.langue, false); // false = ne pas sauvegarder en DB (déjà en DB)
   }
   appliquerNavRole();
   loadVfStatus();

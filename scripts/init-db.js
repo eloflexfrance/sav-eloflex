@@ -205,6 +205,7 @@ async function initDB() {
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{}'`);
       await client.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
       await client.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','operateur','consultation','utilisateur'))`);
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS langue TEXT NOT NULL DEFAULT 'fr'`);
     } catch(e) { /* migration silencieuse */ }
 
     // Table de sessions PostgreSQL (connect-pg-simple)

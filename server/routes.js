@@ -21,7 +21,7 @@ router.post('/auth/login', async (req, res) => {
     await db.run('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
     req.session.user = {
       id: user.id, nom: user.nom, email: user.email, role: user.role,
-      permissions: user.permissions || {}
+      permissions: user.permissions || {}, langue: user.langue || 'fr'
     };
     req.session.save(err => {
       if (err) return res.status(500).json({ error: 'Erreur session' });
@@ -58,7 +58,7 @@ router.post('/auth/setup', async (req, res) => {
       "INSERT INTO users (nom, email, password_hash, role, permissions) VALUES ($1,$2,$3,'admin','{}') RETURNING id, nom, email, role",
       [nom.trim(), email.toLowerCase().trim(), hash]
     );
-    req.session.user = { id: user.id, nom: user.nom, email: user.email, role: 'admin', permissions: {} };
+    req.session.user = { id: user.id, nom: user.nom, email: user.email, role: 'admin', permissions: {}, langue: 'fr' };
     req.session.save(() => res.json({ ok: true, message: `Compte admin créé pour ${user.nom}. Bienvenue !` }));
   } catch (e) {
     if (e.code === '23505') return res.status(400).json({ error: 'Cet email est déjà utilisé.' });
@@ -118,21 +118,21 @@ const adminOnly = requireRole('admin');
 // ── Gestion des utilisateurs (admin only) ─────────────────────────
 router.get('/users', adminOnly, async (req, res) => {
   try {
-    const rows = await db.all('SELECT id, nom, email, role, permissions, actif, last_login FROM users ORDER BY id');
+    const rows = await db.all('SELECT id, nom, email, role, permissions, langue, actif, last_login FROM users ORDER BY id');
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/users', adminOnly, async (req, res) => {
   try {
-    const { nom, email, mot_de_passe, admin: isAdmin, permissions = {} } = req.body;
+    const { nom, email, mot_de_passe, admin: isAdmin, permissions = {}, langue = 'fr' } = req.body;
     if (!nom || !email || !mot_de_passe) return res.status(400).json({ error: 'Nom, email et mot de passe sont requis.' });
     if (mot_de_passe.length < 8) return res.status(400).json({ error: 'Mot de passe : minimum 8 caractères.' });
     const role = isAdmin ? 'admin' : 'utilisateur';
     const hash = await bcrypt.hash(mot_de_passe, 12);
     const user = await db.run(
-      'INSERT INTO users (nom, email, password_hash, role, permissions) VALUES ($1,$2,$3,$4,$5) RETURNING id, nom, email, role, permissions, actif',
-      [nom.trim(), email.toLowerCase().trim(), hash, role, JSON.stringify(permissions)]
+      'INSERT INTO users (nom, email, password_hash, role, permissions, langue) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, nom, email, role, permissions, langue, actif',
+      [nom.trim(), email.toLowerCase().trim(), hash, role, JSON.stringify(permissions), langue || 'fr']
     );
     res.status(201).json(user);
   } catch (e) {
@@ -144,7 +144,7 @@ router.post('/users', adminOnly, async (req, res) => {
 router.put('/users/:id', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { nom, email, admin: isAdmin, permissions, actif } = req.body;
+    const { nom, email, admin: isAdmin, permissions, actif, langue } = req.body;
     if (id === res.locals.user.id && isAdmin === false) {
       return res.status(400).json({ error: 'Vous ne pouvez pas retirer votre propre accès admin.' });
     }
@@ -154,10 +154,11 @@ router.put('/users/:id', adminOnly, async (req, res) => {
     if (email !== undefined) { sets.push(`email=$${++idx}`);       p.push(email.toLowerCase().trim()); }
     if (isAdmin !== undefined){ sets.push(`role=$${++idx}`);       p.push(isAdmin ? 'admin' : 'utilisateur'); }
     if (permissions !== undefined){ sets.push(`permissions=$${++idx}`); p.push(JSON.stringify(permissions)); }
-    if (actif !== undefined) { sets.push(`actif=$${++idx}`);       p.push(Boolean(actif)); }
+    if (langue !== undefined)     { sets.push(`langue=$${++idx}`);      p.push(langue); }
+    if (actif !== undefined)      { sets.push(`actif=$${++idx}`);       p.push(Boolean(actif)); }
     if (!sets.length) return res.status(400).json({ error: 'Aucune modification.' });
     p.push(id);
-    const user = await db.run(`UPDATE users SET ${sets.join(',')} WHERE id=$${++idx} RETURNING id, nom, email, role, permissions, actif`, p);
+    const user = await db.run(`UPDATE users SET ${sets.join(',')} WHERE id=$${++idx} RETURNING id, nom, email, role, permissions, langue, actif`, p);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable.' });
     res.json(user);
   } catch (e) {
