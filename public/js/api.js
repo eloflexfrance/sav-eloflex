@@ -79,4 +79,6 @@ const API = {
   updateUser:(id,d)=>API.put(`/users/${id}`,d),
   resetUserPassword:(id,mdp)=>API.post(`/users/${id}/reset-password`,{mot_de_passe:mdp}),
   deleteUser:(id)=>API.del(`/users/${id}`),
+  commandeLignes:(id)=>API.get(`/commandes/${id}/lignes`),
+  saveCommandeLignes:(id,lignes)=>API.put(`/commandes/${id}/lignes`, lignes),
 };

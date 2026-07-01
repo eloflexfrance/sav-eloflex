@@ -1459,7 +1459,37 @@ router.get('/commandes/:id', async (req, res) => {
        FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id WHERE cmd.id=$1`, [req.params.id]
     );
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
-    res.json({ ...row, statut_calc: statutCommande(row) });
+    const lignes = await db.all(
+      'SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]
+    );
+    res.json({ ...row, statut_calc: statutCommande(row), lignes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Lignes d'une commande (désignation / référence / quantité)
+router.get('/commandes/:id/lignes', async (req, res) => {
+  try {
+    const lignes = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
+    res.json(lignes);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/commandes/:id/lignes', async (req, res) => {
+  // Remplace toutes les lignes d'une commande (envoi du tableau complet)
+  try {
+    const lignes = req.body; // [{designation, reference, quantite, ordre}]
+    if (!Array.isArray(lignes)) return res.status(400).json({ error: 'Tableau de lignes attendu' });
+    await db.run('DELETE FROM commandes_lignes WHERE commande_id=$1', [req.params.id]);
+    for (let i = 0; i < lignes.length; i++) {
+      const l = lignes[i];
+      if (!l.designation?.trim()) continue;
+      await db.run(
+        'INSERT INTO commandes_lignes (commande_id, designation, reference, quantite, ordre) VALUES ($1,$2,$3,$4,$5)',
+        [req.params.id, l.designation.trim(), l.reference?.trim() || null, parseInt(l.quantite) || 1, i]
+      );
+    }
+    const result = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
+    res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1710,19 +1740,26 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
     const modele   = ligneFauteuil?.name?.trim() || null;
     const quantite = ligneFauteuil ? (parseInt(ligneFauteuil.quantity) || 1) : null;
 
-    const groupes = {};
+    // Lignes structurées : chaque position = {designation, reference, quantite}
+    const lignes = [];
+    // Ligne fauteuil en premier si trouvée
+    if (ligneFauteuil) {
+      lignes.push({
+        designation: ligneFauteuil.name?.trim() || '',
+        reference: ligneFauteuil.product_code || ligneFauteuil.code || null,
+        quantite: parseInt(ligneFauteuil.quantity) || 1,
+      });
+    }
     for (const p of positions) {
       if (p === ligneFauteuil) continue;
       const nom = (p.name || '').trim();
       if (!nom || estExclue(nom)) continue;
-      const qte = parseInt(p.quantity) || 1;
-      const cat = categoriser(nom);
-      const label = qte > 1 ? `${nom} ×${qte}` : nom;
-      (groupes[cat] = groupes[cat] || []).push(label);
+      lignes.push({
+        designation: nom,
+        reference: p.product_code || p.code || null,
+        quantite: parseInt(p.quantity) || 1,
+      });
     }
-    const accessoire = Object.keys(groupes).length
-      ? Object.entries(groupes).map(([cat, items]) => `${cat} : ${items.join(', ')}`).join('\n')
-      : null;
 
     const texteComplet = [detail.description || '', ...positions.map(p => [p.name || '', p.description || ''].join(' '))].join(' ');
     const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
@@ -1733,7 +1770,7 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
       numero:        detail.number || inv.number,
       date_commande: (detail.issue_date || detail.sell_date || '').slice(0, 10) || null,
       distributeur:  detail.buyer_name || inv.buyer_name || null,
-      modele, quantite, accessoire,
+      modele, quantite, lignes,
       num_serie: mSerie ? mSerie[0].trim() : null,
       kind: detail.kind || inv.kind,
     });

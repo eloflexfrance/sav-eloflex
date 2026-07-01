@@ -217,6 +217,17 @@ async function initDB() {
     )`);
     await client.query(`CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "user_sessions" ("expire")`);
 
+    // Table des lignes de commande (désignation, référence, quantité — comme intervention_produits)
+    await client.query(`CREATE TABLE IF NOT EXISTS commandes_lignes (
+      id SERIAL PRIMARY KEY,
+      commande_id INTEGER NOT NULL REFERENCES commandes(id) ON DELETE CASCADE,
+      designation TEXT NOT NULL,
+      reference TEXT,
+      quantite INTEGER NOT NULL DEFAULT 1,
+      ordre INTEGER DEFAULT 0
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_lignes_cmd ON commandes_lignes(commande_id)`);
+
     console.log("✅ Tables créées");
 
     // Paramètres par défaut

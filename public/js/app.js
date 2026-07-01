@@ -466,6 +466,32 @@ async function renderExpeditions(ttl,c,a){
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
 const cmdStatutClass = s => s==='Livré'?'g':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':'ouvert';
 
+let TMP_CMD_LIGNES = []; // Lignes de la commande en cours d'édition
+
+function renderCmdLignes(){
+  const el=$('cmd-lignes-list'); if(!el) return;
+  if(!TMP_CMD_LIGNES.length){
+    el.innerHTML=`<div style="font-size:12px;color:var(--text3);padding:8px 0">Aucune ligne — importe un bon de commande ou ajoute une ligne manuellement.</div>`;
+    return;
+  }
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px">
+    <thead><tr style="background:var(--bg)">
+      <th style="padding:5px 8px;text-align:left;color:var(--text2);font-weight:600">Désignation</th>
+      <th style="padding:5px 8px;text-align:left;color:var(--text2);font-weight:600;width:130px">Référence</th>
+      <th style="padding:5px 8px;text-align:center;color:var(--text2);font-weight:600;width:60px">Qté</th>
+      <th style="width:32px"></th>
+    </tr></thead>
+    <tbody>${TMP_CMD_LIGNES.map((l,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
+      <td style="padding:4px 6px"><input class="form-input" style="font-size:12px;padding:4px 7px" value="${esc(l.designation)}" oninput="TMP_CMD_LIGNES[${i}].designation=this.value" placeholder="Désignation *"></td>
+      <td style="padding:4px 6px"><input class="form-input mono" style="font-size:11px;padding:4px 7px" value="${esc(l.reference||'')}" oninput="TMP_CMD_LIGNES[${i}].reference=this.value" placeholder="Réf."></td>
+      <td style="padding:4px 6px"><input class="form-input" type="number" min="1" style="font-size:12px;padding:4px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_CMD_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
+      <td style="padding:4px 2px"><button class="btn sm danger" onclick="removeCmdLigne(${i})" style="padding:4px 6px"><i class="ti ti-x"></i></button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+function addCmdLigne(){ TMP_CMD_LIGNES.push({designation:'',reference:'',quantite:1}); renderCmdLignes(); }
+function removeCmdLigne(i){ TMP_CMD_LIGNES.splice(i,1); renderCmdLignes(); }
+
 // Génère le lien de suivi officiel du transporteur à partir du n° de suivi.
 // Renvoie null si transporteur inconnu/"Autre" ou n° vide (pas de lien à générer dans ce cas).
 function lienSuiviColis(transporteur, numero){
@@ -573,10 +599,16 @@ async function modalCommande(id){
         <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'}</label>
           <div style="display:flex;gap:6px">
             <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1">
-            <button class="btn sm" type="button" title="${t('cmd_lookup_bdc')||'Récupérer le détail depuis VosFactures'}" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+            <button class="btn sm" type="button" title="${t('cmd_lookup_bdc')||'Importer depuis VosFactures'}" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
           </div>
         </div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_accessoire')||'Accessoire'}</label><textarea class="form-input" id="cmd-accessoire" rows="3" style="white-space:pre-wrap">${esc(cm.accessoire||'')}</textarea></div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+            <span>Lignes du bon de commande</span>
+            <button class="btn sm" type="button" onclick="addCmdLigne()"><i class="ti ti-plus"></i> Ajouter</button>
+          </label>
+          <div id="cmd-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:40px"></div>
+        </div>
         <div class="form-group"><label class="form-label">${t('col_date')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_client_final')||'Client final'}</label><input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_suivi')||'N° suivi'}</label><input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal()"></div>
@@ -627,8 +659,11 @@ async function modalCommande(id){
     </div>`);
   window._CMD_ID = id || null;
   window._CMD_PREUVE = id ? { url: cm.preuve_livraison_url, mime: cm.preuve_livraison_mime, taille: cm.preuve_livraison_taille } : {};
+  // Initialiser les lignes depuis les données chargées ou vide
+  TMP_CMD_LIGNES = (cm.lignes || []).map(l => ({designation:l.designation||'', reference:l.reference||'', quantite:l.quantite||1}));
   majLienSuiviModal();
   majZonePreuveLivraison();
+  setTimeout(renderCmdLignes, 50); // Après que le DOM soit prêt
 }
 
 function commandeEstLivree(){
@@ -729,9 +764,14 @@ async function lookupBdcVF(){
     if(r.distributeur && $('cmd-distrib') && !gv('cmd-distrib')){ $('cmd-distrib').value=r.distributeur; remplis.push('distributeur'); }
     if(r.modele     && $('cmd-modele')  && !gv('cmd-modele'))  { $('cmd-modele').value=r.modele;       remplis.push('modèle'); }
     if(r.quantite   && $('cmd-quantite'))                       { $('cmd-quantite').value=r.quantite;   }
-    if(r.accessoire && $('cmd-accessoire') && !gv('cmd-accessoire')){ $('cmd-accessoire').value=r.accessoire; remplis.push('accessoires'); }
-    if(r.date_commande && $('cmd-date') && !gv('cmd-date'))   { $('cmd-date').value=r.date_commande;   remplis.push('date'); }
-    if(r.num_serie  && $('cmd-serie')   && !gv('cmd-serie'))  { $('cmd-serie').value=r.num_serie;      remplis.push('n° série'); }
+    if(r.date_commande && $('cmd-date') && !gv('cmd-date'))    { $('cmd-date').value=r.date_commande;   remplis.push('date'); }
+    if(r.num_serie  && $('cmd-serie')   && !gv('cmd-serie'))   { $('cmd-serie').value=r.num_serie;      remplis.push('n° série'); }
+    // Lignes structurées : remplace TMP_CMD_LIGNES
+    if(r.lignes && r.lignes.length){
+      TMP_CMD_LIGNES = r.lignes.map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
+      renderCmdLignes();
+      remplis.push(`${r.lignes.length} ligne${r.lignes.length>1?'s':''}`);
+    }
     toast(remplis.length
       ? `${t('cmd_bdc_rempli')||'Données récupérées'} : ${remplis.join(', ')}`
       : t('cmd_bdc_deja_rempli')||'Bon de commande trouvé (champs déjà remplis conservés)');
@@ -754,14 +794,21 @@ async function enregistrerCommande(id){
   const d = {
     distributeur_nom: gv('cmd-distrib'), groupe: gv('cmd-groupe'), modele: gv('cmd-modele'),
     quantite: parseInt(gv('cmd-quantite'))||1,
-    accessoire: gv('cmd-accessoire'), bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
+    bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
     client_final: gv('cmd-clientfinal'), num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null, date_livraison: gv('cmd-livraison')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
     informations: gv('cmd-infos')
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
-    if(id) await API.updateCommande(id,d); else await API.createCommande(d);
+    let cmdId = id;
+    if(id) await API.updateCommande(id, d);
+    else { const r = await API.createCommande(d); cmdId = r.id; }
+    // Sauvegarder les lignes si une commande existe
+    if(cmdId){
+      const lignesValides = TMP_CMD_LIGNES.filter(l=>l.designation?.trim());
+      await API.saveCommandeLignes(cmdId, lignesValides);
+    }
     closeModal(); toast(t('msg_enregistre')||'Enregistré'); render();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
