@@ -1454,4 +1454,97 @@ router.delete('/commandes/:id/preuve-livraison', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Lookup d'un bon de commande VosFactures par numéro (client_order ou stock)
+// Retourne le détail complet : distributeur, modèle, accessoires catégorisés avec quantités,
+// date, numéro, n° de série — prêt à pré-remplir la fiche commande.
+router.get('/vosfactures/bdc-lookup', async (req, res) => {
+  try {
+    const numero = (req.query.numero || '').trim();
+    if (!numero) return res.status(400).json({ error: 'Paramètre numero requis' });
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
+      return res.json({ configured: false });
+    }
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+
+    // Cherche dans client_order puis dans stock si pas trouvé
+    let inv = null;
+    for (const kind of ['client_order', 'stock']) {
+      const { data } = await vfApi.get('/invoices.json', { params: { number: numero, kind, per_page: 5 } });
+      inv = Array.isArray(data) ? data.find(d => String(d.number).trim() === numero) || null : null;
+      if (inv) break;
+    }
+    if (!inv) return res.json({ configured: true, found: false });
+
+    const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
+    const positions = detail.positions || detail.invoice_items || [];
+
+    // Règles d'exclusion : retirer les frais génériques, mais garder les deux exceptions explicites
+    const GARDER_EXPLICITES = [
+      /frais\s*d['']?envoi\s*et\s*retour\s*-\s*tests?\s*recharges?\s*2?\s*batteries?/i,
+      /frais\s*d['']?envois?\s*-\s*transfert\s*transporteurs?/i,
+    ];
+    function estExclue(nom) {
+      if (GARDER_EXPLICITES.some(re => re.test(nom))) return false;
+      if (/frais\s*d['']?envoi/i.test(nom)) return true;
+      if (/frais\s*d['']?exp[eé]dition/i.test(nom)) return true;
+      return false;
+    }
+
+    const CATEGORIES_ACCESSOIRES = [
+      { label: 'Frais & services',          re: /\bfrais|transport|\bport\b|\btest|retour\b|main[\s-]?d['']?œuvre|forfait/i },
+      { label: 'Chargeurs',                 re: /\bchargeur/i },
+      { label: 'Moteurs',                   re: /\bmoteur/i },
+      { label: 'Supports',                  re: /\bsupport/i },
+      { label: 'Roues & freins',            re: /\broue|pneu|frein/i },
+      { label: 'Commande & électronique',   re: /\bmanette|joystick|boitier|bo[iî]tier|câble|carte\s*électronique|écran|module/i },
+      { label: 'Confort & assise',          re: /\bcoussin|housse|dossier|accoudoir|assise|repose[-\s]?jambe|repose[-\s]?pied|repose[-\s]?t[êe]te/i },
+      { label: 'Batteries',                 re: /\bbatterie/i },
+    ];
+    function categoriser(nom) {
+      for (const c of CATEGORIES_ACCESSOIRES) if (c.re.test(nom)) return c.label;
+      return 'Autres pièces';
+    }
+
+    const ligneFauteuil = positions.find(p => /eloflex/i.test(p.name || ''))
+      || positions.find(p => !estExclue(p.name || '') && parseFloat(p.total_price_gross || p.price_net || p.price || 0) > 0)
+      || null;
+
+    const modele   = ligneFauteuil?.name?.trim() || null;
+    const quantite = ligneFauteuil ? (parseInt(ligneFauteuil.quantity) || 1) : null;
+
+    const groupes = {};
+    for (const p of positions) {
+      if (p === ligneFauteuil) continue;
+      const nom = (p.name || '').trim();
+      if (!nom || estExclue(nom)) continue;
+      const qte = parseInt(p.quantity) || 1;
+      const cat = categoriser(nom);
+      const label = qte > 1 ? `${nom} ×${qte}` : nom;
+      (groupes[cat] = groupes[cat] || []).push(label);
+    }
+    const accessoire = Object.keys(groupes).length
+      ? Object.entries(groupes).map(([cat, items]) => `${cat} : ${items.join(', ')}`).join('\n')
+      : null;
+
+    const texteComplet = [detail.description || '', ...positions.map(p => [p.name || '', p.description || ''].join(' '))].join(' ');
+    const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
+    const mSerie = texteComplet.match(SERIE_RE);
+
+    res.json({
+      configured: true, found: true,
+      numero:        detail.number || inv.number,
+      date_commande: (detail.issue_date || detail.sell_date || '').slice(0, 10) || null,
+      distributeur:  detail.buyer_name || inv.buyer_name || null,
+      modele, quantite, accessoire,
+      num_serie: mSerie ? mSerie[0].trim() : null,
+      kind: detail.kind || inv.kind,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

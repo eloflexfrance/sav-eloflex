@@ -139,6 +139,12 @@ async function renderDashboard(ttl,c,a){
       </table></div>
     </div>
     <div class="card" style="margin-top:14px">
+      <div class="section-title"><i class="ti ti-package"></i>${t('db_expeditions_pieces')||'Expéditions (pièces détachées)'}
+        <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
+      </div>
+      <div id="dash-exp-pieces">${t('msg_chargement')}</div>
+    </div>
+    <div class="card" style="margin-top:14px">
       <div class="section-title"><i class="ti ti-clipboard-list"></i>${t('cmd_title')||'Suivi des commandes'}
         <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
       </div>
@@ -152,6 +158,7 @@ async function renderDashboard(ttl,c,a){
     </div>`;
   chargerTransfertsDashboard();
   chargerCommandesDashboard();
+  chargerExpeditionsPiecesDashboard();
 }
 
 async function chargerCommandesDashboard(){
@@ -180,8 +187,45 @@ async function chargerCommandesDashboard(){
   }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
-async function chargerTransfertsDashboard(){
-  const el=document.getElementById('dash-transferts');
+async function chargerExpeditionsPiecesDashboard(){
+  const el=document.getElementById('dash-exp-pieces');
+  if(!el) return;
+  try{
+    // Commandes avec n° de suivi ET sans fauteuil Eloflex (= pièces détachées uniquement)
+    const res = await API.commandes({ per_page: 8, q: ' ' });
+    // Filtrer côté front : num_suivi renseigné + modèle ne contient pas "eloflex"
+    const list = (res.rows||[])
+      .filter(cm => cm.num_suivi && !/eloflex/i.test(cm.modele||''))
+      .slice(0, 8);
+    if(!list.length){
+      el.innerHTML=`<div style="font-size:12px;color:var(--text3)">${t('cmd_exp_pieces_empty')||'Aucune expédition de pièces en cours'}</div>`;
+      return;
+    }
+    el.innerHTML=`<div class="table-wrap"><table class="t">
+      <thead><tr>
+        <th>${t('col_date')||'Date'}</th>
+        <th>${t('col_client')||'Distributeur'}</th>
+        <th>${t('cmd_bdc')||'Bdc'}</th>
+        <th>${t('cmd_modele')||'Pièce(s)'}</th>
+        <th>${t('cmd_suivi')||'N° suivi'}</th>
+        <th>${t('col_statut')||'Statut'}</th>
+      </tr></thead>
+      <tbody>${list.map(cm=>{
+        const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
+        return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
+          <td>${fd(cm.date_commande)}</td>
+          <td>${esc(cm.distributeur_nom)}</td>
+          <td class="mono">${esc(cm.bdc||'')}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||cm.accessoire||'')}">${esc(cm.modele||cm.accessoire||'')}</td>
+          <td class="mono">${esc(cm.num_suivi)}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
+          <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+async function chargerTransfertsDashboard(){  const el=document.getElementById('dash-transferts');
   if(!el) return;
   try{
     const list=(await API.transferts()).filter(tr=>tr.statut!=='Arrivé'&&tr.statut!=='Annulé');
@@ -493,7 +537,12 @@ async function modalCommande(id){
         <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_quantite')||'Quantité'}</label><input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}"></div>
-        <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'}</label><input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}"></div>
+        <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'}</label>
+          <div style="display:flex;gap:6px">
+            <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1">
+            <button class="btn sm" type="button" title="${t('cmd_lookup_bdc')||'Récupérer le détail depuis VosFactures'}" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+          </div>
+        </div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_accessoire')||'Accessoire'}</label><textarea class="form-input" id="cmd-accessoire" rows="3" style="white-space:pre-wrap">${esc(cm.accessoire||'')}</textarea></div>
         <div class="form-group"><label class="form-label">${t('col_date')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_client_final')||'Client final'}</label><input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></div>
@@ -635,8 +684,28 @@ function appliquerFactureVF(i){
   toast(t('cmd_vf_applique')||'Facture rattachée — vérifie puis enregistre');
 }
 
-async function lookupFactureVF(){
-  const numero = gv('cmd-facture').trim();
+async function lookupBdcVF(){
+  const numero = gv('cmd-bdc').trim();
+  if(!numero){ toast(t('cmd_bdc_requis')||'Indique d\u2019abord un n° de bon de commande','ti-alert-circle','var(--danger)'); return; }
+  toast(t('cmd_vf_recherche_en_cours')||'Recherche dans VosFactures…','ti-loader-2');
+  try{
+    const r = await API.vfBdcLookup(numero);
+    if(!r.configured){ toast(t('cmd_vf_non_configure')||'VosFactures non configuré','ti-alert-circle','var(--danger)'); return; }
+    if(!r.found){ toast(t('cmd_bdc_introuvable')||'Bon de commande introuvable dans VosFactures','ti-alert-circle','var(--danger)'); return; }
+    let remplis = [];
+    if(r.distributeur && $('cmd-distrib') && !gv('cmd-distrib')){ $('cmd-distrib').value=r.distributeur; remplis.push('distributeur'); }
+    if(r.modele     && $('cmd-modele')  && !gv('cmd-modele'))  { $('cmd-modele').value=r.modele;       remplis.push('modèle'); }
+    if(r.quantite   && $('cmd-quantite'))                       { $('cmd-quantite').value=r.quantite;   }
+    if(r.accessoire && $('cmd-accessoire') && !gv('cmd-accessoire')){ $('cmd-accessoire').value=r.accessoire; remplis.push('accessoires'); }
+    if(r.date_commande && $('cmd-date') && !gv('cmd-date'))   { $('cmd-date').value=r.date_commande;   remplis.push('date'); }
+    if(r.num_serie  && $('cmd-serie')   && !gv('cmd-serie'))  { $('cmd-serie').value=r.num_serie;      remplis.push('n° série'); }
+    toast(remplis.length
+      ? `${t('cmd_bdc_rempli')||'Données récupérées'} : ${remplis.join(', ')}`
+      : t('cmd_bdc_deja_rempli')||'Bon de commande trouvé (champs déjà remplis conservés)');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function lookupFactureVF(){  const numero = gv('cmd-facture').trim();
   if(!numero){ toast(t('cmd_vf_numero_requis')||'Indique d\u2019abord un n° de facture','ti-alert-circle','var(--danger)'); return; }
   toast(t('cmd_vf_recherche_en_cours')||'Recherche dans VosFactures…','ti-loader-2');
   try{
