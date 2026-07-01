@@ -152,7 +152,6 @@ async function renderDashboard(ttl,c,a){
       <div class="stat-card"><div class="stat-label">${t('db_ouvertes')}</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_attente')}</div><div class="stat-value" style="color:var(--warning)">${s.attente}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_expeditions')}</div><div class="stat-value" style="color:var(--accent)">${s.expeditions_cours}</div></div>
-      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('dash-exp-pieces')&&document.getElementById('dash-exp-pieces').scrollIntoView({behavior:'smooth'})"><div class="stat-label">${t('db_expeditions_pieces')||'Expéd. pièces'}</div><div id="stat-exp-pieces" class="stat-value" style="color:var(--accent)">…</div></div>
     </div>
     <div class="grid-4" style="margin-bottom:14px">
       <div class="stat-card"><div class="stat-label">${t('db_garantie')}</div><div class="stat-value" style="color:var(--success)">${s.garantie}</div></div>
@@ -195,12 +194,6 @@ async function renderDashboard(ttl,c,a){
       </table></div>
     </div>
     <div class="card" style="margin-top:14px">
-      <div class="section-title"><i class="ti ti-package"></i>${t('db_expeditions_pieces')||'Expéditions (pièces détachées)'}
-        <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
-      </div>
-      <div id="dash-exp-pieces">${t('msg_chargement')}</div>
-    </div>
-    <div class="card" style="margin-top:14px">
       <div class="section-title"><i class="ti ti-clipboard-list"></i>${t('cmd_title')||'Suivi des commandes'}
         <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
       </div>
@@ -214,7 +207,6 @@ async function renderDashboard(ttl,c,a){
     </div>`;
   chargerTransfertsDashboard();
   chargerCommandesDashboard();
-  chargerExpeditionsPiecesDashboard();
 }
 
 async function chargerCommandesDashboard(){
@@ -225,12 +217,14 @@ async function chargerCommandesDashboard(){
     el.closest('.card')?.remove(); return;
   }
   try{
-    const stats = await API.commandesStats();
-    const res = await API.commandes({statut:'En préparation', per_page:8});
+    const [stats, res] = await Promise.all([
+      API.commandesStats(),
+      API.commandes({ per_page: 10 })
+    ]);
     const list = res.rows||[];
     el.innerHTML=`
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
-        <div class="stat-card"><div class="stat-label">${t('cmd_total')||'Total commandes'}</div><div class="stat-value">${stats.total}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
+        <div class="stat-card"><div class="stat-label">${t('cmd_total')||'Total'}</div><div class="stat-value">${stats.total}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_en_prep')||'En préparation'}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
@@ -238,57 +232,26 @@ async function chargerCommandesDashboard(){
       </div>
       ${!list.length?`<div style="font-size:12px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
       <div class="table-wrap"><table class="t">
-        <thead><tr><th>${t('col_date')||'Date'}</th><th>${t('col_client')||'Distributeur'}</th><th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th></tr></thead>
-        <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
-          <td>${fd(cm.date_commande)}</td><td>${esc(cm.distributeur_nom)}</td>
-          <td class="mono">${esc(cm.bdc||'')}</td><td>${esc(cm.modele||'')}</td>
-        </tr>`).join('')}</tbody>
+        <thead><tr>
+          <th>${t('col_date')||'Date'}</th>
+          <th>${t('col_client')||'Distributeur'}</th>
+          <th>${t('cmd_bdc')||'Bdc'}</th>
+          <th>${t('cmd_modele')||'Modèle / Pièce'}</th>
+          <th>${t('cmd_suivi')||'N° suivi'}</th>
+          <th>${t('col_statut')||'Statut'}</th>
+        </tr></thead>
+        <tbody>${list.map(cm=>{
+          const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
+          return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
+            <td>${fd(cm.date_commande)}</td>
+            <td>${esc(cm.distributeur_nom)}</td>
+            <td class="mono">${esc(cm.bdc||'')}</td>
+            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
+            <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Suivre"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
+            <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
+          </tr>`;
+        }).join('')}</tbody>
       </table></div>`}`;
-  }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
-}
-
-async function chargerExpeditionsPiecesDashboard(){
-  const el=document.getElementById('dash-exp-pieces');
-  if(!el) return;
-  if(!isAdmin() && !hasAccess('commandes') && !hasAccess('expeditions')){
-    el.closest('.card')?.remove(); return;
-  }
-  try{
-    // Récupère suffisamment de commandes pour filtrer côté front
-    // (pas de filtre q pour ne pas brider les résultats)
-    const res = await API.commandes({ per_page: 300 });
-    // Filtre : n° de suivi renseigné + modèle pas un fauteuil Eloflex = pièces détachées
-    const list = (res.rows||[])
-      .filter(cm => cm.num_suivi && !/eloflex/i.test(cm.modele||''))
-      .slice(0, 8);
-    // Mise à jour du compteur dans les stat-cards du haut
-    const stat = document.getElementById('stat-exp-pieces');
-    if(stat) stat.textContent = list.length < 8 ? list.length : (res.rows||[]).filter(cm=>cm.num_suivi && !/eloflex/i.test(cm.modele||'')).length;
-    if(!list.length){
-      el.innerHTML=`<div style="font-size:12px;color:var(--text3)">${t('cmd_exp_pieces_empty')||'Aucune expédition de pièces en cours'}</div>`;
-      return;
-    }
-    el.innerHTML=`<div class="table-wrap"><table class="t">
-      <thead><tr>
-        <th>${t('col_date')||'Date'}</th>
-        <th>${t('col_client')||'Distributeur'}</th>
-        <th>${t('cmd_bdc')||'Bdc'}</th>
-        <th>${t('cmd_modele')||'Pièce(s)'}</th>
-        <th>${t('cmd_suivi')||'N° suivi'}</th>
-        <th>${t('col_statut')||'Statut'}</th>
-      </tr></thead>
-      <tbody>${list.map(cm=>{
-        const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
-        return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
-          <td>${fd(cm.date_commande)}</td>
-          <td>${esc(cm.distributeur_nom)}</td>
-          <td class="mono">${esc(cm.bdc||'')}</td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||cm.accessoire||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
-          <td class="mono">${esc(cm.num_suivi)}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
-          <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table></div>`;
   }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
