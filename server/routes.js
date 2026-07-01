@@ -39,6 +39,39 @@ router.get('/auth/me', (req, res) => {
   res.json(req.session.user);
 });
 
+// Route de setup — accessible UNIQUEMENT si aucun utilisateur n'existe encore.
+// Dès qu'un compte est créé, cette route retourne 403. Pas de shell requis.
+router.get('/auth/setup-status', async (req, res) => {
+  try {
+    const r = await db.get('SELECT COUNT(*)::int AS n FROM users');
+    res.json({ setup_needed: (r?.n || 0) === 0 });
+  } catch (e) { res.json({ setup_needed: true }); }
+});
+
+router.post('/auth/setup', async (req, res) => {
+  try {
+    const count = await db.get('SELECT COUNT(*)::int AS n FROM users');
+    if ((count?.n || 0) > 0) {
+      return res.status(403).json({ error: 'Un compte administrateur existe déjà. Setup désactivé.' });
+    }
+    const { nom, email, mot_de_passe } = req.body;
+    if (!nom || !email || !mot_de_passe) return res.status(400).json({ error: 'Tous les champs sont requis.' });
+    if (mot_de_passe.length < 8) return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
+    const hash = await bcrypt.hash(mot_de_passe, 12);
+    const user = await db.run(
+      'INSERT INTO users (nom, email, password_hash, role) VALUES ($1,$2,$3,\'admin\') RETURNING id, nom, email, role',
+      [nom.trim(), email.toLowerCase().trim(), hash]
+    );
+    req.session.user = { id: user.id, nom: user.nom, email: user.email, role: 'admin' };
+    req.session.save(() => res.json({ ok: true, message: `Compte admin créé pour ${user.nom}. Bienvenue !` }));
+  } catch (e) {
+    if (e.message?.includes('unique') || e.code === '23505') {
+      return res.status(400).json({ error: 'Cet email est déjà utilisé.' });
+    }
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Middleware d'authentification (toutes les routes suivantes) ─────
 router.use((req, res, next) => {
   if (!req.session?.user) {

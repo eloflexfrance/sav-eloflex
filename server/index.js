@@ -64,6 +64,11 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'login.html'));
 });
 
+// ── Page de setup (premier lancement — sans auth, désactivée dès qu'un user existe) ──
+app.get('/setup', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'setup.html'));
+});
+
 // ── Routes API ───────────────────────────────────────────────────────
 app.use('/api', require('./routes'));
 

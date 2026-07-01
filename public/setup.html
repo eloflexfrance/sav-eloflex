@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAV Éloflex — Configuration initiale</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: #f4f5f7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e4e9;
+      border-radius: 14px;
+      padding: 40px 36px 32px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.07);
+    }
+    .logo { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .logo i { font-size:26px; color:#2563eb; }
+    .logo-text { font-size:19px; font-weight:700; color:#111; }
+    .setup-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #eff6ff;
+      color: #2563eb;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 3px 9px;
+      font-size: 11.5px;
+      font-weight: 600;
+      margin: 8px 0 20px;
+    }
+    .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 24px; line-height: 1.5; }
+    .field { margin-bottom: 15px; }
+    .field label { display:block; font-size:11.5px; font-weight:600; color:#374151; margin-bottom:6px; letter-spacing:.03em; }
+    .field input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fafafa;
+      color: #111;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .field input:focus { outline:none; border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12); background:#fff; }
+    .hint { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+    .btn {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+    }
+    .btn:hover { background: #1d4ed8; }
+    .btn:disabled { opacity:.6; cursor:wait; }
+    .error { display:none; margin-top:12px; padding:10px 12px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:8px; font-size:12.5px; }
+    .success { display:none; margin-top:12px; padding:14px 16px; background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; border-radius:8px; font-size:13px; line-height:1.5; }
+    .already-done { text-align:center; padding:20px 0; }
+    .already-done i { font-size:40px; color:#9ca3af; display:block; margin-bottom:12px; }
+    .already-done p { color:#6b7280; font-size:14px; margin-bottom:14px; }
+    .already-done a { color:#2563eb; text-decoration:none; font-weight:600; }
+    .already-done a:hover { text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <i class="ti ti-wheelchair"></i>
+      <span class="logo-text">SAV Éloflex</span>
+    </div>
+    <div class="setup-badge"><i class="ti ti-settings"></i> Configuration initiale</div>
+
+    <div id="main-content">
+      <p class="subtitle">Aucun compte administrateur n'existe encore.<br>Créez le vôtre pour accéder à l'application.</p>
+
+      <div class="field">
+        <label for="nom">Prénom et nom</label>
+        <input type="text" id="nom" placeholder="Brice Dupont" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="email">Adresse e-mail</label>
+        <input type="email" id="email" placeholder="brice@eloflex.fr" autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" placeholder="••••••••" autocomplete="new-password">
+        <p class="hint">Minimum 8 caractères</p>
+      </div>
+
+      <button class="btn" id="btn-setup" onclick="creerAdmin()">
+        <i class="ti ti-shield-check"></i> Créer mon compte administrateur
+      </button>
+      <div class="error" id="err"></div>
+      <div class="success" id="ok"></div>
+    </div>
+
+    <div id="already-done" class="already-done" style="display:none">
+      <i class="ti ti-lock"></i>
+      <p>Un compte administrateur existe déjà.<br>Cette page de configuration est désactivée.</p>
+      <a href="/login">← Aller à la page de connexion</a>
+    </div>
+  </div>
+
+  <script>
+    // Vérifier d'emblée si le setup est encore nécessaire
+    fetch('/api/auth/setup-status')
+      .then(r => r.json())
+      .then(d => {
+        if (!d.setup_needed) {
+          document.getElementById('main-content').style.display = 'none';
+          document.getElementById('already-done').style.display = 'block';
+        }
+      }).catch(() => {});
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter') creerAdmin();
+    });
+
+    async function creerAdmin() {
+      const nom          = document.getElementById('nom').value.trim();
+      const email        = document.getElementById('email').value.trim();
+      const mot_de_passe = document.getElementById('password').value;
+      const errEl        = document.getElementById('err');
+      const okEl         = document.getElementById('ok');
+      const btn          = document.getElementById('btn-setup');
+
+      errEl.style.display = 'none';
+      okEl.style.display  = 'none';
+
+      if (!nom || !email || !mot_de_passe) {
+        errEl.textContent = 'Tous les champs sont requis.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="ti ti-loader-2"></i> Création en cours…';
+
+      try {
+        const r = await fetch('/api/auth/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nom, email, mot_de_passe })
+        });
+        const data = await r.json();
+
+        if (r.ok && data.ok) {
+          okEl.innerHTML = `<strong>✅ ${data.message}</strong><br><br>Vous allez être redirigé vers l'application…`;
+          okEl.style.display = 'block';
+          document.getElementById('btn-setup').style.display = 'none';
+          setTimeout(() => { window.location.href = '/'; }, 2000);
+        } else {
+          errEl.textContent = data.error || 'Une erreur est survenue.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ti ti-shield-check"></i> Créer mon compte administrateur';
+        }
+      } catch (e) {
+        errEl.textContent = 'Impossible de joindre le serveur. Réessayez.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-shield-check"></i> Créer mon compte administrateur';
+      }
+    }
+  </script>
+</body>
+</html>
