@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAV Éloflex — Connexion</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg); }
+    .login-box {
+      background:var(--surface);
+      border:0.5px solid var(--border-s);
+      border-radius:calc(var(--radius) * 2);
+      padding:40px 36px 32px;
+      width:100%;
+      max-width:380px;
+      box-shadow:0 4px 24px rgba(0,0,0,.06);
+    }
+    .login-logo { display:flex; align-items:center; gap:10px; margin-bottom:28px; }
+    .login-logo i { font-size:28px; color:var(--accent); }
+    .login-logo span { font-size:18px; font-weight:700; }
+    .login-title { font-size:13px; color:var(--text2); margin-bottom:24px; }
+    .login-field { margin-bottom:16px; }
+    .login-field label { display:block; font-size:11px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
+    .login-field input {
+      width:100%; box-sizing:border-box;
+      padding:9px 12px; border-radius:var(--radius);
+      border:0.5px solid var(--border-s); background:var(--bg);
+      color:var(--text); font-size:14px; font-family:inherit;
+      transition:border-color .15s;
+    }
+    .login-field input:focus { outline:none; border-color:var(--accent); }
+    .login-btn {
+      width:100%; padding:10px; margin-top:8px;
+      background:var(--accent); color:#fff; border:none;
+      border-radius:var(--radius); font-size:14px; font-weight:600;
+      font-family:inherit; cursor:pointer; transition:background .15s;
+    }
+    .login-btn:hover { background:var(--accent-dark,#1a5cb5); }
+    .login-btn:disabled { opacity:.6; cursor:wait; }
+    .login-error {
+      display:none; margin-top:12px; padding:10px 12px;
+      background:var(--danger-bg); color:var(--danger);
+      border-radius:var(--radius); font-size:12px;
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+</head>
+<body>
+  <div class="login-box">
+    <div class="login-logo">
+      <i class="ti ti-wheelchair"></i>
+      <span>SAV Éloflex</span>
+    </div>
+    <div class="login-title">Connectez-vous pour accéder à l'application</div>
+    <div class="login-field">
+      <label for="email">Adresse e-mail</label>
+      <input type="email" id="email" autocomplete="email" placeholder="prenom.nom@eloflex.fr">
+    </div>
+    <div class="login-field">
+      <label for="password">Mot de passe</label>
+      <input type="password" id="password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="login-btn" id="btn-login" onclick="seConnecter()">Se connecter</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+
+  <script>
+    // Soumission sur Entrée
+    document.getElementById('password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') seConnecter();
+    });
+    document.getElementById('email').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('password').focus();
+    });
+
+    async function seConnecter() {
+      const email      = document.getElementById('email').value.trim();
+      const mot_de_passe = document.getElementById('password').value;
+      const errEl      = document.getElementById('login-error');
+      const btn        = document.getElementById('btn-login');
+
+      errEl.style.display = 'none';
+      if (!email || !mot_de_passe) {
+        errEl.textContent = 'Veuillez saisir votre e-mail et votre mot de passe.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Connexion en cours…';
+
+      try {
+        const r = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, mot_de_passe })
+        });
+        const data = await r.json();
+        if (r.ok && data.ok) {
+          window.location.href = '/';
+        } else {
+          errEl.textContent = data.error || 'Erreur de connexion.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Se connecter';
+          document.getElementById('password').value = '';
+          document.getElementById('password').focus();
+        }
+      } catch (e) {
+        errEl.textContent = 'Impossible de joindre le serveur. Réessayez.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Se connecter';
+      }
+    }
+  </script>
+</body>
+</html>

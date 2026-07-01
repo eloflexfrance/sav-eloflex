@@ -4,6 +4,7 @@ let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', statut:'', groupe:'', distributeur:'', q:'' };
 let CACHE = { catalogue:[], params:{} };
 let TMP_PRODUITS = [];
+let CURRENT_USER = null; // Chargé au démarrage via /api/auth/me
 
 const fd  = d => { if(!d)return'—'; const[y,m,day]=d.split('-'); return`${day}/${m}/${y}`; };
 const moisLabel = ym => {
@@ -17,6 +18,17 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 const sc  = s => s===t('inter_statut_ouvert')?'ouvert':s===t('inter_statut_ferme')?'ferme':s===t('inter_statut_attente')?'attente':'ouvert';
 const $   = id => document.getElementById(id);
 const gv  = id => ($( id)||{}).value||'';
+
+// ── Rôle utilisateur ────────────────────────────────────────────────
+const isAdmin  = () => CURRENT_USER?.role === 'admin';
+const isOp     = () => ['admin','operateur'].includes(CURRENT_USER?.role);
+const canWrite = () => ['admin','operateur'].includes(CURRENT_USER?.role);
+
+async function seDeconnecter(){
+  if(!confirm('Se déconnecter ?')) return;
+  await fetch('/api/auth/logout', { method:'POST' });
+  window.location.href = '/login';
+}
 
 function toast(msg,icon='ti-check',color=''){
   $('toast-area').innerHTML=`<div class="toast" style="${color?'background:'+color:''}">${icon?`<i class="ti ${icon}"></i>`:''} ${esc(msg)}</div>`;
@@ -34,13 +46,35 @@ function toggleDark(){
 }
 if(localStorage.getItem('dark')==='1') document.body.classList.add('dark');
 
-// ── Navigation ────────────────────────────────────────────────────
+// ── Navigation (filtrée par rôle) ────────────────────────────────
+const NAV_ROLES = {
+  operateur:    ['dashboard','clients','interventions','expeditions','commandes','catalogue','alertes','retours_suede','transferts'],
+  consultation: ['dashboard'],
+};
+
+function appliquerNavRole(){
+  if(!CURRENT_USER) return;
+  const allowed = NAV_ROLES[CURRENT_USER.role]; // undefined = admin → tout visible
+  document.querySelectorAll('.nav-item[data-view]').forEach(n => {
+    n.style.display = allowed ? (allowed.includes(n.dataset.view) ? '' : 'none') : '';
+  });
+  // Afficher nom + bouton déconnexion
+  const userZone = $('user-zone');
+  if(userZone) userZone.innerHTML = `
+    <span style="font-size:11px;color:var(--text2);flex:1">${esc(CURRENT_USER.nom)}</span>
+    <button class="btn sm" onclick="seDeconnecter()" title="Se déconnecter" style="padding:4px 8px"><i class="ti ti-logout"></i></button>`;
+}
+
 function setView(v, extra={}){
+  // Bloquer l'accès aux vues non autorisées
+  const allowed = NAV_ROLES[CURRENT_USER?.role];
+  if(allowed && !allowed.includes(v)) return;
   STATE={view:v, clientId:extra.clientId||null, fauteuilId:extra.fauteuilId||null, q:''};
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v));
   render();
 }
 document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setView(n.dataset.view)));
+
 
 async function render(){
   const ttl=$('topbar-title'),c=$('content'),a=$('topbar-actions');
@@ -92,11 +126,12 @@ async function renderDashboard(ttl,c,a){
       </div>
       <div id="qs-results" class="qs-results" style="display:none"></div>
     </div>
-    <div class="grid-4" style="margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px">
       <div class="stat-card"><div class="stat-label">${t('db_interventions')}</div><div class="stat-value">${s.nb_interventions}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_ouvertes')}</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_attente')}</div><div class="stat-value" style="color:var(--warning)">${s.attente}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_expeditions')}</div><div class="stat-value" style="color:var(--accent)">${s.expeditions_cours}</div></div>
+      <div class="stat-card" style="cursor:pointer" onclick="document.getElementById('dash-exp-pieces')&&document.getElementById('dash-exp-pieces').scrollIntoView({behavior:'smooth'})"><div class="stat-label">${t('db_expeditions_pieces')||'Expéd. pièces'}</div><div id="stat-exp-pieces" class="stat-value" style="color:var(--accent)">…</div></div>
     </div>
     <div class="grid-4" style="margin-bottom:14px">
       <div class="stat-card"><div class="stat-label">${t('db_garantie')}</div><div class="stat-value" style="color:var(--success)">${s.garantie}</div></div>
@@ -191,12 +226,16 @@ async function chargerExpeditionsPiecesDashboard(){
   const el=document.getElementById('dash-exp-pieces');
   if(!el) return;
   try{
-    // Commandes avec n° de suivi ET sans fauteuil Eloflex (= pièces détachées uniquement)
-    const res = await API.commandes({ per_page: 8, q: ' ' });
-    // Filtrer côté front : num_suivi renseigné + modèle ne contient pas "eloflex"
+    // Récupère suffisamment de commandes pour filtrer côté front
+    // (pas de filtre q pour ne pas brider les résultats)
+    const res = await API.commandes({ per_page: 300 });
+    // Filtre : n° de suivi renseigné + modèle pas un fauteuil Eloflex = pièces détachées
     const list = (res.rows||[])
       .filter(cm => cm.num_suivi && !/eloflex/i.test(cm.modele||''))
       .slice(0, 8);
+    // Mise à jour du compteur dans les stat-cards du haut
+    const stat = document.getElementById('stat-exp-pieces');
+    if(stat) stat.textContent = list.length < 8 ? list.length : (res.rows||[]).filter(cm=>cm.num_suivi && !/eloflex/i.test(cm.modele||'')).length;
     if(!list.length){
       el.innerHTML=`<div style="font-size:12px;color:var(--text3)">${t('cmd_exp_pieces_empty')||'Aucune expédition de pièces en cours'}</div>`;
       return;
@@ -216,7 +255,7 @@ async function chargerExpeditionsPiecesDashboard(){
           <td>${fd(cm.date_commande)}</td>
           <td>${esc(cm.distributeur_nom)}</td>
           <td class="mono">${esc(cm.bdc||'')}</td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||cm.accessoire||'')}">${esc(cm.modele||cm.accessoire||'')}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||cm.accessoire||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
           <td class="mono">${esc(cm.num_suivi)}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
           <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
         </tr>`;
@@ -1983,11 +2022,23 @@ async function confirmerFusion(idCible){
   }catch(e){alert('Erreur : '+e.message);}
 }
 
-// ── GARANTIE ─────────────────────────────────────────────────────
-
+// ── INIT ────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view==='dashboard'));
 applyNavTranslations();
-loadVfStatus();
-refreshBadges();
-setInterval(refreshBadges, 60000);
-render();
+
+(async () => {
+  // Charger l'utilisateur courant (rôle, nom) avant d'afficher quoi que ce soit
+  try {
+    const r = await fetch('/api/auth/me');
+    if (r.status === 401) { window.location.href = '/login'; return; }
+    CURRENT_USER = await r.json();
+  } catch(e) {
+    window.location.href = '/login';
+    return;
+  }
+  appliquerNavRole();
+  loadVfStatus();
+  refreshBadges();
+  setInterval(refreshBadges, 60000);
+  render();
+})();

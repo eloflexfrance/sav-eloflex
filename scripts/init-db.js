@@ -189,6 +189,27 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_uploaded_at TIMESTAMPTZ`);
     } catch(e) { /* déjà présentes */ }
 
+    // ── Utilisateurs et sessions ─────────────────────────────────
+    await client.query(`CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      nom TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('admin','operateur','consultation')),
+      actif BOOLEAN DEFAULT TRUE,
+      last_login TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    // Table de sessions PostgreSQL (connect-pg-simple)
+    await client.query(`CREATE TABLE IF NOT EXISTS "user_sessions" (
+      "sid" varchar NOT NULL COLLATE "default",
+      "sess" json NOT NULL,
+      "expire" timestamp(6) NOT NULL,
+      CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "user_sessions" ("expire")`);
+
     console.log("✅ Tables créées");
 
     // Paramètres par défaut

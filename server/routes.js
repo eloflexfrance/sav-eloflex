@@ -2,9 +2,63 @@
 const express  = require('express');
 const crypto   = require('crypto');
 const XLSX     = require('xlsx');
+const bcrypt   = require('bcryptjs');
 const db       = require('./db');
 const { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, savePreuveLivraison, deletePreuveLivraisonFile } = require('./uploads');
 const router   = express.Router();
+
+// ── Auth : routes publiques (login/logout/me) ──────────────────────
+router.post('/auth/login', async (req, res) => {
+  try {
+    const { email, mot_de_passe } = req.body;
+    if (!email || !mot_de_passe) return res.status(400).json({ error: 'Email et mot de passe requis' });
+    const user = await db.get(
+      'SELECT * FROM users WHERE LOWER(email)=$1 AND actif=TRUE', [email.toLowerCase().trim()]
+    );
+    if (!user) return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
+    const ok = await bcrypt.compare(mot_de_passe, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
+    await db.run('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
+    req.session.user = { id: user.id, nom: user.nom, email: user.email, role: user.role };
+    req.session.save(err => {
+      if (err) return res.status(500).json({ error: 'Erreur session' });
+      res.json({ ok: true, user: req.session.user });
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/auth/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.clearCookie('sav.sid');
+    res.json({ ok: true });
+  });
+});
+
+router.get('/auth/me', (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Non authentifié' });
+  res.json(req.session.user);
+});
+
+// ── Middleware d'authentification (toutes les routes suivantes) ─────
+router.use((req, res, next) => {
+  if (!req.session?.user) {
+    return res.status(401).json({ error: 'Non authentifié', redirect: '/login' });
+  }
+  res.locals.user = req.session.user;
+  next();
+});
+
+// ── Middleware de rôle ──────────────────────────────────────────────
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!roles.includes(res.locals.user?.role)) {
+      return res.status(403).json({ error: 'Accès refusé pour ce rôle' });
+    }
+    next();
+  };
+}
+const adminOnly     = requireRole('admin');
+const adminOrOp     = requireRole('admin', 'operateur');
 
 // ── Helpers ────────────────────────────────────────────────────────
 async function param(cle) {
@@ -512,7 +566,7 @@ router.get('/stats', async (req, res) => {
 });
 
 // ── EXPORT EXCEL ──────────────────────────────────────────────────
-router.get('/export/excel', async (req, res) => {
+router.get('/export/excel', adminOnly, async (req, res) => {
   try {
     const { type = 'interventions', date_from, date_to, client_id } = req.query;
     const wb = XLSX.utils.book_new();
@@ -576,7 +630,7 @@ router.get('/parametres/cloudinary-status', (req, res) => {
   res.json({ configured, cloud_name: process.env.CLOUDINARY_CLOUD_NAME || null });
 });
 
-router.get('/parametres', async (req, res) => {
+router.get('/parametres', adminOnly, async (req, res) => {
   try {
     const rows = await db.all('SELECT * FROM parametres');
     const obj = {};
@@ -584,7 +638,7 @@ router.get('/parametres', async (req, res) => {
     res.json(obj);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.put('/parametres', async (req, res) => {
+router.put('/parametres', adminOnly, async (req, res) => {
   try {
     const pgClient = await db.pool.connect();
     try {
@@ -620,7 +674,7 @@ router.get('/portail/:token', async (req, res) => {
 // Sync historique complet VosFactures — tourne en arrière-plan
 let SYNC_HISTORIQUE_STATUS = { running: false, progress: '', started_at: null, done: false, results: null, error: null };
 
-router.post('/vosfactures/sync-historique', async (req, res) => {
+router.post('/vosfactures/sync-historique', adminOnly, async (req, res) => {
   const token = process.env.VOSFACTURES_API_TOKEN, account = process.env.VOSFACTURES_ACCOUNT;
   if (!token || !account) return res.status(503).json({ error: 'VosFactures non configuré' });
   if (SYNC_HISTORIQUE_STATUS.running) return res.json({ ok: true, already_running: true, status: SYNC_HISTORIQUE_STATUS });
@@ -746,7 +800,7 @@ router.get('/fauteuils/:id/factures-vf', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.post('/vosfactures/sync', async (req, res) => {
+router.post('/vosfactures/sync', adminOnly, async (req, res) => {
   const token = process.env.VOSFACTURES_API_TOKEN, account = process.env.VOSFACTURES_ACCOUNT;
   if (!token || !account) return res.status(503).json({ error: 'VosFactures non configuré' });
   try {
