@@ -195,11 +195,17 @@ async function initDB() {
       nom TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('admin','operateur','consultation')),
+      role TEXT NOT NULL CHECK (role IN ('admin','operateur','consultation','utilisateur')),
+      permissions JSONB NOT NULL DEFAULT '{}',
       actif BOOLEAN DEFAULT TRUE,
       last_login TIMESTAMPTZ,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
+    try {
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{}'`);
+      await client.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+      await client.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin','operateur','consultation','utilisateur'))`);
+    } catch(e) { /* migration silencieuse */ }
 
     // Table de sessions PostgreSQL (connect-pg-simple)
     await client.query(`CREATE TABLE IF NOT EXISTS "user_sessions" (

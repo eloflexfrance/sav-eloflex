@@ -21,8 +21,33 @@ const gv  = id => ($( id)||{}).value||'';
 
 // ── Rôle utilisateur ────────────────────────────────────────────────
 const isAdmin  = () => CURRENT_USER?.role === 'admin';
-const isOp     = () => ['admin','operateur'].includes(CURRENT_USER?.role);
-const canWrite = () => ['admin','operateur'].includes(CURRENT_USER?.role);
+
+// Modules de l'application (dans l'ordre d'affichage)
+const MODULES = [
+  { key:'dashboard',     label:'Tableau de bord' },
+  { key:'clients',       label:'Clients / Distributeurs' },
+  { key:'interventions', label:'Interventions SAV' },
+  { key:'expeditions',   label:'Expéditions SAV' },
+  { key:'commandes',     label:'Suivi commandes' },
+  { key:'catalogue',     label:'Catalogue pièces' },
+  { key:'rapports',      label:'Rapports & exports' },
+  { key:'alertes',       label:'Alertes' },
+  { key:'retours_suede', label:'Retours Suède' },
+  { key:'transferts',    label:'Transferts fauteuils' },
+  { key:'parametres',    label:'Paramètres' },
+];
+
+function hasAccess(module) {
+  if (isAdmin()) return true;
+  const p = (CURRENT_USER?.permissions || {})[module];
+  return p === 'write' || p === 'read';
+}
+function canWrite(module) {
+  if (isAdmin()) return true;
+  return (CURRENT_USER?.permissions || {})[module] === 'write';
+}
+// Rétrocompatibilité (générique sans module)
+const isOp = () => isAdmin() || Object.values(CURRENT_USER?.permissions || {}).includes('write');
 
 async function seDeconnecter(){
   if(!confirm('Se déconnecter ?')) return;
@@ -54,11 +79,9 @@ const NAV_ROLES = {
 
 function appliquerNavRole(){
   if(!CURRENT_USER) return;
-  const allowed = NAV_ROLES[CURRENT_USER.role]; // undefined = admin → tout visible
   document.querySelectorAll('.nav-item[data-view]').forEach(n => {
-    n.style.display = allowed ? (allowed.includes(n.dataset.view) ? '' : 'none') : '';
+    n.style.display = hasAccess(n.dataset.view) ? '' : 'none';
   });
-  // Afficher nom + bouton déconnexion
   const userZone = $('user-zone');
   if(userZone) userZone.innerHTML = `
     <span style="font-size:11px;color:var(--text2);flex:1">${esc(CURRENT_USER.nom)}</span>
@@ -66,9 +89,7 @@ function appliquerNavRole(){
 }
 
 function setView(v, extra={}){
-  // Bloquer l'accès aux vues non autorisées
-  const allowed = NAV_ROLES[CURRENT_USER?.role];
-  if(allowed && !allowed.includes(v)) return;
+  if(!hasAccess(v)) return;
   STATE={view:v, clientId:extra.clientId||null, fauteuilId:extra.fauteuilId||null, q:''};
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v));
   render();
@@ -959,6 +980,182 @@ async function renderParametres(ttl,c,a){
       <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>${t('param_vf_sync')}</button>
     </div>`;
   API.vfStatus().then(s=>{const el=$('vf-status-detail');if(el)el.innerHTML=s.configured?`<span style="color:var(--success)">✓ Compte configuré : ${esc(s.account||'')}${s.last_sync?' — Dernière sync : '+s.last_sync.created_at?.slice(0,16).replace('T',' '):''}</span>`:`<span style="color:var(--danger)">⚠ Non configuré — renseigner VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT dans .env</span>`;}).catch(()=>{});
+
+  // Section utilisateurs — toujours affichée dans Paramètres (la route /parametres est déjà adminOnly)
+  const usersSection = document.createElement('div');
+  usersSection.className = 'param-section';
+  usersSection.id = 'section-utilisateurs';
+  usersSection.innerHTML = `
+    <h3><i class="ti ti-users-group"></i> Utilisateurs & accès</h3>
+    <div id="users-list-wrap" style="margin-bottom:14px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
+    <button class="btn primary" onclick="modalNouvelUtilisateur()"><i class="ti ti-user-plus"></i> Ajouter un utilisateur</button>`;
+  c.appendChild(usersSection);
+  chargerListeUtilisateurs();
+}
+
+async function chargerListeUtilisateurs(){
+  const wrap = $('users-list-wrap'); if(!wrap) return;
+  wrap.innerHTML = `<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div>`;
+  try{
+    const users = await API.users();
+    if(!users.length){ wrap.innerHTML=`<div style="font-size:12px;color:var(--text2)">Aucun utilisateur.</div>`; return; }
+    wrap.innerHTML=`<div class="table-wrap"><table class="t">
+      <thead><tr><th>Nom</th><th>E-mail</th><th>Type</th><th>Statut</th><th>Dernière connexion</th><th></th></tr></thead>
+      <tbody>${users.map(u=>`<tr>
+        <td style="font-weight:600">${esc(u.nom)}</td>
+        <td style="font-size:12px">${esc(u.email)}</td>
+        <td><span class="badge ${u.role==='admin'?'urgent':'attente'}">${u.role==='admin'?'Administrateur':'Utilisateur'}</span></td>
+        <td><span class="badge ${u.actif?'g':'hg'}">${u.actif?'Actif':'Désactivé'}</span></td>
+        <td style="font-size:11px;color:var(--text2)">${u.last_login?fd(u.last_login.slice(0,10)):'—'}</td>
+        <td style="display:flex;gap:6px;justify-content:flex-end">
+          <button class="btn sm" onclick="modalEditerUtilisateur(${u.id})" title="Modifier"><i class="ti ti-edit"></i></button>
+          <button class="btn sm" onclick="modalResetPassword(${u.id},'${esc(u.nom)}')" title="Changer le mot de passe"><i class="ti ti-key"></i></button>
+          ${u.id!==CURRENT_USER.id?`<button class="btn sm danger" onclick="supprimerUtilisateur(${u.id},'${esc(u.nom)}')" title="Supprimer"><i class="ti ti-trash"></i></button>`:''}
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }catch(e){ wrap.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+function _permGrid(perms={}){
+  return `<div style="margin-top:4px;border:0.5px solid var(--border-s);border-radius:var(--radius);overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--bg)">
+        <th style="padding:6px 10px;text-align:left;font-weight:600;color:var(--text2)">Module</th>
+        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--success);width:110px">Accès complet</th>
+        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--warning);width:110px">Lecture seule</th>
+      </tr></thead>
+      <tbody>${MODULES.map((m,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
+        <td style="padding:7px 10px">${m.label}</td>
+        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="write" ${perms[m.key]==='write'?'checked':''}></td>
+        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="read"  ${perms[m.key]==='read'?'checked':''}></td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+function _collectPerms(){
+  const p={};
+  MODULES.forEach(m=>{
+    const checked=document.querySelector(`input[name="perm-${m.key}"]:checked`);
+    p[m.key]=checked?checked.value:'none';
+  });
+  return p;
+}
+
+function _onAdminToggle(){
+  const isA = document.getElementById('nu-admin')?.checked || document.getElementById('eu-admin')?.checked;
+  const grid = document.getElementById('perm-grid');
+  if(grid) grid.style.display = isA ? 'none' : '';
+}
+
+function modalNouvelUtilisateur(){
+  showModal(`
+    <div class="modal-header"><i class="ti ti-user-plus" style="color:var(--accent)"></i><h2>Nouvel utilisateur</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <div class="grid-2">
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Prénom et nom *</label><input class="form-input" id="nu-nom" placeholder="Frédéric Dijd"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse e-mail *</label><input class="form-input" id="nu-email" type="email" placeholder="frederic@eloflex.fr"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Mot de passe * <span style="font-size:10px;color:var(--text2)">(8 car. min.)</span></label><input class="form-input" id="nu-mdp" type="password" placeholder="••••••••"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius)">
+        <input type="checkbox" id="nu-admin" onchange="_onAdminToggle()" style="width:16px;height:16px;cursor:pointer">
+        <label for="nu-admin" style="font-size:13px;font-weight:600;color:var(--danger);cursor:pointer">Administrateur — accès complet à tout (y compris Paramètres et exports)</label>
+      </div>
+      <div id="perm-grid">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Permissions par module (cocher une case par ligne, ou aucune pour bloquer l'accès) :</div>
+        ${_permGrid()}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Annuler</button>
+      <button class="btn primary" onclick="creerUtilisateur()"><i class="ti ti-check"></i> Créer</button>
+    </div>`);
+}
+
+async function creerUtilisateur(){
+  const nom=gv('nu-nom'), email=gv('nu-email'), mot_de_passe=gv('nu-mdp');
+  const admin=!!document.getElementById('nu-admin')?.checked;
+  const permissions=admin?{}:_collectPerms();
+  if(!nom||!email||!mot_de_passe){ toast('Nom, email et mot de passe sont requis.','ti-alert-circle','var(--danger)'); return; }
+  try{
+    await API.createUser({nom, email, mot_de_passe, admin, permissions});
+    closeModal(); toast(`Compte créé pour ${nom}`); chargerListeUtilisateurs();
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function modalEditerUtilisateur(id){
+  let user;
+  try{ const list=await API.users(); user=list.find(u=>u.id===id); } catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); return; }
+  if(!user) return;
+  const perms = user.permissions||{};
+  showModal(`
+    <div class="modal-header"><i class="ti ti-edit" style="color:var(--accent)"></i><h2>Modifier l'utilisateur</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <div class="grid-2">
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Prénom et nom</label><input class="form-input" id="eu-nom" value="${esc(user.nom)}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">E-mail</label><input class="form-input" id="eu-email" type="email" value="${esc(user.email)}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Statut</label>
+          <select class="form-input" id="eu-actif">
+            <option value="1" ${user.actif?'selected':''}>Actif</option>
+            <option value="0" ${!user.actif?'selected':''}>Désactivé</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius)">
+        <input type="checkbox" id="eu-admin" onchange="_onAdminToggle()" ${user.role==='admin'?'checked':''} style="width:16px;height:16px;cursor:pointer">
+        <label for="eu-admin" style="font-size:13px;font-weight:600;color:var(--danger);cursor:pointer">Administrateur — accès complet à tout</label>
+      </div>
+      <div id="perm-grid" ${user.role==='admin'?'style="display:none"':''}>
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Permissions par module :</div>
+        ${_permGrid(perms)}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Annuler</button>
+      <button class="btn primary" onclick="enregistrerUtilisateur(${id})"><i class="ti ti-check"></i> Enregistrer</button>
+    </div>`);
+}
+
+async function enregistrerUtilisateur(id){
+  const admin=!!document.getElementById('eu-admin')?.checked;
+  const permissions=admin?{}:_collectPerms();
+  try{
+    await API.updateUser(id, { nom:gv('eu-nom'), email:gv('eu-email'), admin, permissions, actif: gv('eu-actif')==='1' });
+    closeModal(); toast('Utilisateur mis à jour'); chargerListeUtilisateurs();
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+function modalResetPassword(id, nom){
+  showModal(`
+    <div class="modal-header"><i class="ti ti-key" style="color:var(--accent)"></i><h2>Nouveau mot de passe</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;font-size:13px">Définir un nouveau mot de passe pour <b>${esc(nom)}</b>.</div>
+      <div class="form-group"><label class="form-label">Nouveau mot de passe <span style="font-size:10px;color:var(--text2)">(8 car. min.)</span></label>
+        <input class="form-input" id="rp-mdp" type="password" placeholder="••••••••"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Annuler</button>
+      <button class="btn primary" onclick="appliquerResetPassword(${id})"><i class="ti ti-check"></i> Appliquer</button>
+    </div>`);
+}
+
+async function appliquerResetPassword(id){
+  const mdp = gv('rp-mdp');
+  if(mdp.length < 8){ toast('Minimum 8 caractères.','ti-alert-circle','var(--danger)'); return; }
+  try{
+    const r = await API.resetUserPassword(id, mdp);
+    closeModal(); toast(r.message||'Mot de passe mis à jour');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function supprimerUtilisateur(id, nom){
+  if(!confirm(`Supprimer définitivement le compte de ${nom} ?`)) return;
+  try{
+    await API.deleteUser(id);
+    toast(`Compte de ${nom} supprimé`);
+    chargerListeUtilisateurs();
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 async function saveParametres(){

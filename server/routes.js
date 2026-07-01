@@ -19,7 +19,10 @@ router.post('/auth/login', async (req, res) => {
     const ok = await bcrypt.compare(mot_de_passe, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
     await db.run('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
-    req.session.user = { id: user.id, nom: user.nom, email: user.email, role: user.role };
+    req.session.user = {
+      id: user.id, nom: user.nom, email: user.email, role: user.role,
+      permissions: user.permissions || {}
+    };
     req.session.save(err => {
       if (err) return res.status(500).json({ error: 'Erreur session' });
       res.json({ ok: true, user: req.session.user });
@@ -28,10 +31,7 @@ router.post('/auth/login', async (req, res) => {
 });
 
 router.post('/auth/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('sav.sid');
-    res.json({ ok: true });
-  });
+  req.session.destroy(() => { res.clearCookie('sav.sid'); res.json({ ok: true }); });
 });
 
 router.get('/auth/me', (req, res) => {
@@ -39,8 +39,6 @@ router.get('/auth/me', (req, res) => {
   res.json(req.session.user);
 });
 
-// Route de setup — accessible UNIQUEMENT si aucun utilisateur n'existe encore.
-// Dès qu'un compte est créé, cette route retourne 403. Pas de shell requis.
 router.get('/auth/setup-status', async (req, res) => {
   try {
     const r = await db.get('SELECT COUNT(*)::int AS n FROM users');
@@ -51,47 +49,142 @@ router.get('/auth/setup-status', async (req, res) => {
 router.post('/auth/setup', async (req, res) => {
   try {
     const count = await db.get('SELECT COUNT(*)::int AS n FROM users');
-    if ((count?.n || 0) > 0) {
-      return res.status(403).json({ error: 'Un compte administrateur existe déjà. Setup désactivé.' });
-    }
+    if ((count?.n || 0) > 0) return res.status(403).json({ error: 'Un compte administrateur existe déjà.' });
     const { nom, email, mot_de_passe } = req.body;
     if (!nom || !email || !mot_de_passe) return res.status(400).json({ error: 'Tous les champs sont requis.' });
     if (mot_de_passe.length < 8) return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères.' });
     const hash = await bcrypt.hash(mot_de_passe, 12);
     const user = await db.run(
-      'INSERT INTO users (nom, email, password_hash, role) VALUES ($1,$2,$3,\'admin\') RETURNING id, nom, email, role',
+      "INSERT INTO users (nom, email, password_hash, role, permissions) VALUES ($1,$2,$3,'admin','{}') RETURNING id, nom, email, role",
       [nom.trim(), email.toLowerCase().trim(), hash]
     );
-    req.session.user = { id: user.id, nom: user.nom, email: user.email, role: 'admin' };
+    req.session.user = { id: user.id, nom: user.nom, email: user.email, role: 'admin', permissions: {} };
     req.session.save(() => res.json({ ok: true, message: `Compte admin créé pour ${user.nom}. Bienvenue !` }));
   } catch (e) {
-    if (e.message?.includes('unique') || e.code === '23505') {
-      return res.status(400).json({ error: 'Cet email est déjà utilisé.' });
-    }
+    if (e.code === '23505') return res.status(400).json({ error: 'Cet email est déjà utilisé.' });
     res.status(500).json({ error: e.message });
   }
 });
 
-// ── Middleware d'authentification (toutes les routes suivantes) ─────
+// ── Middleware d'authentification ──────────────────────────────────
 router.use((req, res, next) => {
-  if (!req.session?.user) {
-    return res.status(401).json({ error: 'Non authentifié', redirect: '/login' });
-  }
+  if (!req.session?.user) return res.status(401).json({ error: 'Non authentifié', redirect: '/login' });
   res.locals.user = req.session.user;
   next();
 });
 
-// ── Middleware de rôle ──────────────────────────────────────────────
+// ── Helpers de permission ──────────────────────────────────────────
+// Détermine le module depuis le chemin de la route
+function moduleFromPath(p) {
+  if (p.startsWith('/clients'))                     return 'clients';
+  if (p.startsWith('/fauteuils')||p.startsWith('/interventions')) return 'interventions';
+  if (p.startsWith('/expeditions'))                 return 'expeditions';
+  if (p.startsWith('/commandes'))                   return 'commandes';
+  if (p.startsWith('/produits')||p.startsWith('/catalogue')) return 'catalogue';
+  if (p.startsWith('/rapports')||p.startsWith('/export')) return 'rapports';
+  if (p.startsWith('/alertes'))                     return 'alertes';
+  if (p.startsWith('/retours'))                     return 'retours_suede';
+  if (p.startsWith('/transferts'))                  return 'transferts';
+  if (p.startsWith('/parametres'))                  return 'parametres';
+  return null;
+}
+
+// Middleware de protection en écriture par module (s'applique aux non-admins)
+router.use((req, res, next) => {
+  const user = res.locals.user;
+  if (user.role === 'admin') return next(); // Admin : accès total
+  const module = moduleFromPath(req.path);
+  if (!module) return next(); // Route système (auth, VF sync...) : déjà protégée
+  const perm = (user.permissions || {})[module] || 'none';
+  // Méthodes en écriture : exiger 'write'
+  if (['POST','PUT','DELETE','PATCH'].includes(req.method) && perm !== 'write') {
+    return res.status(403).json({ error: `Accès en écriture refusé sur le module "${module}".` });
+  }
+  // Lecture : exiger au moins 'read' ou 'write'
+  if (req.method === 'GET' && perm === 'none') {
+    return res.status(403).json({ error: `Accès refusé sur le module "${module}".` });
+  }
+  next();
+});
+
 function requireRole(...roles) {
   return (req, res, next) => {
-    if (!roles.includes(res.locals.user?.role)) {
-      return res.status(403).json({ error: 'Accès refusé pour ce rôle' });
-    }
+    if (!roles.includes(res.locals.user?.role)) return res.status(403).json({ error: 'Accès refusé pour ce rôle' });
     next();
   };
 }
-const adminOnly     = requireRole('admin');
-const adminOrOp     = requireRole('admin', 'operateur');
+const adminOnly = requireRole('admin');
+
+// ── Gestion des utilisateurs (admin only) ─────────────────────────
+router.get('/users', adminOnly, async (req, res) => {
+  try {
+    const rows = await db.all('SELECT id, nom, email, role, permissions, actif, last_login FROM users ORDER BY id');
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/users', adminOnly, async (req, res) => {
+  try {
+    const { nom, email, mot_de_passe, admin: isAdmin, permissions = {} } = req.body;
+    if (!nom || !email || !mot_de_passe) return res.status(400).json({ error: 'Nom, email et mot de passe sont requis.' });
+    if (mot_de_passe.length < 8) return res.status(400).json({ error: 'Mot de passe : minimum 8 caractères.' });
+    const role = isAdmin ? 'admin' : 'utilisateur';
+    const hash = await bcrypt.hash(mot_de_passe, 12);
+    const user = await db.run(
+      'INSERT INTO users (nom, email, password_hash, role, permissions) VALUES ($1,$2,$3,$4,$5) RETURNING id, nom, email, role, permissions, actif',
+      [nom.trim(), email.toLowerCase().trim(), hash, role, JSON.stringify(permissions)]
+    );
+    res.status(201).json(user);
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: 'Cet email est déjà utilisé.' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put('/users/:id', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { nom, email, admin: isAdmin, permissions, actif } = req.body;
+    if (id === res.locals.user.id && isAdmin === false) {
+      return res.status(400).json({ error: 'Vous ne pouvez pas retirer votre propre accès admin.' });
+    }
+    const sets = [], p = [];
+    let idx = 0;
+    if (nom !== undefined)   { sets.push(`nom=$${++idx}`);         p.push(nom.trim()); }
+    if (email !== undefined) { sets.push(`email=$${++idx}`);       p.push(email.toLowerCase().trim()); }
+    if (isAdmin !== undefined){ sets.push(`role=$${++idx}`);       p.push(isAdmin ? 'admin' : 'utilisateur'); }
+    if (permissions !== undefined){ sets.push(`permissions=$${++idx}`); p.push(JSON.stringify(permissions)); }
+    if (actif !== undefined) { sets.push(`actif=$${++idx}`);       p.push(Boolean(actif)); }
+    if (!sets.length) return res.status(400).json({ error: 'Aucune modification.' });
+    p.push(id);
+    const user = await db.run(`UPDATE users SET ${sets.join(',')} WHERE id=$${++idx} RETURNING id, nom, email, role, permissions, actif`, p);
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+    res.json(user);
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: 'Cet email est déjà utilisé.' });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/users/:id/reset-password', adminOnly, async (req, res) => {
+  try {
+    const { mot_de_passe } = req.body;
+    if (!mot_de_passe || mot_de_passe.length < 8) return res.status(400).json({ error: 'Mot de passe : minimum 8 caractères.' });
+    const hash = await bcrypt.hash(mot_de_passe, 12);
+    const user = await db.run('UPDATE users SET password_hash=$1 WHERE id=$2 RETURNING nom, email', [hash, req.params.id]);
+    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+    res.json({ ok: true, message: `Mot de passe mis à jour pour ${user.nom}.` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/users/:id', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (id === res.locals.user.id) return res.status(400).json({ error: 'Vous ne pouvez pas supprimer votre propre compte.' });
+    await db.run('DELETE FROM users WHERE id=$1', [id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ── Helpers ────────────────────────────────────────────────────────
 async function param(cle) {
