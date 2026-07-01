@@ -1922,8 +1922,8 @@ function quickSearch(q){
 function clearQuickSearch(){const el=$('qs-results');if(el)el.style.display='none';}
 function showQuickResults(res,q){
   const el=$('qs-results');if(!el)return;
-  const{fauteuils=[],clients=[]}=res;
-  if(!fauteuils.length&&!clients.length){
+  const{fauteuils=[],clients=[],commandes=[]}=res;
+  if(!fauteuils.length&&!clients.length&&!commandes.length){
     el.innerHTML=`<div class="qs-empty"><i class="ti ti-search-off"></i> Aucun résultat pour "<b>${esc(q)}</b>"</div>`;
     el.style.display='block';return;
   }
@@ -1939,11 +1939,28 @@ function showQuickResults(res,q){
         </div>
         <span class="badge ${f.nb_interventions>0?'attente':'g'}" style="font-size:10px">${f.nb_interventions} inter.</span>
       </div>
-      <div style="display:flex;gap:6px;margin-top:6px;padding-left:28px">
+      <div style="display:flex;gap:6px;margin-top:6px;padding-left:28px;flex-wrap:wrap">
         <button class="btn sm primary" onclick="quickNewInter(${f.id},${f.client_id})"><i class="ti ti-plus"></i>Nouvelle intervention</button>
         <button class="btn sm" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${f.client_id}});clearQuickSearch()"><i class="ti ti-eye"></i>Voir la fiche</button>
+        ${f.commande_id?`<button class="btn sm" onclick="setView('commandes');clearQuickSearch();setTimeout(()=>modalCommande(${f.commande_id}),300)"><i class="ti ti-clipboard-list"></i>Voir la commande</button>`:''}
       </div>
     </div>`).join('');
+  }
+  if(commandes.length){
+    html+=`<div class="qs-section-label" style="margin-top:4px">Commandes</div>`;
+    html+=commandes.map(cmd=>{
+      const statut = cmdStatutClass ? cmdStatutClass(cmd.statut||'En préparation') : '';
+      return `<div class="qs-item" onclick="setView('commandes');clearQuickSearch();setTimeout(()=>modalCommande(${cmd.id}),300)" style="cursor:pointer">
+        <div style="display:flex;align-items:center;gap:10px">
+          <i class="ti ti-clipboard-list" style="font-size:18px;color:var(--accent);flex-shrink:0"></i>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:13px">${esc(cmd.distributeur_nom)}${cmd.bdc?` <span class="mono" style="font-weight:400;color:var(--text3);font-size:12px">${esc(cmd.bdc)}</span>`:''}</div>
+            <div style="font-size:12px;color:var(--text2)">${esc(cmd.modele||'')}${cmd.num_facture?' · Facture : '+esc(cmd.num_facture):''}${cmd.num_serie?' · '+esc(cmd.num_serie):''}${cmd.date_commande?' · '+fd(cmd.date_commande):''}</div>
+          </div>
+          ${cmd.statut?`<span class="badge ${statut}" style="font-size:10px">${esc(cmd.statut)}</span>`:''}
+        </div>
+      </div>`;
+    }).join('');
   }
   if(clients.length){
     html+=`<div class="qs-section-label" style="margin-top:4px">Distributeurs</div>`;

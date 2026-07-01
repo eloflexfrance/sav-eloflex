@@ -1027,11 +1027,12 @@ router.post('/clients/:id/vf-ignore', async (req, res) => {
 router.get('/recherche', async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
-    if (!q || q.length < 2) return res.json({ fauteuils: [], clients: [] });
+    if (!q || q.length < 2) return res.json({ fauteuils: [], clients: [], commandes: [] });
 
     const fauteuils = await db.all(`
       SELECT DISTINCT f.*, c.nom AS client_nom, c.id AS client_id,
-        (SELECT COUNT(*)::int FROM interventions i WHERE i.fauteuil_id=f.id) AS nb_interventions
+        (SELECT COUNT(*)::int FROM interventions i WHERE i.fauteuil_id=f.id) AS nb_interventions,
+        (SELECT cmd.id FROM commandes cmd WHERE cmd.num_serie=f.serie LIMIT 1) AS commande_id
       FROM fauteuils f JOIN clients c ON c.id=f.client_id
       LEFT JOIN interventions iv ON iv.fauteuil_id=f.id
       WHERE f.serie ILIKE $1 OR f.modele ILIKE $1 OR c.nom ILIKE $1 OR iv.num_sav ILIKE $1
@@ -1045,7 +1046,18 @@ router.get('/recherche', async (req, res) => {
       GROUP BY c.id ORDER BY c.nom LIMIT 8
     `, [`%${q}%`]);
 
-    res.json({ fauteuils, clients });
+    // Recherche dans les commandes : BDC, n° facture, n° série, distributeur
+    const commandes = await db.all(`
+      SELECT cmd.id, cmd.bdc, cmd.num_facture, cmd.num_serie, cmd.modele,
+             cmd.distributeur_nom, cmd.date_commande, cmd.statut,
+             cmd.num_suivi, cmd.date_livraison
+      FROM commandes cmd
+      WHERE cmd.bdc ILIKE $1 OR cmd.num_facture ILIKE $1
+         OR cmd.num_serie ILIKE $1 OR cmd.distributeur_nom ILIKE $1
+      ORDER BY cmd.date_commande DESC LIMIT 8
+    `, [`%${q}%`]);
+
+    res.json({ fauteuils, clients, commandes });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
