@@ -1812,11 +1812,14 @@ async function importerHistoriqueCommandes(file){
       <div>Onglets traités : <b>${r.annees?.join(', ')||'—'}</b></div>
       <div>Nouvelles commandes : <b>${r.stats.inserees}</b> · Mises à jour : <b>${r.stats.maj}</b> · Nouveaux clients : <b>${r.stats.clients_crees}</b></div>
       ${annees?`<div style="margin-top:4px;color:var(--text2)">${annees}</div>`:''}
-      ${r.stats.erreurs?`<div style="color:var(--danger);margin-top:4px">⚠ ${r.stats.erreurs} erreur(s)</div>`:''}
+      ${r.stats.erreurs?`<div style="color:var(--danger);margin-top:4px">⚠ ${r.stats.erreurs} erreur(s)${r.stats.premiere_erreur?' — Première : '+r.stats.premiere_erreur:''}</div>`:''}
     </div>`;
     toast(`Import terminé — ${r.stats.inserees} commandes importées`,'ti-table-import');
   }catch(e){
-    el.innerHTML=`<div style="padding:10px 12px;background:var(--danger-bg);border:0.5px solid var(--danger);border-radius:var(--radius);font-size:12px;color:var(--danger)">❌ ${esc(e.message)}</div>`;
+    el.innerHTML=`<div style="padding:10px 12px;background:var(--danger-bg);border:0.5px solid var(--danger);border-radius:var(--radius);font-size:12px;color:var(--danger)">
+      ❌ Erreur : <b>${esc(e.message)}</b><br>
+      <span style="font-size:11px;color:var(--text2)">Vérifie que tu as bien sélectionné le bon fichier Excel (Compta_Eloflex…) et recharge la page si l'erreur persiste.</span>
+    </div>`;
   }
 }
 

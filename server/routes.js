@@ -1066,45 +1066,44 @@ router.get('/recherche', async (req, res) => {
 // ── Import historique commandes depuis fichier Excel comptabilité (sans shell Render) ──
 router.post('/import/commandes-excel', adminOnly, uploadExcel.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Fichier requis' });
-  const XLSX   = require('xlsx');
-  const crypto = require('crypto');
-
-  function normDate(raw) {
-    if (!raw) return null;
-    if (raw instanceof Date) { if (isNaN(raw.getTime())) return null; return raw.toISOString().substring(0,10); }
-    const s = String(raw).trim(); if (!s||s==='-') return null;
-    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
-    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-    const d = new Date(s);
-    if (!isNaN(d.getTime()) && d.getFullYear()>2009 && d.getFullYear()<2030) return d.toISOString().substring(0,10);
-    return null;
-  }
-  function clean(v) { if (v==null) return null; const s=String(v).replace(/\xa0/g,' ').replace(/_x000D_/g,' ').trim(); return (!s||s==='-')?null:s; }
-  function nomClean(raw) { return raw?String(raw).replace(/\s*\(essai\)|\s*\(P\)|\s*\(demo\)/gi,'').replace(/\xa0/g,' ').trim():null; }
-  function getColMap(header) {
-    const h = header.map(v=>v?String(v).toLowerCase().trim():'');
-    const find = (...keys) => { for (const k of keys) { const i=h.findIndex(v=>v.includes(k)); if (i>=0) return i; } return -1; };
-    return { groupe:find('groupe'), distrib:find('distributeur'), email:find('email','mail'), tel:find('téléphone','telephone'),
-      modele:find('modèle','modele'), accessoire:find('accessoire'), bdc:find('bdc'), date:find('date'),
-      order:find('order'), client:find('client'), suivi:find('n° suivi','suivi'), livraison:find('livraison'),
-      serie:find('n° de série','série','serie'), facture:find('facture'), invoicese:find('invoice se'), info:find('information') };
-  }
-  function importKey(annee,bdc,distrib,serie,date) {
-    return crypto.createHash('md5').update(`${annee}|${bdc||''}|${distrib||''}|${serie||''}|${date||''}`).digest('hex');
-  }
-
-  const dbClient = await db.pool.connect();
-  const stats = { lignes:0, inserees:0, maj:0, ignorees:0, clients_crees:0, erreurs:0, par_annee:{} };
   try {
+    const XLSX   = require('xlsx');
+    const crypto = require('crypto');
+
+    function normDate(raw) {
+      if (!raw) return null;
+      if (raw instanceof Date) { if (isNaN(raw.getTime())) return null; return raw.toISOString().substring(0,10); }
+      const s = String(raw).trim(); if (!s||s==='-') return null;
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0,10);
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+      const d = new Date(s);
+      if (!isNaN(d.getTime()) && d.getFullYear()>2009 && d.getFullYear()<2030) return d.toISOString().substring(0,10);
+      return null;
+    }
+    const clean = v => { if (v==null) return null; const s=String(v).replace(/\xa0/g,' ').replace(/_x000D_/g,' ').trim(); return (!s||s==='-')?null:s; };
+    const nomClean = raw => raw?String(raw).replace(/\s*\(essai\)|\s*\(P\)|\s*\(demo\)/gi,'').replace(/\xa0/g,' ').trim():null;
+    function getColMap(header) {
+      const h = header.map(v=>v?String(v).toLowerCase().trim():'');
+      const find = (...keys) => { for (const k of keys) { const i=h.findIndex(v=>v.includes(k)); if (i>=0) return i; } return -1; };
+      return { groupe:find('groupe'), distrib:find('distributeur'), email:find('email','mail'), tel:find('téléphone','telephone'),
+        modele:find('modèle','modele'), accessoire:find('accessoire'), bdc:find('bdc'), date:find('date'),
+        order:find('order'), client:find('client'), suivi:find('n° suivi','suivi'), livraison:find('livraison'),
+        serie:find('n° de série','série','serie'), facture:find('facture'), invoicese:find('invoice se'), info:find('information') };
+    }
+    const importKey = (annee,bdc,distrib,serie,date) =>
+      crypto.createHash('md5').update(`${annee}|${bdc||''}|${distrib||''}|${serie||''}|${date||''}`).digest('hex');
+
     const wb = XLSX.read(req.file.buffer, { type:'buffer', cellDates:true });
     const YEAR_SHEETS = wb.SheetNames.filter(s=>/^\d{4}$/.test(s)).sort();
     if (!YEAR_SHEETS.length) return res.status(400).json({ error: 'Aucun onglet année (2019, 2020, ...) trouvé dans le fichier.' });
 
-    // Pré-charger les clients
-    const existingClients = await dbClient.query('SELECT id, LOWER(TRIM(nom)) AS nom_norm FROM clients');
+    const stats = { lignes:0, inserees:0, maj:0, ignorees:0, clients_crees:0, erreurs:0, par_annee:{}, premiere_erreur:null };
+
+    // Pré-charger les clients existants
+    const existingClients = await db.all('SELECT id, LOWER(TRIM(nom)) AS nom_norm FROM clients');
     const clientCache = new Map();
-    for (const r of existingClients.rows) clientCache.set(r.nom_norm, r.id);
+    for (const r of existingClients) clientCache.set(r.nom_norm, r.id);
 
     for (const year of YEAR_SHEETS) {
       const ws = wb.Sheets[year];
@@ -1120,29 +1119,39 @@ router.post('/import/commandes-excel', adminOnly, uploadExcel.single('file'), as
         const distribRaw = get(colMap.distrib);
         if (!distribRaw) { stats.ignorees++; continue; }
         const distribNom = nomClean(distribRaw);
+        if (!distribNom) { stats.ignorees++; continue; }
         const nomNorm    = distribNom.toLowerCase();
         const groupe=get(colMap.groupe), modele=get(colMap.modele), accessoire=get(colMap.accessoire);
         const bdc=get(colMap.bdc), dateCmd=normDate(get(colMap.date)), vfOrderId=get(colMap.order);
         const clientFinal=get(colMap.client), numSuivi=get(colMap.suivi), dateLivr=normDate(get(colMap.livraison));
         const numSerie=get(colMap.serie), numFacture=get(colMap.facture), invoiceSe=get(colMap.invoicese), info=get(colMap.info);
 
+        // Retrouver ou créer le client
         let clientId = clientCache.get(nomNorm);
         if (!clientId) {
           try {
-            const r = await dbClient.query(
-              `INSERT INTO clients (nom,email,tel,type,token_portail) VALUES ($1,$2,$3,'Distributeur',md5(random()::text)) RETURNING id`,
+            const r = await db.run(
+              `INSERT INTO clients (nom,email,tel,type,token_portail) VALUES ($1,$2,$3,'Distributeur',md5(random()::text))
+               ON CONFLICT (nom) DO UPDATE SET nom=EXCLUDED.nom RETURNING id`,
               [distribNom, get(colMap.email), get(colMap.tel)]
             );
-            clientId = r.rows[0].id; clientCache.set(nomNorm, clientId); stats.clients_crees++;
-          } catch(e) { stats.erreurs++; continue; }
+            clientId = r.id; clientCache.set(nomNorm, clientId); stats.clients_crees++;
+          } catch(e) {
+            // Si conflict sur nom, récupérer l'existant
+            try { const ex = await db.get('SELECT id FROM clients WHERE LOWER(TRIM(nom))=$1',[nomNorm]); if (ex) { clientId=ex.id; clientCache.set(nomNorm,clientId); } } catch(_){}
+            if (!clientId) { stats.erreurs++; if (!stats.premiere_erreur) stats.premiere_erreur=`Client "${distribNom}": ${e.message}`; continue; }
+          }
         }
 
-        let fauteuilId=null;
-        if (numSerie) { const f=await dbClient.query('SELECT id FROM fauteuils WHERE serie=$1',[numSerie]); if (f.rows.length) fauteuilId=f.rows[0].id; }
+        // Chercher le fauteuil lié par série
+        let fauteuilId = null;
+        if (numSerie) {
+          try { const f = await db.get('SELECT id FROM fauteuils WHERE serie=$1',[numSerie]); if (f) fauteuilId=f.id; } catch(_){}
+        }
 
         const key = importKey(year,bdc,distribNom,numSerie,dateCmd);
         try {
-          const r = await dbClient.query(
+          const r = await db.run(
             `INSERT INTO commandes (client_id,fauteuil_id,annee_onglet,groupe,distributeur_nom,modele,accessoire,
               bdc,date_commande,vf_order_id,client_final,num_suivi,date_livraison,num_serie,num_facture,invoice_se,informations,import_key)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
@@ -1150,18 +1159,22 @@ router.post('/import/commandes-excel', adminOnly, uploadExcel.single('file'), as
                num_suivi=EXCLUDED.num_suivi, date_livraison=EXCLUDED.date_livraison,
                num_facture=EXCLUDED.num_facture, informations=EXCLUDED.informations,
                fauteuil_id=COALESCE(commandes.fauteuil_id,EXCLUDED.fauteuil_id), updated_at=NOW()
-             RETURNING (xmax=0) AS inserted`,
+             RETURNING id, (xmax=0) AS inserted`,
             [clientId,fauteuilId,parseInt(year),groupe,distribNom,modele,accessoire,
              bdc,dateCmd,vfOrderId,clientFinal,numSuivi,dateLivr,numSerie,numFacture,invoiceSe,info,key]
           );
-          if (r.rows[0].inserted) { stats.inserees++; yearCount++; } else { stats.maj++; }
-        } catch(e) { stats.erreurs++; }
+          if (r && r.inserted) { stats.inserees++; yearCount++; } else { stats.maj++; }
+        } catch(e) {
+          stats.erreurs++;
+          if (!stats.premiere_erreur) stats.premiere_erreur = `Ligne ${i+1} (${distribNom} / ${year}): ${e.message}`;
+        }
       }
       stats.par_annee[year] = yearCount;
     }
-    res.json({ ok:true, annees: YEAR_SHEETS, stats });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-  finally { dbClient.release(); }
+    res.json({ ok:true, annees:YEAR_SHEETS, stats });
+  } catch(e) {
+    res.status(500).json({ error: e.message, stack: e.stack?.split('\n').slice(0,3).join(' | ') });
+  }
 });
 
 // ── IMPORT EXCEL (upload depuis l'interface) ───────────────────────
