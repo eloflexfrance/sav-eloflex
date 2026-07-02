@@ -1686,13 +1686,15 @@ router.post('/commandes', async (req, res) => {
     const row = await db.run(
       `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, quantite, accessoire,
         bdc, date_commande, vf_order_id, client_final, num_suivi, transporteur, date_livraison, num_serie, num_facture,
-        invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
+        invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo,
+        num_retour, transporteur_retour, date_retour)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
        d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto',
-       d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null, d.modele_demo ? true : false]
+       d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null, d.modele_demo ? true : false,
+       d.num_retour || null, d.transporteur_retour || null, d.date_retour || null]
     );
     res.status(201).json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1703,7 +1705,8 @@ router.put('/commandes/:id', async (req, res) => {
     const d = req.body;
     const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'quantite', 'accessoire',
       'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_livraison', 'num_serie',
-      'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description', 'modele_demo'];
+      'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description', 'modele_demo',
+      'num_retour', 'transporteur_retour', 'date_retour'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {

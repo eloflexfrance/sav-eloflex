@@ -700,6 +700,7 @@ async function renderCommandesTable(page=1){
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i></span>
         </td>
         <td style="text-align:center">
+          ${cm.num_retour?`<i class="ti ti-arrow-back-up" style="color:var(--danger)" title="Retour : ${esc(cm.num_retour)}${cm.date_retour?' — reçu le '+fd(cm.date_retour):''}"></i>`:''}
           ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
         </td>
@@ -779,6 +780,28 @@ async function modalCommande(id){
           </select>
         </div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_infos')||'Informations'}</label><textarea class="form-input" id="cmd-infos" rows="2">${esc(cm.informations||'')}</textarea></div>
+        <div class="form-group" style="grid-column:1/-1">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius);margin-bottom:6px">
+            <i class="ti ti-arrow-back-up" style="color:var(--danger);font-size:16px"></i>
+            <span style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em">Retour produit</span>
+          </div>
+          <div class="grid-2" style="gap:10px">
+            <div class="form-group"><label class="form-label">N° suivi retour</label><input class="form-input mono" id="cmd-num-retour" value="${esc(cm.num_retour||'')}" placeholder="ex: XN123456789JB"></div>
+            <div class="form-group"><label class="form-label">Transporteur retour</label>
+              <select class="form-input" id="cmd-transporteur-retour">
+                <option value="">— Choisir —</option>
+                ${['Chronopost','Colissimo','DB Schenker','UPS','TNT','DHL','Autre'].map(t=>
+                  `<option value="${t}" ${cm.transporteur_retour===t?'selected':''}>${t}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Date de réception retour</label><input class="form-input" id="cmd-date-retour" type="date" value="${cm.date_retour||''}"></div>
+            <div class="form-group" style="display:flex;align-items:flex-end">
+              ${cm.num_retour ? `<a href="${lienSuiviColis(cm.transporteur_retour, cm.num_retour)||'#'}" target="_blank" class="btn sm" ${!lienSuiviColis(cm.transporteur_retour, cm.num_retour)?'disabled':''}>
+                <i class="ti ti-external-link"></i> Suivre le retour
+              </a>` : '<span style="font-size:12px;color:var(--text3)">Renseigne le N° suivi pour suivre</span>'}
+            </div>
+          </div>
+        </div>
         <div class="form-group" style="grid-column:1/-1">
           <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:${cm.reliquat?'var(--warning-bg)':'var(--surface)'}">
             <input type="checkbox" id="cmd-reliquat" ${cm.reliquat?'checked':''} onchange="majReliquatSection()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--warning)">
@@ -998,6 +1021,9 @@ async function enregistrerCommande(id){
     reliquat: !!document.getElementById('cmd-reliquat')?.checked,
     reliquat_description: gv('cmd-reliquat-description')||null,
     modele_demo: !!document.getElementById('cmd-demo')?.checked,
+    num_retour: gv('cmd-num-retour')||null,
+    transporteur_retour: gv('cmd-transporteur-retour')||null,
+    date_retour: gv('cmd-date-retour')||null,
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
