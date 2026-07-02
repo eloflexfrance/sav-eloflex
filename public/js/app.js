@@ -482,14 +482,58 @@ function renderCmdLignes(){
       <th style="width:32px"></th>
     </tr></thead>
     <tbody>${TMP_CMD_LIGNES.map((l,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
-      <td style="padding:4px 6px"><input class="form-input" style="font-size:12px;padding:4px 7px" value="${esc(l.designation)}" oninput="TMP_CMD_LIGNES[${i}].designation=this.value" placeholder="Désignation *"></td>
+      <td style="padding:4px 6px">
+        <div style="position:relative">
+          <input class="form-input cmd-ligne-search" style="font-size:12px;padding:4px 7px"
+            value="${esc(l.designation)}"
+            placeholder="Taper nom ou référence catalogue…"
+            oninput="TMP_CMD_LIGNES[${i}].designation=this.value;searchCmdPieces(${i},this.value)"
+            onfocus="searchCmdPieces(${i},this.value)"
+            onblur="setTimeout(()=>{const d=document.getElementById('cmd-piece-drop-${i}');if(d)d.style.display='none'},150)">
+          <div id="cmd-piece-drop-${i}" class="piece-dropdown" style="display:none"></div>
+        </div>
+      </td>
       <td style="padding:4px 6px"><input class="form-input mono" style="font-size:11px;padding:4px 7px" value="${esc(l.reference||'')}" oninput="TMP_CMD_LIGNES[${i}].reference=this.value" placeholder="Réf."></td>
       <td style="padding:4px 6px"><input class="form-input" type="number" min="1" style="font-size:12px;padding:4px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_CMD_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
       <td style="padding:4px 2px"><button class="btn sm danger" onclick="removeCmdLigne(${i})" style="padding:4px 6px"><i class="ti ti-x"></i></button></td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
-function addCmdLigne(){ TMP_CMD_LIGNES.push({designation:'',reference:'',quantite:1}); renderCmdLignes(); }
+
+function searchCmdPieces(idx, q){
+  const drop = document.getElementById('cmd-piece-drop-'+idx); if(!drop) return;
+  const query = q.toLowerCase().trim();
+  if(!query){ drop.style.display='none'; return; }
+  const results = CACHE.catalogue.filter(p =>
+    p.designation.toLowerCase().includes(query) ||
+    (p.ref && p.ref.toLowerCase().includes(query)) ||
+    (p.ref_fournisseur && p.ref_fournisseur.toLowerCase().includes(query))
+  ).slice(0,12);
+  if(!results.length){ drop.style.display='none'; return; }
+  window._CMD_PIECE_RESULTS = window._CMD_PIECE_RESULTS || {};
+  window._CMD_PIECE_RESULTS[idx] = results;
+  drop.innerHTML = results.map((p,ri) => `<div class="piece-option" onmousedown="event.preventDefault();selectCmdPieceResult(${idx},${ri})">
+    <div style="font-size:12px;font-weight:600">${esc(p.designation)}</div>
+    <div style="font-size:11px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref||'')}</span></div>
+  </div>`).join('');
+  drop.style.display = 'block';
+}
+
+function selectCmdPieceResult(idx, resultIdx){
+  const p = (window._CMD_PIECE_RESULTS && window._CMD_PIECE_RESULTS[idx]) ? window._CMD_PIECE_RESULTS[idx][resultIdx] : null;
+  if(!p) return;
+  TMP_CMD_LIGNES[idx] = { ...TMP_CMD_LIGNES[idx], designation: p.designation||'', reference: p.ref||'' };
+  renderCmdLignes();
+  // Focus sur le champ Qté de la ligne sélectionnée
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.cmd-ligne-search');
+    if(inputs[idx]) inputs[idx].closest('tr')?.querySelector('input[type="number"]')?.focus();
+  }, 50);
+}
+
+function addCmdLigne(){ TMP_CMD_LIGNES.push({designation:'',reference:'',quantite:1}); renderCmdLignes();
+  setTimeout(()=>{const inputs=document.querySelectorAll('.cmd-ligne-search');if(inputs.length)inputs[inputs.length-1].focus();},50);
+}
 function removeCmdLigne(i){ TMP_CMD_LIGNES.splice(i,1); renderCmdLignes(); }
 
 // Génère le lien de suivi officiel du transporteur à partir du n° de suivi.
