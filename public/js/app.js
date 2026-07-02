@@ -610,9 +610,11 @@ async function renderCommandes(ttl,c,a){
     <button class="btn" onclick="syncCommandesVF()"><i class="ti ti-refresh"></i>${t('cmd_sync_vf')||'Synchroniser VosFactures'}</button>
     <button class="btn primary" onclick="modalCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>`;
 
+  // Stats filtrées par l'année sélectionnée (ou année en cours par défaut pour les compteurs)
   const anneeFiltre = CMD_FILTERS.annee ? parseInt(CMD_FILTERS.annee) : new Date().getFullYear();
   const stats = await API.commandesStats(anneeFiltre);
-  const years = Object.keys(stats.par_annee||{}).sort((x,y)=>y-x);
+  // Le menu déroulant des années vient toujours de par_annee (toutes années, voir backend)
+  const years = Object.keys(stats.par_annee||{}).filter(Boolean).sort((x,y)=>y-x);
 
   c.innerHTML=`
     <div style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Année ${anneeFiltre}</div>

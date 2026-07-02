@@ -1522,7 +1522,7 @@ router.get('/commandes', async (req, res) => {
     let idx = 0;
     if (client_id)   { conds.push(`cmd.client_id=$${++idx}`); p.push(client_id); }
     if (distributeur){ conds.push(`cmd.distributeur_nom ILIKE $${++idx}`); p.push(`%${distributeur}%`); }
-    if (annee)       { conds.push(`cmd.annee_onglet=$${++idx}`); p.push(parseInt(annee)); }
+    if (annee)       { conds.push(`(cmd.annee_onglet=$${++idx} OR (cmd.annee_onglet IS NULL AND EXTRACT(YEAR FROM cmd.date_commande::date)=$${idx}))`); p.push(parseInt(annee)); }
     if (groupe)      { conds.push(`cmd.groupe=$${++idx}`); p.push(groupe); }
     if (date_from)   { conds.push(`cmd.date_commande>=$${++idx}`); p.push(date_from); }
     if (date_to)     { conds.push(`cmd.date_commande<=$${++idx}`); p.push(date_to); }
@@ -1546,12 +1546,18 @@ router.get('/commandes', async (req, res) => {
 router.get('/commandes/stats', async (req, res) => {
   try {
     const annee = req.query.annee ? parseInt(req.query.annee) : null;
+    // Données filtrées pour les compteurs
     const rows = annee
-      ? await db.all('SELECT * FROM commandes WHERE annee_onglet=$1', [annee])
+      ? await db.all('SELECT * FROM commandes WHERE annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1)', [annee])
       : await db.all('SELECT * FROM commandes');
     const calc = rows.map(statutCommande);
+    // Toutes les années pour le menu déroulant (toujours non filtré)
+    const allRows = annee ? await db.all('SELECT annee_onglet, date_commande FROM commandes') : rows;
     const parAnnee = {};
-    rows.forEach(r => { parAnnee[r.annee_onglet] = (parAnnee[r.annee_onglet] || 0) + 1; });
+    allRows.forEach(r => {
+      const a = r.annee_onglet || (r.date_commande ? new Date(r.date_commande).getFullYear() : null);
+      if (a) parAnnee[a] = (parAnnee[a] || 0) + 1;
+    });
     const parGroupe = {};
     rows.forEach(r => { if (r.groupe) parGroupe[r.groupe] = (parGroupe[r.groupe] || 0) + 1; });
     const topDistributeurs = {};
