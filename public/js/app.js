@@ -228,8 +228,8 @@ async function chargerCommandesDashboard(){
         <div class="stat-card"><div class="stat-label">${t('cmd_en_prep')||'En préparation'}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
-        <div class="stat-card"><div class="stat-label">Facturé</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
-        <div class="stat-card"><div class="stat-label">🔄 Démos</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
+        <div class="stat-card"><div class="stat-label">${t('cmd_facture_statut')||'Facturé'}</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
+        <div class="stat-card"><div class="stat-label">🔄 ${t('cmd_demo_count')||'Démos'}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_probleme')||'Problème'}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
       </div>
       ${!list.length?`<div style="font-size:12px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
@@ -250,7 +250,7 @@ async function chargerCommandesDashboard(){
             <td class="mono">${esc(cm.bdc||'')}</td>
             <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
             <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Suivre"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
-            <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
+            <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>`}`;
@@ -468,6 +468,19 @@ async function renderExpeditions(ttl,c,a){
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
 const cmdStatutClass = s => s==='Livré'?'g':s==='Facturé'?'g':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':'ouvert';
 
+// Traduit les valeurs de statut stockées en DB (toujours en français) vers la langue affichée
+function tStatut(s){
+  const map = {
+    'En préparation': t('cmd_en_prep')||'En préparation',
+    'Expédié':        t('cmd_expedie')||'Expédié',
+    'Livré':          t('cmd_livre')||'Livré',
+    'Facturé':        t('cmd_facture_statut')||'Facturé',
+    'Problème':       t('cmd_probleme')||'Problème',
+    'Annulé':         t('cmd_annule')||'Annulé',
+  };
+  return map[s] || s;
+}
+
 let TMP_CMD_LIGNES = []; // Lignes de la commande en cours d'édition
 
 function renderCmdLignes(){
@@ -576,8 +589,8 @@ async function renderCommandes(ttl,c,a){
       <div class="card"><div style="font-size:22px;font-weight:700;color:var(--danger,#d33)">${stats.en_preparation}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_en_prep')||'En préparation'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:#d8a32a">${stats.expedie}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_expedie')||'Expédiées'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:#2a9d4d">${stats.livre}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_livre')||'Livrées'}</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--accent)">${stats.facture||0}</div><div style="font-size:12px;color:var(--text2)">Facturées</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--warning)">${stats.demo||0}</div><div style="font-size:12px;color:var(--text2)">🔄 Démos</div></div>
+      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--accent)">${stats.facture||0}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_facture_statut')||'Facturé'}</div></div>
+      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--warning)">${stats.demo||0}</div><div style="font-size:12px;color:var(--text2)">🔄 ${t('cmd_demo_count')||'Démos'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_probleme')||'Problème'}</div></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -591,7 +604,7 @@ async function renderCommandes(ttl,c,a){
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
         <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
         <option value="Livré" ${CMD_FILTERS.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
-        <option value="Facturé" ${CMD_FILTERS.statut==='Facturé'?'selected':''}>Facturé</option>
+        <option value="Facturé" ${CMD_FILTERS.statut==='Facturé'?'selected':''}>${t('cmd_facture_statut')||'Facturé'}</option>
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
@@ -622,10 +635,10 @@ async function renderCommandesTable(){
         <td>${fd(cm.date_commande)}</td>
         <td>${esc(cm.distributeur_nom)}</td>
         <td class="mono">${esc(cm.bdc||'')}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?' <span class="badge hg" style="font-size:10px">🔄 Démo</span>':''}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
         <td class="mono">${esc(cm.num_suivi||'')}${(()=>{const l=lienSuiviColis(cm.transporteur,cm.num_suivi);return l?` <a href="${l}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre le colis'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'';})()}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
-        <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
+        <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span></td>
         <td style="text-align:center">
           ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
@@ -699,7 +712,7 @@ async function modalCommande(id){
             <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
             <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
             <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
-            <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>Facturé</option>
+            <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>${t('cmd_facture_statut')||'Facturé'}</option>
             <option value="Problème" ${cm.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
             <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
           </select>
@@ -2085,10 +2098,10 @@ function showQuickResults(res,q){
         <div style="display:flex;align-items:center;gap:10px">
           <i class="ti ti-clipboard-list" style="font-size:18px;color:var(--accent);flex-shrink:0"></i>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:13px">${esc(cmd.distributeur_nom)}${cmd.bdc?` <span class="mono" style="font-weight:400;color:var(--text3);font-size:12px">${esc(cmd.bdc)}</span>`:''}${cmd.modele_demo?' <span class="badge hg" style="font-size:10px">🔄 Démo</span>':''}</div>
+            <div style="font-weight:700;font-size:13px">${esc(cmd.distributeur_nom)}${cmd.bdc?` <span class="mono" style="font-weight:400;color:var(--text3);font-size:12px">${esc(cmd.bdc)}</span>`:''}${cmd.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</div>
             <div style="font-size:12px;color:var(--text2)">${esc(cmd.modele||'')}${cmd.num_facture?' · Facture : '+esc(cmd.num_facture):''}${cmd.num_serie?' · '+esc(cmd.num_serie):''}${cmd.date_commande?' · '+fd(cmd.date_commande):''}</div>
           </div>
-          ${cmd.statut?`<span class="badge ${statut}" style="font-size:10px">${esc(cmd.statut)}</span>`:''}
+          ${cmd.statut?`<span class="badge ${statut}" style="font-size:10px">${esc(tStatut(cmd.statut))}</span>`:''}
         </div>
       </div>`;
     }).join('');
