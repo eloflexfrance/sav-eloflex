@@ -1131,8 +1131,7 @@ router.post('/import/commandes-excel', adminOnly, uploadExcel.single('file'), as
         if (!clientId) {
           try {
             const r = await db.run(
-              `INSERT INTO clients (nom,email,tel,type,token_portail) VALUES ($1,$2,$3,'Distributeur',md5(random()::text))
-               ON CONFLICT (nom) DO UPDATE SET nom=EXCLUDED.nom RETURNING id`,
+              `INSERT INTO clients (nom,email,tel,type,token_portail) VALUES ($1,$2,$3,'Distributeur',md5(random()::text)) RETURNING id`,
               [distribNom, get(colMap.email), get(colMap.tel)]
             );
             clientId = r.id; clientCache.set(nomNorm, clientId); stats.clients_crees++;
