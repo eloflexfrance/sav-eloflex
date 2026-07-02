@@ -134,8 +134,7 @@ async function refreshBadges(){
 
 async function renderDashboard(ttl,c,a){
   ttl.textContent=t('nav_dashboard');
-  const{stats:s,recentes,par_mois,pieces_top,par_technicien}=await API.stats();
-  const maxMois=Math.max(...par_mois.map(m=>m.total),1);
+  const{stats:s,recentes}=await API.stats();
   c.innerHTML=`
     <div class="quick-search-bar">
       <div style="position:relative;flex:1;max-width:560px">
@@ -158,27 +157,6 @@ async function renderDashboard(ttl,c,a){
       <div class="stat-card"><div class="stat-label">${t('db_hors_garantie')}</div><div class="stat-value" style="color:var(--warning)">${s.hors_garantie}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_pieces_alerte')}</div><div class="stat-value" style="color:${s.pieces_alerte>0?'var(--danger)':'var(--text)'}">${s.pieces_alerte}</div></div>
       <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">${t('db_alertes')}</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
-    </div>
-    <div class="grid-2" style="margin-bottom:14px">
-      <div class="card">
-        <div class="section-title"><i class="ti ti-chart-bar"></i>${t('db_chart_title')}</div>
-        <div class="chart-bar">
-          ${par_mois.map(m=>`<div class="chart-bar-col" title="${moisLabel(m.mois)} : ${m.total} intervention${m.total!==1?'s':''}">
-            <div style="font-size:9px;color:var(--text3)">${m.total}</div>
-            <div class="chart-bar-fill" style="height:${m.total>0?Math.max(Math.round(m.total/maxMois*70),4):2}px;background:${m.total>0?'var(--accent)':'var(--border)'}"></div>
-            <div class="chart-bar-label">${moisLabel(m.mois)}</div>
-          </div>`).join('')}
-        </div>
-      </div>
-      <div class="card">
-        <div class="section-title"><i class="ti ti-box"></i>${t('db_top_pieces')}</div>
-        ${pieces_top.length===0?`<div style="font-size:12px;color:var(--text3)">${t('msg_vide')}</div>`:pieces_top.map(p=>`
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <div style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.designation)}</div>
-            <div style="font-weight:700;font-size:12px;color:var(--accent)">${p.total_utilise}×</div>
-          </div>`).join('')}
-        ${par_technicien.length?`<div class="divider"></div><div class="section-title" style="margin-top:8px"><i class="ti ti-user"></i>${t('db_par_tech')}</div>${par_technicien.map(tech=>`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${esc(tech.technicien)}</span><span style="font-weight:700">${tech.total}</span></div>`).join('')}`:''}
-      </div>
     </div>
     <div class="card">
       <div class="section-title"><i class="ti ti-tool"></i>${t('db_activites')}</div>
@@ -216,15 +194,18 @@ async function chargerCommandesDashboard(){
   if(!isAdmin() && !hasAccess('commandes')){
     el.closest('.card')?.remove(); return;
   }
+  const anneeEnCours = new Date().getFullYear();
   try{
     const [stats, res] = await Promise.all([
-      API.commandesStats(),
+      API.commandesStats(anneeEnCours),
       API.commandes({ per_page: 10 })
     ]);
     const list = res.rows||[];
     el.innerHTML=`
+      <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Année ${anneeEnCours}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
         <div class="stat-card"><div class="stat-label">${t('cmd_total')||'Total'}</div><div class="stat-value">${stats.total}</div></div>
+        <div class="stat-card"><div class="stat-label">🦽 Avec N° série</div><div class="stat-value" style="color:var(--accent)">${stats.fauteuils_serie||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_en_prep')||'En préparation'}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
@@ -284,10 +265,23 @@ async function chargerTransfertsDashboard(){  const el=document.getElementById('
 
 async function renderClients(ttl,c,a){
   ttl.textContent=t('nav_clients');
-  a.innerHTML=`<input class="search-bar" placeholder=""+t('cat_search')+"" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderClients(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
-    <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>`;
-  const list=await API.clients(STATE.q);
-  c.innerHTML=`<div class="table-wrap"><table class="t">
+  // Input SÉPARÉ du corps de liste — évite le saut de curseur à chaque frappe
+  a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
+    <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(STATE.q)}" style="max-width:260px">
+    <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
+  </div>`;
+  document.getElementById('clients-search')?.addEventListener('input', e => {
+    STATE.q = e.target.value;
+    clearTimeout(window._CLT); window._CLT = setTimeout(() => chargerListeClients(), 250);
+  });
+  c.innerHTML=`<div id="clients-list-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">${t('msg_chargement')}</div></div>`;
+  chargerListeClients();
+}
+
+async function chargerListeClients(){
+  const el = document.getElementById('clients-list-body'); if(!el) return;
+  const list = await API.clients(STATE.q);
+  el.innerHTML=`<div class="table-wrap"><table class="t">
     <thead><tr><th>${t('col_distributeur')}</th><th>${t('col_contact')}</th><th>${t('col_ville')}</th><th>${t('col_fauteuils')}</th><th>${t('col_interventions')}</th><th></th></tr></thead>
     <tbody>${list.map(cl=>`<tr onclick="setView('client',{clientId:${cl.id}})">
       <td><div style="font-weight:600">${esc(cl.nom)}</div><div style="font-size:11px;color:var(--text3)">${esc(cl.type)}</div></td>
@@ -347,7 +341,43 @@ async function renderClient(ttl,c,a){
             <span class="badge hg">${(f.nb_interventions||0)-(f.nb_garantie||0)} HG</span>
           </div>
         </div>`).join('')}
-    </div>`;
+    </div>
+    <div class="section-title" style="margin:16px 0 8px"><i class="ti ti-clipboard-list"></i>Commandes</div>
+    <div id="client-commandes-list" style="margin-bottom:20px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>`;
+  chargerCommandesClient(cl.nom);
+}
+
+async function chargerCommandesClient(distribNom){
+  const el = document.getElementById('client-commandes-list'); if(!el) return;
+  try{
+    const res = await API.commandes({ distributeur: distribNom, per_page: 200 });
+    const list = res.rows||[];
+    if(!list.length){
+      el.innerHTML=`<div style="font-size:12px;color:var(--text3)">Aucune commande pour ce distributeur.</div>`;
+      return;
+    }
+    el.innerHTML=`<div class="table-wrap"><table class="t">
+      <thead><tr>
+        <th>${t('col_date')||'Date'}</th>
+        <th>${t('cmd_bdc')||'Bdc'}</th>
+        <th>${t('cmd_modele')||'Modèle / Pièce'}</th>
+        <th>${t('cmd_suivi')||'N° suivi'}</th>
+        <th>N° série</th>
+        <th>${t('col_statut')||'Statut'}</th>
+      </tr></thead>
+      <tbody>${list.map(cm=>{
+        const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
+        return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
+          <td>${fd(cm.date_commande)}</td>
+          <td class="mono">${esc(cm.bdc||'')}</td>
+          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
+          <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
+          <td class="mono">${esc(cm.num_serie||'')}</td>
+          <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span>${cm.reliquat?` <i class="ti ti-clock-exclamation" style="color:var(--warning)" title="Reliquat"></i>`:''}${cm.informations?` <i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 function garantieChip(f){
@@ -580,10 +610,12 @@ async function renderCommandes(ttl,c,a){
     <button class="btn" onclick="syncCommandesVF()"><i class="ti ti-refresh"></i>${t('cmd_sync_vf')||'Synchroniser VosFactures'}</button>
     <button class="btn primary" onclick="modalCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>`;
 
-  const stats = await API.commandesStats();
+  const anneeFiltre = CMD_FILTERS.annee ? parseInt(CMD_FILTERS.annee) : new Date().getFullYear();
+  const stats = await API.commandesStats(anneeFiltre);
   const years = Object.keys(stats.par_annee||{}).sort((x,y)=>y-x);
 
   c.innerHTML=`
+    <div style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Année ${anneeFiltre}</div>
     <div class="cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
       <div class="card"><div style="font-size:22px;font-weight:700">${stats.total}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_total')||'Total commandes'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:var(--danger,#d33)">${stats.en_preparation}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_en_prep')||'En préparation'}</div></div>
@@ -595,7 +627,7 @@ async function renderCommandes(ttl,c,a){
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <input class="search-bar" style="max-width:240px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série, suivi...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;renderCommandesTable()">
-      <select id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;renderCommandesTable()">
+      <select id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;render()">
         <option value="">${t('cmd_toutes_annees')||'Toutes années'}</option>
         ${years.map(y=>`<option value="${y}" ${CMD_FILTERS.annee==y?'selected':''}>${y}</option>`).join('')}
       </select>
@@ -750,7 +782,7 @@ async function modalCommande(id){
 
 function commandeEstLivree(){
   const sel = gv('cmd-statut');
-  if (sel === 'Livré') return true;
+  if (sel === 'Livré' || sel === 'Facturé') return true;
   if ((sel === 'Auto' || !sel) && gv('cmd-livraison')) return true;
   return false;
 }

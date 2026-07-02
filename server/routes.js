@@ -1545,7 +1545,10 @@ router.get('/commandes', async (req, res) => {
 
 router.get('/commandes/stats', async (req, res) => {
   try {
-    const rows = await db.all('SELECT * FROM commandes');
+    const annee = req.query.annee ? parseInt(req.query.annee) : null;
+    const rows = annee
+      ? await db.all('SELECT * FROM commandes WHERE annee_onglet=$1', [annee])
+      : await db.all('SELECT * FROM commandes');
     const calc = rows.map(statutCommande);
     const parAnnee = {};
     rows.forEach(r => { parAnnee[r.annee_onglet] = (parAnnee[r.annee_onglet] || 0) + 1; });
@@ -1561,9 +1564,11 @@ router.get('/commandes/stats', async (req, res) => {
       probleme: calc.filter(s => s === 'Problème').length,
       facture:  calc.filter(s => s === 'Facturé').length,
       demo:     rows.filter(r => r.modele_demo).length,
+      fauteuils_serie: rows.filter(r => /eloflex/i.test(r.modele||'') && r.num_serie).length,
       par_annee: parAnnee,
       par_groupe: parGroupe,
-      top_distributeurs: Object.entries(topDistributeurs).sort((a, b) => b[1] - a[1]).slice(0, 10)
+      top_distributeurs: Object.entries(topDistributeurs).sort((a, b) => b[1] - a[1]).slice(0, 10),
+      annee_filtre: annee
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

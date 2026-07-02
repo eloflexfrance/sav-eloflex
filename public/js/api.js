@@ -63,7 +63,7 @@ const API = {
   vfLogs:()=>API.get('/vosfactures/logs'),
   commandes:(p={})=>API.get('/commandes'+('?'+new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([,v])=>v!=null&&v!==''))).toString())),
   commande:(id)=>API.get(`/commandes/${id}`),
-  commandesStats:()=>API.get('/commandes/stats'),
+  commandesStats:(annee)=>API.get(`/commandes/stats${annee?'?annee='+annee:''}`),
   createCommande:(d)=>API.post('/commandes',d),
   updateCommande:(id,d)=>API.put(`/commandes/${id}`,d),
   deleteCommande:(id)=>API.del(`/commandes/${id}`),
