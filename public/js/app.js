@@ -90,6 +90,9 @@ function appliquerNavRole(){
 
 function setView(v, extra={}){
   if(!hasAccess(v)) return;
+  // Réinitialiser les recherches locales quand on change de vue
+  if(v !== 'clients')   window._clientsQ = '';
+  if(v !== 'catalogue') { STATE.q = ''; }
   STATE={view:v, clientId:extra.clientId||null, fauteuilId:extra.fauteuilId||null, q:''};
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v));
   render();
@@ -265,13 +268,13 @@ async function chargerTransfertsDashboard(){  const el=document.getElementById('
 
 async function renderClients(ttl,c,a){
   ttl.textContent=t('nav_clients');
-  // Input SÉPARÉ du corps de liste — évite le saut de curseur à chaque frappe
+  if(!window._clientsQ) window._clientsQ = '';
   a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
-    <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(STATE.q)}" style="max-width:260px">
+    <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(window._clientsQ)}" style="max-width:260px">
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
   </div>`;
   document.getElementById('clients-search')?.addEventListener('input', e => {
-    STATE.q = e.target.value;
+    window._clientsQ = e.target.value;
     clearTimeout(window._CLT); window._CLT = setTimeout(() => chargerListeClients(), 250);
   });
   c.innerHTML=`<div id="clients-list-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">${t('msg_chargement')}</div></div>`;
@@ -280,7 +283,7 @@ async function renderClients(ttl,c,a){
 
 async function chargerListeClients(){
   const el = document.getElementById('clients-list-body'); if(!el) return;
-  const list = await API.clients(STATE.q);
+  const list = await API.clients(window._clientsQ||'');
   el.innerHTML=`<div class="table-wrap"><table class="t">
     <thead><tr><th>${t('col_distributeur')}</th><th>${t('col_contact')}</th><th>${t('col_ville')}</th><th>${t('col_fauteuils')}</th><th>${t('col_interventions')}</th><th></th></tr></thead>
     <tbody>${list.map(cl=>`<tr onclick="setView('client',{clientId:${cl.id}})">
@@ -975,13 +978,24 @@ async function syncCommandesVF(){
 
 async function renderCatalogue(ttl,c,a){
   ttl.textContent=t('cat_title');
-  a.innerHTML=`
-    <input class="search-bar" placeholder="${t('cat_search')}" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderCatalogue(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
+  a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
+    <input id="cat-search" class="search-bar" placeholder="${t('cat_search')}" value="${esc(STATE.q)}" style="max-width:280px">
     <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')}</button>
-    <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>`;
-  const list=await API.catalogue(STATE.q);
-  CACHE.catalogue=list;
-  c.innerHTML=`<div class="table-wrap"><table class="t">
+    <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>
+  </div>`;
+  document.getElementById('cat-search')?.addEventListener('input', e => {
+    STATE.q = e.target.value;
+    clearTimeout(window._CAT); window._CAT = setTimeout(() => chargerListeCatalogue(), 250);
+  });
+  c.innerHTML=`<div id="catalogue-list-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">${t('msg_chargement')}</div></div>`;
+  chargerListeCatalogue();
+}
+
+async function chargerListeCatalogue(){
+  const el = document.getElementById('catalogue-list-body'); if(!el) return;
+  const list = await API.catalogue(STATE.q);
+  CACHE.catalogue = list;
+  el.innerHTML=`<div class="table-wrap"><table class="t">
     <thead><tr><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_fournisseur')}</th><th>${t('col_ref_fou')}</th><th>${t('col_prix')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th></tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
