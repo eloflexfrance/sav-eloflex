@@ -621,7 +621,10 @@ async function renderCommandesTable(){
         <td class="mono">${esc(cm.num_suivi||'')}${(()=>{const l=lienSuiviColis(cm.transporteur,cm.num_suivi);return l?` <a href="${l}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre le colis'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'';})()}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
         <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
-        <td style="text-align:center">${cm.informations?`<i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}</td>
+        <td style="text-align:center">
+          ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}
+          ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
+        </td>
       </tr>`).join('')}</tbody>
     </table></div>`;
 }
@@ -640,10 +643,10 @@ async function modalCommande(id){
         <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_quantite')||'Quantité'}</label><input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}"></div>
-        <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'}</label>
+        <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'} / Devis</label>
           <div style="display:flex;gap:6px">
             <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1">
-            <button class="btn sm" type="button" title="${t('cmd_lookup_bdc')||'Importer depuis VosFactures'}" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+            <button class="btn sm" type="button" title="Importer depuis VosFactures (BDC, Devis, Facture, BL)" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
           </div>
         </div>
         <div class="form-group" style="grid-column:1/-1">
@@ -669,6 +672,7 @@ async function modalCommande(id){
         </div>
         <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-6px"></div>
         <div class="form-group"><label class="form-label">${t('cmd_date_livraison')||'Date livraison'}</label><input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison()"></div>
+        <div class="form-group"><label class="form-label">N° Bordereau de livraison</label><input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="ex: BL-2026-0042"></div>
         <div class="form-group"><label class="form-label">${t('cmd_serie')||'N° série'}</label><input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}"></div>
         <div class="form-group">
           <label class="form-label">${t('cmd_facture')||'N° facture'}</label>
@@ -689,6 +693,15 @@ async function modalCommande(id){
           </select>
         </div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_infos')||'Informations'}</label><textarea class="form-input" id="cmd-infos" rows="2">${esc(cm.informations||'')}</textarea></div>
+        <div class="form-group" style="grid-column:1/-1">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:${cm.reliquat?'var(--warning-bg)':'var(--surface)'}">
+            <input type="checkbox" id="cmd-reliquat" ${cm.reliquat?'checked':''} onchange="majReliquatSection()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--warning)">
+            <label for="cmd-reliquat" style="font-size:13px;font-weight:600;cursor:pointer;color:var(--warning)">⚠ Reliquat en attente</label>
+          </div>
+          <div id="cmd-reliquat-desc" style="${cm.reliquat?'':'display:none'}; margin-top:8px">
+            <textarea class="form-input" id="cmd-reliquat-description" rows="2" placeholder="Décrire le reliquat (articles manquants, délai estimé...)">${esc(cm.reliquat_description||'')}</textarea>
+          </div>
+        </div>
       </div>
       <div id="cmd-preuve-zone"></div>
       ${id?`<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
@@ -810,6 +823,8 @@ async function lookupBdcVF(){
     if(r.quantite   && $('cmd-quantite'))                       { $('cmd-quantite').value=r.quantite;   }
     if(r.date_commande && $('cmd-date') && !gv('cmd-date'))    { $('cmd-date').value=r.date_commande;   remplis.push('date'); }
     if(r.num_serie  && $('cmd-serie')   && !gv('cmd-serie'))   { $('cmd-serie').value=r.num_serie;      remplis.push('n° série'); }
+    // Si le document trouvé est un bordereau de livraison, remplir le champ BL
+    if(r.kind==='receipt' && $('cmd-bordereau') && !gv('cmd-bordereau')){ $('cmd-bordereau').value=r.numero||''; remplis.push('bordereau de livraison'); }
     // Lignes structurées : remplace TMP_CMD_LIGNES
     if(r.lignes && r.lignes.length){
       TMP_CMD_LIGNES = r.lignes.map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
@@ -834,14 +849,25 @@ async function lookupFactureVF(){  const numero = gv('cmd-facture').trim();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+function majReliquatSection(){
+  const checked = document.getElementById('cmd-reliquat')?.checked;
+  const desc = document.getElementById('cmd-reliquat-desc');
+  const wrap = document.getElementById('cmd-reliquat')?.parentElement;
+  if(desc) desc.style.display = checked ? '' : 'none';
+  if(wrap) wrap.style.background = checked ? 'var(--warning-bg)' : 'var(--surface)';
+}
+
 async function enregistrerCommande(id){
   const d = {
     distributeur_nom: gv('cmd-distrib'), groupe: gv('cmd-groupe'), modele: gv('cmd-modele'),
     quantite: parseInt(gv('cmd-quantite'))||1,
     bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
-    client_final: gv('cmd-clientfinal'), num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null, date_livraison: gv('cmd-livraison')||null,
+    client_final: gv('cmd-clientfinal'), num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
+    date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
-    informations: gv('cmd-infos')
+    informations: gv('cmd-infos'),
+    reliquat: !!document.getElementById('cmd-reliquat')?.checked,
+    reliquat_description: gv('cmd-reliquat-description')||null,
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{

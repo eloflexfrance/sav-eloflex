@@ -163,6 +163,9 @@ async function initDB() {
       invoice_se TEXT,
       informations TEXT,
       statut TEXT DEFAULT 'Auto',
+      num_bordereau TEXT,
+      reliquat BOOLEAN DEFAULT FALSE,
+      reliquat_description TEXT,
       preuve_livraison_filename TEXT,
       preuve_livraison_url TEXT,
       preuve_livraison_mime TEXT,
@@ -181,6 +184,9 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_commande_id BIGINT UNIQUE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS quantite INTEGER DEFAULT 1`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS transporteur TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_bordereau TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat BOOLEAN DEFAULT FALSE`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_description TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_filename TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_url TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_mime TEXT`);

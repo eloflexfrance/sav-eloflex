@@ -1512,12 +1512,13 @@ router.post('/commandes', async (req, res) => {
     const row = await db.run(
       `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, quantite, accessoire,
         bdc, date_commande, vf_order_id, client_final, num_suivi, transporteur, date_livraison, num_serie, num_facture,
-        invoice_se, informations, statut)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+        invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
-       d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto']
+       d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto',
+       d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null]
     );
     res.status(201).json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1528,7 +1529,7 @@ router.put('/commandes/:id', async (req, res) => {
     const d = req.body;
     const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'quantite', 'accessoire',
       'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_livraison', 'num_serie',
-      'num_facture', 'invoice_se', 'informations', 'statut'];
+      'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
@@ -1694,9 +1695,9 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
       params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
     });
 
-    // Cherche dans client_order puis dans stock si pas trouvé
+    // Cherche dans tous types : BDC, stock, devis, facture, bordereau de livraison
     let inv = null;
-    for (const kind of ['client_order', 'stock']) {
+    for (const kind of ['client_order', 'stock', 'estimate', 'vat', 'receipt']) {
       const { data } = await vfApi.get('/invoices.json', { params: { number: numero, kind, per_page: 5 } });
       inv = Array.isArray(data) ? data.find(d => String(d.number).trim() === numero) || null : null;
       if (inv) break;
