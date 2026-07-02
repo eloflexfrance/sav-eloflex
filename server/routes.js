@@ -1030,15 +1030,29 @@ router.get('/recherche', async (req, res) => {
     const q = (req.query.q || '').trim();
     if (!q || q.length < 2) return res.json({ fauteuils: [], clients: [], commandes: [] });
 
-    const fauteuils = await db.all(`
+    // Vérifier d'abord si la saisie correspond exactement à un numéro de série
+    const exactSerie = await db.get(`
       SELECT DISTINCT f.*, c.nom AS client_nom, c.id AS client_id,
         (SELECT COUNT(*)::int FROM interventions i WHERE i.fauteuil_id=f.id) AS nb_interventions,
         (SELECT cmd.id FROM commandes cmd WHERE cmd.num_serie=f.serie LIMIT 1) AS commande_id
       FROM fauteuils f JOIN clients c ON c.id=f.client_id
-      LEFT JOIN interventions iv ON iv.fauteuil_id=f.id
-      WHERE f.serie ILIKE $1 OR f.modele ILIKE $1 OR c.nom ILIKE $1 OR iv.num_sav ILIKE $1
-      ORDER BY c.nom, f.date_achat DESC LIMIT 50
-    `, [`%${q}%`]);
+      WHERE LOWER(f.serie) = LOWER($1)
+    `, [q]);
+
+    const fauteuils = exactSerie
+      ? [exactSerie]  // Correspondance exacte : on n'affiche que celle-là
+      : await db.all(`
+          SELECT DISTINCT f.*, c.nom AS client_nom, c.id AS client_id,
+            (SELECT COUNT(*)::int FROM interventions i WHERE i.fauteuil_id=f.id) AS nb_interventions,
+            (SELECT cmd.id FROM commandes cmd WHERE cmd.num_serie=f.serie LIMIT 1) AS commande_id
+          FROM fauteuils f JOIN clients c ON c.id=f.client_id
+          LEFT JOIN interventions iv ON iv.fauteuil_id=f.id
+          WHERE f.modele ILIKE $1 OR c.nom ILIKE $1 OR iv.num_sav ILIKE $1
+             OR f.serie ILIKE $1
+          ORDER BY
+            CASE WHEN LOWER(f.serie) LIKE LOWER($2) THEN 0 ELSE 1 END,
+            f.updated_at DESC LIMIT 50
+        `, [`%${q}%`, `${q}%`]);
 
     const clients = await db.all(`
       SELECT c.*, COUNT(f.id)::int AS nb_fauteuils
@@ -1047,7 +1061,6 @@ router.get('/recherche', async (req, res) => {
       GROUP BY c.id ORDER BY c.nom LIMIT 10
     `, [`%${q}%`]);
 
-    // Toutes les commandes du distributeur + correspondances directes (BDC, facture, série)
     const commandes = await db.all(`
       SELECT cmd.id, cmd.bdc, cmd.num_facture, cmd.num_serie, cmd.modele,
              cmd.distributeur_nom, cmd.date_commande, cmd.statut, cmd.modele_demo,
