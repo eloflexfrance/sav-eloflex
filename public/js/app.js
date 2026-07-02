@@ -228,6 +228,7 @@ async function chargerCommandesDashboard(){
         <div class="stat-card"><div class="stat-label">${t('cmd_en_prep')||'En préparation'}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
+        <div class="stat-card"><div class="stat-label">Facturé</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_probleme')||'Problème'}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
       </div>
       ${!list.length?`<div style="font-size:12px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
@@ -464,7 +465,7 @@ async function renderExpeditions(ttl,c,a){
 }
 
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
-const cmdStatutClass = s => s==='Livré'?'g':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':'ouvert';
+const cmdStatutClass = s => s==='Livré'?'g':s==='Facturé'?'g':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':'ouvert';
 
 let TMP_CMD_LIGNES = []; // Lignes de la commande en cours d'édition
 
@@ -574,6 +575,7 @@ async function renderCommandes(ttl,c,a){
       <div class="card"><div style="font-size:22px;font-weight:700;color:var(--danger,#d33)">${stats.en_preparation}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_en_prep')||'En préparation'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:#d8a32a">${stats.expedie}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_expedie')||'Expédiées'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:#2a9d4d">${stats.livre}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_livre')||'Livrées'}</div></div>
+      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--accent)">${stats.facture||0}</div><div style="font-size:12px;color:var(--text2)">Facturées</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_probleme')||'Problème'}</div></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -587,6 +589,7 @@ async function renderCommandes(ttl,c,a){
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
         <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
         <option value="Livré" ${CMD_FILTERS.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
+        <option value="Facturé" ${CMD_FILTERS.statut==='Facturé'?'selected':''}>Facturé</option>
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
@@ -688,6 +691,7 @@ async function modalCommande(id){
             <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
             <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
             <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
+            <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>Facturé</option>
             <option value="Problème" ${cm.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
             <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
           </select>

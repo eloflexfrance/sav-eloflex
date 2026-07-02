@@ -1445,6 +1445,7 @@ router.get('/commandes/stats', async (req, res) => {
       expedie: calc.filter(s => s === 'Expédié').length,
       livre: calc.filter(s => s === 'Livré').length,
       probleme: calc.filter(s => s === 'Problème').length,
+      facture:  calc.filter(s => s === 'Facturé').length,
       par_annee: parAnnee,
       par_groupe: parGroupe,
       top_distributeurs: Object.entries(topDistributeurs).sort((a, b) => b[1] - a[1]).slice(0, 10)
