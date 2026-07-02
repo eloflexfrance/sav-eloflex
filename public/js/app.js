@@ -646,7 +646,7 @@ async function modalCommande(id){
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label><input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required></div>
         <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px">
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:0.5px solid ${cm.modele_demo?'var(--warning)':'var(--border-s)'};border-radius:var(--radius);background:${cm.modele_demo?'var(--warning-bg)':'var(--surface)'};cursor:pointer;width:100%" onclick="document.getElementById('cmd-demo').click()">
+          <div id="cmd-demo-wrap" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:0.5px solid ${cm.modele_demo?'var(--warning)':'var(--border-s)'};border-radius:var(--radius);background:${cm.modele_demo?'var(--warning-bg)':'var(--surface)'};width:100%">
             <input type="checkbox" id="cmd-demo" ${cm.modele_demo?'checked':''} onchange="majDemoStyle(this)" style="width:16px;height:16px;accent-color:var(--warning);cursor:pointer">
             <label for="cmd-demo" style="font-size:13px;font-weight:600;color:var(--warning);cursor:pointer">🔄 Modèle de démo</label>
           </div>
@@ -867,7 +867,7 @@ async function lookupFactureVF(){  const numero = gv('cmd-facture').trim();
 }
 
 function majDemoStyle(cb){
-  const wrap = cb.closest('div[style]');
+  const wrap = document.getElementById('cmd-demo-wrap');
   if(wrap){
     wrap.style.borderColor = cb.checked ? 'var(--warning)' : 'var(--border-s)';
     wrap.style.background  = cb.checked ? 'var(--warning-bg)' : 'var(--surface)';
