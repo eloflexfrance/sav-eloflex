@@ -1107,6 +1107,18 @@ async function renderParametres(ttl,c,a){
         <div id="vf-status-detail" style="font-size:12px;color:var(--text2)">${t('param_vf_checking')}</div>
       </div>
       <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>${t('param_vf_sync')}</button>
+    </div>
+    <div class="param-section">
+      <h3><i class="ti ti-table-import"></i> Import historique commandes (Excel comptabilité)</h3>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        Importe toutes les commandes de ton fichier Excel (onglets 2019, 2020… 2026) sans avoir besoin du terminal.
+        L'import est idempotent : relancer ne crée pas de doublons.
+      </p>
+      <label class="btn" style="cursor:pointer;display:inline-flex">
+        <i class="ti ti-upload"></i> Choisir le fichier Excel comptabilité…
+        <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importerHistoriqueCommandes(this.files[0])">
+      </label>
+      <div id="import-commandes-result" style="margin-top:10px"></div>
     </div>`;
   API.vfStatus().then(s=>{const el=$('vf-status-detail');if(el)el.innerHTML=s.configured?`<span style="color:var(--success)">✓ Compte configuré : ${esc(s.account||'')}${s.last_sync?' — Dernière sync : '+s.last_sync.created_at?.slice(0,16).replace('T',' '):''}</span>`:`<span style="color:var(--danger)">⚠ Non configuré — renseigner VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT dans .env</span>`;}).catch(()=>{});
 
@@ -1788,8 +1800,27 @@ async function exportClientPDF(id){const cl=await API.client(id);const inters=aw
 
 // ── VOSFACTURES ───────────────────────────────────────────────────
 
-async function syncVosFactures(){
-  const btn=$('btn-sync');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i>Sync…';
+async function importerHistoriqueCommandes(file){
+  const el=$('import-commandes-result'); if(!el) return;
+  if(!file){ el.innerHTML=''; return; }
+  el.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Import en cours… (peut prendre 1-3 min selon la taille du fichier)</div>`;
+  try{
+    const r = await API.importCommandesExcel(file);
+    const annees = Object.entries(r.stats.par_annee||{}).map(([a,n])=>`${a} : ${n} nouvelles`).join(', ');
+    el.innerHTML=`<div style="padding:10px 12px;background:var(--success-bg);border:0.5px solid var(--success);border-radius:var(--radius);font-size:12px">
+      <div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> Import terminé !</div>
+      <div>Onglets traités : <b>${r.annees?.join(', ')||'—'}</b></div>
+      <div>Nouvelles commandes : <b>${r.stats.inserees}</b> · Mises à jour : <b>${r.stats.maj}</b> · Nouveaux clients : <b>${r.stats.clients_crees}</b></div>
+      ${annees?`<div style="margin-top:4px;color:var(--text2)">${annees}</div>`:''}
+      ${r.stats.erreurs?`<div style="color:var(--danger);margin-top:4px">⚠ ${r.stats.erreurs} erreur(s)</div>`:''}
+    </div>`;
+    toast(`Import terminé — ${r.stats.inserees} commandes importées`,'ti-table-import');
+  }catch(e){
+    el.innerHTML=`<div style="padding:10px 12px;background:var(--danger-bg);border:0.5px solid var(--danger);border-radius:var(--radius);font-size:12px;color:var(--danger)">❌ ${esc(e.message)}</div>`;
+  }
+}
+
+async function syncVosFactures(){  const btn=$('btn-sync');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i>Sync…';
   try{const r=await API.vfSync();toast(`Sync OK — ${r.results.clients} clients, ${r.results.products} produits`,'ti-refresh');CACHE.catalogue=[];render();}
   catch(e){toast('Erreur sync : '+e.message,'ti-alert-circle','var(--danger)');}
   finally{btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>Sync VosFactures';loadVfStatus();}
