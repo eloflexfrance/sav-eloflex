@@ -1519,10 +1519,19 @@ router.post('/email/notification-intervention', async (req, res) => {
 
 
 // ── COMMANDES ─────────────────────────────────────────────────────
+// Retourne true si le num_suivi ressemble à un vrai numéro transporteur
+// (au moins 8 chars, contient des chiffres, entièrement alphanumérique)
+// Exclut : "RETOUR BRICE", "SUÈDE", "ATTENTE VALIDATION", etc.
+function isRealTracking(s) {
+  if (!s) return false;
+  const clean = s.trim().replace(/\s+/g, '');
+  return clean.length >= 8 && /\d/.test(clean) && /^[A-Z0-9\-]+$/i.test(clean);
+}
+
 function statutCommande(cmd) {
   if (cmd.statut && cmd.statut !== 'Auto') return cmd.statut;
   if (cmd.date_livraison) return 'Livré';
-  if (cmd.num_suivi) return 'Expédié';
+  if (isRealTracking(cmd.num_suivi)) return 'Expédié';
   return 'En préparation';
 }
 
@@ -1559,34 +1568,59 @@ router.get('/commandes', async (req, res) => {
 router.get('/commandes/stats', async (req, res) => {
   try {
     const annee = req.query.annee ? parseInt(req.query.annee) : null;
-    // Données filtrées pour les compteurs
-    const rows = annee
-      ? await db.all('SELECT * FROM commandes WHERE annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1)', [annee])
-      : await db.all('SELECT * FROM commandes');
-    const calc = rows.map(statutCommande);
-    // Toutes les années pour le menu déroulant (toujours non filtré)
-    const allRows = annee ? await db.all('SELECT annee_onglet, date_commande FROM commandes') : rows;
+    const anneeFilter = annee
+      ? `(annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1))`
+      : 'TRUE';
+    const params = annee ? [annee] : [];
+
+    // Calcul SQL du statut (miroir de la fonction JS statutCommande + isRealTracking)
+    const statutExpr = `
+      CASE
+        WHEN statut IS NOT NULL AND statut != 'Auto' THEN statut
+        WHEN date_livraison IS NOT NULL THEN 'Livré'
+        WHEN num_suivi IS NOT NULL
+          AND LENGTH(REGEXP_REPLACE(num_suivi, '\\s+', '', 'g')) >= 8
+          AND REGEXP_REPLACE(num_suivi, '\\s+', '', 'g') ~ '^[A-Z0-9\\-]+$'
+          AND REGEXP_REPLACE(num_suivi, '\\s+', '', 'g') ~ '[0-9]'
+          THEN 'Expédié'
+        ELSE 'En préparation'
+      END`;
+
+    // Compteurs filtrés par année
+    const counts = await db.get(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN (${statutExpr}) = 'En préparation' THEN 1 ELSE 0 END) AS en_preparation,
+        SUM(CASE WHEN (${statutExpr}) = 'Expédié'        THEN 1 ELSE 0 END) AS expedie,
+        SUM(CASE WHEN (${statutExpr}) = 'Livré'          THEN 1 ELSE 0 END) AS livre,
+        SUM(CASE WHEN (${statutExpr}) = 'Problème'       THEN 1 ELSE 0 END) AS probleme,
+        SUM(CASE WHEN (${statutExpr}) = 'Facturé'        THEN 1 ELSE 0 END) AS facture,
+        SUM(CASE WHEN modele_demo = TRUE                 THEN 1 ELSE 0 END) AS demo,
+        SUM(CASE WHEN modele ILIKE '%eloflex%' AND num_serie IS NOT NULL THEN 1 ELSE 0 END) AS fauteuils_serie
+      FROM commandes WHERE ${anneeFilter}
+    `, params);
+
+    // Répartition par année (toujours sans filtre pour le menu déroulant)
+    const anneeRows = await db.all(`
+      SELECT COALESCE(annee_onglet::text, EXTRACT(YEAR FROM date_commande::date)::text) AS annee,
+             COUNT(*)::int AS n
+      FROM commandes
+      WHERE annee_onglet IS NOT NULL OR date_commande IS NOT NULL
+      GROUP BY 1 ORDER BY 1 DESC
+    `);
     const parAnnee = {};
-    allRows.forEach(r => {
-      const a = r.annee_onglet || (r.date_commande ? new Date(r.date_commande).getFullYear() : null);
-      if (a) parAnnee[a] = (parAnnee[a] || 0) + 1;
-    });
-    const parGroupe = {};
-    rows.forEach(r => { if (r.groupe) parGroupe[r.groupe] = (parGroupe[r.groupe] || 0) + 1; });
-    const topDistributeurs = {};
-    rows.forEach(r => { topDistributeurs[r.distributeur_nom] = (topDistributeurs[r.distributeur_nom] || 0) + 1; });
+    anneeRows.forEach(r => { if (r.annee) parAnnee[r.annee] = r.n; });
+
     res.json({
-      total: rows.length,
-      en_preparation: calc.filter(s => s === 'En préparation').length,
-      expedie: calc.filter(s => s === 'Expédié').length,
-      livre: calc.filter(s => s === 'Livré').length,
-      probleme: calc.filter(s => s === 'Problème').length,
-      facture:  calc.filter(s => s === 'Facturé').length,
-      demo:     rows.filter(r => r.modele_demo).length,
-      fauteuils_serie: rows.filter(r => /eloflex/i.test(r.modele||'') && r.num_serie).length,
+      total:          parseInt(counts.total)          || 0,
+      en_preparation: parseInt(counts.en_preparation) || 0,
+      expedie:        parseInt(counts.expedie)        || 0,
+      livre:          parseInt(counts.livre)          || 0,
+      probleme:       parseInt(counts.probleme)       || 0,
+      facture:        parseInt(counts.facture)        || 0,
+      demo:           parseInt(counts.demo)           || 0,
+      fauteuils_serie:parseInt(counts.fauteuils_serie)|| 0,
       par_annee: parAnnee,
-      par_groupe: parGroupe,
-      top_distributeurs: Object.entries(topDistributeurs).sort((a, b) => b[1] - a[1]).slice(0, 10),
       annee_filtre: annee
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

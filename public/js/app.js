@@ -501,6 +501,12 @@ async function renderExpeditions(ttl,c,a){
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
 const cmdStatutClass = s => s==='Livré'?'g':s==='Facturé'?'g':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':'ouvert';
 
+function isRealTracking(s){
+  if(!s) return false;
+  const c = s.trim().replace(/\s+/g,'');
+  return c.length>=8 && /\d/.test(c) && /^[A-Z0-9\-]+$/i.test(c);
+}
+
 // Traduit les valeurs de statut stockées en DB (toujours en français) vers la langue affichée
 function tStatut(s){
   const map = {
@@ -675,7 +681,9 @@ async function renderCommandesTable(){
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
         <td class="mono">${esc(cm.num_suivi||'')}${(()=>{const l=lienSuiviColis(cm.transporteur,cm.num_suivi);return l?` <a href="${l}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre le colis'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'';})()}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
-        <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span></td>
+        <td onclick="event.stopPropagation()" style="position:relative">
+          <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i></span>
+        </td>
         <td style="text-align:center">
           ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
@@ -930,6 +938,36 @@ function majReliquatSection(){
   const wrap = document.getElementById('cmd-reliquat')?.parentElement;
   if(desc) desc.style.display = checked ? '' : 'none';
   if(wrap) wrap.style.background = checked ? 'var(--warning-bg)' : 'var(--surface)';
+}
+
+const STATUTS_LISTE = ['Auto','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
+
+function toggleStatutMenu(e, id, statutActuel){
+  // Fermer tout menu ouvert
+  document.querySelectorAll('.statut-menu').forEach(m => m.remove());
+  const menu = document.createElement('div');
+  menu.className = 'statut-menu';
+  menu.style.cssText = `position:fixed;z-index:9999;background:var(--surface);border:0.5px solid var(--border-s);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.12);padding:4px 0;min-width:150px`;
+  menu.innerHTML = STATUTS_LISTE.map(s => `
+    <div onclick="changerStatutCommande(${id},'${s}');this.closest('.statut-menu').remove()"
+      style="padding:7px 14px;cursor:pointer;font-size:13px;${s===statutActuel?'font-weight:700;color:var(--accent)':''}
+      display:flex;align-items:center;gap:8px" class="statut-option">
+      ${s===statutActuel?'<i class="ti ti-check" style="font-size:12px"></i>':'<span style="width:12px"></span>'}
+      <span class="badge ${s==='Auto'?'ouvert':cmdStatutClass(s)}" style="font-size:11px">${tStatut(s)||s}</span>
+    </div>`).join('');
+  document.body.appendChild(menu);
+  const rect = e.target.getBoundingClientRect();
+  menu.style.left = `${Math.min(rect.left, window.innerWidth - 180)}px`;
+  menu.style.top  = `${rect.bottom + 4}px`;
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 50);
+}
+
+async function changerStatutCommande(id, statut){
+  try{
+    await API.updateCommande(id, { statut });
+    toast(`Statut → ${tStatut(statut)||statut}`, 'ti-check');
+    render();
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 async function enregistrerCommande(id){
