@@ -2117,7 +2117,10 @@ function showQuickResults(res,q){
       <div style="display:flex;gap:6px;margin-top:6px;padding-left:28px;flex-wrap:wrap">
         <button class="btn sm primary" onclick="quickNewInter(${f.id},${f.client_id})"><i class="ti ti-plus"></i>Nouvelle intervention</button>
         <button class="btn sm" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${f.client_id}});clearQuickSearch()"><i class="ti ti-eye"></i>Voir la fiche</button>
-        ${f.commande_id?`<button class="btn sm" onclick="setView('commandes');clearQuickSearch();setTimeout(()=>modalCommande(${f.commande_id}),300)"><i class="ti ti-clipboard-list"></i>Voir la commande</button>`:''}
+        <button class="btn sm" onclick="${f.commande_id
+          ? `setView('commandes');clearQuickSearch();setTimeout(()=>modalCommande(${f.commande_id}),300)`
+          : `CMD_FILTERS.q=${JSON.stringify(f.serie||'')};setView('commandes');clearQuickSearch()`
+        }"><i class="ti ti-clipboard-list"></i>Commande</button>
       </div>
     </div>`).join('');
   }
