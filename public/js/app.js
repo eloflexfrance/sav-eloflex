@@ -229,6 +229,7 @@ async function chargerCommandesDashboard(){
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
         <div class="stat-card"><div class="stat-label">Facturé</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
+        <div class="stat-card"><div class="stat-label">🔄 Démos</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_probleme')||'Problème'}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
       </div>
       ${!list.length?`<div style="font-size:12px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
@@ -576,6 +577,7 @@ async function renderCommandes(ttl,c,a){
       <div class="card"><div style="font-size:22px;font-weight:700;color:#d8a32a">${stats.expedie}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_expedie')||'Expédiées'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:#2a9d4d">${stats.livre}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_livre')||'Livrées'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:var(--accent)">${stats.facture||0}</div><div style="font-size:12px;color:var(--text2)">Facturées</div></div>
+      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--warning)">${stats.demo||0}</div><div style="font-size:12px;color:var(--text2)">🔄 Démos</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_probleme')||'Problème'}</div></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
@@ -620,7 +622,7 @@ async function renderCommandesTable(){
         <td>${fd(cm.date_commande)}</td>
         <td>${esc(cm.distributeur_nom)}</td>
         <td class="mono">${esc(cm.bdc||'')}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?' <span class="badge hg" style="font-size:10px">🔄 Démo</span>':''}</td>
         <td class="mono">${esc(cm.num_suivi||'')}${(()=>{const l=lienSuiviColis(cm.transporteur,cm.num_suivi);return l?` <a href="${l}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre le colis'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'';})()}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
         <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(cm.statut_calc)}</span></td>
@@ -643,6 +645,12 @@ async function modalCommande(id){
     <div class="modal-body">
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label><input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required></div>
+        <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px">
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:0.5px solid ${cm.modele_demo?'var(--warning)':'var(--border-s)'};border-radius:var(--radius);background:${cm.modele_demo?'var(--warning-bg)':'var(--surface)'};cursor:pointer;width:100%" onclick="document.getElementById('cmd-demo').click()">
+            <input type="checkbox" id="cmd-demo" ${cm.modele_demo?'checked':''} onchange="majDemoStyle(this)" style="width:16px;height:16px;accent-color:var(--warning);cursor:pointer">
+            <label for="cmd-demo" style="font-size:13px;font-weight:600;color:var(--warning);cursor:pointer">🔄 Modèle de démo</label>
+          </div>
+        </div>
         <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
         <div class="form-group"><label class="form-label">${t('cmd_quantite')||'Quantité'}</label><input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}"></div>
@@ -827,8 +835,13 @@ async function lookupBdcVF(){
     if(r.quantite   && $('cmd-quantite'))                       { $('cmd-quantite').value=r.quantite;   }
     if(r.date_commande && $('cmd-date') && !gv('cmd-date'))    { $('cmd-date').value=r.date_commande;   remplis.push('date'); }
     if(r.num_serie  && $('cmd-serie')   && !gv('cmd-serie'))   { $('cmd-serie').value=r.num_serie;      remplis.push('n° série'); }
-    // Si le document trouvé est un bordereau de livraison, remplir le champ BL
+    // Démo détectée automatiquement dans le document VosFactures
     if(r.kind==='receipt' && $('cmd-bordereau') && !gv('cmd-bordereau')){ $('cmd-bordereau').value=r.numero||''; remplis.push('bordereau de livraison'); }
+    if(r.modele_demo && document.getElementById('cmd-demo')){
+      document.getElementById('cmd-demo').checked = true;
+      majDemoStyle(document.getElementById('cmd-demo'));
+      remplis.push('🔄 modèle démo détecté');
+    }
     // Lignes structurées : remplace TMP_CMD_LIGNES
     if(r.lignes && r.lignes.length){
       TMP_CMD_LIGNES = r.lignes.map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
@@ -853,6 +866,14 @@ async function lookupFactureVF(){  const numero = gv('cmd-facture').trim();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+function majDemoStyle(cb){
+  const wrap = cb.closest('div[style]');
+  if(wrap){
+    wrap.style.borderColor = cb.checked ? 'var(--warning)' : 'var(--border-s)';
+    wrap.style.background  = cb.checked ? 'var(--warning-bg)' : 'var(--surface)';
+  }
+}
+
 function majReliquatSection(){
   const checked = document.getElementById('cmd-reliquat')?.checked;
   const desc = document.getElementById('cmd-reliquat-desc');
@@ -872,6 +893,7 @@ async function enregistrerCommande(id){
     informations: gv('cmd-infos'),
     reliquat: !!document.getElementById('cmd-reliquat')?.checked,
     reliquat_description: gv('cmd-reliquat-description')||null,
+    modele_demo: !!document.getElementById('cmd-demo')?.checked,
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
@@ -2063,7 +2085,7 @@ function showQuickResults(res,q){
         <div style="display:flex;align-items:center;gap:10px">
           <i class="ti ti-clipboard-list" style="font-size:18px;color:var(--accent);flex-shrink:0"></i>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:13px">${esc(cmd.distributeur_nom)}${cmd.bdc?` <span class="mono" style="font-weight:400;color:var(--text3);font-size:12px">${esc(cmd.bdc)}</span>`:''}</div>
+            <div style="font-weight:700;font-size:13px">${esc(cmd.distributeur_nom)}${cmd.bdc?` <span class="mono" style="font-weight:400;color:var(--text3);font-size:12px">${esc(cmd.bdc)}</span>`:''}${cmd.modele_demo?' <span class="badge hg" style="font-size:10px">🔄 Démo</span>':''}</div>
             <div style="font-size:12px;color:var(--text2)">${esc(cmd.modele||'')}${cmd.num_facture?' · Facture : '+esc(cmd.num_facture):''}${cmd.num_serie?' · '+esc(cmd.num_serie):''}${cmd.date_commande?' · '+fd(cmd.date_commande):''}</div>
           </div>
           ${cmd.statut?`<span class="badge ${statut}" style="font-size:10px">${esc(cmd.statut)}</span>`:''}

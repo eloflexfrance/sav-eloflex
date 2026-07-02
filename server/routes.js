@@ -1037,25 +1037,26 @@ router.get('/recherche', async (req, res) => {
       FROM fauteuils f JOIN clients c ON c.id=f.client_id
       LEFT JOIN interventions iv ON iv.fauteuil_id=f.id
       WHERE f.serie ILIKE $1 OR f.modele ILIKE $1 OR c.nom ILIKE $1 OR iv.num_sav ILIKE $1
-      ORDER BY f.updated_at DESC LIMIT 10
+      ORDER BY c.nom, f.date_achat DESC LIMIT 50
     `, [`%${q}%`]);
 
     const clients = await db.all(`
       SELECT c.*, COUNT(f.id)::int AS nb_fauteuils
       FROM clients c LEFT JOIN fauteuils f ON f.client_id=c.id
       WHERE c.nom ILIKE $1
-      GROUP BY c.id ORDER BY c.nom LIMIT 8
+      GROUP BY c.id ORDER BY c.nom LIMIT 10
     `, [`%${q}%`]);
 
-    // Recherche dans les commandes : BDC, n° facture, n° série, distributeur
+    // Toutes les commandes du distributeur + correspondances directes (BDC, facture, série)
     const commandes = await db.all(`
       SELECT cmd.id, cmd.bdc, cmd.num_facture, cmd.num_serie, cmd.modele,
-             cmd.distributeur_nom, cmd.date_commande, cmd.statut,
-             cmd.num_suivi, cmd.date_livraison
+             cmd.distributeur_nom, cmd.date_commande, cmd.statut, cmd.modele_demo,
+             cmd.num_suivi, cmd.date_livraison, cmd.reliquat
       FROM commandes cmd
       WHERE cmd.bdc ILIKE $1 OR cmd.num_facture ILIKE $1
          OR cmd.num_serie ILIKE $1 OR cmd.distributeur_nom ILIKE $1
-      ORDER BY cmd.date_commande DESC LIMIT 8
+         OR cmd.num_bordereau ILIKE $1
+      ORDER BY cmd.date_commande DESC LIMIT 50
     `, [`%${q}%`]);
 
     res.json({ fauteuils, clients, commandes });
@@ -1446,6 +1447,7 @@ router.get('/commandes/stats', async (req, res) => {
       livre: calc.filter(s => s === 'Livré').length,
       probleme: calc.filter(s => s === 'Problème').length,
       facture:  calc.filter(s => s === 'Facturé').length,
+      demo:     rows.filter(r => r.modele_demo).length,
       par_annee: parAnnee,
       par_groupe: parGroupe,
       top_distributeurs: Object.entries(topDistributeurs).sort((a, b) => b[1] - a[1]).slice(0, 10)
@@ -1513,13 +1515,13 @@ router.post('/commandes', async (req, res) => {
     const row = await db.run(
       `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, quantite, accessoire,
         bdc, date_commande, vf_order_id, client_final, num_suivi, transporteur, date_livraison, num_serie, num_facture,
-        invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
+        invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
        d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto',
-       d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null]
+       d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null, d.modele_demo ? true : false]
     );
     res.status(201).json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1530,7 +1532,7 @@ router.put('/commandes/:id', async (req, res) => {
     const d = req.body;
     const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'quantite', 'accessoire',
       'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_livraison', 'num_serie',
-      'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description'];
+      'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description', 'modele_demo'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
@@ -1767,6 +1769,9 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
     const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
     const mSerie = texteComplet.match(SERIE_RE);
 
+    // Détection automatique modèle de démo / prêt d'essai
+    const modeleDemo = /offre\s*d['']?essai|pret\s*(long\s*terme|court)|pr[êe]t\s*(long|court|d['']?essai)|d[ée]mo(?:nstration)?|essai\s*\d+\s*jours/i.test(texteComplet);
+
     res.json({
       configured: true, found: true,
       numero:        detail.number || inv.number,
@@ -1775,6 +1780,7 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
       modele, quantite, lignes,
       num_serie: mSerie ? mSerie[0].trim() : null,
       kind: detail.kind || inv.kind,
+      modele_demo: modeleDemo,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -166,6 +166,7 @@ async function initDB() {
       num_bordereau TEXT,
       reliquat BOOLEAN DEFAULT FALSE,
       reliquat_description TEXT,
+      modele_demo BOOLEAN DEFAULT FALSE,
       preuve_livraison_filename TEXT,
       preuve_livraison_url TEXT,
       preuve_livraison_mime TEXT,
@@ -187,6 +188,7 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_bordereau TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_description TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS modele_demo BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_filename TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_url TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_mime TEXT`);
