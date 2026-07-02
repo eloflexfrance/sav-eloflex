@@ -383,29 +383,61 @@ async function syncCommandesVF(fullHistory = false) {
         if (f.rows.length) fauteuilId = f.rows[0].id;
       }
 
-      // 4. Upsert dans commandes (clé d'idempotence = vf_commande_id, l'id du document VF)
+      // 4. Upsert dans commandes
+      // Stratégie : vf_commande_id en priorité, sinon chercher par bdc+distributeur (import Excel)
       try {
-        const res = await client.query(`
-          INSERT INTO commandes (
-            client_id, fauteuil_id, annee_onglet, distributeur_nom, modele, quantite, accessoire,
-            bdc, date_commande, vf_order_id, num_serie, informations, vf_commande_id
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-          ON CONFLICT (vf_commande_id) DO UPDATE SET
-            distributeur_nom = EXCLUDED.distributeur_nom,
-            modele           = EXCLUDED.modele,
-            quantite         = EXCLUDED.quantite,
-            accessoire       = EXCLUDED.accessoire,
-            bdc              = EXCLUDED.bdc,
-            date_commande    = EXCLUDED.date_commande,
-            vf_order_id      = EXCLUDED.vf_order_id,
-            num_serie        = COALESCE(commandes.num_serie, EXCLUDED.num_serie),
-            fauteuil_id       = COALESCE(commandes.fauteuil_id, EXCLUDED.fauteuil_id),
-            updated_at        = NOW()
-          RETURNING (xmax = 0) AS inserted
-        `, [clientId, fauteuilId, annee, nomDistrib, modele, quantite, accessoire,
-            o.number || null, dateCommande, o.oid ? String(o.oid) : null,
-            numSerie, detail.description || null, o.id]);
-        if (res.rows[0].inserted) created++; else updated++;
+        // Chercher si une commande existe déjà avec ce bdc + ce distributeur (import Excel sans vf_commande_id)
+        let existingId = null;
+        if (o.number) {
+          const ex = await client.query(
+            `SELECT id FROM commandes WHERE vf_commande_id IS NULL AND bdc=$1 AND LOWER(distributeur_nom)=LOWER($2) LIMIT 1`,
+            [o.number, nomDistrib]
+          );
+          if (ex.rows.length) existingId = ex.rows[0].id;
+        }
+
+        if (existingId) {
+          // Commande trouvée par BDC (import Excel) : rattacher l'ID VF + compléter les champs vides uniquement
+          await client.query(`
+            UPDATE commandes SET
+              vf_commande_id = $1,
+              fauteuil_id    = COALESCE(fauteuil_id, $2),
+              num_serie      = COALESCE(num_serie, $3),
+              modele         = COALESCE(NULLIF(modele,''), $4),
+              quantite       = COALESCE(quantite, $5),
+              updated_at     = NOW()
+            WHERE id = $6
+          `, [o.id, fauteuilId, numSerie, modele, quantite, existingId]);
+          updated++;
+        } else {
+          // Upsert standard sur vf_commande_id
+          // IMPORTANT : les champs modifiés manuellement (statut, reliquat, informations,
+          // num_suivi, num_bordereau, preuve de livraison, modele_demo) ne sont JAMAIS écrasés.
+          // Seules les données structurelles VF sont mises à jour.
+          const res = await client.query(`
+            INSERT INTO commandes (
+              client_id, fauteuil_id, annee_onglet, distributeur_nom, modele, quantite, accessoire,
+              bdc, date_commande, vf_order_id, num_serie, informations, vf_commande_id
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            ON CONFLICT (vf_commande_id) DO UPDATE SET
+              distributeur_nom = EXCLUDED.distributeur_nom,
+              modele           = COALESCE(NULLIF(commandes.modele,''), EXCLUDED.modele),
+              quantite         = COALESCE(commandes.quantite,          EXCLUDED.quantite),
+              bdc              = COALESCE(NULLIF(commandes.bdc,''),    EXCLUDED.bdc),
+              date_commande    = COALESCE(commandes.date_commande,     EXCLUDED.date_commande),
+              vf_order_id      = EXCLUDED.vf_order_id,
+              num_serie        = COALESCE(commandes.num_serie,         EXCLUDED.num_serie),
+              fauteuil_id      = COALESCE(commandes.fauteuil_id,      EXCLUDED.fauteuil_id),
+              updated_at       = NOW()
+              -- NE PAS écraser : statut, informations, num_suivi, date_livraison,
+              -- num_bordereau, reliquat, reliquat_description, modele_demo,
+              -- preuve_livraison_*, accessoire (si déjà rempli manuellement)
+            RETURNING (xmax = 0) AS inserted
+          `, [clientId, fauteuilId, annee, nomDistrib, modele, quantite, accessoire,
+              o.number || null, dateCommande, o.oid ? String(o.oid) : null,
+              numSerie, detail.description || null, o.id]);
+          if (res.rows[0].inserted) created++; else updated++;
+        }
       } catch (e) {
         console.warn(`  ⚠️ Commande VF ${o.id} : ${e.message}`);
         skipped++;

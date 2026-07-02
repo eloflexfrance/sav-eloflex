@@ -637,12 +637,12 @@ async function renderCommandes(ttl,c,a){
       <div class="card"><div style="font-size:22px;font-weight:700;color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_probleme')||'Problème'}</div></div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-      <input class="search-bar" style="max-width:240px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série, suivi...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;renderCommandesTable()">
+      <input class="search-bar" style="max-width:240px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série, suivi...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;renderCommandesTable(1)">
       <select id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;render()">
         <option value="">${t('cmd_toutes_annees')||'Toutes années'}</option>
         ${years.map(y=>`<option value="${y}" ${CMD_FILTERS.annee==y?'selected':''}>${y}</option>`).join('')}
       </select>
-      <select id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable()">
+      <select id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
         <option value="">${t('cmd_tous_statuts')||'Tous statuts'}</option>
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
         <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
@@ -651,22 +651,37 @@ async function renderCommandes(ttl,c,a){
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
-      <input placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable()" style="max-width:200px">
+      <input placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)" style="max-width:200px">
     </div>
     <div id="cmd-table-wrap"></div>`;
   await renderCommandesTable();
 }
 
-async function renderCommandesTable(){
+async function renderCommandesTable(page=1){
   const wrap=$('cmd-table-wrap'); if(!wrap) return;
   wrap.innerHTML=`<div class="empty" style="padding-top:30px"><i class="ti ti-loader-2"></i>${t('msg_chargement')}</div>`;
+  const PER_PAGE = 100;
   const res = await API.commandes({
     annee: CMD_FILTERS.annee, statut: CMD_FILTERS.statut,
-    distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 300
+    distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q,
+    per_page: PER_PAGE, page
   });
   const list = res.rows||[];
+  const total = res.total || list.length;
+  const nbPages = Math.ceil(total / PER_PAGE);
+
   if(!list.length){ wrap.innerHTML=`<div class="empty"><i class="ti ti-clipboard-list"></i>${t('cmd_empty')||'Aucune commande trouvée'}</div>`; return; }
-  wrap.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:8px">${res.total} ${t('cmd_resultats')||'résultat(s)'}</div>
+
+  // Navigation pagination
+  const nav = nbPages > 1 ? `
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
+      <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(${page-1})"><i class="ti ti-chevron-left"></i></button>
+      <span style="color:var(--text2)">Page <b>${page}</b> / ${nbPages}</span>
+      <button class="btn sm" ${page>=nbPages?'disabled':''} onclick="renderCommandesTable(${page+1})"><i class="ti ti-chevron-right"></i></button>
+      <span style="color:var(--text3);font-size:12px">${total} résultat(s)</span>
+    </div>` : `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">${total} ${t('cmd_resultats')||'résultat(s)'}</div>`;
+
+  wrap.innerHTML=`${nav}
     <div class="table-wrap"><table class="t">
       <thead><tr>
         <th>${t('col_date')||'Date'}</th><th>${t('col_client')||'Distributeur'}</th>
@@ -689,7 +704,8 @@ async function renderCommandesTable(){
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
         </td>
       </tr>`).join('')}</tbody>
-    </table></div>`;
+    </table></div>
+    ${nbPages > 1 ? nav : ''}`;
 }
 
 async function modalCommande(id){
