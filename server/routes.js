@@ -114,6 +114,7 @@ function requireRole(...roles) {
   };
 }
 const adminOnly = requireRole('admin');
+const adminOrOp  = requireRole('admin', 'operateur');
 
 // ── Gestion des utilisateurs (admin only) ─────────────────────────
 router.get('/users', adminOnly, async (req, res) => {
