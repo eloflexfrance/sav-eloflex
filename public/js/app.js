@@ -636,7 +636,7 @@ async function renderCommandes(ttl,c,a){
       <div class="card"><div style="font-size:22px;font-weight:700;color:var(--warning)">${stats.demo||0}</div><div style="font-size:12px;color:var(--text2)">🔄 ${t('cmd_demo_count')||'Démos'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_probleme')||'Problème'}</div></div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
       <input class="search-bar" style="max-width:240px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série, suivi...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;renderCommandesTable(1)">
       <select id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;render()">
         <option value="">${t('cmd_toutes_annees')||'Toutes années'}</option>
@@ -651,7 +651,19 @@ async function renderCommandes(ttl,c,a){
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
-      <input placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)" style="max-width:200px">
+      <input id="cmd-f-distrib" placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)" style="max-width:200px">
+      ${CMD_FILTERS.distributeur||CMD_FILTERS.statut||CMD_FILTERS.q
+        ? `<button class="btn sm" onclick="CMD_FILTERS.distributeur='';CMD_FILTERS.statut='';CMD_FILTERS.q='';render()" title="Effacer tous les filtres" style="white-space:nowrap">
+            <i class="ti ti-x"></i> Effacer les filtres
+           </button>`
+        : ''}
+      ${CMD_FILTERS.distributeur
+        ? `<span style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--accent-bg);border:0.5px solid var(--accent);border-radius:var(--radius);font-size:12px;color:var(--accent);font-weight:600">
+            <i class="ti ti-building-store" style="font-size:12px"></i>
+            ${esc(CMD_FILTERS.distributeur)}
+            <button onclick="CMD_FILTERS.distributeur='';renderCommandesTable(1)" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0;line-height:1;font-size:14px" title="Retirer ce filtre">×</button>
+           </span>`
+        : ''}
     </div>
     <div id="cmd-table-wrap"></div>`;
   await renderCommandesTable();
