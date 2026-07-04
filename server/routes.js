@@ -1959,4 +1959,92 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Alertes commandes bloquées ─────────────────────────────────────
+router.get('/commandes/alertes-blocage', async (req, res) => {
+  try {
+    const seuil = parseInt(req.query.jours)||7;
+    const rows = await db.all(`
+      SELECT cmd.id, cmd.distributeur_nom, cmd.bdc, cmd.modele, cmd.date_commande,
+             cmd.num_suivi, cmd.statut,
+             ROUND(DATE_PART('day', NOW() - cmd.date_commande::timestamp))::int AS jours_attente
+      FROM commandes cmd
+      WHERE cmd.date_commande IS NOT NULL
+        AND (cmd.statut IS NULL OR cmd.statut IN ('Auto','En préparation'))
+        AND cmd.date_livraison IS NULL
+        AND (cmd.num_suivi IS NULL
+             OR LENGTH(REGEXP_REPLACE(cmd.num_suivi,'\\s+','','g')) < 8
+             OR NOT (REGEXP_REPLACE(cmd.num_suivi,'\\s+','','g') ~ '[0-9]'))
+        AND DATE_PART('day', NOW() - cmd.date_commande::timestamp) >= $1
+      ORDER BY jours_attente DESC
+      LIMIT 50
+    `, [seuil]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Email confirmation expédition ──────────────────────────────────
+router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
+  try {
+    const params = {};
+    const prows = await db.all('SELECT cle, valeur FROM parametres');
+    prows.forEach(r => params[r.cle] = r.valeur);
+    if (params.email_notifications !== '1') return res.json({ ok: false, reason: 'Notifications email désactivées dans Paramètres' });
+    if (!params.email_smtp_host || !params.email_smtp_user) return res.json({ ok: false, reason: 'SMTP non configuré dans Paramètres' });
+    const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom, c.email AS client_email
+      FROM commandes cmd JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    if (!cmd.client_email) return res.json({ ok: false, reason: `Pas d'adresse email pour ${cmd.distributeur_nom}` });
+    if (!cmd.num_suivi) return res.json({ ok: false, reason: 'Numéro de suivi manquant' });
+    const liens = { 'Chronopost':`https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=${cmd.num_suivi}`,
+      'Colissimo':`https://www.laposte.fr/outils/suivre-vos-envois?code=${cmd.num_suivi}`,
+      'DB Schenker':`https://www.dbschenker.com/track/${cmd.num_suivi}`, 'UPS':`https://www.ups.com/track?tracknum=${cmd.num_suivi}` };
+    const lienSuivi = liens[cmd.transporteur]||'';
+    const articlesList = cmd.modele||(cmd.accessoire||'').split('\n').slice(0,3).join(', ');
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({ host:params.email_smtp_host, port:parseInt(params.email_smtp_port)||587,
+      secure:false, auth:{user:params.email_smtp_user, pass:params.email_smtp_pass} });
+    await transporter.sendMail({
+      from: params.email_from||params.email_smtp_user, to: cmd.client_email,
+      subject: `[Éloflex] Expédition de votre commande ${cmd.bdc||'#'+cmd.id}`,
+      html: `<div style="font-family:sans-serif;max-width:560px;color:#222">
+        <h2 style="color:#1a3a5c">Éloflex France — Expédition</h2>
+        <p>Votre commande est en route !</p>
+        <table style="border-collapse:collapse;width:100%;font-size:13px;margin:16px 0">
+          <tr style="background:#f5f5f4"><td style="padding:8px 12px;font-weight:600;width:160px">Distributeur</td><td style="padding:8px 12px">${cmd.distributeur_nom}</td></tr>
+          <tr><td style="padding:8px 12px;font-weight:600;background:#f5f5f4">Référence</td><td style="padding:8px 12px"><strong>${cmd.bdc||'—'}</strong></td></tr>
+          <tr style="background:#f5f5f4"><td style="padding:8px 12px;font-weight:600">Article(s)</td><td style="padding:8px 12px">${articlesList}</td></tr>
+          <tr><td style="padding:8px 12px;font-weight:600;background:#f5f5f4">Transporteur</td><td style="padding:8px 12px">${cmd.transporteur||'—'}</td></tr>
+          <tr style="background:#f5f5f4"><td style="padding:8px 12px;font-weight:600">N° suivi</td><td style="padding:8px 12px"><strong>${cmd.num_suivi}</strong></td></tr>
+        </table>
+        ${lienSuivi?`<a href="${lienSuivi}" style="display:inline-block;background:#1a3a5c;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Suivre mon colis →</a>`:''}
+        <p style="margin-top:20px;font-size:12px;color:#888">Éloflex France — Service commercial</p>
+      </div>`
+    });
+    res.json({ ok:true, to:cmd.client_email });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Migration N° suivi : déplace les valeurs texte vers informations/num_retour ──
+router.post('/commandes/fix-suivi', adminOnly, async (req, res) => {
+  try {
+    const rows = await db.all(`SELECT id, num_suivi, num_retour, informations FROM commandes
+      WHERE num_suivi IS NOT NULL
+        AND (LENGTH(REGEXP_REPLACE(num_suivi,'\\s+','','g')) < 8
+             OR NOT (REGEXP_REPLACE(num_suivi,'\\s+','','g') ~ '[0-9]'))`);
+    let migres = 0;
+    for (const r of rows) {
+      const note = r.num_suivi.trim();
+      const isRetour = /retour|suède|suede|sweden/i.test(note);
+      if (isRetour && !r.num_retour) {
+        await db.run('UPDATE commandes SET num_suivi=NULL, num_retour=$1 WHERE id=$2', [note, r.id]);
+      } else {
+        const info = r.informations ? `${r.informations}\n[suivi] ${note}` : `[suivi] ${note}`;
+        await db.run('UPDATE commandes SET num_suivi=NULL, informations=$1 WHERE id=$2', [info, r.id]);
+      }
+      migres++;
+    }
+    res.json({ ok:true, migres, detail:`${migres} valeur(s) migrée(s)` });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

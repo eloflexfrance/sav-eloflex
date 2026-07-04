@@ -686,15 +686,23 @@ async function renderCommandesTable(page=1){
       <thead><tr>
         <th>${t('col_date')||'Date'}</th><th>${t('col_client')||'Distributeur'}</th>
         <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
-        <th>${t('cmd_suivi')||'N° suivi'}</th><th>${t('cmd_serie')||'N° série'}</th>
+        <th>${t('cmd_suivi')||'N° suivi'}</th><th>Date livraison</th><th>${t('cmd_serie')||'N° série'}</th>
         <th>${t('col_statut')||'Statut'}</th><th style="text-align:center">  </th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
         <td>${fd(cm.date_commande)}</td>
-        <td>${esc(cm.distributeur_nom)}</td>
+        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';renderCommandesTable(1)" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span></td>
         <td class="mono">${esc(cm.bdc||'')}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
-        <td class="mono">${esc(cm.num_suivi||'')}${(()=>{const l=lienSuiviColis(cm.transporteur,cm.num_suivi);return l?` <a href="${l}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t('cmd_suivre_colis')||'Suivre le colis'}"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'';})()}</td>
+        <td class="mono">${(()=>{
+          if(!cm.num_suivi) return '';
+          if(isRealTracking(cm.num_suivi)){
+            const l=lienSuiviColis(cm.transporteur,cm.num_suivi);
+            return esc(cm.num_suivi)+(l?` <a href="${l}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'');
+          }
+          return `<span style="color:var(--text3);font-size:11px" title="${esc(cm.num_suivi)}">${esc(cm.num_suivi)}</span>`;
+        })()}</td>
+        <td style="font-size:12px;color:var(--text2)">${cm.date_livraison?fd(cm.date_livraison):'—'}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
         <td onclick="event.stopPropagation()" style="position:relative">
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i></span>
@@ -820,6 +828,7 @@ async function modalCommande(id){
     </div>
     <div class="modal-footer">
       ${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i>${t('btn_supprimer')||'Supprimer'}</button>`:''}
+      ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Envoyer confirmation d'expédition par email"><i class="ti ti-mail"></i> Email expédition</button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
@@ -1237,7 +1246,25 @@ async function renderParametres(ttl,c,a){
       <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>${t('param_vf_sync')}</button>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-table-import"></i> Import historique commandes (Excel comptabilité)</h3>
+      <h3><i class="ti ti-clock-exclamation"></i> Commandes bloquées</h3>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Commandes "En préparation" sans numéro de suivi valide depuis plus de :</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+        <select class="form-input" id="blocage-seuil" style="width:auto" onchange="chargerAlertesBlocage()">
+          <option value="3">3 jours</option>
+          <option value="7" selected>7 jours</option>
+          <option value="14">14 jours</option>
+          <option value="30">30 jours</option>
+        </select>
+        <button class="btn sm" onclick="chargerAlertesBlocage()"><i class="ti ti-refresh"></i> Actualiser</button>
+      </div>
+      <div id="alertes-blocage-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
+    </div>
+    <div class="param-section">
+      <h3><i class="ti ti-database-export"></i> Nettoyage N° suivi</h3>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Migre les valeurs texte ("RETOUR BRICE", "SUÈDE", "ATTENTE VALIDATION"…) stockées dans le champ N° suivi vers les champs appropriés : retours → N° retour, autres → Informations.</p>
+      <button class="btn" onclick="lancerMigrationSuivi()"><i class="ti ti-arrow-merge"></i> Lancer la migration</button>
+      <div id="migration-suivi-result" style="margin-top:8px"></div>
+    </div>
       <p style="font-size:12px;color:var(--text2);margin-bottom:12px">
         Importe toutes les commandes de ton fichier Excel (onglets 2019, 2020… 2026) sans avoir besoin du terminal.
         L'import est idempotent : relancer ne crée pas de doublons.
@@ -1260,6 +1287,7 @@ async function renderParametres(ttl,c,a){
     <button class="btn primary" onclick="modalNouvelUtilisateur()"><i class="ti ti-user-plus"></i> Ajouter un utilisateur</button>`;
   c.appendChild(usersSection);
   chargerListeUtilisateurs();
+  chargerAlertesBlocage();
 }
 
 async function chargerListeUtilisateurs(){
@@ -1439,6 +1467,46 @@ async function supprimerUtilisateur(id, nom){
     await API.deleteUser(id);
     toast(`Compte de ${nom} supprimé`);
     chargerListeUtilisateurs();
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function envoyerEmailExpedition(id){
+  if(!confirm('Envoyer la confirmation d\'expédition par email au distributeur ?')) return;
+  toast('Envoi en cours…','ti-loader-2');
+  try{
+    const r = await API.emailExpedition(id);
+    if(r.ok) toast(`Email envoyé à ${r.to}`,'ti-mail');
+    else toast(`Non envoyé : ${r.reason}`,'ti-alert-circle','var(--warning)');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function chargerAlertesBlocage(){
+  const el=$('alertes-blocage-list'); if(!el) return;
+  el.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div>`;
+  try{
+    const jours = parseInt($('blocage-seuil')?.value)||7;
+    const rows = await API.commandesAlertesBlocage(jours);
+    if(!rows.length){ el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> Aucune commande bloquée — tout est à jour !</div>`; return; }
+    el.innerHTML=`<div class="table-wrap"><table class="t">
+      <thead><tr><th>Distributeur</th><th>Bdc</th><th>Modèle</th><th>Date commande</th><th>Jours attente</th><th></th></tr></thead>
+      <tbody>${rows.map(r=>`<tr onclick="modalCommande(${r.id})" style="cursor:pointer">
+        <td>${esc(r.distributeur_nom)}</td>
+        <td class="mono">${esc(r.bdc||'')}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.modele||'')}</td>
+        <td>${fd(r.date_commande)}</td>
+        <td><span class="badge ${r.jours_attente>14?'urgent':'attente'}">${r.jours_attente}j</span></td>
+        <td><button class="btn sm primary" onclick="event.stopPropagation();modalCommande(${r.id})"><i class="ti ti-pencil"></i></button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+  }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+async function lancerMigrationSuivi(){
+  if(!confirm('Migrer les faux numéros de suivi (RETOUR BRICE, SUÈDE, etc.) vers les champs appropriés ? Cette action est irréversible.')) return;
+  toast('Migration en cours…','ti-loader-2');
+  try{
+    const r = await API.fixSuivi();
+    toast(r.detail,'ti-check');
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
