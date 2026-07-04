@@ -720,8 +720,9 @@ async function renderCommandesTable(page=1){
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i></span>
         </td>
         <td style="text-align:center">
-          ${cm.num_retour?`<i class="ti ti-arrow-back-up" style="color:var(--danger)" title="Retour : ${esc(cm.num_retour)}${cm.date_retour?' — reçu le '+fd(cm.date_retour):''}"></i>`:''}
-          ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}
+          ${cm.client_final?`<i class="ti ti-user-check" style="color:var(--accent)" title="Client final : ${esc(cm.client_final)}"></i>`:''}
+          ${cm.num_retour?`<i class="ti ti-arrow-back-up" style="color:var(--danger);margin-left:2px" title="Retour : ${esc(cm.num_retour)}${cm.date_retour?' — reçu le '+fd(cm.date_retour):''}"></i>`:''}
+          ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--text2);margin-left:2px" title="${esc(cm.informations)}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
         </td>
       </tr>`).join('')}</tbody>
