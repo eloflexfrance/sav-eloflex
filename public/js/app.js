@@ -779,7 +779,12 @@ async function modalCommande(id){
         </div>
         <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-6px"></div>
         <div class="form-group"><label class="form-label">${t('cmd_date_livraison')||'Date livraison'}</label><input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison()"></div>
-        <div class="form-group"><label class="form-label">N° Bordereau de livraison</label><input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="ex: BL-2026-0042"></div>
+        <div class="form-group"><label class="form-label">N° Bordereau de livraison</label>
+          <div style="display:flex;gap:6px">
+            <input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="ex: BL-2026-0042" style="flex:1">
+            <button class="btn sm" type="button" title="Importer les articles depuis ce bordereau VosFactures" onmousedown="lookupBordereauVF()"><i class="ti ti-download"></i></button>
+          </div>
+        </div>
         <div class="form-group"><label class="form-label">${t('cmd_serie')||'N° série'}</label><input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}"></div>
         <div class="form-group">
           <label class="form-label">${t('cmd_facture')||'N° facture'}</label>
@@ -811,8 +816,8 @@ async function modalCommande(id){
             <div class="form-group"><label class="form-label">Transporteur retour</label>
               <select class="form-input" id="cmd-transporteur-retour">
                 <option value="">— Choisir —</option>
-                ${['Chronopost','Colissimo','DB Schenker','UPS','TNT','DHL','Autre'].map(t=>
-                  `<option value="${t}" ${cm.transporteur_retour===t?'selected':''}>${t}</option>`).join('')}
+                ${['Chronopost','Colissimo','DB Schenker','UPS','TNT','DHL','Autre'].map(tr=>
+                  `<option value="${tr}" ${cm.transporteur_retour===tr?'selected':''}>${tr}</option>`).join('')}
               </select>
             </div>
             <div class="form-group"><label class="form-label">Date de réception retour</label><input class="form-input" id="cmd-date-retour" type="date" value="${cm.date_retour||''}"></div>
@@ -821,6 +826,13 @@ async function modalCommande(id){
                 <i class="ti ti-external-link"></i> Suivre le retour
               </a>` : '<span style="font-size:12px;color:var(--text3)">Renseigne le N° suivi pour suivre</span>'}
             </div>
+          </div>
+          <div style="margin-top:8px">
+            <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span>Articles retournés</span>
+              <button class="btn sm" type="button" onclick="addRetourLigne()"><i class="ti ti-plus"></i> Ajouter</button>
+            </label>
+            <div id="cmd-retour-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:36px"></div>
           </div>
         </div>
         <div class="form-group" style="grid-column:1/-1">
@@ -849,9 +861,10 @@ async function modalCommande(id){
   window._CMD_PREUVE = id ? { url: cm.preuve_livraison_url, mime: cm.preuve_livraison_mime, taille: cm.preuve_livraison_taille } : {};
   // Initialiser les lignes depuis les données chargées ou vide
   TMP_CMD_LIGNES = (cm.lignes || []).map(l => ({designation:l.designation||'', reference:l.reference||'', quantite:l.quantite||1}));
+  TMP_RETOUR_LIGNES = (cm.retour_lignes || []).map(l => ({designation:l.designation||'', reference:l.reference||'', quantite:l.quantite||1}));
   majLienSuiviModal();
   majZonePreuveLivraison();
-  setTimeout(renderCmdLignes, 50); // Après que le DOM soit prêt
+  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); }, 50);
 }
 
 function commandeEstLivree(){
@@ -985,6 +998,51 @@ async function lookupFactureVF(){  const numero = gv('cmd-facture').trim();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+let TMP_RETOUR_LIGNES = [];
+
+function renderRetourLignes(){
+  const el=$('cmd-retour-lignes-list'); if(!el) return;
+  if(!TMP_RETOUR_LIGNES.length){
+    el.innerHTML=`<div style="font-size:12px;color:var(--text3);padding:6px 0">Aucun article retourné — cliquez "+ Ajouter"</div>`;
+    return;
+  }
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:var(--bg)">
+      <th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600">Désignation</th>
+      <th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600;width:120px">Référence</th>
+      <th style="padding:4px 8px;text-align:center;color:var(--text2);font-weight:600;width:55px">Qté</th>
+      <th style="width:28px"></th>
+    </tr></thead>
+    <tbody>${TMP_RETOUR_LIGNES.map((l,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
+      <td style="padding:3px 6px"><input class="form-input" style="font-size:12px;padding:3px 7px" value="${esc(l.designation)}" oninput="TMP_RETOUR_LIGNES[${i}].designation=this.value" placeholder="Désignation *"></td>
+      <td style="padding:3px 6px"><input class="form-input mono" style="font-size:11px;padding:3px 7px" value="${esc(l.reference||'')}" oninput="TMP_RETOUR_LIGNES[${i}].reference=this.value" placeholder="Réf."></td>
+      <td style="padding:3px 6px"><input class="form-input" type="number" min="1" style="font-size:12px;padding:3px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_RETOUR_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
+      <td style="padding:3px 2px"><button class="btn sm danger" onclick="TMP_RETOUR_LIGNES.splice(${i},1);renderRetourLignes()" style="padding:3px 5px"><i class="ti ti-x"></i></button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+function addRetourLigne(){ TMP_RETOUR_LIGNES.push({designation:'',reference:'',quantite:1}); renderRetourLignes();
+  setTimeout(()=>{ const r=document.querySelectorAll('#cmd-retour-lignes-list input'); r[r.length-3]?.focus(); },50); }
+
+async function lookupBordereauVF(){
+  const numero = gv('cmd-bordereau').trim();
+  if(!numero){ toast('Indique d\u2019abord un N° de bordereau','ti-alert-circle','var(--danger)'); return; }
+  toast('Recherche dans VosFactures…','ti-loader-2');
+  try{
+    const r = await API.vfBdcLookup(numero);
+    if(!r.configured){ toast('VosFactures non configuré','ti-alert-circle','var(--danger)'); return; }
+    if(!r.found){ toast('Bordereau introuvable dans VosFactures','ti-alert-circle','var(--danger)'); return; }
+    let remplis = [];
+    if(r.lignes && r.lignes.length){
+      TMP_CMD_LIGNES = r.lignes.map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
+      renderCmdLignes(); remplis.push(`${r.lignes.length} article(s)`);
+    }
+    if(r.num_serie && $('cmd-serie') && !gv('cmd-serie')){ $('cmd-serie').value=r.num_serie; remplis.push('n° série'); }
+    if(r.date_commande && $('cmd-date') && !gv('cmd-date')){ $('cmd-date').value=r.date_commande; remplis.push('date'); }
+    toast(remplis.length ? `Bordereau importé : ${remplis.join(', ')}` : 'Bordereau trouvé (données déjà remplies)');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
 function majDemoStyle(cb){
   const wrap = document.getElementById('cmd-demo-wrap');
   if(wrap){
@@ -1056,6 +1114,8 @@ async function enregistrerCommande(id){
     if(cmdId){
       const lignesValides = TMP_CMD_LIGNES.filter(l=>l.designation?.trim());
       await API.saveCommandeLignes(cmdId, lignesValides);
+      const retourValides = TMP_RETOUR_LIGNES.filter(l=>l.designation?.trim());
+      if(retourValides.length || window._CMD_ID) await API.saveRetourLignes(cmdId, retourValides);
     }
     closeModal(); toast(t('msg_enregistre')||'Enregistré'); render();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }

@@ -81,6 +81,7 @@ const API = {
   deleteUser:(id)=>API.del(`/users/${id}`),
   commandeLignes:(id)=>API.get(`/commandes/${id}/lignes`),
   saveCommandeLignes:(id,lignes)=>API.put(`/commandes/${id}/lignes`, lignes),
+  saveRetourLignes:(id,lignes)=>API.put(`/commandes/${id}/retour-lignes`, lignes),
   importCommandesExcel:async(file)=>{const fd=new FormData();fd.append('file',file);const r=await fetch('/api/import/commandes-excel',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
   commandesAlertesBlocage:(jours=7)=>API.get(`/commandes/alertes-blocage?jours=${jours}`),
   emailExpedition:(id)=>API.post(`/commandes/${id}/email-expedition`,{}),

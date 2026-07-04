@@ -1637,7 +1637,10 @@ router.get('/commandes/:id', async (req, res) => {
     const lignes = await db.all(
       'SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]
     );
-    res.json({ ...row, statut_calc: statutCommande(row), lignes });
+    const retour_lignes = await db.all(
+      'SELECT * FROM commandes_retour_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]
+    );
+    res.json({ ...row, statut_calc: statutCommande(row), lignes, retour_lignes });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1664,6 +1667,24 @@ router.put('/commandes/:id/lignes', async (req, res) => {
       );
     }
     const result = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/commandes/:id/retour-lignes', async (req, res) => {
+  try {
+    const lignes = req.body;
+    if (!Array.isArray(lignes)) return res.status(400).json({ error: 'Tableau attendu' });
+    await db.run('DELETE FROM commandes_retour_lignes WHERE commande_id=$1', [req.params.id]);
+    for (let i = 0; i < lignes.length; i++) {
+      const l = lignes[i];
+      if (!l.designation?.trim()) continue;
+      await db.run(
+        'INSERT INTO commandes_retour_lignes (commande_id, designation, reference, quantite, ordre) VALUES ($1,$2,$3,$4,$5)',
+        [req.params.id, l.designation.trim(), l.reference?.trim() || null, parseInt(l.quantite) || 1, i]
+      );
+    }
+    const result = await db.all('SELECT * FROM commandes_retour_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
