@@ -231,7 +231,7 @@ async function chargerCommandesDashboard(){
           return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
             <td>${fd(cm.date_commande)}</td>
             <td>${esc(cm.distributeur_nom)}</td>
-            <td class="mono">${esc(cm.bdc||'')}</td>
+            <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
             <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
             <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Suivre"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
             <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span></td>
@@ -372,7 +372,7 @@ async function chargerCommandesClient(distribNom){
         const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
         return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
           <td>${fd(cm.date_commande)}</td>
-          <td class="mono">${esc(cm.bdc||'')}</td>
+          <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
           <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
           <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
           <td class="mono">${esc(cm.num_serie||'')}</td>
@@ -706,7 +706,7 @@ async function renderCommandesTable(page=1){
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
         <td>${fd(cm.date_commande)}</td>
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span></td>
-        <td class="mono">${esc(cm.bdc||'')}</td>
+        <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
@@ -757,6 +757,9 @@ async function modalCommande(id){
             <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1">
             <button class="btn sm" type="button" title="Importer depuis VosFactures (BDC, Devis, Facture, BL)" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
           </div>
+        </div>
+        <div class="form-group"><label class="form-label">N° commande distributeur</label>
+          <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="Réf. interne distributeur">
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
@@ -1106,6 +1109,7 @@ async function enregistrerCommande(id){
     num_retour: gv('cmd-num-retour')||null,
     transporteur_retour: gv('cmd-transporteur-retour')||null,
     date_retour: gv('cmd-date-retour')||null,
+    num_commande_distrib: gv('cmd-num-distrib')||null,
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
@@ -1580,8 +1584,9 @@ async function chargerDoublonsBanner(){
       <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:var(--warning-bg);border:0.5px solid var(--warning);border-radius:var(--radius);margin-bottom:14px">
         <i class="ti ti-alert-triangle" style="color:var(--warning);font-size:18px;flex-shrink:0;margin-top:1px"></i>
         <div style="flex:1">
-          <div style="font-weight:700;font-size:13px;color:var(--warning);margin-bottom:8px">
-            ${rows.length} doublon${rows.length>1?'s':''} détecté${rows.length>1?'s':''} — même numéro de BDC pour plusieurs commandes
+          <div style="font-weight:700;font-size:13px;color:var(--warning);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+            <span>${rows.length} doublon${rows.length>1?'s':''} détecté${rows.length>1?'s':''} — même numéro de BDC pour plusieurs commandes</span>
+            <button class="btn sm danger" onclick="supprimerTousDoublonsBanner(this)" style="margin-left:12px;white-space:nowrap"><i class="ti ti-trash"></i> Supprimer tous</button>
           </div>
           <div class="table-wrap"><table class="t" style="font-size:12px">
             <thead><tr><th>BDC</th><th>Distributeur</th><th style="text-align:center">Nb</th><th>Commandes</th></tr></thead>
@@ -1623,6 +1628,19 @@ async function chargerAlertesBlocage(){
       </tr>`).join('')}</tbody>
     </table></div>`;
   }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+async function supprimerTousDoublonsBanner(btn){
+  if(!confirm('Supprimer tous les doublons ?\n\nPour chaque BDC en doublon, la commande la plus complète est conservée (priorité : source VosFactures > N° suivi > N° série > facture).\n\nAction irréversible.')) return;
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Suppression…'; }
+  try{
+    const r = await API.supprimerDoublons();
+    toast(`✅ ${r.supprimes} doublon(s) supprimé(s)`,'ti-check');
+    render(); // Recharge la page entière pour effacer la bannière
+  }catch(e){
+    toast(e.message,'ti-alert-circle','var(--danger)');
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-trash"></i> Supprimer tous'; }
+  }
 }
 
 async function supprimerTousDoublons(){

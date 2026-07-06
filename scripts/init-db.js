@@ -190,6 +190,7 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_description TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS modele_demo BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_retour TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_commande_distrib TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS transporteur_retour TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS date_retour TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_filename TEXT`);
