@@ -1323,7 +1323,8 @@ async function renderParametres(ttl,c,a){
     <div class="param-section">
       <h3><i class="ti ti-copy"></i> Doublons de commandes</h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Commandes ayant le même numéro de BDC ou devis pour le même distributeur.</p>
-      <div id="param-doublons-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
+      <button class="btn danger" onclick="supprimerTousDoublons()" id="btn-suppr-doublons"><i class="ti ti-trash"></i> Supprimer tous les doublons</button>
+      <div id="param-doublons-list" style="margin-top:10px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-clock-exclamation"></i> Commandes bloquées</h3>
@@ -1622,6 +1623,25 @@ async function chargerAlertesBlocage(){
       </tr>`).join('')}</tbody>
     </table></div>`;
   }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+async function supprimerTousDoublons(){
+  const el=$('param-doublons-list');
+  const btn=$('btn-suppr-doublons');
+  const rows = el?.querySelectorAll('tbody tr');
+  const nb = rows?.length || 0;
+  if(!confirm(`Supprimer les doublons ?\n\nPour chaque groupe, la commande la plus complète est conservée (priorité : source VosFactures > N° suivi > N° série > facture).\n\nAction irréversible.`)) return;
+  if(btn) btn.disabled=true;
+  toast('Suppression en cours…','ti-loader-2');
+  try{
+    const r = await API.supprimerDoublons();
+    toast(`✅ ${r.supprimes} doublon(s) supprimé(s) sur ${r.groupes} groupe(s)`,'ti-check');
+    chargerDoublonsParametres();
+    if(btn){ btn.disabled=true; btn.textContent='✓ Doublons supprimés'; }
+  }catch(e){
+    toast(e.message,'ti-alert-circle','var(--danger)');
+    if(btn) btn.disabled=false;
+  }
 }
 
 async function chargerDoublonsParametres(){

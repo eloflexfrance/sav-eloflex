@@ -87,5 +87,6 @@ const API = {
   emailExpedition:(id)=>API.post(`/commandes/${id}/email-expedition`,{}),
   fixSuivi:()=>API.post('/commandes/fix-suivi',{}),
   commandesDoublons:()=>API.get('/commandes/doublons'),
+  supprimerDoublons:()=>API.post('/commandes/supprimer-doublons',{}),
   migrationFactureHistorique:()=>API.post('/commandes/migration-facture-historique',{}),
 };

@@ -1627,7 +1627,53 @@ router.get('/commandes/stats', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Routes nommées AVANT /:id pour éviter le conflit de paramètre Express
+router.post('/commandes/supprimer-doublons', adminOnly, async (req, res) => {
+  try {
+    // Trouver tous les groupes de doublons (même bdc + même distributeur)
+    const groupes = await db.all(`
+      SELECT cmd.bdc, cmd.distributeur_nom,
+        array_agg(cmd.id ORDER BY cmd.created_at) AS ids
+      FROM commandes cmd
+      WHERE cmd.bdc IS NOT NULL AND TRIM(cmd.bdc) != ''
+      GROUP BY cmd.bdc, cmd.distributeur_nom
+      HAVING COUNT(*) > 1
+    `);
+
+    let supprimes = 0;
+    for (const g of groupes) {
+      const ids = Array.isArray(g.ids) ? g.ids : JSON.parse(g.ids);
+      // Charger chaque commande pour scorer
+      const rows = await db.all(
+        `SELECT id, vf_commande_id, num_suivi, num_serie, date_livraison, num_facture,
+                informations, statut, modele_demo, import_key
+         FROM commandes WHERE id = ANY($1::int[])`, [ids]
+      );
+
+      // Score : retenir la plus complète
+      const scored = rows.map(r => ({
+        id: r.id,
+        score:
+          (r.vf_commande_id ? 10 : 0) +
+          (r.num_suivi && /\d/.test(r.num_suivi) ? 4 : 0) +
+          (r.num_serie ? 3 : 0) +
+          (r.date_livraison ? 2 : 0) +
+          (r.num_facture ? 2 : 0) +
+          (r.informations ? 1 : 0) +
+          (r.modele_demo ? 1 : 0) +
+          (r.import_key ? 1 : 0)
+      })).sort((a, b) => b.score - a.score || b.id - a.id);
+
+      const garder = scored[0].id;
+      const aSupprimer = scored.slice(1).map(s => s.id);
+      for (const sid of aSupprimer) {
+        await db.run('DELETE FROM commandes WHERE id=$1', [sid]);
+        supprimes++;
+      }
+    }
+    res.json({ ok: true, supprimes, groupes: groupes.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/commandes/doublons', async (req, res) => {
   try {
     const rows = await db.all(`
