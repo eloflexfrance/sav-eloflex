@@ -149,6 +149,12 @@ async function renderDashboard(ttl,c,a){
       </div>
       <div id="qs-results" class="qs-results" style="display:none"></div>
     </div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="section-title"><i class="ti ti-clipboard-list"></i>${t('cmd_title')||'Suivi des commandes'}
+        <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
+      </div>
+      <div id="dash-commandes">${t('msg_chargement')}</div>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px">
       <div class="stat-card"><div class="stat-label">${t('db_interventions')}</div><div class="stat-value">${s.nb_interventions}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_ouvertes')}</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
@@ -173,12 +179,6 @@ async function renderDashboard(ttl,c,a){
           <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
         </tr>`).join('')}</tbody>
       </table></div>
-    </div>
-    <div class="card" style="margin-top:14px">
-      <div class="section-title"><i class="ti ti-clipboard-list"></i>${t('cmd_title')||'Suivi des commandes'}
-        <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
-      </div>
-      <div id="dash-commandes">${t('msg_chargement')}</div>
     </div>
     <div class="card" style="margin-top:14px">
       <div class="section-title"><i class="ti ti-arrows-exchange"></i>${t('transferts_en_cours')}
