@@ -1981,7 +1981,46 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Alertes commandes bloquées ─────────────────────────────────────
+// ── Migration ponctuelle : commandes antérieures à juin 2026 → Facturé ──
+router.post('/commandes/migration-facture-historique', adminOnly, async (req, res) => {
+  try {
+    const result = await db.run(`
+      UPDATE commandes
+      SET statut = 'Facturé', updated_at = NOW()
+      WHERE statut NOT IN ('Annulé', 'Facturé')
+        AND (
+          (date_commande IS NOT NULL AND date_commande::date < '2026-06-01')
+          OR (date_commande IS NULL AND annee_onglet IS NOT NULL AND annee_onglet < 2026)
+        )
+    `);
+    const count = await db.get(`
+      SELECT COUNT(*)::int AS n FROM commandes
+      WHERE statut = 'Facturé'
+        AND updated_at > NOW() - INTERVAL '10 seconds'
+    `);
+    res.json({ ok: true, mises_a_jour: count?.n || 0 });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+router.get('/commandes/doublons', async (req, res) => {
+  try {
+    const rows = await db.all(`
+      SELECT
+        cmd.bdc,
+        cmd.distributeur_nom,
+        COUNT(*)::int AS nb,
+        array_agg(cmd.id ORDER BY cmd.created_at) AS ids,
+        array_agg(cmd.date_commande ORDER BY cmd.created_at) AS dates,
+        array_agg(cmd.modele ORDER BY cmd.created_at) AS modeles,
+        array_agg(COALESCE(cmd.vf_commande_id::text,'–') ORDER BY cmd.created_at) AS sources
+      FROM commandes cmd
+      WHERE cmd.bdc IS NOT NULL AND TRIM(cmd.bdc) != ''
+      GROUP BY cmd.bdc, cmd.distributeur_nom
+      HAVING COUNT(*) > 1
+      ORDER BY COUNT(*) DESC, cmd.bdc
+    `);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 router.get('/commandes/alertes-blocage', async (req, res) => {
   try {
     const seuil = parseInt(req.query.jours)||7;

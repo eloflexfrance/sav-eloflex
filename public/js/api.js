@@ -86,4 +86,6 @@ const API = {
   commandesAlertesBlocage:(jours=7)=>API.get(`/commandes/alertes-blocage?jours=${jours}`),
   emailExpedition:(id)=>API.post(`/commandes/${id}/email-expedition`,{}),
   fixSuivi:()=>API.post('/commandes/fix-suivi',{}),
+  commandesDoublons:()=>API.get('/commandes/doublons'),
+  migrationFactureHistorique:()=>API.post('/commandes/migration-facture-historique',{}),
 };

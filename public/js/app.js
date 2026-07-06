@@ -627,6 +627,7 @@ async function renderCommandes(ttl,c,a){
 
   c.innerHTML=`
     <div style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Année ${anneeFiltre}</div>
+    <div id="doublons-banner"></div>
     <div class="cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
       <div class="card"><div style="font-size:22px;font-weight:700">${stats.total}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_total')||'Total commandes'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:var(--danger,#d33)">${stats.en_preparation}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_en_prep')||'En préparation'}</div></div>
@@ -667,6 +668,7 @@ async function renderCommandes(ttl,c,a){
     </div>
     <div id="cmd-table-wrap"></div>`;
   await renderCommandesTable();
+  chargerDoublonsBanner();
 }
 
 async function renderCommandesTable(page=1){
@@ -1319,6 +1321,11 @@ async function renderParametres(ttl,c,a){
       <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>${t('param_vf_sync')}</button>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-copy"></i> Doublons de commandes</h3>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Commandes ayant le même numéro de BDC ou devis pour le même distributeur.</p>
+      <div id="param-doublons-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-clock-exclamation"></i> Commandes bloquées</h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Commandes "En préparation" sans numéro de suivi valide depuis plus de :</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
@@ -1331,6 +1338,15 @@ async function renderParametres(ttl,c,a){
         <button class="btn sm" onclick="chargerAlertesBlocage()"><i class="ti ti-refresh"></i> Actualiser</button>
       </div>
       <div id="alertes-blocage-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
+    </div>
+    <div class="param-section">
+      <h3><i class="ti ti-receipt-2"></i> Migration facturation historique</h3>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
+        Passe toutes les commandes antérieures à juin 2026 (hors Annulé et déjà Facturé) au statut <b>Facturé</b>.<br>
+        <span style="color:var(--danger);font-size:11px">⚠ Action irréversible — à n'exécuter qu'une seule fois.</span>
+      </p>
+      <button class="btn" onclick="lancerMigrationFacture()" id="btn-migration-facture"><i class="ti ti-check"></i> Passer l'historique en Facturé</button>
+      <div id="migration-facture-result" style="margin-top:8px"></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-database-export"></i> Nettoyage N° suivi</h3>
@@ -1361,6 +1377,7 @@ async function renderParametres(ttl,c,a){
   c.appendChild(usersSection);
   chargerListeUtilisateurs();
   chargerAlertesBlocage();
+  chargerDoublonsParametres();
 }
 
 async function chargerListeUtilisateurs(){
@@ -1553,6 +1570,39 @@ async function envoyerEmailExpedition(id){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+async function chargerDoublonsBanner(){
+  const banner = $('doublons-banner'); if(!banner) return;
+  try{
+    const rows = await API.commandesDoublons();
+    if(!rows.length){ banner.innerHTML=''; return; }
+    banner.innerHTML=`
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:var(--warning-bg);border:0.5px solid var(--warning);border-radius:var(--radius);margin-bottom:14px">
+        <i class="ti ti-alert-triangle" style="color:var(--warning);font-size:18px;flex-shrink:0;margin-top:1px"></i>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:13px;color:var(--warning);margin-bottom:8px">
+            ${rows.length} doublon${rows.length>1?'s':''} détecté${rows.length>1?'s':''} — même numéro de BDC pour plusieurs commandes
+          </div>
+          <div class="table-wrap"><table class="t" style="font-size:12px">
+            <thead><tr><th>BDC</th><th>Distributeur</th><th style="text-align:center">Nb</th><th>Commandes</th></tr></thead>
+            <tbody>${rows.map(r=>`<tr>
+              <td class="mono"><b>${esc(r.bdc)}</b></td>
+              <td>${esc(r.distributeur_nom)}</td>
+              <td style="text-align:center"><span class="badge urgent">${r.nb}×</span></td>
+              <td>${(Array.isArray(r.ids)?r.ids:[r.ids]).map((id,i)=>`
+                <button class="btn sm" onclick="modalCommande(${id})" style="margin:1px">
+                  <i class="ti ti-clipboard-list"></i> #${id}
+                  ${Array.isArray(r.dates)&&r.dates[i]?' · '+fd(r.dates[i]):''}
+                </button>`).join('')}
+              </td>
+            </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+        <button class="btn sm" onclick="this.closest('[style]').remove()" title="Masquer" style="flex-shrink:0"><i class="ti ti-x"></i></button>
+      </div>`;
+  }catch(e){ console.warn('doublons:', e.message); }
+}
+
 async function chargerAlertesBlocage(){
   const el=$('alertes-blocage-list'); if(!el) return;
   el.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div>`;
@@ -1572,6 +1622,48 @@ async function chargerAlertesBlocage(){
       </tr>`).join('')}</tbody>
     </table></div>`;
   }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+async function chargerDoublonsParametres(){
+  const el=$('param-doublons-list'); if(!el) return;
+  try{
+    const rows = await API.commandesDoublons();
+    if(!rows.length){
+      el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> Aucun doublon détecté.</div>`;
+      return;
+    }
+    el.innerHTML=`<div style="font-size:12px;color:var(--warning);margin-bottom:8px;font-weight:600">
+      <i class="ti ti-alert-triangle"></i> ${rows.length} BDC en doublon
+    </div>
+    <div class="table-wrap"><table class="t" style="font-size:12px">
+      <thead><tr><th>BDC</th><th>Distributeur</th><th>Nb</th><th>Commandes</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td class="mono"><b>${esc(r.bdc)}</b></td>
+        <td>${esc(r.distributeur_nom)}</td>
+        <td><span class="badge urgent">${r.nb}×</span></td>
+        <td>${(Array.isArray(r.ids)?r.ids:[r.ids]).map(id=>`
+          <button class="btn sm" onclick="setView('commandes');setTimeout(()=>modalCommande(${id}),300)">#${id}</button>`).join(' ')}
+        </td>
+      </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+  }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+async function lancerMigrationFacture(){
+  if(!confirm('Passer TOUTES les commandes antérieures à juin 2026 au statut "Facturé" ?\n\nCela exclut les commandes déjà "Annulé" et déjà "Facturé".\nAction irréversible.')) return;
+  const btn=$('btn-migration-facture'); if(btn) btn.disabled=true;
+  toast('Migration en cours…','ti-loader-2');
+  try{
+    const r = await API.migrationFactureHistorique();
+    const msg = `✅ ${r.mises_a_jour} commande(s) passée(s) en Facturé.`;
+    $('migration-facture-result').innerHTML=`<div style="padding:8px 12px;background:var(--success-bg);border:0.5px solid var(--success);border-radius:var(--radius);font-size:12px;color:var(--success)">${msg}</div>`;
+    toast(msg,'ti-check');
+    if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-check"></i> Migration effectuée'; }
+  }catch(e){
+    $('migration-facture-result').innerHTML=`<div style="color:var(--danger);font-size:12px">❌ ${esc(e.message)}</div>`;
+    if(btn) btn.disabled=false;
+  }
 }
 
 async function lancerMigrationSuivi(){
