@@ -1627,6 +1627,48 @@ router.get('/commandes/stats', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Routes nommées AVANT /:id pour éviter le conflit de paramètre Express
+router.get('/commandes/doublons', async (req, res) => {
+  try {
+    const rows = await db.all(`
+      SELECT cmd.bdc, cmd.distributeur_nom,
+        COUNT(*)::int AS nb,
+        array_agg(cmd.id ORDER BY cmd.created_at) AS ids,
+        array_agg(cmd.date_commande ORDER BY cmd.created_at) AS dates,
+        array_agg(cmd.modele ORDER BY cmd.created_at) AS modeles,
+        array_agg(COALESCE(cmd.vf_commande_id::text,'–') ORDER BY cmd.created_at) AS sources
+      FROM commandes cmd
+      WHERE cmd.bdc IS NOT NULL AND TRIM(cmd.bdc) != ''
+      GROUP BY cmd.bdc, cmd.distributeur_nom
+      HAVING COUNT(*) > 1
+      ORDER BY COUNT(*) DESC, cmd.bdc
+    `);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/commandes/alertes-blocage', async (req, res) => {
+  try {
+    const seuil = parseInt(req.query.jours)||7;
+    const rows = await db.all(`
+      SELECT cmd.id, cmd.distributeur_nom, cmd.bdc, cmd.modele, cmd.date_commande,
+             cmd.num_suivi, cmd.statut,
+             ROUND(DATE_PART('day', NOW() - cmd.date_commande::timestamp))::int AS jours_attente
+      FROM commandes cmd
+      WHERE cmd.date_commande IS NOT NULL
+        AND (cmd.statut IS NULL OR cmd.statut IN ('Auto','En préparation'))
+        AND cmd.date_livraison IS NULL
+        AND (cmd.num_suivi IS NULL
+             OR LENGTH(REGEXP_REPLACE(cmd.num_suivi,'\\s+','','g')) < 8
+             OR NOT (REGEXP_REPLACE(cmd.num_suivi,'\\s+','','g') ~ '[0-9]'))
+        AND DATE_PART('day', NOW() - cmd.date_commande::timestamp) >= $1
+      ORDER BY jours_attente DESC
+      LIMIT 50
+    `, [seuil]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/commandes/:id', async (req, res) => {
   try {
     const row = await db.get(
@@ -1999,47 +2041,6 @@ router.post('/commandes/migration-facture-historique', adminOnly, async (req, re
         AND updated_at > NOW() - INTERVAL '10 seconds'
     `);
     res.json({ ok: true, mises_a_jour: count?.n || 0 });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-router.get('/commandes/doublons', async (req, res) => {
-  try {
-    const rows = await db.all(`
-      SELECT
-        cmd.bdc,
-        cmd.distributeur_nom,
-        COUNT(*)::int AS nb,
-        array_agg(cmd.id ORDER BY cmd.created_at) AS ids,
-        array_agg(cmd.date_commande ORDER BY cmd.created_at) AS dates,
-        array_agg(cmd.modele ORDER BY cmd.created_at) AS modeles,
-        array_agg(COALESCE(cmd.vf_commande_id::text,'–') ORDER BY cmd.created_at) AS sources
-      FROM commandes cmd
-      WHERE cmd.bdc IS NOT NULL AND TRIM(cmd.bdc) != ''
-      GROUP BY cmd.bdc, cmd.distributeur_nom
-      HAVING COUNT(*) > 1
-      ORDER BY COUNT(*) DESC, cmd.bdc
-    `);
-    res.json(rows);
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-router.get('/commandes/alertes-blocage', async (req, res) => {
-  try {
-    const seuil = parseInt(req.query.jours)||7;
-    const rows = await db.all(`
-      SELECT cmd.id, cmd.distributeur_nom, cmd.bdc, cmd.modele, cmd.date_commande,
-             cmd.num_suivi, cmd.statut,
-             ROUND(DATE_PART('day', NOW() - cmd.date_commande::timestamp))::int AS jours_attente
-      FROM commandes cmd
-      WHERE cmd.date_commande IS NOT NULL
-        AND (cmd.statut IS NULL OR cmd.statut IN ('Auto','En préparation'))
-        AND cmd.date_livraison IS NULL
-        AND (cmd.num_suivi IS NULL
-             OR LENGTH(REGEXP_REPLACE(cmd.num_suivi,'\\s+','','g')) < 8
-             OR NOT (REGEXP_REPLACE(cmd.num_suivi,'\\s+','','g') ~ '[0-9]'))
-        AND DATE_PART('day', NOW() - cmd.date_commande::timestamp) >= $1
-      ORDER BY jours_attente DESC
-      LIMIT 50
-    `, [seuil]);
-    res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
