@@ -2119,22 +2119,30 @@ router.post('/commandes/:id/generer-facture', adminOrOp, async (req, res) => {
     const { data: buyers } = await vfApi.get('/clients.json', { params: { name: cmd.distributeur_nom, per_page: 5 } });
     const buyer = Array.isArray(buyers) ? buyers.find(b => b.name?.toLowerCase().includes(cmd.distributeur_nom.toLowerCase().slice(0, 8))) : null;
     const positions = (lignes.length ? lignes : [{ designation: cmd.modele || 'Commande', quantite: cmd.quantite || 1, reference: cmd.bdc }])
-      .map(l => ({ name: l.designation, quantity: String(l.quantite || 1), price_net: '0', tax: '20', code: l.reference || '' }));
+      .map(l => ({ name: l.designation, quantity: String(l.quantite || 1), price_net: '0.00', tax: '20' }));
     const today = new Date().toISOString().slice(0, 10);
     const payload = {
       invoice: {
         kind: 'vat', sell_date: cmd.date_livraison || today, issue_date: today,
         buyer_name: cmd.distributeur_nom,
-        ...(buyer ? { buyer_id: buyer.id } : {}),
         positions,
         ...(cmd.bdc ? { description: `Commande ${cmd.bdc}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}` } : {})
       }
     };
-    const { data: inv } = await vfApi.post('/invoices.json', payload);
-    if (!inv?.id) return res.json({ ok: false, reason: 'VosFactures n\'a pas retourné d\'identifiant' });
+    let invData;
+    try {
+      const { data } = await vfApi.post('/invoices.json', payload);
+      invData = data;
+    } catch(vfErr) {
+      const vfMsg = vfErr.response?.data
+        ? (typeof vfErr.response.data === 'string' ? vfErr.response.data : JSON.stringify(vfErr.response.data))
+        : vfErr.message;
+      return res.status(422).json({ error: `VosFactures : ${vfMsg}` });
+    }
+    if (!invData?.id) return res.json({ ok: false, reason: 'VosFactures n\'a pas retourné d\'identifiant' });
     await db.run('UPDATE commandes SET vf_invoice_id=$1, num_facture=$2, statut=\'Facturé\', updated_at=NOW() WHERE id=$3',
-      [inv.id, inv.number || String(inv.id), req.params.id]);
-    res.json({ ok: true, invoice_id: inv.id, numero: inv.number, url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}` });
+      [invData.id, invData.number || String(invData.id), req.params.id]);
+    res.json({ ok: true, invoice_id: invData.id, numero: invData.number, url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${invData.id}` });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2167,11 +2175,10 @@ router.post('/commandes/:id/creer-bl', adminOrOp, async (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const payload = {
       invoice: {
-        kind: 'wz',         // Bon de sortie (Bordereau de livraison) dans VosFactures
+        kind: 'wz',
         issue_date: today,
         sell_date: today,
         buyer_name: cmd.distributeur_nom,
-        ...(buyer ? { buyer_id: buyer.id } : {}),
         positions,
         description: `BDC : ${cmd.bdc || '#' + cmd.id}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}`
       }
