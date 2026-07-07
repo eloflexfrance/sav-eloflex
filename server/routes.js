@@ -2149,25 +2149,50 @@ router.post('/commandes/:id/creer-bl', adminOrOp, async (req, res) => {
     const lignes = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
     const axios = require('axios');
     const vfApi = axios.create({ baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
-      headers: { 'Accept': 'application/json' }, params: { api_token: process.env.VOSFACTURES_API_TOKEN } });
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN } });
+
+    // Chercher le client dans VF
     const { data: buyers } = await vfApi.get('/clients.json', { params: { name: cmd.distributeur_nom, per_page: 5 } });
-    const buyer = Array.isArray(buyers) ? buyers[0] : null;
+    const buyer = Array.isArray(buyers) && buyers.length ? buyers[0] : null;
+
     const positions = (lignes.length ? lignes : [{ designation: cmd.modele || 'Article', quantite: cmd.quantite || 1, reference: cmd.bdc }])
-      .map(l => ({ name: l.designation, quantity: String(l.quantite || 1), price_net: '0', tax: '0', code: l.reference || '' }));
+      .map(l => ({
+        name: l.designation,
+        quantity: String(parseInt(l.quantite) || 1),
+        price_net: '0.00',
+        tax: 'disabled'   // Pas de TVA sur un BL
+      }));
+
     const today = new Date().toISOString().slice(0, 10);
     const payload = {
       invoice: {
-        kind: 'receipt', sell_date: today, issue_date: today,
+        kind: 'wz',         // Bon de sortie (Bordereau de livraison) dans VosFactures
+        issue_date: today,
+        sell_date: today,
         buyer_name: cmd.distributeur_nom,
         ...(buyer ? { buyer_id: buyer.id } : {}),
         positions,
         description: `BDC : ${cmd.bdc || '#' + cmd.id}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}`
       }
     };
-    const { data: bl } = await vfApi.post('/invoices.json', payload);
-    if (!bl?.id) return res.json({ ok: false, reason: 'VosFactures n\'a pas retourné d\'identifiant' });
-    await db.run('UPDATE commandes SET num_bordereau=$1, updated_at=NOW() WHERE id=$2', [bl.number || String(bl.id), req.params.id]);
-    res.json({ ok: true, bl_id: bl.id, numero: bl.number, url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${bl.id}` });
+
+    let blData;
+    try {
+      const { data } = await vfApi.post('/invoices.json', payload);
+      blData = data;
+    } catch(vfErr) {
+      // Extraire le message d'erreur VosFactures pour le renvoyer clairement
+      const vfMsg = vfErr.response?.data
+        ? (typeof vfErr.response.data === 'string' ? vfErr.response.data : JSON.stringify(vfErr.response.data))
+        : vfErr.message;
+      return res.status(422).json({ error: `VosFactures : ${vfMsg}` });
+    }
+
+    if (!blData?.id) return res.json({ ok: false, reason: 'VosFactures n\'a pas retourné d\'identifiant' });
+    await db.run('UPDATE commandes SET num_bordereau=$1, updated_at=NOW() WHERE id=$2',
+      [blData.number || String(blData.id), req.params.id]);
+    res.json({ ok: true, bl_id: blData.id, numero: blData.number, url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${blData.id}` });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
