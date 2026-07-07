@@ -772,7 +772,8 @@ async function modalCommande(id){
             <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_bdc')||'Bdc'} / Devis</label>
               <div style="display:flex;gap:6px">
                 <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1">
-                <button class="btn sm" type="button" title="Importer depuis VosFactures (BDC, Devis, Facture, BL)" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+                <button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+                ${cm.bdc?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'},'${esc(cm.bdc)}')"><i class="ti ti-external-link"></i></button>`:''}
               </div>
             </div>
             <div class="form-group" style="margin:0"><label class="form-label">N° commande distributeur</label>
@@ -915,7 +916,6 @@ async function modalCommande(id){
       ${id?`<button class="btn sm" onclick="envoyerEmailConfirmation(${id})" title="Demander confirmation au distributeur"><i class="ti ti-mail"></i> Confirmer</button>`:''}
       ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Envoyer confirmation d'expédition"><i class="ti ti-mail"></i> Email expéd.</button>`:''}
       ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="Générer la facture dans VosFactures"><i class="ti ti-receipt-2"></i> Facture VF</button>`:''}
-      ${id&&(/eloflex/i.test(cm.modele||'')?false:true)&&cm.modele?`<button class="btn sm" onclick="creerBLVF(${id})" title="Créer le bordereau de livraison dans VosFactures"><i class="ti ti-clipboard-check"></i> BL VF</button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
@@ -1650,6 +1650,16 @@ async function genererFactureVF(id){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+function ouvrirDansVF(vfId, bdc){
+  const account = window._VF_ACCOUNT;
+  if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
+  // Lien direct si on a l'ID VosFactures, sinon recherche par numéro BDC
+  const url = vfId
+    ? `https://${account}.vosfactures.fr/invoices/${vfId}`
+    : `https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(bdc)}`;
+  window.open(url, '_blank', 'noopener');
+}
+
 async function creerBLVF(id){
   if(!confirm('Créer le bordereau de livraison dans VosFactures ?')) return;
   toast('Création BL en cours…','ti-loader-2');
@@ -2366,7 +2376,12 @@ async function syncVosFactures(){  const btn=$('btn-sync');btn.disabled=true;btn
   finally{btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>Sync VosFactures';loadVfStatus();}
 }
 async function loadVfStatus(){
-  try{const s=await API.vfStatus();const el=$('vf-status');if(!el)return;if(!s.configured){el.textContent='⚠ VosFactures non configuré';el.className='vf-status err';}else if(s.last_sync){el.textContent=`✓ Sync ${s.last_sync.created_at?.slice(0,10)}`;el.className='vf-status ok';}else{el.textContent=`Compte : ${s.account}`;el.className='vf-status';}}catch(e){}
+  try{const s=await API.vfStatus();const el=$('vf-status');if(!el)return;
+    if(s.account) window._VF_ACCOUNT=s.account; // Stocké pour construire les liens VF
+    if(!s.configured){el.textContent='⚠ VosFactures non configuré';el.className='vf-status err';}
+    else if(s.last_sync){el.textContent=`✓ Sync ${s.last_sync.created_at?.slice(0,10)}`;el.className='vf-status ok';}
+    else{el.textContent=`Compte : ${s.account}`;el.className='vf-status';}
+  }catch(e){}
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
