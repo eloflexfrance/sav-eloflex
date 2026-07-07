@@ -2164,12 +2164,15 @@ router.post('/commandes/:id/creer-bl', adminOrOp, async (req, res) => {
     const { data: buyers } = await vfApi.get('/clients.json', { params: { name: cmd.distributeur_nom, per_page: 5 } });
     const buyer = Array.isArray(buyers) && buyers.length ? buyers[0] : null;
 
-    const positions = (lignes.length ? lignes : [{ designation: cmd.modele || 'Article', quantite: cmd.quantite || 1, reference: cmd.bdc }])
+    const positions = (lignes.length ? lignes : [{ designation: cmd.modele || 'Article', quantite: cmd.quantite || 1 }])
       .map(l => ({
         name: l.designation,
         quantity: String(parseInt(l.quantite) || 1),
         price_net: '0.00',
-        tax: 'disabled'   // Pas de TVA sur un BL
+        price_gross: '0.00',
+        total_price_net: '0.00',
+        total_price_gross: '0.00',
+        tax: 'disabled'
       }));
 
     const today = new Date().toISOString().slice(0, 10);
