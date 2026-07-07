@@ -2061,6 +2061,7 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
 
     res.json({
       configured: true, found: true,
+      vf_id:         inv.id,
       numero:        detail.number || inv.number,
       date_commande: (detail.issue_date || detail.sell_date || '').slice(0, 10) || null,
       distributeur:  detail.buyer_name || inv.buyer_name || null,
