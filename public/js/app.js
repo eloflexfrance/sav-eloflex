@@ -209,6 +209,7 @@ async function chargerCommandesDashboard(){
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
         <div class="stat-card"><div class="stat-label">${t('cmd_total')||'Total'}</div><div class="stat-value">${stats.total}</div></div>
         <div class="stat-card"><div class="stat-label">🦽 Avec N° série</div><div class="stat-value" style="color:var(--accent)">${stats.fauteuils_serie||0}</div></div>
+        <div class="stat-card"><div class="stat-label">⏳ En attente</div><div class="stat-value">${stats.en_attente||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_en_prep')||'En préparation'}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
@@ -499,7 +500,9 @@ async function renderExpeditions(ttl,c,a){
 }
 
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
-const cmdStatutClass = s => s==='Livré'?'g':s==='Facturé'?'g':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':'ouvert';
+const cmdStatutClass = s => s==='Livré'?'g':s==='Facturé'?'g':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='En attente confirmation'?'ouvert':'ouvert';
+
+const STATUTS_CMD = ['Auto','En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
 
 function isRealTracking(s){
   if(!s) return false;
@@ -510,6 +513,7 @@ function isRealTracking(s){
 // Traduit les valeurs de statut stockées en DB (toujours en français) vers la langue affichée
 function tStatut(s){
   const map = {
+    'En attente confirmation': 'En attente confirmation',
     'En préparation': t('cmd_en_prep')||'En préparation',
     'Expédié':        t('cmd_expedie')||'Expédié',
     'Livré':          t('cmd_livre')||'Livré',
@@ -617,6 +621,9 @@ async function renderCommandes(ttl,c,a){
   ttl.textContent=t('cmd_title')||'Suivi des commandes';
   a.innerHTML=`<button class="btn success" onclick="API.exportExcel('commandes')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')||'Excel'}</button>
     <button class="btn" onclick="syncCommandesVF()"><i class="ti ti-refresh"></i>${t('cmd_sync_vf')||'Synchroniser VosFactures'}</button>
+    <button class="btn" id="btn-kanban-toggle" onclick="CMD_VIEW=CMD_VIEW==='liste'?'kanban':'liste';renderCommandesView()" title="Basculer liste / Kanban">
+      <i class="ti ${CMD_VIEW==='kanban'?'ti-list':'ti-layout-kanban'}"></i> ${CMD_VIEW==='kanban'?'Liste':'Kanban'}
+    </button>
     <button class="btn primary" onclick="modalCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>`;
 
   // Stats filtrées par l'année sélectionnée (ou année en cours par défaut pour les compteurs)
@@ -630,6 +637,7 @@ async function renderCommandes(ttl,c,a){
     <div id="doublons-banner"></div>
     <div class="cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
       <div class="card"><div style="font-size:22px;font-weight:700">${stats.total}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_total')||'Total commandes'}</div></div>
+      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--text)">${stats.en_attente||0}</div><div style="font-size:12px;color:var(--text2)">⏳ En attente</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:var(--danger,#d33)">${stats.en_preparation}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_en_prep')||'En préparation'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:#d8a32a">${stats.expedie}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_expedie')||'Expédiées'}</div></div>
       <div class="card"><div style="font-size:22px;font-weight:700;color:#2a9d4d">${stats.livre}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_livre')||'Livrées'}</div></div>
@@ -645,6 +653,8 @@ async function renderCommandes(ttl,c,a){
       </select>
       <select id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
         <option value="">${t('cmd_tous_statuts')||'Tous statuts'}</option>
+        <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
+        <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
         <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
         <option value="Livré" ${CMD_FILTERS.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
@@ -667,8 +677,13 @@ async function renderCommandes(ttl,c,a){
         : ''}
     </div>
     <div id="cmd-table-wrap"></div>`;
-  await renderCommandesTable();
+  await renderCommandesView();
   chargerDoublonsBanner();
+}
+
+async function renderCommandesView(){
+  if(CMD_VIEW==='kanban') return renderCommandesKanban();
+  return renderCommandesTable(1);
 }
 
 async function renderCommandesTable(page=1){
@@ -802,6 +817,7 @@ async function modalCommande(id){
           <label class="form-label">${t('cmd_statut')||'Statut'}</label>
           <select class="form-input" id="cmd-statut" onchange="majZonePreuveLivraison()">
             <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto')||'Auto (calculé)'}</option>
+            <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
             <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
             <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
             <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
@@ -851,6 +867,41 @@ async function modalCommande(id){
         </div>
       </div>
       <div id="cmd-preuve-zone"></div>
+      ${(()=>{
+        const type = cm.commande_type || (/eloflex/i.test(cm.modele||'') ? 'fauteuil' : cm.modele ? 'pieces' : '');
+        const isFauteuil = type === 'fauteuil';
+        const isPieces   = type === 'pieces';
+        if(!type && !cm.modele) return '';
+        return `<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">Type</span>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+              <input type="radio" name="cmd-type" value="fauteuil" ${isFauteuil?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='';$('cmd-type-section-pieces').style.display='none'"> 🦽 Fauteuil → Suède
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
+              <input type="radio" name="cmd-type" value="pieces" ${isPieces?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='none';$('cmd-type-section-pieces').style.display=''"> 📦 Pièces détachées
+            </label>
+          </div>
+          <div id="cmd-type-section-fauteuil" style="${isFauteuil?'':'display:none'}">
+            <div class="grid-2" style="gap:8px">
+              <div class="form-group"><label class="form-label">Réf. commande Suède (invoice SE)</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="ex: SE-2026-0042"></div>
+              <div class="form-group"><label class="form-label">Date envoi Suède</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+              <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
+              <label for="cmd-confirmation" style="font-size:13px;cursor:pointer">Confirmation reçue du distributeur</label>
+              ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
+            </div>
+          </div>
+          <div id="cmd-type-section-pieces" style="${isPieces?'':'display:none'}">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
+              <label for="cmd-confirmation" style="font-size:13px;cursor:pointer">BDC confirmé par le distributeur</label>
+              ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
+            </div>
+          </div>
+        </div>`;
+      })()}
       ${id?`<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
         <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i>${t('cmd_chercher_vf')||'Chercher une facture VosFactures à rattacher'}</button>
         <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
@@ -858,7 +909,10 @@ async function modalCommande(id){
     </div>
     <div class="modal-footer">
       ${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i>${t('btn_supprimer')||'Supprimer'}</button>`:''}
-      ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Envoyer confirmation d'expédition par email"><i class="ti ti-mail"></i> Email expédition</button>`:''}
+      ${id?`<button class="btn sm" onclick="envoyerEmailConfirmation(${id})" title="Demander confirmation au distributeur"><i class="ti ti-mail"></i> Confirmer</button>`:''}
+      ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Envoyer confirmation d'expédition"><i class="ti ti-mail"></i> Email expéd.</button>`:''}
+      ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="Générer la facture dans VosFactures"><i class="ti ti-receipt-2"></i> Facture VF</button>`:''}
+      ${id&&(/eloflex/i.test(cm.modele||'')?false:true)&&cm.modele?`<button class="btn sm" onclick="creerBLVF(${id})" title="Créer le bordereau de livraison dans VosFactures"><i class="ti ti-clipboard-check"></i> BL VF</button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
@@ -1110,6 +1164,11 @@ async function enregistrerCommande(id){
     transporteur_retour: gv('cmd-transporteur-retour')||null,
     date_retour: gv('cmd-date-retour')||null,
     num_commande_distrib: gv('cmd-num-distrib')||null,
+    commande_type: document.querySelector('input[name="cmd-type"]:checked')?.value||null,
+    invoice_se: gv('cmd-invoice-se')||null,
+    date_envoi_suede: gv('cmd-date-suede')||null,
+    confirmation_recue: !!document.getElementById('cmd-confirmation')?.checked,
+    date_confirmation: document.getElementById('cmd-confirmation')?.checked && !window._CMD_CONF_DATE ? new Date().toISOString().slice(0,10) : (window._CMD_CONF_DATE||null),
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
@@ -1563,6 +1622,82 @@ async function supprimerUtilisateur(id, nom){
     toast(`Compte de ${nom} supprimé`);
     chargerListeUtilisateurs();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function envoyerEmailConfirmation(id){
+  if(!confirm('Envoyer un email de demande de confirmation BDC au distributeur ?')) return;
+  toast('Envoi en cours…','ti-loader-2');
+  try{
+    const r = await API.emailConfirmation(id);
+    if(r.ok){ toast(`Email de confirmation envoyé à ${r.to}`,'ti-mail'); closeModal(); render(); }
+    else toast(`Non envoyé : ${r.reason}`,'ti-alert-circle','var(--warning)');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function genererFactureVF(id){
+  if(!confirm('Générer la facture dans VosFactures ?\n\nLa commande passera au statut "Facturé" et le N° de facture sera renseigné automatiquement.')) return;
+  toast('Génération en cours…','ti-loader-2');
+  try{
+    const r = await API.genererFacture(id);
+    if(r.ok){
+      toast(`Facture ${r.numero} créée dans VosFactures`,'ti-receipt-2');
+      if(r.url) window.open(r.url,'_blank');
+      closeModal(); render();
+    } else toast(`Erreur : ${r.reason}`,'ti-alert-circle','var(--warning)');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+async function creerBLVF(id){
+  if(!confirm('Créer le bordereau de livraison dans VosFactures ?')) return;
+  toast('Création BL en cours…','ti-loader-2');
+  try{
+    const r = await API.creerBL(id);
+    if(r.ok){
+      toast(`BL ${r.numero} créé dans VosFactures`,'ti-clipboard-check');
+      if(r.url) window.open(r.url,'_blank');
+      closeModal(); render();
+    } else toast(`Erreur : ${r.reason}`,'ti-alert-circle','var(--warning)');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+// ── Vue Kanban ────────────────────────────────────────────────────
+let CMD_VIEW = 'liste'; // 'liste' | 'kanban'
+
+async function renderCommandesKanban(){
+  const wrap=$('cmd-table-wrap'); if(!wrap) return;
+  wrap.innerHTML=`<div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> Chargement…</div>`;
+  const res = await API.commandes({ annee: CMD_FILTERS.annee, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500 });
+  const list = res.rows||[];
+  const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème'];
+  const grouped = {};
+  COLS.forEach(s => grouped[s] = []);
+  list.forEach(cm => {
+    const s = cm.statut_calc || 'En préparation';
+    if(grouped[s]) grouped[s].push(cm); else grouped['En préparation'].push(cm);
+  });
+  wrap.innerHTML=`<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px">
+    ${COLS.map(col=>`
+      <div style="min-width:220px;flex:0 0 220px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:8px;display:flex;justify-content:space-between">
+          <span>${tStatut(col)}</span>
+          <span class="badge ${cmdStatutClass(col)}" style="font-size:10px">${grouped[col].length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${grouped[col].map(cm=>`
+            <div onclick="modalCommande(${cm.id})" style="padding:10px 12px;background:var(--surface);border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;font-size:12px">
+              <div style="font-weight:700;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.distributeur_nom)}</div>
+              <div style="color:var(--text2);display:flex;justify-content:space-between">
+                <span class="mono">${esc(cm.bdc||'—')}</span>
+                <span>${fd(cm.date_commande)}</span>
+              </div>
+              ${cm.modele?`<div style="color:var(--text3);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px">${esc(cm.modele)}</div>`:''}
+              ${cm.reliquat?`<span class="badge hg" style="font-size:10px;margin-top:4px;display:inline-block">⏰ Reliquat</span>`:''}
+              ${cm.modele_demo?`<span class="badge hg" style="font-size:10px;margin-top:4px;display:inline-block">🔄 Démo</span>`:''}
+            </div>`).join('')}
+          ${grouped[col].length===0?`<div style="font-size:12px;color:var(--text3);text-align:center;padding:12px 0">—</div>`:''}
+        </div>
+      </div>`).join('')}
+  </div>`;
 }
 
 async function envoyerEmailExpedition(id){

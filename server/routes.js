@@ -1520,9 +1520,6 @@ router.post('/email/notification-intervention', async (req, res) => {
 
 
 // ── COMMANDES ─────────────────────────────────────────────────────
-// Retourne true si le num_suivi ressemble à un vrai numéro transporteur
-// (au moins 8 chars, contient des chiffres, entièrement alphanumérique)
-// Exclut : "RETOUR BRICE", "SUÈDE", "ATTENTE VALIDATION", etc.
 function isRealTracking(s) {
   if (!s) return false;
   const clean = s.trim().replace(/\s+/g, '');
@@ -1591,8 +1588,9 @@ router.get('/commandes/stats', async (req, res) => {
     const counts = await db.get(`
       SELECT
         COUNT(*) AS total,
-        SUM(CASE WHEN (${statutExpr}) = 'En préparation' THEN 1 ELSE 0 END) AS en_preparation,
-        SUM(CASE WHEN (${statutExpr}) = 'Expédié'        THEN 1 ELSE 0 END) AS expedie,
+        SUM(CASE WHEN (${statutExpr}) = 'En préparation'          THEN 1 ELSE 0 END) AS en_preparation,
+        SUM(CASE WHEN (${statutExpr}) = 'En attente confirmation' THEN 1 ELSE 0 END) AS en_attente,
+        SUM(CASE WHEN (${statutExpr}) = 'Expédié'                 THEN 1 ELSE 0 END) AS expedie,
         SUM(CASE WHEN (${statutExpr}) = 'Livré'          THEN 1 ELSE 0 END) AS livre,
         SUM(CASE WHEN (${statutExpr}) = 'Problème'       THEN 1 ELSE 0 END) AS probleme,
         SUM(CASE WHEN (${statutExpr}) = 'Facturé'        THEN 1 ELSE 0 END) AS facture,
@@ -1615,6 +1613,7 @@ router.get('/commandes/stats', async (req, res) => {
     res.json({
       total:          parseInt(counts.total)          || 0,
       en_preparation: parseInt(counts.en_preparation) || 0,
+      en_attente:     parseInt(counts.en_attente)     || 0,
       expedie:        parseInt(counts.expedie)        || 0,
       livre:          parseInt(counts.livre)          || 0,
       probleme:       parseInt(counts.probleme)       || 0,
@@ -1797,14 +1796,17 @@ router.post('/commandes', async (req, res) => {
       `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, quantite, accessoire,
         bdc, date_commande, vf_order_id, client_final, num_suivi, transporteur, date_livraison, num_serie, num_facture,
         invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo,
-        num_retour, transporteur_retour, date_retour, num_commande_distrib)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING *`,
+        num_retour, transporteur_retour, date_retour, num_commande_distrib,
+        commande_type, ref_suede, date_envoi_suede, confirmation_recue, date_confirmation)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
        d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto',
        d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null, d.modele_demo ? true : false,
-       d.num_retour || null, d.transporteur_retour || null, d.date_retour || null, d.num_commande_distrib || null]
+       d.num_retour || null, d.transporteur_retour || null, d.date_retour || null, d.num_commande_distrib || null,
+       d.commande_type || null, d.ref_suede || null, d.date_envoi_suede || null,
+       d.confirmation_recue ? true : false, d.date_confirmation || null]
     );
     res.status(201).json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1816,7 +1818,8 @@ router.put('/commandes/:id', async (req, res) => {
     const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'quantite', 'accessoire',
       'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_livraison', 'num_serie',
       'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description', 'modele_demo',
-      'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib'];
+      'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib',
+      'commande_type', 'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
@@ -2067,6 +2070,105 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
       modele_demo: modeleDemo,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Email demande de confirmation BDC au distributeur ──────────────
+router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => {
+  try {
+    const params = {}; const prows = await db.all('SELECT cle, valeur FROM parametres');
+    prows.forEach(r => params[r.cle] = r.valeur);
+    if (!params.email_smtp_host || !params.email_smtp_user) return res.json({ ok: false, reason: 'SMTP non configuré' });
+    const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom, c.email AS client_email
+      FROM commandes cmd JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    if (!cmd.client_email) return res.json({ ok: false, reason: `Pas d'email pour ${cmd.distributeur_nom}` });
+    const nodemailer = require('nodemailer');
+    const t = nodemailer.createTransport({ host: params.email_smtp_host, port: parseInt(params.email_smtp_port) || 587,
+      secure: false, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass } });
+    await t.sendMail({
+      from: params.email_from || params.email_smtp_user, to: cmd.client_email,
+      subject: `[Éloflex] Confirmation de commande ${cmd.bdc || '#' + cmd.id}`,
+      html: `<div style="font-family:sans-serif;max-width:560px;color:#222">
+        <h2 style="color:#1a3a5c">Éloflex France — Confirmation de commande</h2>
+        <p>Bonjour,</p>
+        <p>Nous avons bien reçu votre commande <strong>${cmd.bdc || '#' + cmd.id}</strong> du ${cmd.date_commande ? new Date(cmd.date_commande).toLocaleDateString('fr-FR') : '—'}.</p>
+        <p>Pourriez-vous confirmer votre bon de commande par retour de mail afin que nous puissions procéder à la préparation ?</p>
+        ${cmd.num_commande_distrib ? `<p>Votre référence interne : <strong>${cmd.num_commande_distrib}</strong></p>` : ''}
+        <p style="margin-top:20px;font-size:12px;color:#888">Éloflex France — Service commercial</p>
+      </div>`
+    });
+    // Passer automatiquement en "En attente confirmation"
+    await db.run(`UPDATE commandes SET statut='En attente confirmation', updated_at=NOW() WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true, to: cmd.client_email });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Génération d'une facture dans VosFactures ──────────────────────
+router.post('/commandes/:id/generer-facture', adminOrOp, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT)
+      return res.json({ ok: false, reason: 'VosFactures non configuré' });
+    const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom FROM commandes cmd
+      JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    const lignes = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
+    const axios = require('axios');
+    const vfApi = axios.create({ baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' }, params: { api_token: process.env.VOSFACTURES_API_TOKEN } });
+    // Chercher le client dans VF
+    const { data: buyers } = await vfApi.get('/clients.json', { params: { name: cmd.distributeur_nom, per_page: 5 } });
+    const buyer = Array.isArray(buyers) ? buyers.find(b => b.name?.toLowerCase().includes(cmd.distributeur_nom.toLowerCase().slice(0, 8))) : null;
+    const positions = (lignes.length ? lignes : [{ designation: cmd.modele || 'Commande', quantite: cmd.quantite || 1, reference: cmd.bdc }])
+      .map(l => ({ name: l.designation, quantity: String(l.quantite || 1), price_net: '0', tax: '20', code: l.reference || '' }));
+    const today = new Date().toISOString().slice(0, 10);
+    const payload = {
+      invoice: {
+        kind: 'vat', sell_date: cmd.date_livraison || today, issue_date: today,
+        buyer_name: cmd.distributeur_nom,
+        ...(buyer ? { buyer_id: buyer.id } : {}),
+        positions,
+        ...(cmd.bdc ? { description: `Commande ${cmd.bdc}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}` } : {})
+      }
+    };
+    const { data: inv } = await vfApi.post('/invoices.json', payload);
+    if (!inv?.id) return res.json({ ok: false, reason: 'VosFactures n\'a pas retourné d\'identifiant' });
+    await db.run('UPDATE commandes SET vf_invoice_id=$1, num_facture=$2, statut=\'Facturé\', updated_at=NOW() WHERE id=$3',
+      [inv.id, inv.number || String(inv.id), req.params.id]);
+    res.json({ ok: true, invoice_id: inv.id, numero: inv.number, url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}` });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Création d'un BL (bordereau de livraison) dans VosFactures ─────
+router.post('/commandes/:id/creer-bl', adminOrOp, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT)
+      return res.json({ ok: false, reason: 'VosFactures non configuré' });
+    const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom FROM commandes cmd
+      JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    const lignes = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
+    const axios = require('axios');
+    const vfApi = axios.create({ baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' }, params: { api_token: process.env.VOSFACTURES_API_TOKEN } });
+    const { data: buyers } = await vfApi.get('/clients.json', { params: { name: cmd.distributeur_nom, per_page: 5 } });
+    const buyer = Array.isArray(buyers) ? buyers[0] : null;
+    const positions = (lignes.length ? lignes : [{ designation: cmd.modele || 'Article', quantite: cmd.quantite || 1, reference: cmd.bdc }])
+      .map(l => ({ name: l.designation, quantity: String(l.quantite || 1), price_net: '0', tax: '0', code: l.reference || '' }));
+    const today = new Date().toISOString().slice(0, 10);
+    const payload = {
+      invoice: {
+        kind: 'receipt', sell_date: today, issue_date: today,
+        buyer_name: cmd.distributeur_nom,
+        ...(buyer ? { buyer_id: buyer.id } : {}),
+        positions,
+        description: `BDC : ${cmd.bdc || '#' + cmd.id}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}`
+      }
+    };
+    const { data: bl } = await vfApi.post('/invoices.json', payload);
+    if (!bl?.id) return res.json({ ok: false, reason: 'VosFactures n\'a pas retourné d\'identifiant' });
+    await db.run('UPDATE commandes SET num_bordereau=$1, updated_at=NOW() WHERE id=$2', [bl.number || String(bl.id), req.params.id]);
+    res.json({ ok: true, bl_id: bl.id, numero: bl.number, url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${bl.id}` });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Migration ponctuelle : commandes antérieures à juin 2026 → Facturé ──

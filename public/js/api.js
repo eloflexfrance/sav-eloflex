@@ -89,4 +89,7 @@ const API = {
   commandesDoublons:()=>API.get('/commandes/doublons'),
   supprimerDoublons:()=>API.post('/commandes/supprimer-doublons',{}),
   migrationFactureHistorique:()=>API.post('/commandes/migration-facture-historique',{}),
+  emailConfirmation:(id)=>API.post(`/commandes/${id}/email-confirmation`,{}),
+  genererFacture:(id)=>API.post(`/commandes/${id}/generer-facture`,{}),
+  creerBL:(id)=>API.post(`/commandes/${id}/creer-bl`,{}),
 };
