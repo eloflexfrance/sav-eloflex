@@ -766,15 +766,53 @@ async function modalCommande(id){
         </div>
         <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
-        <div class="form-group"><label class="form-label">${t('cmd_quantite')||'Quantité'}</label><input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}"></div>
-        <div class="form-group"><label class="form-label">${t('cmd_bdc')||'Bdc'} / Devis</label>
-          <div style="display:flex;gap:6px">
-            <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1">
-            <button class="btn sm" type="button" title="Importer depuis VosFactures (BDC, Devis, Facture, BL)" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+        <div class="form-group" style="grid-column:1/-1">
+          <div style="display:grid;grid-template-columns:1fr 2fr 2fr;gap:10px;align-items:end">
+            <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_quantite')||'Quantité'}</label><input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}"></div>
+            <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_bdc')||'Bdc'} / Devis</label>
+              <div style="display:flex;gap:6px">
+                <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1">
+                <button class="btn sm" type="button" title="Importer depuis VosFactures (BDC, Devis, Facture, BL)" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+              </div>
+            </div>
+            <div class="form-group" style="margin:0"><label class="form-label">N° commande distributeur</label>
+              <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="Réf. interne distributeur">
+            </div>
           </div>
         </div>
-        <div class="form-group"><label class="form-label">N° commande distributeur</label>
-          <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="Réf. interne distributeur">
+        <div class="form-group" style="grid-column:1/-1">
+          ${(()=>{
+            const type = cm.commande_type || (/eloflex/i.test(cm.modele||'') ? 'fauteuil' : cm.modele ? 'pieces' : '');
+            const isFauteuil = type === 'fauteuil';
+            const isPieces   = type === 'pieces';
+            return `<div style="display:flex;align-items:center;gap:16px;padding:10px 14px;background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius)">
+              <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">Type</span>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                <input type="radio" name="cmd-type" value="fauteuil" ${isFauteuil?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='';$('cmd-type-section-pieces').style.display='none'"> 🦽 Fauteuil → Suède
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                <input type="radio" name="cmd-type" value="pieces" ${isPieces?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='none';$('cmd-type-section-pieces').style.display=''"> 📦 Pièces détachées
+              </label>
+            </div>
+            <div id="cmd-type-section-fauteuil" style="margin-top:8px;${isFauteuil?'':'display:none'}">
+              <div class="grid-2" style="gap:8px">
+                <div class="form-group" style="margin:0"><label class="form-label">Réf. commande Suède (invoice SE)</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="ex: SE-2026-0042"></div>
+                <div class="form-group" style="margin:0"><label class="form-label">Date envoi Suède</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
+                <label for="cmd-confirmation" style="font-size:13px;cursor:pointer">Confirmation reçue du distributeur</label>
+                ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
+              </div>
+            </div>
+            <div id="cmd-type-section-pieces" style="margin-top:8px;${isPieces?'':'display:none'}">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
+                <label for="cmd-confirmation" style="font-size:13px;cursor:pointer">BDC confirmé par le distributeur</label>
+                ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
+              </div>
+            </div>`;
+          })()}
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
@@ -867,41 +905,6 @@ async function modalCommande(id){
         </div>
       </div>
       <div id="cmd-preuve-zone"></div>
-      ${(()=>{
-        const type = cm.commande_type || (/eloflex/i.test(cm.modele||'') ? 'fauteuil' : cm.modele ? 'pieces' : '');
-        const isFauteuil = type === 'fauteuil';
-        const isPieces   = type === 'pieces';
-        if(!type && !cm.modele) return '';
-        return `<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-            <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">Type</span>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
-              <input type="radio" name="cmd-type" value="fauteuil" ${isFauteuil?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='';$('cmd-type-section-pieces').style.display='none'"> 🦽 Fauteuil → Suède
-            </label>
-            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px">
-              <input type="radio" name="cmd-type" value="pieces" ${isPieces?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='none';$('cmd-type-section-pieces').style.display=''"> 📦 Pièces détachées
-            </label>
-          </div>
-          <div id="cmd-type-section-fauteuil" style="${isFauteuil?'':'display:none'}">
-            <div class="grid-2" style="gap:8px">
-              <div class="form-group"><label class="form-label">Réf. commande Suède (invoice SE)</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="ex: SE-2026-0042"></div>
-              <div class="form-group"><label class="form-label">Date envoi Suède</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-              <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-              <label for="cmd-confirmation" style="font-size:13px;cursor:pointer">Confirmation reçue du distributeur</label>
-              ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
-            </div>
-          </div>
-          <div id="cmd-type-section-pieces" style="${isPieces?'':'display:none'}">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-              <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-              <label for="cmd-confirmation" style="font-size:13px;cursor:pointer">BDC confirmé par le distributeur</label>
-              ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
-            </div>
-          </div>
-        </div>`;
-      })()}
       ${id?`<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
         <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i>${t('cmd_chercher_vf')||'Chercher une facture VosFactures à rattacher'}</button>
         <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
