@@ -2178,9 +2178,10 @@ router.post('/commandes/:id/creer-bl', adminOrOp, async (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const payload = {
       invoice: {
-        kind: 'wz',
+        kind: 'other',
         issue_date: today,
         sell_date: today,
+        name: `Bon de livraison`,
         buyer_name: cmd.distributeur_nom,
         positions,
         description: `BDC : ${cmd.bdc || '#' + cmd.id}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}`
