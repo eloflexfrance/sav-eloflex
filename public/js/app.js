@@ -544,7 +544,7 @@ function renderCmdLignes(){
         <div style="position:relative">
           <input class="form-input cmd-ligne-search" style="font-size:12px;padding:4px 7px"
             value="${esc(l.designation)}"
-            placeholder="Taper nom ou référence catalogue…"
+            placeholder="${t('cat_search_catalogue')||'Taper nom ou référence catalogue…'}"
             oninput="TMP_CMD_LIGNES[${i}].designation=this.value;searchCmdPieces(${i},this.value)"
             onfocus="searchCmdPieces(${i},this.value)"
             onblur="setTimeout(()=>{const d=document.getElementById('cmd-piece-drop-${i}');if(d)d.style.display='none'},150)">
@@ -771,16 +771,16 @@ async function modalCommande(id){
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
     <div style="display:flex;border-bottom:0.5px solid var(--border-s)">
-      ${tabBtn('commande','Commande','ti-clipboard-list',false)}
-      ${tabBtn('expedition','Expédition','ti-truck-delivery',hasExp)}
-      ${tabBtn('facturation','Facturation','ti-receipt-2',hasFact)}
+      ${tabBtn('commande',t('cmd_tab_commande')||'Commande','ti-clipboard-list',false)}
+      ${tabBtn('expedition',t('cmd_tab_expedition')||'Expédition','ti-truck-delivery',hasExp)}
+      ${tabBtn('facturation',t('cmd_tab_facturation')||'Facturation','ti-receipt-2',hasFact)}
     </div>
     <div class="modal-body" style="padding-top:16px">
 
       <div id="cmd-tab-commande" style="${initTab!=='commande'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label>
-            <input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required placeholder="Nom du distributeur">
+            <input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required placeholder="${t('col_client')||'Nom du distributeur'}">
           </div>
           <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px">
             <label id="cmd-demo-wrap" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:0.5px solid ${cm.modele_demo?'var(--warning)':'var(--border-s)'};border-radius:var(--radius);background:${cm.modele_demo?'var(--warning-bg)':'var(--surface)'};width:100%;cursor:pointer;user-select:none">
@@ -797,13 +797,13 @@ async function modalCommande(id){
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">Bdc / Devis</label>
             <div style="display:flex;gap:5px">
-              <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="Numéro BDC ou Devis">
+              <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="${t('cmd_num_bdc_placeholder')||'Numéro BDC ou Devis'}">
               <button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
               ${cm.bdc?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'},'${esc(cm.bdc)}')"><i class="ti ti-external-link"></i></button>`:''}
             </div>
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">N° commande distributeur</label>
-            <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="Réf. interne">
+            <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="${t('cmd_ref_interne')||'Réf. interne'}">
           </div>
         </div>
         <div style="background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius);padding:12px;margin-bottom:12px">
@@ -818,24 +818,24 @@ async function modalCommande(id){
           </div>
           <div id="cmd-type-section-fauteuil" style="${isFauteuil?'':'display:none'}">
             <div class="grid-2" style="gap:8px;margin-bottom:8px">
-              <div class="form-group" style="margin:0"><label class="form-label">Réf. Suède (invoice SE)</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="SE-2026-..."></div>
-              <div class="form-group" style="margin:0"><label class="form-label">Date envoi Suède</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
+              <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_ref_suede')||'Réf. Suède (invoice SE)'}</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="SE-2026-..."></div>
+              <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_date_suede')||'Date envoi Suède'}</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
             </div>
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
               <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-              Confirmation reçue du distributeur${cm.date_confirmation?' <span style="font-size:11px;color:var(--text2)">('+fd(cm.date_confirmation)+')</span>':''}
+              ${t('cmd_confirmation_fauteuil')||'Confirmation reçue du distributeur'}${cm.date_confirmation?' <span style="font-size:11px;color:var(--text2)">('+fd(cm.date_confirmation)+')</span>':''}
             </label>
           </div>
           <div id="cmd-type-section-pieces" style="${isPieces?'':'display:none'}">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
               <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-              BDC confirmé par le distributeur${cm.date_confirmation?' <span style="font-size:11px;color:var(--text2)">('+fd(cm.date_confirmation)+')</span>':''}
+              ${t('cmd_confirmation_pieces')||'BDC confirmé par le distributeur'}${cm.date_confirmation?' <span style="font-size:11px;color:var(--text2)">('+fd(cm.date_confirmation)+')</span>':''}
             </label>
           </div>
         </div>
         <div style="margin-bottom:12px">
           <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            Lignes du bon de commande
+            ${t('cmd_lignes_bdc')||'Lignes du bon de commande'}
             <button class="btn sm" type="button" onclick="addCmdLigne()"><i class="ti ti-plus"></i> Ajouter</button>
           </label>
           <div id="cmd-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:40px"></div>
@@ -848,10 +848,10 @@ async function modalCommande(id){
       <div id="cmd-tab-expedition" style="${initTab!=='expedition'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group" style="grid-column:1/-1"><label class="form-label">Client final</label>
-            <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="Nom du client bénéficiaire">
+            <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="${t('cmd_client_beneficiaire')||'Nom du client bénéficiaire'}">
           </div>
           <div class="form-group"><label class="form-label">N° suivi</label>
-            <input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal()" placeholder="Numéro transporteur">
+            <input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal()" placeholder="${t('cmd_num_transporteur_placeholder')||'Numéro transporteur'}">
           </div>
           <div class="form-group"><label class="form-label">Transporteur</label>
             <select class="form-input" id="cmd-transporteur" onchange="majLienSuiviModal()">
@@ -874,7 +874,7 @@ async function modalCommande(id){
             </div>
           </div>
           <div class="form-group"><label class="form-label">N° série</label>
-            <input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}" placeholder="Numéro de série">
+            <input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}" placeholder="${t('cmd_num_serie_placeholder')||'Numéro de série'}">
           </div>
         </div>
         <div id="cmd-preuve-zone"></div>
@@ -883,7 +883,7 @@ async function modalCommande(id){
             <i class="ti ti-arrow-back-up"></i> Retour produit
           </div>
           <div class="grid-2" style="gap:10px">
-            <div class="form-group"><label class="form-label">N° suivi retour</label>
+            <div class="form-group"><label class="form-label">${t('cmd_suivi_retour')||'N° suivi retour'}</label>
               <input class="form-input mono" id="cmd-num-retour" value="${esc(cm.num_retour||'')}" placeholder="ex: XN123456789JB">
             </div>
             <div class="form-group"><label class="form-label">Transporteur retour</label>
@@ -892,7 +892,7 @@ async function modalCommande(id){
                 ${['Chronopost','Colissimo','DB Schenker','UPS','TNT','DHL','Autre'].map(tr=>`<option value="${tr}" ${cm.transporteur_retour===tr?'selected':''}>${tr}</option>`).join('')}
               </select>
             </div>
-            <div class="form-group"><label class="form-label">Date réception retour</label>
+            <div class="form-group"><label class="form-label">${t('cmd_date_retour_reception')||'Date réception retour'}</label>
               <input class="form-input" id="cmd-date-retour" type="date" value="${cm.date_retour||''}">
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end">
@@ -901,7 +901,7 @@ async function modalCommande(id){
           </div>
           <div style="margin-top:8px">
             <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              Articles retournés
+              ${t('cmd_articles_retournes')||'Articles retournés'}
               <button class="btn sm" type="button" onclick="addRetourLigne()"><i class="ti ti-plus"></i> Ajouter</button>
             </label>
             <div id="cmd-retour-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:36px"></div>
@@ -924,10 +924,10 @@ async function modalCommande(id){
             </select>
           </div>
           <div class="form-group"><label class="form-label">N° facture</label>
-            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="Numéro de facture">
+            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label class="form-label">Informations</label>
-            <textarea class="form-input" id="cmd-infos" rows="2" placeholder="Notes internes…">${esc(cm.informations||'')}</textarea>
+            <textarea class="form-input" id="cmd-infos" rows="2" placeholder="${t('cmd_notes_placeholder')||'Notes internes…'}">${esc(cm.informations||'')}</textarea>
           </div>
         </div>
         <div style="margin-bottom:12px">
@@ -936,11 +936,11 @@ async function modalCommande(id){
             <label for="cmd-reliquat" style="font-size:13px;font-weight:600;cursor:pointer;color:var(--warning)">⚠ Reliquat en attente</label>
           </div>
           <div id="cmd-reliquat-desc" style="${cm.reliquat?'':'display:none'};margin-top:8px">
-            <textarea class="form-input" id="cmd-reliquat-description" rows="2" placeholder="Décrire le reliquat…">${esc(cm.reliquat_description||'')}</textarea>
+            <textarea class="form-input" id="cmd-reliquat-description" rows="2" placeholder="${t('cmd_reliquat_placeholder')||'Décrire le reliquat…'}">${esc(cm.reliquat_description||'')}</textarea>
           </div>
         </div>
         ${id?`<div style="padding-top:12px;border-top:0.5px solid var(--border-s)">
-          <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i> Chercher une facture VosFactures à rattacher</button>
+          <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i> ${t('cmd_chercher_vf_rattacher')||'Chercher une facture VosFactures à rattacher'}</button>
           <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
         </div>`:''}
       </div>
@@ -2201,7 +2201,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
         </label>
         <div style="position:relative">
           <input class="form-input" id="f-serie-search" autocomplete="off"
-            placeholder="Taper n° de série, modèle ou distributeur…"
+            placeholder="${t('qs_type_serie')||'Taper n° de série, modèle ou distributeur…'}"
             value="${(()=>{const f=fauteuils.find(f=>f.id===(fauteuilId||d.fauteuil_id));return f?esc(f.modele+' — '+f.serie):'';})()}"
             oninput="searchFauteuilInter(this.value)"
             onfocus="if(this.value.length>=2)searchFauteuilInter(this.value)"
@@ -2356,7 +2356,7 @@ function renderProduitsForm(){
       <div>
         ${i===0?'<div class="form-label">Désignation</div>':''}
         <div style="position:relative">
-          <input class="form-input piece-search" style="font-size:12px" placeholder="Taper nom ou référence…"
+          <input class="form-input piece-search" style="font-size:12px" placeholder="${t('cat_search_placeholder')||'Taper nom ou référence…'}"
             value="${esc(p.designation)}"
             oninput="TMP_PRODUITS[${i}].designation=this.value;searchPieces(${i},this.value)"
             onfocus="searchPieces(${i},this.value)"
