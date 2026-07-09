@@ -101,6 +101,7 @@ async function initDB() {
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS vf_ignore BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_bordereau_vf TEXT`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_sav TEXT`);
+      await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_facture TEXT`);
       // Nettoyer les date_achat mal formées (pas au format YYYY-MM-DD)
       await client.query(`UPDATE fauteuils SET date_achat = NULL WHERE date_achat IS NOT NULL AND date_achat !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`);
       // Nettoyer les dates aberrantes (avant 2010 = numéro BDC mal interprété)
@@ -191,6 +192,7 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS modele_demo BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_retour TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_commande_distrib TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_data TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS commande_type TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS ref_suede TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS date_envoi_suede TEXT`);

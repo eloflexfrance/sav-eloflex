@@ -46,18 +46,9 @@ const upload = multer({ storage, fileFilter, limits: { fileSize: 15 * 1024 * 102
 const LIVRAISON_DIR = path.join(UPLOAD_DIR, 'livraisons');
 if (!fs.existsSync(LIVRAISON_DIR)) fs.mkdirSync(LIVRAISON_DIR, { recursive: true });
 
-const livraisonStorage = USE_CLOUDINARY
-  ? multer.memoryStorage()
-  : multer.diskStorage({
-      destination: (req, file, cb) => cb(null, LIVRAISON_DIR),
-      filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
-        cb(null, `livraison_${req.params.id}_${Date.now()}${ext}`);
-      }
-    });
-
+// Toujours memoryStorage pour les livraisons : le buffer est disponible pour base64 DB (Render éphémère)
 const uploadPreuveLivraison = multer({
-  storage: livraisonStorage,
+  storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
     const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
     if (allowed.includes(file.mimetype)) cb(null, true);
@@ -77,7 +68,12 @@ async function savePreuveLivraison(file, commandeId) {
     });
     return { filename: result.public_id, url: result.secure_url, taille: file.size, mime: file.mimetype, storage: 'cloudinary' };
   }
-  return { filename: file.filename, url: `/uploads/livraisons/${file.filename}`, taille: file.size, mime: file.mimetype, storage: 'local' };
+  // Stockage local : écrire le buffer sur le disque
+  const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
+  const filename = `livraison_${commandeId}_${Date.now()}${ext}`;
+  const filepath = path.join(LIVRAISON_DIR, filename);
+  fs.writeFileSync(filepath, file.buffer);
+  return { filename, url: `/uploads/livraisons/${filename}`, taille: file.size, mime: file.mimetype, storage: 'local' };
 }
 
 function deletePreuveLivraisonFile(filename, storage) {

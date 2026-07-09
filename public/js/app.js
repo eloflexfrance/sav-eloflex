@@ -146,8 +146,8 @@ async function renderDashboard(ttl,c,a){
           style="padding-left:34px;font-size:14px;border-radius:10px"
           oninput="quickSearch(this.value)"
           onkeydown="if(event.key==='Escape'){this.value='';clearQuickSearch();}">
+        <div id="qs-results" class="qs-results" style="display:none"></div>
       </div>
-      <div id="qs-results" class="qs-results" style="display:none"></div>
     </div>
     <div class="card" style="margin-bottom:14px">
       <div class="section-title"><i class="ti ti-clipboard-list"></i>${t('cmd_title')||'Suivi des commandes'}
@@ -282,9 +282,12 @@ async function renderClients(ttl,c,a){
   chargerListeClients();
 }
 
+let _clientsReqId = 0;
 async function chargerListeClients(){
   const el = document.getElementById('clients-list-body'); if(!el) return;
+  const reqId = ++_clientsReqId;
   const list = await API.clients(window._clientsQ||'');
+  if(reqId !== _clientsReqId) return; // réponse périmée — une requête plus récente a pris le relais
   el.innerHTML=`<div class="table-wrap"><table class="t">
     <thead><tr><th>${t('col_distributeur')}</th><th>${t('col_contact')}</th><th>${t('col_ville')}</th><th>${t('col_fauteuils')}</th><th>${t('col_interventions')}</th><th></th></tr></thead>
     <tbody>${list.map(cl=>`<tr onclick="setView('client',{clientId:${cl.id}})">
@@ -951,7 +954,11 @@ async function modalCommande(id){
     </div>`);
 
   window._CMD_ID = id || null;
-  window._CMD_PREUVE = id ? { url: cm.preuve_livraison_url, mime: cm.preuve_livraison_mime, taille: cm.preuve_livraison_taille } : {};
+  window._CMD_PREUVE = id ? {
+    url: cm.preuve_livraison_data || cm.preuve_livraison_url, // data:... en priorité (Render-safe)
+    mime: cm.preuve_livraison_mime,
+    taille: cm.preuve_livraison_taille
+  } : {};
   window._CMD_CONF_DATE = cm.date_confirmation || null;
   TMP_CMD_LIGNES = (cm.lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
   TMP_RETOUR_LIGNES = (cm.retour_lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
@@ -1267,9 +1274,12 @@ async function renderCatalogue(ttl,c,a){
   chargerListeCatalogue();
 }
 
+let _catalogueReqId = 0;
 async function chargerListeCatalogue(){
   const el = document.getElementById('catalogue-list-body'); if(!el) return;
+  const reqId = ++_catalogueReqId;
   const list = await API.catalogue(STATE.q);
+  if(reqId !== _catalogueReqId) return;
   CACHE.catalogue = list;
   el.innerHTML=`<div class="table-wrap"><table class="t">
     <thead><tr><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_fournisseur')}</th><th>${t('col_ref_fou')}</th><th>${t('col_prix')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th></tr></thead>
@@ -2705,7 +2715,13 @@ function quickSearch(q){
   clearTimeout(QS_TIMER);
   if(!q||q.length<2){clearQuickSearch();return;}
   QS_TIMER=setTimeout(async()=>{
-    try{const res=await API.recherche(q);showQuickResults(res,q);}catch(e){}
+    try{
+      const res=await API.recherche(q);
+      showQuickResults(res,q);
+    }catch(e){
+      const el=$('qs-results');
+      if(el){ el.innerHTML=`<div class="qs-empty" style="color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur recherche : ${esc(e.message)}</div>`; el.style.display='block'; }
+    }
   },200);
 }
 function clearQuickSearch(){const el=$('qs-results');if(el)el.style.display='none';}

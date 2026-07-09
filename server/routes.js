@@ -1050,10 +1050,8 @@ router.get('/recherche', async (req, res) => {
           LEFT JOIN interventions iv ON iv.fauteuil_id=f.id
           WHERE f.modele ILIKE $1 OR c.nom ILIKE $1 OR iv.num_sav ILIKE $1
              OR f.serie ILIKE $1
-          ORDER BY
-            CASE WHEN LOWER(f.serie) LIKE LOWER($2) THEN 0 ELSE 1 END,
-            f.updated_at DESC LIMIT 50
-        `, [`%${q}%`, `${q}%`]);
+          ORDER BY f.updated_at DESC LIMIT 50
+        `, [`%${q}%`]);
 
     const clients = await db.all(`
       SELECT c.*, COUNT(f.id)::int AS nb_fauteuils
@@ -1960,11 +1958,14 @@ router.post('/commandes/:id/preuve-livraison', uploadPreuveLivraison.single('fic
     }
 
     const saved = await savePreuveLivraison(req.file, req.params.id);
+    // Toujours stocker en base64 dans la DB (survit aux redémarrages Render)
+    const base64data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     const row = await db.run(
       `UPDATE commandes SET preuve_livraison_filename=$1, preuve_livraison_url=$2, preuve_livraison_mime=$3,
-        preuve_livraison_taille=$4, preuve_livraison_storage=$5, preuve_livraison_uploaded_at=NOW(), updated_at=NOW()
-       WHERE id=$6 RETURNING *`,
-      [saved.filename, saved.url, saved.mime, saved.taille, saved.storage, req.params.id]
+        preuve_livraison_taille=$4, preuve_livraison_storage=$5, preuve_livraison_uploaded_at=NOW(),
+        preuve_livraison_data=$6, updated_at=NOW()
+       WHERE id=$7 RETURNING *`,
+      [saved.filename, saved.url, saved.mime, saved.taille, saved.storage, base64data, req.params.id]
     );
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
