@@ -748,186 +748,233 @@ async function renderCommandesTable(page=1){
 }
 
 async function modalCommande(id){
-  let cm = id ? await API.commande(id) : {};
+  let cm = id ? await API.commande(id) : {statut:'Auto', quantite:1};
+
+  const hasExp  = !!(cm.num_suivi || cm.date_livraison || cm.num_bordereau || cm.num_serie);
+  const hasFact = !!(cm.num_facture || (cm.statut && cm.statut!=='Auto' && cm.statut!=='En préparation' && cm.statut!=='En attente confirmation'));
+  const initTab = id && (cm.statut_calc==='Expédié'||cm.statut_calc==='Livré') && !hasFact ? 'expedition' : 'commande';
+  const type = cm.commande_type || (/eloflex/i.test(cm.modele||'') ? 'fauteuil' : cm.modele ? 'pieces' : '');
+  const isFauteuil = type==='fauteuil', isPieces=type==='pieces';
+
+  const tabBtn = (key, label, icon, dot) =>
+    `<button id="tab-btn-${key}" onclick="switchCmdTab('${key}')"
+      style="flex:1;padding:10px 6px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;
+             border-bottom:2px solid ${key===initTab?'var(--accent)':'transparent'};
+             color:${key===initTab?'var(--accent)':'var(--text2)'};display:flex;align-items:center;justify-content:center;gap:5px">
+      <i class="ti ${icon}"></i>${label}${dot?`<span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:2px"></span>`:''}
+    </button>`;
+
   showModal(`
     <div class="modal-header">
       <i class="ti ti-clipboard-list" style="font-size:18px;color:var(--accent)"></i>
-      <h2>${id?(t('cmd_edit')||'Modifier la commande'):(t('cmd_add')||'Nouvelle commande')}</h2>
+      <h2 style="flex:1">${id?(t('cmd_edit')||'Modifier'):(t('cmd_add')||'Nouvelle commande')}${cm.distributeur_nom?` <span style="font-weight:400;color:var(--text2);font-size:15px">— ${esc(cm.distributeur_nom)}</span>`:''}</h2>
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
-    <div class="modal-body">
-      <div class="grid-2">
-        <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label><input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required></div>
-        <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px">
-          <label id="cmd-demo-wrap" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:0.5px solid ${cm.modele_demo?'var(--warning)':'var(--border-s)'};border-radius:var(--radius);background:${cm.modele_demo?'var(--warning-bg)':'var(--surface)'};width:100%;cursor:pointer;user-select:none">
-            <input type="checkbox" id="cmd-demo" ${cm.modele_demo?'checked':''} onchange="majDemoStyle(this)" style="width:16px;height:16px;accent-color:var(--warning);flex-shrink:0">
-            <span style="font-size:13px;font-weight:600;color:var(--warning)">🔄 Modèle de démo</span>
-          </label>
+    <div style="display:flex;border-bottom:0.5px solid var(--border-s)">
+      ${tabBtn('commande','Commande','ti-clipboard-list',false)}
+      ${tabBtn('expedition','Expédition','ti-truck-delivery',hasExp)}
+      ${tabBtn('facturation','Facturation','ti-receipt-2',hasFact)}
+    </div>
+    <div class="modal-body" style="padding-top:16px">
+
+      <div id="cmd-tab-commande" style="${initTab!=='commande'?'display:none':''}">
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label>
+            <input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required placeholder="Nom du distributeur">
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px">
+            <label id="cmd-demo-wrap" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:0.5px solid ${cm.modele_demo?'var(--warning)':'var(--border-s)'};border-radius:var(--radius);background:${cm.modele_demo?'var(--warning-bg)':'var(--surface)'};width:100%;cursor:pointer;user-select:none">
+              <input type="checkbox" id="cmd-demo" ${cm.modele_demo?'checked':''} onchange="majDemoStyle(this)" style="width:16px;height:16px;accent-color:var(--warning);flex-shrink:0">
+              <span style="font-size:13px;font-weight:600;color:var(--warning)">🔄 Modèle de démo</span>
+            </label>
+          </div>
+          <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
+          <div class="form-group"><label class="form-label">${t('cmd_modele')||'Modèle / Article'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
         </div>
-        <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
-        <div class="form-group" style="grid-column:1/-1">
-          <div style="display:grid;grid-template-columns:1fr 2fr 2fr;gap:10px;align-items:end">
-            <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_quantite')||'Quantité'}</label><input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}"></div>
-            <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_bdc')||'Bdc'} / Devis</label>
-              <div style="display:flex;gap:6px">
-                <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1">
-                <button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
-                ${cm.bdc?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'},'${esc(cm.bdc)}')"><i class="ti ti-external-link"></i></button>`:''}
-              </div>
-            </div>
-            <div class="form-group" style="margin:0"><label class="form-label">N° commande distributeur</label>
-              <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="Réf. interne distributeur">
+        <div style="display:grid;grid-template-columns:1fr 2fr 2fr;gap:10px;margin-bottom:12px">
+          <div class="form-group" style="margin:0"><label class="form-label">Quantité</label>
+            <input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}">
+          </div>
+          <div class="form-group" style="margin:0"><label class="form-label">Bdc / Devis</label>
+            <div style="display:flex;gap:5px">
+              <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="Numéro BDC ou Devis">
+              <button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+              ${cm.bdc?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'},'${esc(cm.bdc)}')"><i class="ti ti-external-link"></i></button>`:''}
             </div>
           </div>
+          <div class="form-group" style="margin:0"><label class="form-label">N° commande distributeur</label>
+            <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="Réf. interne">
+          </div>
         </div>
-        <div class="form-group" style="grid-column:1/-1">
-          ${(()=>{
-            const type = cm.commande_type || (/eloflex/i.test(cm.modele||'') ? 'fauteuil' : cm.modele ? 'pieces' : '');
-            const isFauteuil = type === 'fauteuil';
-            const isPieces   = type === 'pieces';
-            return `<div style="display:flex;align-items:center;gap:16px;padding:10px 14px;background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius)">
-              <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">Type</span>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-                <input type="radio" name="cmd-type" value="fauteuil" ${isFauteuil?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='';$('cmd-type-section-pieces').style.display='none'"> 🦽 Fauteuil → Suède
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-                <input type="radio" name="cmd-type" value="pieces" ${isPieces?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='none';$('cmd-type-section-pieces').style.display=''"> 📦 Pièces détachées
-              </label>
+        <div style="background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius);padding:12px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:${type?'10px':'0'}">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2)">Type</span>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+              <input type="radio" name="cmd-type" value="fauteuil" ${isFauteuil?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='';$('cmd-type-section-pieces').style.display='none'"> 🦽 Fauteuil → Suède
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+              <input type="radio" name="cmd-type" value="pieces" ${isPieces?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='none';$('cmd-type-section-pieces').style.display=''"> 📦 Pièces détachées
+            </label>
+          </div>
+          <div id="cmd-type-section-fauteuil" style="${isFauteuil?'':'display:none'}">
+            <div class="grid-2" style="gap:8px;margin-bottom:8px">
+              <div class="form-group" style="margin:0"><label class="form-label">Réf. Suède (invoice SE)</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="SE-2026-..."></div>
+              <div class="form-group" style="margin:0"><label class="form-label">Date envoi Suède</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
             </div>
-            <div id="cmd-type-section-fauteuil" style="margin-top:8px;${isFauteuil?'':'display:none'}">
-              <div class="grid-2" style="gap:8px">
-                <div class="form-group" style="margin:0"><label class="form-label">Réf. commande Suède (invoice SE)</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="ex: SE-2026-0042"></div>
-                <div class="form-group" style="margin:0"><label class="form-label">Date envoi Suède</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
-                <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-                <label for="cmd-confirmation" style="font-size:13px;cursor:pointer">Confirmation reçue du distributeur</label>
-                ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
-              </div>
-            </div>
-            <div id="cmd-type-section-pieces" style="margin-top:8px;${isPieces?'':'display:none'}">
-              <div style="display:flex;align-items:center;gap:8px">
-                <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-                <label for="cmd-confirmation" style="font-size:13px;cursor:pointer">BDC confirmé par le distributeur</label>
-                ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
-              </div>
-            </div>`;
-          })()}
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
+              Confirmation reçue du distributeur${cm.date_confirmation?' <span style="font-size:11px;color:var(--text2)">('+fd(cm.date_confirmation)+')</span>':''}
+            </label>
+          </div>
+          <div id="cmd-type-section-pieces" style="${isPieces?'':'display:none'}">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
+              BDC confirmé par le distributeur${cm.date_confirmation?' <span style="font-size:11px;color:var(--text2)">('+fd(cm.date_confirmation)+')</span>':''}
+            </label>
+          </div>
         </div>
-        <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
-            <span>Lignes du bon de commande</span>
+        <div style="margin-bottom:12px">
+          <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            Lignes du bon de commande
             <button class="btn sm" type="button" onclick="addCmdLigne()"><i class="ti ti-plus"></i> Ajouter</button>
           </label>
           <div id="cmd-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:40px"></div>
         </div>
-        <div class="form-group"><label class="form-label">${t('col_date')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_client_final')||'Client final'}</label><input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}"></div>
-        <div class="form-group"><label class="form-label">${t('cmd_suivi')||'N° suivi'}</label><input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal()"></div>
-        <div class="form-group">
-          <label class="form-label">${t('cmd_transporteur')||'Transporteur'}</label>
-          <select class="form-input" id="cmd-transporteur" onchange="majLienSuiviModal()">
-            <option value="">${t('cmd_transporteur_choisir')||'— Choisir —'}</option>
-            <option value="Chronopost" ${cm.transporteur==='Chronopost'?'selected':''}>Chronopost</option>
-            <option value="Colissimo" ${cm.transporteur==='Colissimo'?'selected':''}>Colissimo (La Poste)</option>
-            <option value="DB Schenker" ${cm.transporteur==='DB Schenker'?'selected':''}>DB Schenker</option>
-            <option value="UPS" ${cm.transporteur==='UPS'?'selected':''}>UPS</option>
-            <option value="Autre" ${cm.transporteur==='Autre'?'selected':''}>${t('cmd_transporteur_autre')||'Autre'}</option>
-          </select>
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label">Date commande</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
         </div>
-        <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-6px"></div>
-        <div class="form-group"><label class="form-label">${t('cmd_date_livraison')||'Date livraison'}</label><input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison()"></div>
-        <div class="form-group"><label class="form-label">N° Bordereau de livraison</label>
-          <div style="display:flex;gap:6px">
-            <input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="ex: BL-2026-0042" style="flex:1">
-            <button class="btn sm" type="button" title="Importer les articles depuis ce bordereau VosFactures" onmousedown="lookupBordereauVF()"><i class="ti ti-download"></i></button>
+      </div>
+
+      <div id="cmd-tab-expedition" style="${initTab!=='expedition'?'display:none':''}">
+        <div class="grid-2">
+          <div class="form-group" style="grid-column:1/-1"><label class="form-label">Client final</label>
+            <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="Nom du client bénéficiaire">
+          </div>
+          <div class="form-group"><label class="form-label">N° suivi</label>
+            <input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal()" placeholder="Numéro transporteur">
+          </div>
+          <div class="form-group"><label class="form-label">Transporteur</label>
+            <select class="form-input" id="cmd-transporteur" onchange="majLienSuiviModal()">
+              <option value="">— Choisir —</option>
+              <option value="Chronopost" ${cm.transporteur==='Chronopost'?'selected':''}>Chronopost</option>
+              <option value="Colissimo" ${cm.transporteur==='Colissimo'?'selected':''}>Colissimo (La Poste)</option>
+              <option value="DB Schenker" ${cm.transporteur==='DB Schenker'?'selected':''}>DB Schenker</option>
+              <option value="UPS" ${cm.transporteur==='UPS'?'selected':''}>UPS</option>
+              <option value="Autre" ${cm.transporteur==='Autre'?'selected':''}>Autre</option>
+            </select>
+          </div>
+          <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-8px"></div>
+          <div class="form-group"><label class="form-label">Date livraison</label>
+            <input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison()">
+          </div>
+          <div class="form-group"><label class="form-label">N° Bordereau de livraison</label>
+            <div style="display:flex;gap:5px">
+              <input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="BL-2026-..." style="flex:1">
+              <button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBordereauVF()"><i class="ti ti-download"></i></button>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label">N° série</label>
+            <input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}" placeholder="Numéro de série">
           </div>
         </div>
-        <div class="form-group"><label class="form-label">${t('cmd_serie')||'N° série'}</label><input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}"></div>
-        <div class="form-group">
-          <label class="form-label">${t('cmd_facture')||'N° facture'}</label>
-          <div style="display:flex;gap:6px">
-            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1">
-            <button class="btn sm" type="button" title="${t('cmd_recuperer_serie')||'Récupérer le n° de série depuis cette facture'}" onmousedown="lookupFactureVF()"><i class="ti ti-search"></i></button>
-          </div>
-        </div>
-        <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label">${t('cmd_statut')||'Statut'}</label>
-          <select class="form-input" id="cmd-statut" onchange="majZonePreuveLivraison()">
-            <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto')||'Auto (calculé)'}</option>
-            <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
-            <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
-            <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
-            <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
-            <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>${t('cmd_facture_statut')||'Facturé'}</option>
-            <option value="Problème" ${cm.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
-            <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
-          </select>
-        </div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_infos')||'Informations'}</label><textarea class="form-input" id="cmd-infos" rows="2">${esc(cm.informations||'')}</textarea></div>
-        <div class="form-group" style="grid-column:1/-1">
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius);margin-bottom:6px">
-            <i class="ti ti-arrow-back-up" style="color:var(--danger);font-size:16px"></i>
-            <span style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em">Retour produit</span>
+        <div id="cmd-preuve-zone"></div>
+        <div style="margin-top:14px;padding-top:14px;border-top:0.5px solid var(--border-s)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--danger);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
+            <i class="ti ti-arrow-back-up"></i> Retour produit
           </div>
           <div class="grid-2" style="gap:10px">
-            <div class="form-group"><label class="form-label">N° suivi retour</label><input class="form-input mono" id="cmd-num-retour" value="${esc(cm.num_retour||'')}" placeholder="ex: XN123456789JB"></div>
+            <div class="form-group"><label class="form-label">N° suivi retour</label>
+              <input class="form-input mono" id="cmd-num-retour" value="${esc(cm.num_retour||'')}" placeholder="ex: XN123456789JB">
+            </div>
             <div class="form-group"><label class="form-label">Transporteur retour</label>
               <select class="form-input" id="cmd-transporteur-retour">
                 <option value="">— Choisir —</option>
-                ${['Chronopost','Colissimo','DB Schenker','UPS','TNT','DHL','Autre'].map(tr=>
-                  `<option value="${tr}" ${cm.transporteur_retour===tr?'selected':''}>${tr}</option>`).join('')}
+                ${['Chronopost','Colissimo','DB Schenker','UPS','TNT','DHL','Autre'].map(tr=>`<option value="${tr}" ${cm.transporteur_retour===tr?'selected':''}>${tr}</option>`).join('')}
               </select>
             </div>
-            <div class="form-group"><label class="form-label">Date de réception retour</label><input class="form-input" id="cmd-date-retour" type="date" value="${cm.date_retour||''}"></div>
+            <div class="form-group"><label class="form-label">Date réception retour</label>
+              <input class="form-input" id="cmd-date-retour" type="date" value="${cm.date_retour||''}">
+            </div>
             <div class="form-group" style="display:flex;align-items:flex-end">
-              ${cm.num_retour ? `<a href="${lienSuiviColis(cm.transporteur_retour, cm.num_retour)||'#'}" target="_blank" class="btn sm" ${!lienSuiviColis(cm.transporteur_retour, cm.num_retour)?'disabled':''}>
-                <i class="ti ti-external-link"></i> Suivre le retour
-              </a>` : '<span style="font-size:12px;color:var(--text3)">Renseigne le N° suivi pour suivre</span>'}
+              ${cm.num_retour&&lienSuiviColis(cm.transporteur_retour,cm.num_retour)?`<a href="${lienSuiviColis(cm.transporteur_retour,cm.num_retour)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i> Suivre le retour</a>`:`<span style="font-size:12px;color:var(--text3)">Renseigne le N° pour suivre</span>`}
             </div>
           </div>
           <div style="margin-top:8px">
             <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-              <span>Articles retournés</span>
+              Articles retournés
               <button class="btn sm" type="button" onclick="addRetourLigne()"><i class="ti ti-plus"></i> Ajouter</button>
             </label>
             <div id="cmd-retour-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:36px"></div>
           </div>
         </div>
-        <div class="form-group" style="grid-column:1/-1">
+      </div>
+
+      <div id="cmd-tab-facturation" style="${initTab!=='facturation'?'display:none':''}">
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label">Statut</label>
+            <select class="form-input" id="cmd-statut" onchange="majZonePreuveLivraison()">
+              <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>Auto (calculé)</option>
+              <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
+              <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>En préparation</option>
+              <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>Expédié</option>
+              <option value="Livré" ${cm.statut==='Livré'?'selected':''}>Livré</option>
+              <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>Facturé</option>
+              <option value="Problème" ${cm.statut==='Problème'?'selected':''}>Problème</option>
+              <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>Annulé</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">N° facture</label>
+            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="Numéro de facture">
+          </div>
+          <div class="form-group" style="grid-column:1/-1"><label class="form-label">Informations</label>
+            <textarea class="form-input" id="cmd-infos" rows="2" placeholder="Notes internes…">${esc(cm.informations||'')}</textarea>
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:${cm.reliquat?'var(--warning-bg)':'var(--surface)'}">
             <input type="checkbox" id="cmd-reliquat" ${cm.reliquat?'checked':''} onchange="majReliquatSection()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--warning)">
             <label for="cmd-reliquat" style="font-size:13px;font-weight:600;cursor:pointer;color:var(--warning)">⚠ Reliquat en attente</label>
           </div>
-          <div id="cmd-reliquat-desc" style="${cm.reliquat?'':'display:none'}; margin-top:8px">
-            <textarea class="form-input" id="cmd-reliquat-description" rows="2" placeholder="Décrire le reliquat (articles manquants, délai estimé...)">${esc(cm.reliquat_description||'')}</textarea>
+          <div id="cmd-reliquat-desc" style="${cm.reliquat?'':'display:none'};margin-top:8px">
+            <textarea class="form-input" id="cmd-reliquat-description" rows="2" placeholder="Décrire le reliquat…">${esc(cm.reliquat_description||'')}</textarea>
           </div>
         </div>
+        ${id?`<div style="padding-top:12px;border-top:0.5px solid var(--border-s)">
+          <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i> Chercher une facture VosFactures à rattacher</button>
+          <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
+        </div>`:''}
       </div>
-      <div id="cmd-preuve-zone"></div>
-      ${id?`<div style="margin-top:6px;padding-top:14px;border-top:0.5px solid var(--border)">
-        <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i>${t('cmd_chercher_vf')||'Chercher une facture VosFactures à rattacher'}</button>
-        <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
-      </div>`:''}
     </div>
     <div class="modal-footer">
-      ${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i>${t('btn_supprimer')||'Supprimer'}</button>`:''}
-      ${id?`<button class="btn sm" onclick="envoyerEmailConfirmation(${id})" title="Demander confirmation au distributeur"><i class="ti ti-mail"></i> Confirmer</button>`:''}
-      ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Envoyer confirmation d'expédition"><i class="ti ti-mail"></i> Email expéd.</button>`:''}
-      ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="Générer la facture dans VosFactures"><i class="ti ti-receipt-2"></i> Facture VF</button>`:''}
+      ${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i></button>`:''}
+      ${id?`<button class="btn sm" onclick="envoyerEmailConfirmation(${id})" title="Demander confirmation BDC"><i class="ti ti-mail"></i> Confirmer</button>`:''}
+      ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Email d'expédition"><i class="ti ti-mail"></i> Email expéd.</button>`:''}
+      ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="Créer la facture dans VosFactures"><i class="ti ti-receipt-2"></i> Facture VF</button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
+
   window._CMD_ID = id || null;
   window._CMD_PREUVE = id ? { url: cm.preuve_livraison_url, mime: cm.preuve_livraison_mime, taille: cm.preuve_livraison_taille } : {};
-  // Initialiser les lignes depuis les données chargées ou vide
-  TMP_CMD_LIGNES = (cm.lignes || []).map(l => ({designation:l.designation||'', reference:l.reference||'', quantite:l.quantite||1}));
-  TMP_RETOUR_LIGNES = (cm.retour_lignes || []).map(l => ({designation:l.designation||'', reference:l.reference||'', quantite:l.quantite||1}));
-  majLienSuiviModal();
-  majZonePreuveLivraison();
-  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); }, 50);
+  window._CMD_CONF_DATE = cm.date_confirmation || null;
+  TMP_CMD_LIGNES = (cm.lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
+  TMP_RETOUR_LIGNES = (cm.retour_lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
+  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majZonePreuveLivraison(); }, 60);
 }
+
+function switchCmdTab(tab){
+  ['commande','expedition','facturation'].forEach(k=>{
+    const panel = document.getElementById('cmd-tab-'+k);
+    const btn   = document.getElementById('tab-btn-'+k);
+    if(panel) panel.style.display = k===tab ? '' : 'none';
+    if(btn){
+      btn.style.borderBottom = k===tab ? '2px solid var(--accent)' : '2px solid transparent';
+      btn.style.color = k===tab ? 'var(--accent)' : 'var(--text2)';
+    }
+  });
+  if(tab==='expedition') setTimeout(()=>{ majLienSuiviModal(); majZonePreuveLivraison(); renderRetourLignes(); }, 30);
+}
+
 
 function commandeEstLivree(){
   const sel = gv('cmd-statut');
