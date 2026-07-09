@@ -1854,7 +1854,10 @@ router.get('/commandes/:id/factures-vf-suggestions', async (req, res) => {
       return res.json({ factures: [], configured: false });
     }
     if (!cmd.vf_id) {
-      return res.json({ factures: [], configured: true, reason: 'Distributeur non lié à un client VosFactures' });
+      // Pas de lien VF direct — recherche par numéro de facture ou nom distributeur
+      if (!req.query.num_facture && !cmd.distributeur_nom) {
+        return res.json({ factures: [], configured: true, reason: 'Aucun lien VosFactures disponible' });
+      }
     }
 
     const axios = require('axios');
@@ -1864,9 +1867,25 @@ router.get('/commandes/:id/factures-vf-suggestions', async (req, res) => {
       params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
     });
 
-    const { data } = await vfApi.get('/invoices.json', {
-      params: { client_id: cmd.vf_id, kind: 'vat', per_page: 15, order: 'issue_date.desc' }
-    });
+    // Si on a un num_facture saisi, chercher directement
+    let data;
+    if (req.query.num_facture) {
+      const r = await vfApi.get('/invoices.json', {
+        params: { number: req.query.num_facture, kind: 'vat', per_page: 5 }
+      });
+      data = r.data;
+    } else if (cmd.vf_id) {
+      const r = await vfApi.get('/invoices.json', {
+        params: { client_id: cmd.vf_id, kind: 'vat', per_page: 15, order: 'issue_date.desc' }
+      });
+      data = r.data;
+    } else {
+      // Pas de vf_id → recherche par nom distributeur
+      const r = await vfApi.get('/invoices.json', {
+        params: { buyer_name: cmd.distributeur_nom, kind: 'vat', per_page: 15, order: 'issue_date.desc' }
+      });
+      data = r.data;
+    }
 
     const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
     const factures = (Array.isArray(data) ? data : []).slice(0, 10).map(inv => ({

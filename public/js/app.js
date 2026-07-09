@@ -810,10 +810,10 @@ async function modalCommande(id){
           <div style="display:flex;align-items:center;gap:16px;margin-bottom:${type?'10px':'0'}">
             <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2)">Type</span>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-              <input type="radio" name="cmd-type" value="fauteuil" ${isFauteuil?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='';$('cmd-type-section-pieces').style.display='none'"> 🦽 Fauteuil → Suède
+              <input type="radio" name="cmd-type" value="fauteuil" ${isFauteuil?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='';$('cmd-type-section-pieces').style.display='none';if($('cmd-confirmation-wrap')){$('cmd-confirmation-wrap').style.display='flex';$('cmd-confirmation-label').textContent=t('cmd_confirmation_fauteuil')||'Confirmation reçue du distributeur';}"> 🦽 Fauteuil → Suède
             </label>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-              <input type="radio" name="cmd-type" value="pieces" ${isPieces?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='none';$('cmd-type-section-pieces').style.display=''"> 📦 Pièces détachées
+              <input type="radio" name="cmd-type" value="pieces" ${isPieces?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='none';$('cmd-type-section-pieces').style.display='';if($('cmd-confirmation-wrap')){$('cmd-confirmation-wrap').style.display='flex';$('cmd-confirmation-label').textContent=t('cmd_confirmation_pieces')||'BDC confirmé par le distributeur';}"> 📦 Pièces détachées
             </label>
           </div>
           <div id="cmd-type-section-fauteuil" style="${isFauteuil?'':'display:none'}">
@@ -821,17 +821,13 @@ async function modalCommande(id){
               <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_ref_suede')||'Réf. Suède (invoice SE)'}</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="SE-2026-..."></div>
               <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_date_suede')||'Date envoi Suède'}</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
             </div>
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-              ${t('cmd_confirmation_fauteuil')||'Confirmation reçue du distributeur'}${cm.date_confirmation?' <span style="font-size:11px;color:var(--text2)">('+fd(cm.date_confirmation)+')</span>':''}
-            </label>
           </div>
-          <div id="cmd-type-section-pieces" style="${isPieces?'':'display:none'}">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-              ${t('cmd_confirmation_pieces')||'BDC confirmé par le distributeur'}${cm.date_confirmation?' <span style="font-size:11px;color:var(--text2)">('+fd(cm.date_confirmation)+')</span>':''}
-            </label>
-          </div>
+          <div id="cmd-type-section-pieces" style="${isPieces?'':'display:none'}"></div>
+          ${type?`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-top:8px" id="cmd-confirmation-wrap">
+            <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
+            <span id="cmd-confirmation-label">${isFauteuil?(t('cmd_confirmation_fauteuil')||'Confirmation reçue du distributeur'):(t('cmd_confirmation_pieces')||'BDC confirmé par le distributeur')}</span>
+            ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
+          </label>`:''}
         </div>
         <div style="margin-bottom:12px">
           <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -940,7 +936,7 @@ async function modalCommande(id){
           </div>
         </div>
         ${id?`<div style="padding-top:12px;border-top:0.5px solid var(--border-s)">
-          <button class="btn sm" onclick="chercherFacturesVF(${id})" type="button"><i class="ti ti-search"></i> ${t('cmd_chercher_vf_rattacher')||'Chercher une facture VosFactures à rattacher'}</button>
+        <button class="btn sm" onclick="chercherFacturesVF(${id},'${esc(cm.num_facture||'')}')" type="button"><i class="ti ti-search"></i> ${t('cmd_chercher_vf_rattacher')||'Chercher une facture VosFactures à rattacher'}</button>
           <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
         </div>`:''}
       </div>
@@ -1031,11 +1027,14 @@ async function supprimerPreuveLivraison(id){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
-async function chercherFacturesVF(id){
+async function chercherFacturesVF(id, numFacture){
   const zone=$('cmd-vf-suggest-list');
   zone.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${t('msg_chargement')}</div>`;
+  // Utiliser le numéro de facture saisi si disponible
+  const numFact = numFacture || gv('cmd-facture') || '';
+  const url = `/commandes/${id}/factures-vf-suggestions${numFact?'?num_facture='+encodeURIComponent(numFact):''}`;
   try{
-    const r = await API.commandeFacturesSuggestions(id);
+    const r = await API.get(url);
     if(!r.configured){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${t('cmd_vf_non_configure')||'VosFactures non configuré'}</div>`; return; }
     if(r.reason){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${esc(r.reason)}</div>`; return; }
     if(!r.factures||!r.factures.length){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${t('cmd_vf_aucune')||'Aucune facture récente trouvée pour ce distributeur'}</div>`; return; }
