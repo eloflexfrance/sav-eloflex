@@ -718,13 +718,14 @@ async function renderCommandesTable(page=1){
   wrap.innerHTML=`${nav}
     <div class="table-wrap"><table class="t">
       <thead><tr>
-        <th>${t('col_date')||'Date'}</th><th>${t('col_client')||'Distributeur'}</th>
+        <th>${t('col_date')||'Date'}</th><th style="width:75px">Groupe</th><th>${t('col_client')||'Distributeur'}</th>
         <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th><th>Date livraison</th><th>${t('cmd_serie')||'N° série'}</th>
         <th>${t('col_statut')||'Statut'}</th><th style="text-align:center">  </th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
         <td>${fd(cm.date_commande)}</td>
+        <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span></td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
