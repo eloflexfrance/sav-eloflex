@@ -221,20 +221,22 @@ async function chargerCommandesDashboard(){
       <div class="table-wrap"><table class="t">
         <thead><tr>
           <th>${t('col_date')||'Date'}</th>
+          <th style="width:80px">Groupe</th>
           <th>${t('col_client')||'Distributeur'}</th>
           <th>${t('cmd_bdc')||'Bdc'}</th>
           <th>${t('cmd_modele')||'Modèle / Pièce'}</th>
-          <th>${t('cmd_suivi')||'N° suivi'}</th>
+          <th style="max-width:110px">${t('cmd_suivi')||'N° suivi'}</th>
           <th>${t('col_statut')||'Statut'}</th>
         </tr></thead>
         <tbody>${list.map(cm=>{
           const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
           return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
             <td>${fd(cm.date_commande)}</td>
+            <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
             <td>${esc(cm.distributeur_nom)}</td>
             <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
-            <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
-            <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Suivre"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
+            <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
+            <td class="mono" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
             <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span></td>
           </tr>`;
         }).join('')}</tbody>
@@ -785,14 +787,15 @@ async function modalCommande(id){
           <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label>
             <input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required placeholder="${t('col_client')||'Nom du distributeur'}">
           </div>
-          <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:4px">
-            <label id="cmd-demo-wrap" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:0.5px solid ${cm.modele_demo?'var(--warning)':'var(--border-s)'};border-radius:var(--radius);background:${cm.modele_demo?'var(--warning-bg)':'var(--surface)'};width:100%;cursor:pointer;user-select:none">
-              <input type="checkbox" id="cmd-demo" ${cm.modele_demo?'checked':''} onchange="majDemoStyle(this)" style="width:16px;height:16px;accent-color:var(--warning);flex-shrink:0">
-              <span style="font-size:13px;font-weight:600;color:var(--warning)">🔄 Modèle de démo</span>
-            </label>
+          <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
+            <select class="form-input" id="cmd-groupe">
+              <option value="">— Choisir —</option>
+              ${['De base','Bastide','Providom','Distri club','Particulier'].map(g=>`<option value="${g}" ${cm.groupe===g?'selected':''}>${g}</option>`).join('')}
+            </select>
           </div>
-          <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label><input class="form-input" id="cmd-groupe" value="${esc(cm.groupe||'')}"></div>
-          <div class="form-group"><label class="form-label">${t('cmd_modele')||'Modèle / Article'}</label><input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}"></div>
+          <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle / Article'}</label>
+            <input class="form-input" id="cmd-modele" value="${esc(cm.modele||'')}">
+          </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 2fr 2fr;gap:10px;margin-bottom:12px">
           <div class="form-group" style="margin:0"><label class="form-label">Quantité</label>
@@ -810,27 +813,41 @@ async function modalCommande(id){
           </div>
         </div>
         <div style="background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius);padding:12px;margin-bottom:12px">
-          <div style="display:flex;align-items:center;gap:16px;margin-bottom:${type?'10px':'0'}">
-            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2)">Type</span>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-              <input type="radio" name="cmd-type" value="fauteuil" ${isFauteuil?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='';$('cmd-type-section-pieces').style.display='none';if($('cmd-confirmation-wrap')){$('cmd-confirmation-wrap').style.display='flex';$('cmd-confirmation-label').textContent=t('cmd_confirmation_fauteuil')||'Confirmation reçue du distributeur';}"> 🦽 Fauteuil → Suède
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:10px">Type de commande</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede()"> 🆕 Fauteuil Neuf
             </label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-              <input type="radio" name="cmd-type" value="pieces" ${isPieces?'checked':''} onchange="$('cmd-type-section-fauteuil').style.display='none';$('cmd-type-section-pieces').style.display='';if($('cmd-confirmation-wrap')){$('cmd-confirmation-wrap').style.display='flex';$('cmd-confirmation-label').textContent=t('cmd_confirmation_pieces')||'BDC confirmé par le distributeur';}"> 📦 Pièces détachées
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede()"> 🔄 Fauteuil Démo
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
+              <input type="checkbox" id="cmd-type-pieces" ${cm.type_pieces||(cm.commande_type==='pieces')?'checked':''} style="width:15px;height:15px;accent-color:var(--text2)"> 📦 Pièces détachées
             </label>
           </div>
-          <div id="cmd-type-section-fauteuil" style="${isFauteuil?'':'display:none'}">
+          <div id="cmd-type-section-fauteuil" style="${cm.type_fauteuil_neuf||cm.type_fauteuil_demo||(cm.commande_type==='fauteuil')?'':'display:none'}">
             <div class="grid-2" style="gap:8px;margin-bottom:8px">
               <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_ref_suede')||'Réf. Suède (invoice SE)'}</label><input class="form-input mono" id="cmd-invoice-se" value="${esc(cm.invoice_se||'')}" placeholder="SE-2026-..."></div>
               <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_date_suede')||'Date envoi Suède'}</label><input class="form-input" id="cmd-date-suede" type="date" value="${cm.date_envoi_suede||''}"></div>
             </div>
           </div>
-          <div id="cmd-type-section-pieces" style="${isPieces?'':'display:none'}"></div>
-          ${type?`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-top:8px" id="cmd-confirmation-wrap">
-            <input type="checkbox" id="cmd-confirmation" ${cm.confirmation_recue?'checked':''} style="width:15px;height:15px">
-            <span id="cmd-confirmation-label">${isFauteuil?(t('cmd_confirmation_fauteuil')||'Confirmation reçue du distributeur'):(t('cmd_confirmation_pieces')||'BDC confirmé par le distributeur')}</span>
-            ${cm.date_confirmation?`<span style="font-size:11px;color:var(--text2)">(${fd(cm.date_confirmation)})</span>`:''}
-          </label>`:''}
+          <div id="cmd-type-section-pieces" style="${cm.type_pieces||(cm.commande_type==='pieces')?'':'display:none'}"></div>
+          ${(cm.type_fauteuil_neuf||cm.type_fauteuil_demo||cm.type_pieces||cm.commande_type)?`
+          <div style="border-top:0.5px solid var(--border-s);margin-top:8px;padding-top:8px">
+            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">BDC confirmé par :</div>
+            <div style="display:flex;gap:14px">
+              ${['mail','vosfactures','fiche de mesure'].map(m=>`
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                <input type="radio" name="cmd-confirmation-mode" value="${m}" ${(cm.confirmation_mode===m||(m==='mail'&&cm.confirmation_recue&&!cm.confirmation_mode))?'checked':''} style="accent-color:var(--accent)">
+                ${m==='mail'?'✉ Mail':m==='vosfactures'?'📋 VosFactures':'📐 Fiche de mesure'}
+              </label>`).join('')}
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text3)">
+                <input type="radio" name="cmd-confirmation-mode" value="" ${!cm.confirmation_mode&&!cm.confirmation_recue?'checked':''} style="accent-color:var(--text3)">
+                Non confirmé
+              </label>
+            </div>
+            ${cm.date_confirmation?`<div style="font-size:11px;color:var(--text2);margin-top:4px">Confirmé le ${fd(cm.date_confirmation)}</div>`:''}
+          </div>`:''}
         </div>
         <div style="margin-bottom:12px">
           <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -1158,6 +1175,13 @@ async function lookupBordereauVF(){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+function majTypeSuede(){
+  const neuf = !!document.getElementById('cmd-type-fauteuil-neuf')?.checked;
+  const demo = !!document.getElementById('cmd-type-fauteuil-demo')?.checked;
+  const sec = $('cmd-type-section-fauteuil');
+  if(sec) sec.style.display = (neuf||demo) ? '' : 'none';
+}
+
 function majDemoStyle(cb){
   const wrap = document.getElementById('cmd-demo-wrap');
   if(wrap){
@@ -1220,11 +1244,16 @@ async function enregistrerCommande(id){
     transporteur_retour: gv('cmd-transporteur-retour')||null,
     date_retour: gv('cmd-date-retour')||null,
     num_commande_distrib: gv('cmd-num-distrib')||null,
-    commande_type: document.querySelector('input[name="cmd-type"]:checked')?.value||null,
+    commande_type: document.getElementById('cmd-type-fauteuil-neuf')?.checked ? 'fauteuil' : document.getElementById('cmd-type-pieces')?.checked ? 'pieces' : null,
+    type_fauteuil_neuf: !!document.getElementById('cmd-type-fauteuil-neuf')?.checked,
+    type_fauteuil_demo: !!document.getElementById('cmd-type-fauteuil-demo')?.checked,
+    type_pieces:        !!document.getElementById('cmd-type-pieces')?.checked,
+    modele_demo:        !!document.getElementById('cmd-type-fauteuil-demo')?.checked,
+    confirmation_mode: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value||null,
+    confirmation_recue: !!(document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value),
     invoice_se: gv('cmd-invoice-se')||null,
     date_envoi_suede: gv('cmd-date-suede')||null,
-    confirmation_recue: !!document.getElementById('cmd-confirmation')?.checked,
-    date_confirmation: document.getElementById('cmd-confirmation')?.checked && !window._CMD_CONF_DATE ? new Date().toISOString().slice(0,10) : (window._CMD_CONF_DATE||null),
+    date_confirmation: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value && !window._CMD_CONF_DATE ? new Date().toISOString().slice(0,10) : (window._CMD_CONF_DATE||null),
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{

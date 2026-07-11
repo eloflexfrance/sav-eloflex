@@ -1817,7 +1817,8 @@ router.put('/commandes/:id', async (req, res) => {
       'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_livraison', 'num_serie',
       'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description', 'modele_demo',
       'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib',
-      'commande_type', 'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation'];
+      'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
+      'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
@@ -2103,25 +2104,73 @@ router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => 
       FROM commandes cmd JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
     if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
     if (!cmd.client_email) return res.json({ ok: false, reason: `Pas d'email pour ${cmd.distributeur_nom}` });
+
+    // Token de confirmation (déterministe, pas de stockage)
+    const crypto = require('crypto');
+    const token = crypto.createHash('sha256').update(`${cmd.id}-eloflex-confirm-2026`).digest('hex').slice(0, 20);
+    const baseUrl = process.env.APP_URL || 'https://sav-eloflex.onrender.com';
+    const confirmUrl = `${baseUrl}/api/confirmer-commande/${cmd.id}/${token}`;
+
+    // Type de commande
+    const types = [cmd.type_fauteuil_neuf && '🆕 Fauteuil Neuf', cmd.type_fauteuil_demo && '🔄 Fauteuil Démo', cmd.type_pieces && '📦 Pièces détachées'].filter(Boolean).join(', ');
+
     const nodemailer = require('nodemailer');
-    const t = nodemailer.createTransport({ host: params.email_smtp_host, port: parseInt(params.email_smtp_port) || 587,
+    const tr = nodemailer.createTransport({ host: params.email_smtp_host, port: parseInt(params.email_smtp_port) || 587,
       secure: false, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass } });
-    await t.sendMail({
+    await tr.sendMail({
       from: params.email_from || params.email_smtp_user, to: cmd.client_email,
       subject: `[Éloflex] Confirmation de commande ${cmd.bdc || '#' + cmd.id}`,
-      html: `<div style="font-family:sans-serif;max-width:560px;color:#222">
-        <h2 style="color:#1a3a5c">Éloflex France — Confirmation de commande</h2>
-        <p>Bonjour,</p>
-        <p>Nous avons bien reçu votre commande <strong>${cmd.bdc || '#' + cmd.id}</strong> du ${cmd.date_commande ? new Date(cmd.date_commande).toLocaleDateString('fr-FR') : '—'}.</p>
-        <p>Pourriez-vous confirmer votre bon de commande par retour de mail afin que nous puissions procéder à la préparation ?</p>
-        ${cmd.num_commande_distrib ? `<p>Votre référence interne : <strong>${cmd.num_commande_distrib}</strong></p>` : ''}
-        <p style="margin-top:20px;font-size:12px;color:#888">Éloflex France — Service commercial</p>
+      html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
+        <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Éloflex France — Confirmation de commande</h2>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
+          <p style="margin:0 0 12px">Bonjour,</p>
+          <p style="margin:0 0 16px">Nous avons bien reçu votre commande du <strong>${cmd.date_commande ? new Date(cmd.date_commande).toLocaleDateString('fr-FR') : '—'}</strong>.</p>
+          <table style="border-collapse:collapse;width:100%;font-size:13px;margin:0 0 20px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">Référence Éloflex</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${cmd.bdc || '—'}</strong></td></tr>
+            ${cmd.num_commande_distrib ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Votre référence</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${cmd.num_commande_distrib}</strong></td></tr>` : ''}
+            ${types ? `<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Type</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${types}</td></tr>` : ''}
+            ${cmd.modele ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Article(s)</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.modele}</td></tr>` : ''}
+            ${cmd.groupe ? `<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555">Groupe</td><td style="padding:9px 14px">${cmd.groupe}</td></tr>` : ''}
+          </table>
+          <p style="margin:0 0 20px">Pourriez-vous <strong>confirmer votre bon de commande</strong> afin que nous puissions procéder à la préparation ?</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="${confirmUrl}" style="display:inline-block;background:#1a3a5c;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600">✓ Confirmer ma commande</a>
+          </div>
+          <p style="margin:0 0 4px;font-size:12px;color:#888">Ou confirmez par retour de mail à : <a href="mailto:${params.email_smtp_user}" style="color:#1a3a5c">${params.email_smtp_user}</a></p>
+          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">Éloflex France — Service commercial<br>Cet email a été envoyé automatiquement depuis le système de gestion SAV.</p>
+        </div>
       </div>`
     });
-    // Passer automatiquement en "En attente confirmation"
     await db.run(`UPDATE commandes SET statut='En attente confirmation', updated_at=NOW() WHERE id=$1`, [req.params.id]);
     res.json({ ok: true, to: cmd.client_email });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Lien de confirmation BDC par clic (depuis email distributeur) ──
+router.get('/confirmer-commande/:id/:token', async (req, res) => {
+  try {
+    const crypto = require('crypto');
+    const expected = crypto.createHash('sha256').update(`${req.params.id}-eloflex-confirm-2026`).digest('hex').slice(0, 20);
+    if (req.params.token !== expected) return res.status(403).send('<h2>Lien invalide ou expiré.</h2>');
+    const cmd = await db.get('SELECT id, bdc, distributeur_nom, confirmation_recue FROM commandes WHERE id=$1', [req.params.id]);
+    if (!cmd) return res.status(404).send('<h2>Commande introuvable.</h2>');
+    if (!cmd.confirmation_recue) {
+      await db.run(`UPDATE commandes SET confirmation_recue=TRUE, confirmation_mode='mail', date_confirmation=$1, statut='En préparation', updated_at=NOW() WHERE id=$2`,
+        [new Date().toISOString().slice(0,10), req.params.id]);
+    }
+    res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Commande confirmée</title>
+      <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f5f7fa}
+      .card{background:#fff;border-radius:12px;padding:40px 48px;text-align:center;max-width:480px;box-shadow:0 4px 24px rgba(0,0,0,.1)}
+      h1{color:#1a3a5c;font-size:22px;margin:0 0 12px}.check{font-size:48px;margin-bottom:16px}p{color:#555;line-height:1.6}</style>
+      </head><body><div class="card">
+        <div class="check">✅</div>
+        <h1>Commande confirmée !</h1>
+        <p>Merci <strong>${cmd.distributeur_nom}</strong>, votre bon de commande <strong>${cmd.bdc || '#'+cmd.id}</strong> a bien été confirmé.</p>
+        <p style="font-size:13px;color:#888;margin-top:20px">Équipe Éloflex France — nous allons procéder à la préparation.</p>
+      </div></body></html>`);
+  } catch(e) { res.status(500).send(`<h2>Erreur : ${e.message}</h2>`); }
 });
 
 // ── Génération d'une facture dans VosFactures ──────────────────────
@@ -2262,29 +2311,41 @@ router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
     if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
     if (!cmd.client_email) return res.json({ ok: false, reason: `Pas d'adresse email pour ${cmd.distributeur_nom}` });
     if (!cmd.num_suivi) return res.json({ ok: false, reason: 'Numéro de suivi manquant' });
+
     const liens = { 'Chronopost':`https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=${cmd.num_suivi}`,
       'Colissimo':`https://www.laposte.fr/outils/suivre-vos-envois?code=${cmd.num_suivi}`,
       'DB Schenker':`https://www.dbschenker.com/track/${cmd.num_suivi}`, 'UPS':`https://www.ups.com/track?tracknum=${cmd.num_suivi}` };
     const lienSuivi = liens[cmd.transporteur]||'';
     const articlesList = cmd.modele||(cmd.accessoire||'').split('\n').slice(0,3).join(', ');
+    const types = [cmd.type_fauteuil_neuf && '🆕 Fauteuil Neuf', cmd.type_fauteuil_demo && '🔄 Fauteuil Démo', cmd.type_pieces && '📦 Pièces détachées'].filter(Boolean).join(', ');
+
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({ host:params.email_smtp_host, port:parseInt(params.email_smtp_port)||587,
       secure:false, auth:{user:params.email_smtp_user, pass:params.email_smtp_pass} });
     await transporter.sendMail({
       from: params.email_from||params.email_smtp_user, to: cmd.client_email,
       subject: `[Éloflex] Expédition de votre commande ${cmd.bdc||'#'+cmd.id}`,
-      html: `<div style="font-family:sans-serif;max-width:560px;color:#222">
-        <h2 style="color:#1a3a5c">Éloflex France — Expédition</h2>
-        <p>Votre commande est en route !</p>
-        <table style="border-collapse:collapse;width:100%;font-size:13px;margin:16px 0">
-          <tr style="background:#f5f5f4"><td style="padding:8px 12px;font-weight:600;width:160px">Distributeur</td><td style="padding:8px 12px">${cmd.distributeur_nom}</td></tr>
-          <tr><td style="padding:8px 12px;font-weight:600;background:#f5f5f4">Référence</td><td style="padding:8px 12px"><strong>${cmd.bdc||'—'}</strong></td></tr>
-          <tr style="background:#f5f5f4"><td style="padding:8px 12px;font-weight:600">Article(s)</td><td style="padding:8px 12px">${articlesList}</td></tr>
-          <tr><td style="padding:8px 12px;font-weight:600;background:#f5f5f4">Transporteur</td><td style="padding:8px 12px">${cmd.transporteur||'—'}</td></tr>
-          <tr style="background:#f5f5f4"><td style="padding:8px 12px;font-weight:600">N° suivi</td><td style="padding:8px 12px"><strong>${cmd.num_suivi}</strong></td></tr>
-        </table>
-        ${lienSuivi?`<a href="${lienSuivi}" style="display:inline-block;background:#1a3a5c;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Suivre mon colis →</a>`:''}
-        <p style="margin-top:20px;font-size:12px;color:#888">Éloflex France — Service commercial</p>
+      html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
+        <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Éloflex France — Votre commande est en route !</h2>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
+          <table style="border-collapse:collapse;width:100%;font-size:13px;margin:0 0 20px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">Distributeur</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.distributeur_nom}</td></tr>
+            ${cmd.groupe ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Groupe</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.groupe}</td></tr>` : ''}
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Référence Éloflex</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${cmd.bdc||'—'}</strong></td></tr>
+            ${cmd.num_commande_distrib ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Votre référence</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.num_commande_distrib}</td></tr>` : ''}
+            ${types ? `<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Type</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${types}</td></tr>` : ''}
+            ${articlesList ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Article(s)</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${articlesList}</td></tr>` : ''}
+            ${cmd.num_serie ? `<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">N° série</td><td style="padding:9px 14px;font-family:monospace;border-bottom:1px solid #e5e7eb"><strong>${cmd.num_serie}</strong></td></tr>` : ''}
+            <tr${cmd.num_serie?'':' style="background:#f8f9fa"'}><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Transporteur</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.transporteur||'—'}</td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">N° suivi</td><td style="padding:9px 14px;font-family:monospace;border-bottom:1px solid #e5e7eb"><strong>${cmd.num_suivi}</strong></td></tr>
+            ${cmd.num_bordereau ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555">N° bordereau</td><td style="padding:9px 14px;font-family:monospace">${cmd.num_bordereau}</td></tr>` : ''}
+          </table>
+          ${lienSuivi ? `<div style="text-align:center;margin:24px 0"><a href="${lienSuivi}" style="display:inline-block;background:#1a3a5c;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600">Suivre mon colis →</a></div>` : ''}
+          ${cmd.client_final ? `<p style="margin:0 0 16px;font-size:13px;color:#555;background:#f8f9fa;padding:10px 14px;border-radius:6px;border-left:3px solid #1a3a5c"><strong>Client final :</strong> ${cmd.client_final}</p>` : ''}
+          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">Éloflex France — Service commercial<br>Pour toute question, répondez à cet email.</p>
+        </div>
       </div>`
     });
     res.json({ ok:true, to:cmd.client_email });
