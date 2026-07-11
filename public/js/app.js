@@ -1109,7 +1109,7 @@ async function lookupBdcVF(){
     }
     // Lignes structurées : remplace TMP_CMD_LIGNES
     if(r.lignes && r.lignes.length){
-      TMP_CMD_LIGNES = r.lignes.map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
+      TMP_CMD_LIGNES = r.lignes.map(l=>({designation:(LANG==='en'&&l.designation_en?l.designation_en:l.designation)||'',reference:l.reference||'',quantite:l.quantite||1}));
       renderCmdLignes();
       remplis.push(`${r.lignes.length} ligne${r.lignes.length>1?'s':''}`);
     }
@@ -1167,7 +1167,7 @@ async function lookupBordereauVF(){
     if(!r.found){ toast('Bordereau introuvable dans VosFactures','ti-alert-circle','var(--danger)'); return; }
     let remplis = [];
     if(r.lignes && r.lignes.length){
-      TMP_CMD_LIGNES = r.lignes.map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
+      TMP_CMD_LIGNES = r.lignes.map(l=>({designation:(LANG==='en'&&l.designation_en?l.designation_en:l.designation)||'',reference:l.reference||'',quantite:l.quantite||1}));
       renderCmdLignes(); remplis.push(`${r.lignes.length} article(s)`);
     }
     if(r.num_serie && $('cmd-serie') && !gv('cmd-serie')){ $('cmd-serie').value=r.num_serie; remplis.push('n° série'); }

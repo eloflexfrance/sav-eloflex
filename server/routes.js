@@ -2068,6 +2068,7 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
       if (!nom || estExclue(nom)) continue;
       lignes.push({
         designation: nom,
+        designation_en: (p.supplier_code || '').trim() || nom, // Réf. fournisseur pour mode EN
         reference: p.product_code || p.code || null,
         quantite: parseInt(p.quantity) || 1,
       });
