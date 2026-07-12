@@ -534,7 +534,7 @@ let TMP_CMD_LIGNES = []; // Lignes de la commande en cours d'édition
 function renderCmdLignes(){
   const el=$('cmd-lignes-list'); if(!el) return;
   if(!TMP_CMD_LIGNES.length){
-    el.innerHTML=`<div style="font-size:12px;color:var(--text3);padding:8px 0">Aucune ligne — importe un bon de commande ou ajoute une ligne manuellement.</div>`;
+    el.innerHTML=`<div style="font-size:12px;color:var(--text3);padding:8px 0">${t('cmd_lignes_empty')||'Aucune ligne — importe un BDC ou ajoute une ligne manuellement.'}</div>`;
     return;
   }
   el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px">
@@ -658,7 +658,7 @@ async function renderCommandes(ttl,c,a){
       </select>
       <select id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
         <option value="">${t('cmd_tous_statuts')||'Tous statuts'}</option>
-        <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
+        <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ ${t('cmd_en_attente')||'En attente confirmation'}</option>
         <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
         <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
@@ -782,9 +782,9 @@ async function modalCommande(id){
       ${tabBtn('facturation',t('cmd_tab_facturation')||'Facturation','ti-receipt-2',hasFact)}
     </div>
     <div style="display:flex;align-items:center;gap:10px;padding:10px 22px;background:var(--bg);border-bottom:0.5px solid var(--border-s)">
-      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">Statut</span>
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">${t('cmd_statut_label')||'STATUT'}</span>
       <select id="cmd-statut" onchange="majZonePreuveLivraison();majStatutBadge()" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:var(--surface);cursor:pointer">
-        <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>Auto (calculé)</option>
+        <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto_option')||t('cmd_auto_option')||'Auto (calculé)'}</option>
         <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
         <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>En préparation</option>
         <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>Expédié</option>
@@ -794,7 +794,7 @@ async function modalCommande(id){
         <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>Annulé</option>
       </select>
       <span id="cmd-statut-badge" class="badge ${cmdStatutClass(cm.statut_calc||'En préparation')}" style="font-size:11px">${tStatut(cm.statut_calc||'En préparation')}</span>
-      <span style="font-size:11px;color:var(--text3)" id="cmd-statut-auto-hint">${(cm.statut||'Auto')==='Auto'?'← calculé automatiquement':''}</span>
+      <span style="font-size:11px;color:var(--text3)" id="cmd-statut-auto-hint">${(cm.statut||'Auto')==='Auto'?t('cmd_auto_hint')||'← calculé automatiquement':''}</span>
     </div>
     <div class="modal-body" style="padding-top:16px">
 
@@ -829,7 +829,7 @@ async function modalCommande(id){
           </div>
         </div>
         <div style="background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius);padding:12px;margin-bottom:12px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:10px">Type de commande</div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:10px">${t('cmd_type_label')||'TYPE DE COMMANDE'}</div>
           <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
               <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede()"> 🆕 Fauteuil Neuf
@@ -918,7 +918,7 @@ async function modalCommande(id){
             <div class="form-group"><label class="form-label">${t('cmd_suivi_retour')||'N° suivi retour'}</label>
               <input class="form-input mono" id="cmd-num-retour" value="${esc(cm.num_retour||'')}" placeholder="ex: XN123456789JB">
             </div>
-            <div class="form-group"><label class="form-label">Transporteur retour</label>
+            <div class="form-group"><label class="form-label">${t('cmd_transporteur_retour')||'Transporteur retour'}</label>
               <select class="form-input" id="cmd-transporteur-retour">
                 <option value="">— Choisir —</option>
                 ${['Chronopost','Colissimo','DB Schenker','UPS','TNT','DHL','Autre'].map(tr=>`<option value="${tr}" ${cm.transporteur_retour===tr?'selected':''}>${tr}</option>`).join('')}
@@ -928,7 +928,7 @@ async function modalCommande(id){
               <input class="form-input" id="cmd-date-retour" type="date" value="${cm.date_retour||''}">
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end">
-              ${cm.num_retour&&lienSuiviColis(cm.transporteur_retour,cm.num_retour)?`<a href="${lienSuiviColis(cm.transporteur_retour,cm.num_retour)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i> Suivre le retour</a>`:`<span style="font-size:12px;color:var(--text3)">Renseigne le N° pour suivre</span>`}
+              ${cm.num_retour&&lienSuiviColis(cm.transporteur_retour,cm.num_retour)?`<a href="${lienSuiviColis(cm.transporteur_retour,cm.num_retour)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i> Suivre le retour</a>`:`<span style="font-size:12px;color:var(--text3)">${t('cmd_renseigne_suivi')||'Renseigne le N° pour suivre'}</span>`}
             </div>
           </div>
           <div style="margin-top:8px">
@@ -943,10 +943,10 @@ async function modalCommande(id){
 
       <div id="cmd-tab-facturation" style="${initTab!=='facturation'?'display:none':''}">
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">N° facture VosFactures</label>
+          <div class="form-group"><label class="form-label">${t('cmd_facture_vf_label')||'N° facture VosFactures'}</label>
             <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
           </div>
-          <div class="form-group"><label class="form-label">N° facture Pennylane</label>
+          <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
               <input class="form-input mono" id="cmd-facture-pl" value="${esc(cm.num_facture_pennylane||'')}" placeholder="FAC-2026-..." style="flex:1" oninput="majStatutBadge()">
               ${id?`<button class="btn sm" type="button" onclick="genererFacturePennylaneModal(${id})" title="Créer la facture dans Pennylane (brouillon)"><i class="ti ti-brand-stripe"></i></button>`:''}
@@ -966,13 +966,13 @@ async function modalCommande(id){
           </div>
         </div>
         <div style="margin-top:4px;padding-top:14px;border-top:0.5px solid var(--border-s)">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin-bottom:10px"><i class="ti ti-receipt-off" style="font-size:13px"></i> Avoir</div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin-bottom:10px"><i class="ti ti-receipt-off" style="font-size:13px"></i> ${t('cmd_avoir_titre')||'AVOIR'}</div>
           <div class="grid-2" style="gap:10px;align-items:end">
-            <div class="form-group" style="margin:0"><label class="form-label">N° avoir VosFactures</label>
+            <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_avoir_vf_label')||'N° avoir VosFactures'}</label>
               <input class="form-input mono" id="cmd-avoir" value="${esc(cm.num_avoir||'')}" placeholder="AV-2026-...">
             </div>
             <div class="form-group" style="margin:0;display:flex;align-items:flex-end;gap:6px">
-              ${cm.num_avoir?`<button class="btn sm" type="button" onclick="ouvrirAvoirVF('${esc(cm.num_avoir)}')" title="Ouvrir l'avoir dans VosFactures"><i class="ti ti-external-link"></i> Ouvrir dans VosFactures</button>`:`<span style="font-size:12px;color:var(--text3)">Renseigne le N° pour accéder à l'avoir</span>`}
+              ${cm.num_avoir?`<button class="btn sm" type="button" onclick="ouvrirAvoirVF('${esc(cm.num_avoir)}')" title="Ouvrir l'avoir dans VosFactures"><i class="ti ti-external-link"></i> Ouvrir dans VosFactures</button>`:`<span style="font-size:12px;color:var(--text3)">${t('cmd_renseigne_avoir')||'Renseigne le N° pour accéder à l\'avoir'}</span>`}
             </div>
           </div>
         </div>
@@ -1156,7 +1156,7 @@ let TMP_RETOUR_LIGNES = [];
 function renderRetourLignes(){
   const el=$('cmd-retour-lignes-list'); if(!el) return;
   if(!TMP_RETOUR_LIGNES.length){
-    el.innerHTML=`<div style="font-size:12px;color:var(--text3);padding:6px 0">Aucun article retourné — cliquez "+ Ajouter"</div>`;
+    el.innerHTML=`<div style="font-size:12px;color:var(--text3);padding:6px 0">${t('cmd_retour_articles_empty')||'Aucun article retourné — cliquez "+ Ajouter"'}</div>`;
     return;
   }
   el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px">
