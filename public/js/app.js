@@ -539,9 +539,9 @@ function renderCmdLignes(){
   }
   el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px">
     <thead><tr style="background:var(--bg)">
-      <th style="padding:5px 8px;text-align:left;color:var(--text2);font-weight:600">Désignation</th>
-      <th style="padding:5px 8px;text-align:left;color:var(--text2);font-weight:600;width:130px">Référence</th>
-      <th style="padding:5px 8px;text-align:center;color:var(--text2);font-weight:600;width:60px">Qté</th>
+      <th style="padding:5px 8px;text-align:left;color:var(--text2);font-weight:600">${t('col_designation_court')||'Désignation'}</th>
+      <th style="padding:5px 8px;text-align:left;color:var(--text2);font-weight:600;width:130px">${t('col_ref_short')||'Référence'}</th>
+      <th style="padding:5px 8px;text-align:center;color:var(--text2);font-weight:600;width:60px">${t('col_qte')||'Qté'}</th>
       <th style="width:32px"></th>
     </tr></thead>
     <tbody>${TMP_CMD_LIGNES.map((l,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
@@ -832,13 +832,13 @@ async function modalCommande(id){
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:10px">${t('cmd_type_label')||'TYPE DE COMMANDE'}</div>
           <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede()"> 🆕 Fauteuil Neuf
+              <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede()">${t('cmd_type_fauteuil_neuf')||'Fauteuil Neuf'}
             </label>
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede()"> 🔄 Fauteuil Démo
+              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede()">${t('cmd_type_fauteuil_demo')||'Fauteuil Démo'}
             </label>
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-type-pieces" ${cm.type_pieces||(cm.commande_type==='pieces')?'checked':''} style="width:15px;height:15px;accent-color:var(--text2)"> 📦 Pièces détachées
+              <input type="checkbox" id="cmd-type-pieces" ${cm.type_pieces||(cm.commande_type==='pieces')?'checked':''} style="width:15px;height:15px;accent-color:var(--text2)">${t('cmd_type_pieces')||'Pièces détachées'}
             </label>
           </div>
           <div id="cmd-type-section-fauteuil" style="${cm.type_fauteuil_neuf||cm.type_fauteuil_demo||(cm.commande_type==='fauteuil')?'':'display:none'}">
@@ -850,16 +850,16 @@ async function modalCommande(id){
           <div id="cmd-type-section-pieces" style="${cm.type_pieces||(cm.commande_type==='pieces')?'':'display:none'}"></div>
           ${(cm.type_fauteuil_neuf||cm.type_fauteuil_demo||cm.type_pieces||cm.commande_type)?`
           <div style="border-top:0.5px solid var(--border-s);margin-top:8px;padding-top:8px">
-            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">BDC confirmé par :</div>
+            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">${t('cmd_bdc_confirme_par')||'BDC confirmé par :'}</div>
             <div style="display:flex;gap:14px">
               ${['mail','vosfactures','fiche de mesure'].map(m=>`
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
                 <input type="radio" name="cmd-confirmation-mode" value="${m}" ${(cm.confirmation_mode===m||(m==='mail'&&cm.confirmation_recue&&!cm.confirmation_mode))?'checked':''} style="accent-color:var(--accent)">
-                ${m==='mail'?'✉ Mail':m==='vosfactures'?'📋 VosFactures':'📐 Fiche de mesure'}
+                ${m==='mail'?t('cmd_mail')||'✉ Mail':m==='vosfactures'?'📋 VosFactures':t('cmd_fiche_mesure')||'📐 Fiche de mesure'}
               </label>`).join('')}
               <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text3)">
                 <input type="radio" name="cmd-confirmation-mode" value="" ${!cm.confirmation_mode&&!cm.confirmation_recue?'checked':''} style="accent-color:var(--text3)">
-                Non confirmé
+                ${t('cmd_non_confirme')||'Non confirmé'}
               </label>
             </div>
             ${cm.date_confirmation?`<div style="font-size:11px;color:var(--text2);margin-top:4px">Confirmé le ${fd(cm.date_confirmation)}</div>`:''}
@@ -868,12 +868,12 @@ async function modalCommande(id){
         <div style="margin-bottom:12px">
           <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             ${t('cmd_lignes_bdc')||'Lignes du bon de commande'}
-            <button class="btn sm" type="button" onclick="addCmdLigne()"><i class="ti ti-plus"></i> Ajouter</button>
+            <button class="btn sm" type="button" onclick="addCmdLigne()"><i class="ti ti-plus"></i> ${t('btn_ajouter')||'+ Ajouter'}</button>
           </label>
           <div id="cmd-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:40px"></div>
         </div>
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">Date commande</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
+          <div class="form-group"><label class="form-label">${t('cmd_date_commande')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
         </div>
       </div>
 
@@ -934,7 +934,7 @@ async function modalCommande(id){
           <div style="margin-top:8px">
             <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
               ${t('cmd_articles_retournes')||'Articles retournés'}
-              <button class="btn sm" type="button" onclick="addRetourLigne()"><i class="ti ti-plus"></i> Ajouter</button>
+              <button class="btn sm" type="button" onclick="addRetourLigne()"><i class="ti ti-plus"></i> ${t('btn_ajouter')||'+ Ajouter'}</button>
             </label>
             <div id="cmd-retour-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:36px"></div>
           </div>
@@ -984,8 +984,8 @@ async function modalCommande(id){
     </div>
     <div class="modal-footer">
       ${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i></button>`:''}
-      ${id?`<button class="btn sm" onclick="envoyerEmailConfirmation(${id})" title="Demander confirmation BDC"><i class="ti ti-mail"></i> Confirmer</button>`:''}
-      ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Email d'expédition"><i class="ti ti-mail"></i> Email expéd.</button>`:''}
+      ${id?`<button class="btn sm" onclick="envoyerEmailConfirmation(${id})" title="Demander confirmation BDC"><i class="ti ti-mail"></i> ${t('btn_confirmer_bdc')||'Confirmer'}</button>`:''}
+      ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Email d'expédition"><i class="ti ti-mail"></i> ${t('btn_email_exped')||'Email expéd.'}</button>`:''}
       ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="Créer la facture dans VosFactures"><i class="ti ti-receipt-2"></i> Facture VF</button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
@@ -1161,9 +1161,9 @@ function renderRetourLignes(){
   }
   el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead><tr style="background:var(--bg)">
-      <th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600">Désignation</th>
-      <th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600;width:120px">Référence</th>
-      <th style="padding:4px 8px;text-align:center;color:var(--text2);font-weight:600;width:55px">Qté</th>
+      <th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600">${t('col_designation_court')||'Désignation'}</th>
+      <th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600;width:120px">${t('col_ref_short')||'Référence'}</th>
+      <th style="padding:4px 8px;text-align:center;color:var(--text2);font-weight:600;width:55px">${t('col_qte')||'Qté'}</th>
       <th style="width:28px"></th>
     </tr></thead>
     <tbody>${TMP_RETOUR_LIGNES.map((l,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
@@ -1928,7 +1928,7 @@ async function chargerAlertesBlocage(){
     const rows = await API.commandesAlertesBlocage(jours);
     if(!rows.length){ el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> Aucune commande bloquée — tout est à jour !</div>`; return; }
     el.innerHTML=`<div class="table-wrap"><table class="t">
-      <thead><tr><th>Distributeur</th><th>Bdc</th><th>Modèle</th><th>Date commande</th><th>Jours attente</th><th></th></tr></thead>
+      <thead><tr><th>Distributeur</th><th>Bdc</th><th>Modèle</th><th>${t('cmd_date_commande')||'Date commande'}</th><th>Jours attente</th><th></th></tr></thead>
       <tbody>${rows.map(r=>`<tr onclick="modalCommande(${r.id})" style="cursor:pointer">
         <td>${esc(r.distributeur_nom)}</td>
         <td class="mono">${esc(r.bdc||'')}</td>
@@ -2091,7 +2091,7 @@ async function viewIntervention(id){
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-box"></i>Pièces</div>
       ${(i.produits||[]).length===0?'<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>':`
-        <table class="t"><thead><tr><th>${t('col_designation')}</th><th>Réf</th><th>Qté</th><th>PU HT</th><th>Total HT</th></tr></thead>
+        <table class="t"><thead><tr><th>${t('col_designation')}</th><th>Réf</th><th>${t('col_qte')||'Qté'}</th><th>PU HT</th><th>Total HT</th></tr></thead>
         <tbody>${(i.produits||[]).map(p=>`<tr><td>${esc(p.designation)}</td><td class="mono">${esc(p.ref||'')}</td><td>${p.qte}</td><td>${parseFloat(p.pxht||0).toFixed(2)} €</td><td style="font-weight:700">${(parseFloat(p.pxht||0)*p.qte).toFixed(2)} €</td></tr>`).join('')}</tbody></table>
         <div style="text-align:right;padding-top:6px;font-weight:700;font-size:13px">Total HT : ${total.toFixed(2)} €</div>`}
       <div class="divider"></div>
@@ -2457,7 +2457,7 @@ function renderProduitsForm(){
   el.innerHTML=TMP_PRODUITS.map((p,i)=>`
     <div style="display:grid;grid-template-columns:2fr 0.8fr 0.5fr 0.7fr auto;gap:5px;align-items:start;margin-bottom:8px">
       <div>
-        ${i===0?'<div class="form-label">Désignation</div>':''}
+        ${i===0?`<div class="form-label">${t('col_designation_court')||'Désignation'}</div>`:''}
         <div style="position:relative">
           <input class="form-input piece-search" style="font-size:12px" placeholder="${t('cat_search_placeholder')||'Taper nom ou référence…'}"
             value="${esc(p.designation)}"
@@ -2468,7 +2468,7 @@ function renderProduitsForm(){
         </div>
       </div>
       <div>${i===0?'<div class="form-label">Réf</div>':''}<input class="form-input mono" style="font-size:11px" value="${esc(p.ref)}" oninput="TMP_PRODUITS[${i}].ref=this.value"></div>
-      <div>${i===0?'<div class="form-label">Qté</div>':''}<input class="form-input piece-qte" type="number" min="1" value="${p.qte}" oninput="TMP_PRODUITS[${i}].qte=parseInt(this.value)||1"></div>
+      <div>${i===0?`<div class="form-label">${t('col_qte')||'Qté'}</div>`:''}<input class="form-input piece-qte" type="number" min="1" value="${p.qte}" oninput="TMP_PRODUITS[${i}].qte=parseInt(this.value)||1"></div>
       <div>${i===0?'<div class="form-label">PU HT</div>':''}<input class="form-input" type="number" step="0.01" value="${parseFloat(p.pxht||0).toFixed(2)}" oninput="TMP_PRODUITS[${i}].pxht=parseFloat(this.value)||0"></div>
       <div style="${i===0?'padding-top:18px':''}"><button class="btn sm danger" onclick="removeProduit(${i})"><i class="ti ti-x"></i></button></div>
     </div>`).join('');
