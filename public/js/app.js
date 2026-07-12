@@ -781,6 +781,21 @@ async function modalCommande(id){
       ${tabBtn('expedition',t('cmd_tab_expedition')||'Expédition','ti-truck-delivery',hasExp)}
       ${tabBtn('facturation',t('cmd_tab_facturation')||'Facturation','ti-receipt-2',hasFact)}
     </div>
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 22px;background:var(--bg);border-bottom:0.5px solid var(--border-s)">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">Statut</span>
+      <select id="cmd-statut" onchange="majZonePreuveLivraison();majStatutBadge()" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:var(--surface);cursor:pointer">
+        <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>Auto (calculé)</option>
+        <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
+        <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>En préparation</option>
+        <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>Expédié</option>
+        <option value="Livré" ${cm.statut==='Livré'?'selected':''}>Livré</option>
+        <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>Facturé</option>
+        <option value="Problème" ${cm.statut==='Problème'?'selected':''}>Problème</option>
+        <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>Annulé</option>
+      </select>
+      <span id="cmd-statut-badge" class="badge ${cmdStatutClass(cm.statut_calc||'En préparation')}" style="font-size:11px">${tStatut(cm.statut_calc||'En préparation')}</span>
+      <span style="font-size:11px;color:var(--text3)" id="cmd-statut-auto-hint">${(cm.statut||'Auto')==='Auto'?'← calculé automatiquement':''}</span>
+    </div>
     <div class="modal-body" style="padding-top:16px">
 
       <div id="cmd-tab-commande" style="${initTab!=='commande'?'display:none':''}">
@@ -804,7 +819,7 @@ async function modalCommande(id){
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">Bdc / Devis</label>
             <div style="display:flex;gap:5px">
-              <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="${t('cmd_num_bdc_placeholder')||'Numéro BDC ou Devis'}">
+              <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="${t('cmd_num_bdc_placeholder')||'Numéro BDC ou Devis'}" oninput="majStatutBadge()">
               <button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
               ${cm.bdc?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'},'${esc(cm.bdc)}')"><i class="ti ti-external-link"></i></button>`:''}
             </div>
@@ -868,7 +883,7 @@ async function modalCommande(id){
             <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="${t('cmd_client_beneficiaire')||'Nom du client bénéficiaire'}">
           </div>
           <div class="form-group"><label class="form-label">N° suivi</label>
-            <input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal()" placeholder="${t('cmd_num_transporteur_placeholder')||'Numéro transporteur'}">
+            <input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal();majStatutBadge()" placeholder="${t('cmd_num_transporteur_placeholder')||'Numéro transporteur'}">
           </div>
           <div class="form-group"><label class="form-label">Transporteur</label>
             <select class="form-input" id="cmd-transporteur" onchange="majLienSuiviModal()">
@@ -882,7 +897,7 @@ async function modalCommande(id){
           </div>
           <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-8px"></div>
           <div class="form-group"><label class="form-label">Date livraison</label>
-            <input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison()">
+            <input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison();majStatutBadge()">
           </div>
           <div class="form-group"><label class="form-label">N° Bordereau de livraison</label>
             <div style="display:flex;gap:5px">
@@ -928,20 +943,8 @@ async function modalCommande(id){
 
       <div id="cmd-tab-facturation" style="${initTab!=='facturation'?'display:none':''}">
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">Statut</label>
-            <select class="form-input" id="cmd-statut" onchange="majZonePreuveLivraison()">
-              <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>Auto (calculé)</option>
-              <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
-              <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>En préparation</option>
-              <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>Expédié</option>
-              <option value="Livré" ${cm.statut==='Livré'?'selected':''}>Livré</option>
-              <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>Facturé</option>
-              <option value="Problème" ${cm.statut==='Problème'?'selected':''}>Problème</option>
-              <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>Annulé</option>
-            </select>
-          </div>
           <div class="form-group"><label class="form-label">N° facture</label>
-            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}">
+            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
           </div>
           <div class="form-group" style="grid-column:1/-1"><label class="form-label">Informations</label>
             <textarea class="form-input" id="cmd-infos" rows="2" placeholder="${t('cmd_notes_placeholder')||'Notes internes…'}">${esc(cm.informations||'')}</textarea>
@@ -956,8 +959,19 @@ async function modalCommande(id){
             <textarea class="form-input" id="cmd-reliquat-description" rows="2" placeholder="${t('cmd_reliquat_placeholder')||'Décrire le reliquat…'}">${esc(cm.reliquat_description||'')}</textarea>
           </div>
         </div>
-        ${id?`<div style="padding-top:12px;border-top:0.5px solid var(--border-s)">
-        <button class="btn sm" onclick="chercherFacturesVF(${id},'${esc(cm.num_facture||'')}')" type="button"><i class="ti ti-search"></i> ${t('cmd_chercher_vf_rattacher')||'Chercher une facture VosFactures à rattacher'}</button>
+        <div style="margin-top:4px;padding-top:14px;border-top:0.5px solid var(--border-s)">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin-bottom:10px"><i class="ti ti-receipt-off" style="font-size:13px"></i> Avoir</div>
+          <div class="grid-2" style="gap:10px;align-items:end">
+            <div class="form-group" style="margin:0"><label class="form-label">N° avoir VosFactures</label>
+              <input class="form-input mono" id="cmd-avoir" value="${esc(cm.num_avoir||'')}" placeholder="AV-2026-...">
+            </div>
+            <div class="form-group" style="margin:0;display:flex;align-items:flex-end;gap:6px">
+              ${cm.num_avoir?`<button class="btn sm" type="button" onclick="ouvrirAvoirVF('${esc(cm.num_avoir)}')" title="Ouvrir l'avoir dans VosFactures"><i class="ti ti-external-link"></i> Ouvrir dans VosFactures</button>`:`<span style="font-size:12px;color:var(--text3)">Renseigne le N° pour accéder à l'avoir</span>`}
+            </div>
+          </div>
+        </div>
+        ${id?`<div style="padding-top:12px;margin-top:12px;border-top:0.5px solid var(--border-s)">
+          <button class="btn sm" onclick="chercherFacturesVF(${id},'${esc(cm.num_facture||'')}')" type="button"><i class="ti ti-search"></i> ${t('cmd_chercher_vf_rattacher')||'Chercher une facture VosFactures à rattacher'}</button>
           <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
         </div>`:''}
       </div>
@@ -1176,6 +1190,35 @@ async function lookupBordereauVF(){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+function majStatutBadge(){
+  const sel = $('cmd-statut'); if(!sel) return;
+  const badge = $('cmd-statut-badge');
+  const hint  = $('cmd-statut-auto-hint');
+  if(sel.value !== 'Auto'){
+    if(badge){ badge.textContent = tStatut(sel.value)||sel.value; badge.className = `badge ${cmdStatutClass(sel.value)}`; }
+    if(hint) hint.textContent = '';
+    return;
+  }
+  // Calculer le statut auto côté client
+  const bdc      = (gv('cmd-bdc')||'').trim();
+  const suivi    = (gv('cmd-suivi')||'').trim();
+  const livraison = (gv('cmd-livraison')||'').trim();
+  const facture  = (gv('cmd-facture')||'').trim();
+  let calc = 'En préparation';
+  if(facture)                    calc = 'Facturé';
+  else if(livraison)             calc = 'Livré';
+  else if(isRealTracking(suivi)) calc = 'Expédié';
+  // bdc → En préparation (déjà valeur par défaut)
+  if(badge){ badge.textContent = tStatut(calc); badge.className = `badge ${cmdStatutClass(calc)}`; }
+  if(hint)  hint.textContent = '← calculé automatiquement';
+}
+
+function ouvrirAvoirVF(num){
+  const account = window._VF_ACCOUNT;
+  if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
+  window.open(`https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(num)}`, '_blank', 'noopener');
+}
+
 function majTypeSuede(){
   const neuf = !!document.getElementById('cmd-type-fauteuil-neuf')?.checked;
   const demo = !!document.getElementById('cmd-type-fauteuil-demo')?.checked;
@@ -1255,6 +1298,7 @@ async function enregistrerCommande(id){
     invoice_se: gv('cmd-invoice-se')||null,
     date_envoi_suede: gv('cmd-date-suede')||null,
     date_confirmation: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value && !window._CMD_CONF_DATE ? new Date().toISOString().slice(0,10) : (window._CMD_CONF_DATE||null),
+    num_avoir: gv('cmd-avoir')||null,
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{

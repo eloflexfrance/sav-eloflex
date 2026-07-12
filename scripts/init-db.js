@@ -198,6 +198,8 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS type_fauteuil_demo BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS type_pieces BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS confirmation_mode TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_avoir TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_avoir_id BIGINT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS ref_suede TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS date_envoi_suede TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS confirmation_recue BOOLEAN DEFAULT FALSE`);
