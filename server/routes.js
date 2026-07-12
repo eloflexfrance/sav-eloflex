@@ -1693,6 +1693,56 @@ router.get('/commandes/doublons', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// ── PENNYLANE (intégration parallèle à VosFactures) ───────────────
+// ══════════════════════════════════════════════════════════════════
+
+router.get('/pennylane/status', async (req, res) => {
+  try {
+    if (!process.env.PENNYLANE_TOKEN) return res.json({ configured: false });
+    const { checkStatus } = require('../scripts/sync-pennylane');
+    const info = await checkStatus();
+    res.json({ configured: true, account: info.account });
+  } catch(e) { res.json({ configured: false, error: e.message }); }
+});
+
+router.post('/pennylane/sync-commandes', adminOnly, async (req, res) => {
+  try {
+    const { syncCommandesPennylane } = require('../scripts/sync-pennylane');
+    const message = await syncCommandesPennylane(req.query.historique === '1');
+    res.json({ ok: true, message });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/pennylane/bdc-lookup', async (req, res) => {
+  try {
+    if (!process.env.PENNYLANE_TOKEN) return res.json({ configured: false });
+    const numero = (req.query.numero || '').trim();
+    if (!numero) return res.status(400).json({ error: 'numero requis' });
+    const { lookupDocumentPennylane } = require('../scripts/sync-pennylane');
+    const result = await lookupDocumentPennylane(numero);
+    res.json(result);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/pennylane/generer-facture/:cmdId', adminOrOp, async (req, res) => {
+  try {
+    if (!process.env.PENNYLANE_TOKEN) return res.json({ ok: false, reason: 'Pennylane non configuré' });
+    const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom FROM commandes cmd
+      JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.cmdId]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    const lignes = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre', [req.params.cmdId]);
+    const { genererFacturePennylane } = require('../scripts/sync-pennylane');
+    const inv = await genererFacturePennylane(cmd, lignes);
+    const numero = inv.invoice_number || String(inv.id);
+    await db.run('UPDATE commandes SET num_facture=$1, updated_at=NOW() WHERE id=$2', [numero, req.params.cmdId]);
+    const url = `https://app.pennylane.com/companies/invoices/${inv.id}`;
+    res.json({ ok: true, invoice_id: inv.id, numero, url });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Fin Pennylane ──────────────────────────────────────────────────
+
 router.get('/commandes/alertes-blocage', async (req, res) => {
   try {
     const seuil = parseInt(req.query.jours)||7;

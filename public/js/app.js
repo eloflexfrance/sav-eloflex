@@ -1517,6 +1517,18 @@ async function renderParametres(ttl,c,a){
       <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>${t('param_vf_sync')}</button>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-brand-stripe"></i> Pennylane <span id="pl-status-badge" style="font-size:11px;margin-left:8px"></span></h3>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
+        Intégration Pennylane V2 — parallèle à VosFactures.<br>
+        Configure la variable d'environnement <code>PENNYLANE_TOKEN</code> dans Render (Environment) avec ton token API Pennylane.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="syncPennylane(false)"><i class="ti ti-refresh"></i> Sync Pennylane (90j)</button>
+        <button class="btn" onclick="syncPennylane(true)"><i class="ti ti-history"></i> Sync historique complet</button>
+      </div>
+      <div id="pl-sync-result" style="margin-top:8px"></div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-copy"></i> Doublons de commandes</h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Commandes ayant le même numéro de BDC ou devis pour le même distributeur.</p>
       <button class="btn danger" onclick="supprimerTousDoublons()" id="btn-suppr-doublons"><i class="ti ti-trash"></i> Supprimer tous les doublons</button>
@@ -1575,6 +1587,7 @@ async function renderParametres(ttl,c,a){
   chargerListeUtilisateurs();
   chargerAlertesBlocage();
   chargerDoublonsParametres();
+  loadPennylaneStatus();
 }
 
 async function chargerListeUtilisateurs(){
@@ -2510,6 +2523,32 @@ async function importerHistoriqueCommandes(file){
       ❌ Erreur : <b>${esc(e.message)}</b><br>
       <span style="font-size:11px;color:var(--text2)">Vérifie que tu as bien sélectionné le bon fichier Excel (Compta_Eloflex…) et recharge la page si l'erreur persiste.</span>
     </div>`;
+  }
+}
+
+async function syncPennylane(full = false){
+  const el = $('pl-sync-result');
+  if(el) el.innerHTML = `<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Synchronisation en cours…</div>`;
+  try {
+    const r = await API.pennylaneSyncCommandes(full);
+    if(el) el.innerHTML = `<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> ${esc(r.message||'OK')}</div>`;
+    toast(r.message || 'Sync Pennylane terminé', 'ti-check');
+  } catch(e) {
+    if(el) el.innerHTML = `<div style="font-size:12px;color:var(--danger)">❌ ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadPennylaneStatus(){
+  const badge = $('pl-status-badge'); if(!badge) return;
+  try {
+    const s = await API.pennylaneStatus();
+    if(s.configured){
+      badge.innerHTML = `<span class="badge g" style="font-size:10px">✓ Connecté${s.account?.email?' — '+esc(s.account.email):''}</span>`;
+    } else {
+      badge.innerHTML = `<span class="badge hg" style="font-size:10px">Non configuré</span>`;
+    }
+  } catch(_) {
+    badge.innerHTML = `<span class="badge hg" style="font-size:10px">Erreur</span>`;
   }
 }
 

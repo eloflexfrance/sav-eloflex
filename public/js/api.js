@@ -92,4 +92,9 @@ const API = {
   emailConfirmation:(id)=>API.post(`/commandes/${id}/email-confirmation`,{}),
   genererFacture:(id)=>API.post(`/commandes/${id}/generer-facture`,{}),
   creerBL:(id)=>API.post(`/commandes/${id}/creer-bl`,{}),
+  // ── Pennylane ──
+  pennylaneStatus:()=>API.get('/pennylane/status'),
+  pennylaneSyncCommandes:(full)=>API.post(`/pennylane/sync-commandes${full?'?historique=1':''}`),
+  pennylaneGenererFacture:(id)=>API.post(`/pennylane/generer-facture/${id}`,{}),
+  pennylane_bdc_lookup:(numero)=>API.get(`/pennylane/bdc-lookup?numero=${encodeURIComponent(numero)}`),
 };
