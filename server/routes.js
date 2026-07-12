@@ -1872,7 +1872,7 @@ router.put('/commandes/:id', async (req, res) => {
       'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib',
       'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
       'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation',
-      'num_avoir', 'vf_avoir_id'];
+      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {

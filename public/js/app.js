@@ -943,8 +943,14 @@ async function modalCommande(id){
 
       <div id="cmd-tab-facturation" style="${initTab!=='facturation'?'display:none':''}">
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">N° facture</label>
+          <div class="form-group"><label class="form-label">N° facture VosFactures</label>
             <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
+          </div>
+          <div class="form-group"><label class="form-label">N° facture Pennylane</label>
+            <div style="display:flex;gap:6px">
+              <input class="form-input mono" id="cmd-facture-pl" value="${esc(cm.num_facture_pennylane||'')}" placeholder="FAC-2026-..." style="flex:1" oninput="majStatutBadge()">
+              ${id?`<button class="btn sm" type="button" onclick="genererFacturePennylaneModal(${id})" title="Créer la facture dans Pennylane (brouillon)"><i class="ti ti-brand-stripe"></i></button>`:''}
+            </div>
           </div>
           <div class="form-group" style="grid-column:1/-1"><label class="form-label">Informations</label>
             <textarea class="form-input" id="cmd-infos" rows="2" placeholder="${t('cmd_notes_placeholder')||'Notes internes…'}">${esc(cm.informations||'')}</textarea>
@@ -1299,6 +1305,7 @@ async function enregistrerCommande(id){
     date_envoi_suede: gv('cmd-date-suede')||null,
     date_confirmation: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value && !window._CMD_CONF_DATE ? new Date().toISOString().slice(0,10) : (window._CMD_CONF_DATE||null),
     num_avoir: gv('cmd-avoir')||null,
+    num_facture_pennylane: gv('cmd-facture-pl')||null,
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
@@ -2524,6 +2531,22 @@ async function importerHistoriqueCommandes(file){
       <span style="font-size:11px;color:var(--text2)">Vérifie que tu as bien sélectionné le bon fichier Excel (Compta_Eloflex…) et recharge la page si l'erreur persiste.</span>
     </div>`;
   }
+}
+
+async function genererFacturePennylaneModal(id){
+  if(!confirm('Créer un brouillon de facture dans Pennylane ?\n\nLa facture sera créée en brouillon — tu pourras la vérifier et la finaliser dans Pennylane.')) return;
+  toast('Création en cours dans Pennylane…','ti-loader-2');
+  try{
+    const r = await API.pennylaneGenererFacture(id);
+    if(r.ok){
+      const inp = $('cmd-facture-pl');
+      if(inp) inp.value = r.numero || '';
+      toast(`Facture Pennylane ${r.numero} créée (brouillon)`,'ti-check');
+      if(r.url) window.open(r.url,'_blank');
+    } else {
+      toast(`Erreur : ${r.reason||r.error}`,'ti-alert-circle','var(--warning)');
+    }
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 async function syncPennylane(full = false){
