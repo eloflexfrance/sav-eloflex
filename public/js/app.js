@@ -786,12 +786,12 @@ async function modalCommande(id){
       <select id="cmd-statut" onchange="majZonePreuveLivraison();majStatutBadge()" style="font-size:12px;padding:4px 8px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:var(--surface);cursor:pointer">
         <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto_option')||t('cmd_auto_option')||'Auto (calculé)'}</option>
         <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
-        <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>En préparation</option>
-        <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>Expédié</option>
-        <option value="Livré" ${cm.statut==='Livré'?'selected':''}>Livré</option>
-        <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>Facturé</option>
-        <option value="Problème" ${cm.statut==='Problème'?'selected':''}>Problème</option>
-        <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>Annulé</option>
+        <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
+        <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
+        <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
+        <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>${t('cmd_facture_statut')||'Facturé'}</option>
+        <option value="Problème" ${cm.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
+        <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
       <span id="cmd-statut-badge" class="badge ${cmdStatutClass(cm.statut_calc||'En préparation')}" style="font-size:11px">${tStatut(cm.statut_calc||'En préparation')}</span>
       <span style="font-size:11px;color:var(--text3)" id="cmd-statut-auto-hint">${(cm.statut||'Auto')==='Auto'?t('cmd_auto_hint')||'← calculé automatiquement':''}</span>
