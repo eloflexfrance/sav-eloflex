@@ -902,7 +902,7 @@ async function modalCommande(id){
           <div class="form-group"><label class="form-label">N° Bordereau de livraison</label>
             <div style="display:flex;gap:5px">
               <input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="BL-2026-..." style="flex:1">
-              <button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBordereauVF()"><i class="ti ti-download"></i></button>
+              ${cm.num_bordereau?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(null,'${esc(cm.num_bordereau)}')"><i class="ti ti-external-link"></i></button>`:''}
             </div>
           </div>
           <div class="form-group"><label class="form-label">N° série</label>
