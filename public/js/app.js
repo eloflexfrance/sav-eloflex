@@ -832,13 +832,13 @@ async function modalCommande(id){
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:10px">${t('cmd_type_label')||'TYPE DE COMMANDE'}</div>
           <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede()">${t('cmd_type_fauteuil_neuf')||'Fauteuil Neuf'}
+              <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede();majBdcConfirme()">${t('cmd_type_fauteuil_neuf')||'Fauteuil Neuf'}
             </label>
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede()">${t('cmd_type_fauteuil_demo')||'Fauteuil Démo'}
+              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede();majBdcConfirme()">${t('cmd_type_fauteuil_demo')||'Fauteuil Démo'}
             </label>
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-type-pieces" ${cm.type_pieces||(cm.commande_type==='pieces')?'checked':''} style="width:15px;height:15px;accent-color:var(--text2)">${t('cmd_type_pieces')||'Pièces détachées'}
+              <input type="checkbox" id="cmd-type-pieces" ${cm.type_pieces||(cm.commande_type==='pieces')?'checked':''} style="width:15px;height:15px;accent-color:var(--text2)" onchange="majBdcConfirme()">${t('cmd_type_pieces')||'Pièces détachées'}
             </label>
           </div>
           <div id="cmd-type-section-fauteuil" style="${cm.type_fauteuil_neuf||cm.type_fauteuil_demo||(cm.commande_type==='fauteuil')?'':'display:none'}">
@@ -848,22 +848,23 @@ async function modalCommande(id){
             </div>
           </div>
           <div id="cmd-type-section-pieces" style="${cm.type_pieces||(cm.commande_type==='pieces')?'':'display:none'}"></div>
-          ${(cm.type_fauteuil_neuf||cm.type_fauteuil_demo||cm.type_pieces||cm.commande_type)?`
-          <div style="border-top:0.5px solid var(--border-s);margin-top:8px;padding-top:8px">
-            <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">${t('cmd_bdc_confirme_par')||'BDC confirmé par :'}</div>
-            <div style="display:flex;gap:14px">
-              ${['mail','vosfactures','fiche de mesure'].map(m=>`
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-                <input type="radio" name="cmd-confirmation-mode" value="${m}" ${(cm.confirmation_mode===m||(m==='mail'&&cm.confirmation_recue&&!cm.confirmation_mode))?'checked':''} style="accent-color:var(--accent)">
-                ${m==='mail'?t('cmd_mail')||'✉ Mail':m==='vosfactures'?'📋 VosFactures':t('cmd_fiche_mesure')||'📐 Fiche de mesure'}
-              </label>`).join('')}
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text3)">
-                <input type="radio" name="cmd-confirmation-mode" value="" ${!cm.confirmation_mode&&!cm.confirmation_recue?'checked':''} style="accent-color:var(--text3)">
-                ${t('cmd_non_confirme')||'Non confirmé'}
-              </label>
+          <div id="cmd-bdc-confirme-section" style="${cm.type_fauteuil_neuf||cm.type_fauteuil_demo||cm.type_pieces||cm.commande_type?'':'display:none'}">
+            <div style="border-top:0.5px solid var(--border-s);margin-top:8px;padding-top:8px">
+              <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">${t('cmd_bdc_confirme_par')||'BDC confirmé par :'}</div>
+              <div style="display:flex;gap:14px;flex-wrap:wrap">
+                ${['mail','vosfactures','fiche de mesure'].map(m=>`
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                  <input type="radio" name="cmd-confirmation-mode" value="${m}" ${cm.confirmation_mode===m?'checked':''} style="accent-color:var(--accent)">
+                  ${m==='mail'?t('cmd_mail')||'✉ Mail':m==='vosfactures'?'📋 VosFactures':`📐 ${t('cmd_fiche_mesure')||'Fiche de mesure'}`}
+                </label>`).join('')}
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text3)">
+                  <input type="radio" name="cmd-confirmation-mode" value="" ${!cm.confirmation_mode?'checked':''} style="accent-color:var(--text3)">
+                  ${t('cmd_non_confirme')||'Non confirmé'}
+                </label>
+              </div>
+              ${cm.date_confirmation?`<div style="font-size:11px;color:var(--text2);margin-top:4px">Confirmé le ${fd(cm.date_confirmation)}</div>`:''}
             </div>
-            ${cm.date_confirmation?`<div style="font-size:11px;color:var(--text2);margin-top:4px">Confirmé le ${fd(cm.date_confirmation)}</div>`:''}
-          </div>`:''}
+          </div>
         </div>
         <div style="margin-bottom:12px">
           <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -1223,6 +1224,14 @@ function ouvrirAvoirVF(num){
   const account = window._VF_ACCOUNT;
   if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
   window.open(`https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(num)}`, '_blank', 'noopener');
+}
+
+function majBdcConfirme(){
+  const neuf  = !!document.getElementById('cmd-type-fauteuil-neuf')?.checked;
+  const demo  = !!document.getElementById('cmd-type-fauteuil-demo')?.checked;
+  const pieces= !!document.getElementById('cmd-type-pieces')?.checked;
+  const sec = document.getElementById('cmd-bdc-confirme-section');
+  if(sec) sec.style.display = (neuf||demo||pieces) ? '' : 'none';
 }
 
 function majTypeSuede(){
