@@ -1803,24 +1803,15 @@ async function genererFactureVF(id){
 async function ouvrirDansVF(vfId, bdc){
   const account = window._VF_ACCOUNT;
   if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
-  // Si on a déjà l'ID VosFactures → lien direct
+  // Si on a l'ID VosFactures → lien direct vers le document
   if(vfId){
     window.open(`https://${account}.vosfactures.fr/invoices/${vfId}`, '_blank', 'noopener');
     return;
   }
-  if(!bdc){ toast('Renseigne d\'abord le numéro BDC/Devis','ti-alert-circle','var(--warning)'); return; }
-  // Sinon : lookup pour récupérer l'ID VF puis ouvrir le lien direct
-  toast('Recherche dans VosFactures…','ti-loader-2');
-  try{
-    const r = await API.vfBdcLookup(bdc);
-    if(r.configured && r.found && r.vf_id){
-      window.open(`https://${account}.vosfactures.fr/invoices/${r.vf_id}`, '_blank', 'noopener');
-    } else if(!r.found){
-      toast(`"${bdc}" introuvable dans VosFactures`,'ti-alert-circle','var(--warning)');
-    } else {
-      toast('VosFactures non configuré','ti-alert-circle','var(--warning)');
-    }
-  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+  if(!bdc){ toast('Renseigne d\'abord le numéro','ti-alert-circle','var(--warning)'); return; }
+  // Pas d'ID connu → ouvrir directement la recherche VosFactures
+  // (évite l'API qui ne supporte pas les WZ en recherche par numéro)
+  window.open(`https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(bdc)}`, '_blank', 'noopener');
 }
 
 async function creerBLVF(id){
