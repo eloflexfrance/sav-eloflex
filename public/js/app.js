@@ -918,6 +918,7 @@ async function modalCommande(id){
                 </select>`}
           </div>
         </div>
+      </div>
 
       <div id="cmd-tab-expedition" style="${initTab!=='expedition'?'display:none':''}">
         <div class="grid-2">
