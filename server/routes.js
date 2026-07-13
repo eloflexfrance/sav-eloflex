@@ -2062,11 +2062,30 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
 
     // Cherche dans tous types : BDC, stock, devis, facture, bordereau de livraison (wz), reçu
     let inv = null;
+    // Normalisation pour comparaison souple (ignore espaces/tirets/slashes)
+    const normalise = s => String(s||'').toLowerCase().replace(/[\s\-\/]+/g,'');
+    const numNorm = normalise(numero);
+
     for (const kind of ['client_order', 'stock', 'estimate', 'vat', 'wz', 'receipt']) {
-      const { data } = await vfApi.get('/invoices.json', { params: { number: numero, kind, per_page: 5 } });
-      inv = Array.isArray(data) ? data.find(d => String(d.number).trim() === numero) || null : null;
-      if (inv) break;
+      const { data } = await vfApi.get('/invoices.json', { params: { number: numero, kind, per_page: 10 } });
+      if (Array.isArray(data)) {
+        inv = data.find(d => normalise(d.number) === numNorm) || null;
+        if (inv) break;
+      }
     }
+
+    // Fallback : recherche texte libre sans filtrer par type
+    if (!inv) {
+      try {
+        const { data } = await vfApi.get('/invoices.json', { params: { search_text: numero, per_page: 10 } });
+        if (Array.isArray(data)) {
+          inv = data.find(d => normalise(d.number) === numNorm)
+             || data.find(d => normalise(d.number).includes(numNorm))
+             || null;
+        }
+      } catch(_) {}
+    }
+
     if (!inv) return res.json({ configured: true, found: false });
 
     const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
@@ -2138,7 +2157,7 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
     res.json({
       configured: true, found: true,
       vf_id:         inv.id,
-      numero:        detail.number || inv.number,
+      numero:        detail.number || inv.number,  // numéro exact tel que dans VosFactures
       date_commande: (detail.issue_date || detail.sell_date || '').slice(0, 10) || null,
       distributeur:  detail.buyer_name || inv.buyer_name || null,
       modele, quantite, lignes,
