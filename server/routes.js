@@ -1544,7 +1544,8 @@ router.get('/commandes', async (req, res) => {
     const conds = [], p = [];
     let idx = 0;
     // Filtre pays : utilisateur avec pays défini → voit uniquement ses commandes
-    const userPays = res.locals.user?.pays || null;
+    // Admin global peut filtrer dynamiquement via le paramètre ?pays=
+    const userPays = res.locals.user?.pays || req.query.pays || null;
     if (userPays) { conds.push(`(cmd.pays=$${++idx} OR cmd.pays IS NULL)`); p.push(userPays); }
     if (client_id)   { conds.push(`cmd.client_id=$${++idx}`); p.push(client_id); }
     if (distributeur){ conds.push(`cmd.distributeur_nom ILIKE $${++idx}`); p.push(`%${distributeur}%`); }
@@ -1572,7 +1573,7 @@ router.get('/commandes', async (req, res) => {
 router.get('/commandes/stats', async (req, res) => {
   try {
     const annee = req.query.annee ? parseInt(req.query.annee) : null;
-    const userPays = res.locals.user?.pays || null;
+    const userPays = res.locals.user?.pays || req.query.pays || null;
     const paysFilter = userPays ? `AND (pays = '${userPays.replace(/'/g,"''")}' OR pays IS NULL)` : '';
     const anneeFilter = annee
       ? `(annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1)) ${paysFilter}`

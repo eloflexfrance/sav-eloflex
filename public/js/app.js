@@ -20,6 +20,28 @@ const $   = id => document.getElementById(id);
 const gv  = id => ($( id)||{}).value||'';
 
 // ── Rôle utilisateur ────────────────────────────────────────────────
+// Filtre pays actif pour les admins globaux (persisté en localStorage)
+let _PAYS_FILTRE = localStorage.getItem('sav_pays_filtre') || '';
+function setPaysFiltre(pays){
+  _PAYS_FILTRE = pays;
+  if(pays) localStorage.setItem('sav_pays_filtre', pays);
+  else localStorage.removeItem('sav_pays_filtre');
+  renderTopbarPays();
+  render();
+}
+
+const PAYS_LIST = [
+  { code:'',          flag:'🌍', label:'Tous' },
+  { code:'France',    flag:'🇫🇷', label:'France' },
+  { code:'Sweden',    flag:'🇸🇪', label:'Suède' },
+  { code:'UK',        flag:'🇬🇧', label:'UK' },
+  { code:'Germany',   flag:'🇩🇪', label:'DE' },
+  { code:'Spain',     flag:'🇪🇸', label:'ES' },
+  { code:'Belgium',   flag:'🇧🇪', label:'BE' },
+  { code:'Switzerland',flag:'🇨🇭',label:'CH' },
+  { code:'Netherlands',flag:'🇳🇱',label:'NL' },
+];
+
 const isAdmin  = () => CURRENT_USER?.role === 'admin';
 
 // Modules de l'application (dans l'ordre d'affichage)
@@ -85,7 +107,8 @@ function appliquerNavRole(){
   const userZone = $('user-zone');
   if(userZone) userZone.innerHTML = `
     <span style="font-size:11px;color:var(--text2);flex:1">${esc(CURRENT_USER.nom)}</span>
-    ${CURRENT_USER.pays?`<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:var(--accent-soft,rgba(59,130,246,.12));color:var(--accent);font-weight:600">${esc(CURRENT_USER.pays)}</span>`:'<span style="font-size:10px;color:var(--text3)">🌍 Global</span>'}
+    ${CURRENT_USER.pays?`<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:var(--accent-soft,rgba(59,130,246,.12));color:var(--accent);font-weight:600">${esc(CURRENT_USER.pays)}</span>`:''}
+    <div id="pays-switcher" style="display:flex"></div>
     <button class="btn sm" onclick="seDeconnecter()" title="Se déconnecter" style="padding:4px 8px"><i class="ti ti-logout"></i></button>`;
 }
 
@@ -634,7 +657,7 @@ async function renderCommandes(ttl,c,a){
 
   // Stats filtrées par l'année sélectionnée (ou année en cours par défaut pour les compteurs)
   const anneeFiltre = CMD_FILTERS.annee ? parseInt(CMD_FILTERS.annee) : new Date().getFullYear();
-  const stats = await API.commandesStats(anneeFiltre);
+  const stats = await API.commandesStats(anneeFiltre, _PAYS_FILTRE||CURRENT_USER.pays||'');
   // Le menu déroulant des années vient toujours de par_annee (toutes années, voir backend)
   const years = Object.keys(stats.par_annee||{}).filter(Boolean).sort((x,y)=>y-x);
 
@@ -884,6 +907,7 @@ async function modalCommande(id){
               ? `<div class="form-input" style="background:var(--bg);cursor:default">${esc(CURRENT_USER.pays)}</div><input type="hidden" id="cmd-pays" value="${esc(CURRENT_USER.pays)}">`
               : `<select class="form-input" id="cmd-pays">
                   <option value="France" ${(cm.pays||'France')==='France'?'selected':''}>🇫🇷 France</option>
+                  <option value="Sweden" ${cm.pays==='Sweden'?'selected':''}>🇸🇪 Suède</option>
                   <option value="UK" ${cm.pays==='UK'?'selected':''}>🇬🇧 United Kingdom</option>
                   <option value="Germany" ${cm.pays==='Germany'?'selected':''}>🇩🇪 Deutschland</option>
                   <option value="Spain" ${cm.pays==='Spain'?'selected':''}>🇪🇸 España</option>
@@ -1256,6 +1280,24 @@ function majTypeSuede(){
   const demo = !!document.getElementById('cmd-type-fauteuil-demo')?.checked;
   const sec = $('cmd-type-section-fauteuil');
   if(sec) sec.style.display = (neuf||demo) ? '' : 'none';
+}
+
+function renderTopbarPays(){
+  const el = document.getElementById('pays-switcher');
+  if(!el) return;
+  // Visible uniquement pour les admins globaux (sans pays fixé sur le compte)
+  if(!isAdmin() || CURRENT_USER.pays){ el.innerHTML=''; return; }
+  // Pays actifs (ceux qui ont des commandes, pour l'instant la liste configurée)
+  const actifs = PAYS_LIST.filter(p => ['','France','Sweden'].includes(p.code));
+  el.innerHTML = actifs.map(p=>`
+    <button onclick="setPaysFiltre('${p.code}')" title="${p.label}" style="
+      padding:3px 8px;border:none;border-radius:12px;cursor:pointer;font-size:12px;
+      background:${_PAYS_FILTRE===p.code?'var(--accent)':'var(--surface)'};
+      color:${_PAYS_FILTRE===p.code?'#fff':'var(--text2)'};
+      border:0.5px solid ${_PAYS_FILTRE===p.code?'var(--accent)':'var(--border-s)'};
+      margin-left:3px;transition:all .15s">
+      ${p.flag} ${p.label}
+    </button>`).join('');
 }
 
 function majDemoStyle(cb){
@@ -1701,6 +1743,7 @@ function modalNouvelUtilisateur(){
           <select class="form-input" id="nu-pays">
             <option value="">🌍 Tous pays (admin global)</option>
             <option value="France">🇫🇷 France</option>
+            <option value="Sweden">🇸🇪 Suède</option>
             <option value="UK">🇬🇧 United Kingdom</option>
             <option value="Germany">🇩🇪 Deutschland</option>
             <option value="Spain">🇪🇸 España</option>
@@ -1759,6 +1802,7 @@ async function modalEditerUtilisateur(id){
           <select class="form-input" id="eu-pays">
             <option value="" ${!user.pays?'selected':''}>🌍 Tous pays (admin global)</option>
             <option value="France" ${user.pays==='France'?'selected':''}>🇫🇷 France</option>
+            <option value="Sweden" ${user.pays==='Sweden'?'selected':''}>🇸🇪 Suède</option>
             <option value="UK" ${user.pays==='UK'?'selected':''}>🇬🇧 United Kingdom</option>
             <option value="Germany" ${user.pays==='Germany'?'selected':''}>🇩🇪 Deutschland</option>
             <option value="Spain" ${user.pays==='Spain'?'selected':''}>🇪🇸 España</option>
@@ -1889,7 +1933,7 @@ let CMD_VIEW = 'liste'; // 'liste' | 'kanban'
 async function renderCommandesKanban(){
   const wrap=$('cmd-table-wrap'); if(!wrap) return;
   wrap.innerHTML=`<div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> Chargement…</div>`;
-  const res = await API.commandes({ annee: CMD_FILTERS.annee, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500 });
+  const res = await API.commandes({ annee: CMD_FILTERS.annee, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
   const list = res.rows||[];
   const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème'];
   const grouped = {};
