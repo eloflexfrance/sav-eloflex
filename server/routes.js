@@ -2060,9 +2060,9 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
       params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
     });
 
-    // Cherche dans tous types : BDC, stock, devis, facture, bordereau de livraison
+    // Cherche dans tous types : BDC, stock, devis, facture, bordereau de livraison (wz), reçu
     let inv = null;
-    for (const kind of ['client_order', 'stock', 'estimate', 'vat', 'receipt']) {
+    for (const kind of ['client_order', 'stock', 'estimate', 'vat', 'wz', 'receipt']) {
       const { data } = await vfApi.get('/invoices.json', { params: { number: numero, kind, per_page: 5 } });
       inv = Array.isArray(data) ? data.find(d => String(d.number).trim() === numero) || null : null;
       if (inv) break;
