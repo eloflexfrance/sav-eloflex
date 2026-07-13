@@ -21,7 +21,8 @@ router.post('/auth/login', async (req, res) => {
     await db.run('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
     req.session.user = {
       id: user.id, nom: user.nom, email: user.email, role: user.role,
-      permissions: user.permissions || {}, langue: user.langue || 'fr'
+      permissions: user.permissions || {}, langue: user.langue || 'fr',
+      pays: user.pays || null
     };
     req.session.save(err => {
       if (err) return res.status(500).json({ error: 'Erreur session' });

@@ -85,6 +85,7 @@ function appliquerNavRole(){
   const userZone = $('user-zone');
   if(userZone) userZone.innerHTML = `
     <span style="font-size:11px;color:var(--text2);flex:1">${esc(CURRENT_USER.nom)}</span>
+    ${CURRENT_USER.pays?`<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:var(--accent-soft,rgba(59,130,246,.12));color:var(--accent);font-weight:600">${esc(CURRENT_USER.pays)}</span>`:'<span style="font-size:10px;color:var(--text3)">🌍 Global</span>'}
     <button class="btn sm" onclick="seDeconnecter()" title="Se déconnecter" style="padding:4px 8px"><i class="ti ti-logout"></i></button>`;
 }
 
@@ -718,7 +719,9 @@ async function renderCommandesTable(page=1){
   wrap.innerHTML=`${nav}
     <div class="table-wrap"><table class="t">
       <thead><tr>
-        <th>${t('col_date')||'Date'}</th><th style="width:75px">Groupe</th><th>${t('col_client')||'Distributeur'}</th>
+        <th>${t('col_date')||'Date'}</th><th style="width:75px">Groupe</th>
+        ${!CURRENT_USER.pays?'<th style="width:80px">Pays</th>':''}
+        <th>${t('col_client')||'Distributeur'}</th>
         <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th><th>Date livraison</th><th>${t('cmd_serie')||'N° série'}</th>
         <th>${t('col_statut')||'Statut'}</th><th style="text-align:center">  </th>
@@ -726,6 +729,7 @@ async function renderCommandesTable(page=1){
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
         <td>${fd(cm.date_commande)}</td>
         <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
+        ${!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'France')}</span></td>`:''}
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span></td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
@@ -875,8 +879,21 @@ async function modalCommande(id){
         </div>
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${t('cmd_date_commande')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
+          <div class="form-group"><label class="form-label">Pays</label>
+            ${CURRENT_USER.pays
+              ? `<div class="form-input" style="background:var(--bg);cursor:default">${esc(CURRENT_USER.pays)}</div><input type="hidden" id="cmd-pays" value="${esc(CURRENT_USER.pays)}">`
+              : `<select class="form-input" id="cmd-pays">
+                  <option value="France" ${(cm.pays||'France')==='France'?'selected':''}>🇫🇷 France</option>
+                  <option value="UK" ${cm.pays==='UK'?'selected':''}>🇬🇧 United Kingdom</option>
+                  <option value="Germany" ${cm.pays==='Germany'?'selected':''}>🇩🇪 Deutschland</option>
+                  <option value="Spain" ${cm.pays==='Spain'?'selected':''}>🇪🇸 España</option>
+                  <option value="Italy" ${cm.pays==='Italy'?'selected':''}>🇮🇹 Italia</option>
+                  <option value="Belgium" ${cm.pays==='Belgium'?'selected':''}>🇧🇪 Belgique</option>
+                  <option value="Switzerland" ${cm.pays==='Switzerland'?'selected':''}>🇨🇭 Suisse</option>
+                  <option value="Netherlands" ${cm.pays==='Netherlands'?'selected':''}>🇳🇱 Nederland</option>
+                </select>`}
+          </div>
         </div>
-      </div>
 
       <div id="cmd-tab-expedition" style="${initTab!=='expedition'?'display:none':''}">
         <div class="grid-2">
@@ -1315,6 +1332,7 @@ async function enregistrerCommande(id){
     date_confirmation: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value && !window._CMD_CONF_DATE ? new Date().toISOString().slice(0,10) : (window._CMD_CONF_DATE||null),
     num_avoir: gv('cmd-avoir')||null,
     num_facture_pennylane: gv('cmd-facture-pl')||null,
+    pays: gv('cmd-pays')||CURRENT_USER.pays||'France',
   };
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
