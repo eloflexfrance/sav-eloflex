@@ -2065,19 +2065,26 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
     const numNorm = normalise(numero);
     let inv = null;
 
-    // Tentative 1 : recherche sans filtre de type (tous les documents VosFactures)
+    // Étape 1 : BL/WZ — VosFactures n'accepte pas ?number= avec kind=wz
+    // On utilise search_text qui fonctionne pour ce type
     try {
-      const { data } = await vfApi.get('/invoices.json', { params: { number: numero, per_page: 20 } });
+      const { data } = await vfApi.get('/invoices.json', {
+        params: { kind: 'wz', search_text: numero, per_page: 20 }
+      });
       if (Array.isArray(data) && data.length) {
-        inv = data.find(d => normalise(d.number) === numNorm) || null;
+        inv = data.find(d => normalise(d.number) === numNorm)
+           || data.find(d => normalise(d.number).includes(numNorm))
+           || null;
       }
     } catch(_) {}
 
-    // Tentative 2 : par type, un par un (avec gestion d'erreur individuelle)
+    // Étape 2 : Autres types (BDC, devis, facture, reçu) avec filtre number
     if (!inv) {
-      for (const kind of ['wz', 'client_order', 'stock', 'estimate', 'vat', 'receipt', 'other', 'proforma']) {
+      for (const kind of ['client_order', 'estimate', 'vat', 'stock', 'receipt', 'other', 'proforma']) {
         try {
-          const { data } = await vfApi.get('/invoices.json', { params: { number: numero, kind, per_page: 10 } });
+          const { data } = await vfApi.get('/invoices.json', {
+            params: { kind, number: numero, per_page: 10 }
+          });
           if (Array.isArray(data) && data.length) {
             const match = data.find(d => normalise(d.number) === numNorm);
             if (match) { inv = match; break; }
@@ -2086,19 +2093,18 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
       }
     }
 
-    // Tentative 3 : search_text libre (capture "BL 3728" si le user a tapé "BL3728", etc.)
+    // Étape 3 : Fallback — récupérer les WZ récents et chercher par numéro côté serveur
     if (!inv) {
-      for (const q of [numero, numero.replace(/([A-Z]+)(\d+)/,'$1 $2')]) {
-        try {
-          const { data } = await vfApi.get('/invoices.json', { params: { search_text: q, per_page: 20 } });
-          if (Array.isArray(data) && data.length) {
-            inv = data.find(d => normalise(d.number) === numNorm)
-               || data.find(d => normalise(d.number).includes(numNorm))
-               || null;
-            if (inv) break;
-          }
-        } catch(_) {}
-      }
+      try {
+        const { data } = await vfApi.get('/invoices.json', {
+          params: { kind: 'wz', per_page: 100, page: 1, order: 'id desc' }
+        });
+        if (Array.isArray(data) && data.length) {
+          inv = data.find(d => normalise(d.number) === numNorm)
+             || data.find(d => normalise(d.number).includes(numNorm))
+             || null;
+        }
+      } catch(_) {}
     }
 
     if (!inv) return res.json({ configured: true, found: false });
