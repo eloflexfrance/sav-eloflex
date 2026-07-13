@@ -201,6 +201,9 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_avoir TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_avoir_id BIGINT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_facture_pennylane TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS pays TEXT DEFAULT 'France'`);
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pays TEXT`);
+      // pays NULL sur users = admin global (voit tous les pays)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS ref_suede TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS date_envoi_suede TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS confirmation_recue BOOLEAN DEFAULT FALSE`);

@@ -1604,10 +1604,11 @@ async function chargerListeUtilisateurs(){
     const users = await API.users();
     if(!users.length){ wrap.innerHTML=`<div style="font-size:12px;color:var(--text2)">Aucun utilisateur.</div>`; return; }
     wrap.innerHTML=`<div class="table-wrap"><table class="t">
-      <thead><tr><th>Nom</th><th>E-mail</th><th>Type</th><th>Statut</th><th>Dernière connexion</th><th></th></tr></thead>
+      <thead><tr><th>Nom</th><th>E-mail</th><th>Pays</th><th>Type</th><th>Statut</th><th>Dernière connexion</th><th></th></tr></thead>
       <tbody>${users.map(u=>`<tr>
         <td style="font-weight:600">${esc(u.nom)}</td>
         <td style="font-size:12px">${esc(u.email)}</td>
+        <td><span style="font-size:12px">${u.pays||'<span style="color:var(--text3)">🌍 Tous</span>'}</span></td>
         <td><span class="badge ${u.role==='admin'?'urgent':'attente'}">${u.role==='admin'?'Administrateur':'Utilisateur'}</span></td>
         <td><span class="badge ${u.actif?'g':'hg'}">${u.actif?'Actif':'Désactivé'}</span></td>
         <td style="font-size:11px;color:var(--text2)">${u.last_login?fd(u.last_login.slice(0,10)):'—'}</td>
@@ -1669,6 +1670,20 @@ function modalNouvelUtilisateur(){
             <option value="en">🇬🇧 English</option>
           </select>
         </div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Pays / Périmètre commandes</label>
+          <select class="form-input" id="nu-pays">
+            <option value="">🌍 Tous pays (admin global)</option>
+            <option value="France">🇫🇷 France</option>
+            <option value="UK">🇬🇧 United Kingdom</option>
+            <option value="Germany">🇩🇪 Deutschland</option>
+            <option value="Spain">🇪🇸 España</option>
+            <option value="Italy">🇮🇹 Italia</option>
+            <option value="Belgium">🇧🇪 Belgique</option>
+            <option value="Switzerland">🇨🇭 Suisse</option>
+            <option value="Netherlands">🇳🇱 Nederland</option>
+          </select>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px">Laisse vide pour un accès admin à tous les pays.</div>
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius)">
         <input type="checkbox" id="nu-admin" onchange="_onAdminToggle()" style="width:16px;height:16px;cursor:pointer">
@@ -1686,12 +1701,12 @@ function modalNouvelUtilisateur(){
 }
 
 async function creerUtilisateur(){
-  const nom=gv('nu-nom'), email=gv('nu-email'), mot_de_passe=gv('nu-mdp'), langue=gv('nu-langue')||'fr';
+  const nom=gv('nu-nom'), email=gv('nu-email'), mot_de_passe=gv('nu-mdp'), langue=gv('nu-langue')||'fr', pays=gv('nu-pays')||null;
   const admin=!!document.getElementById('nu-admin')?.checked;
   const permissions=admin?{}:_collectPerms();
   if(!nom||!email||!mot_de_passe){ toast('Nom, email et mot de passe sont requis.','ti-alert-circle','var(--danger)'); return; }
   try{
-    await API.createUser({nom, email, mot_de_passe, admin, permissions, langue});
+    await API.createUser({nom, email, mot_de_passe, admin, permissions, langue, pays});
     closeModal(); toast(`Compte créé pour ${nom}`); chargerListeUtilisateurs();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
@@ -1711,6 +1726,19 @@ async function modalEditerUtilisateur(id){
           <select class="form-input" id="eu-langue">
             <option value="fr" ${(user.langue||'fr')==='fr'?'selected':''}>🇫🇷 Français</option>
             <option value="en" ${user.langue==='en'?'selected':''}>🇬🇧 English</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Pays / Périmètre commandes</label>
+          <select class="form-input" id="eu-pays">
+            <option value="" ${!user.pays?'selected':''}>🌍 Tous pays (admin global)</option>
+            <option value="France" ${user.pays==='France'?'selected':''}>🇫🇷 France</option>
+            <option value="UK" ${user.pays==='UK'?'selected':''}>🇬🇧 United Kingdom</option>
+            <option value="Germany" ${user.pays==='Germany'?'selected':''}>🇩🇪 Deutschland</option>
+            <option value="Spain" ${user.pays==='Spain'?'selected':''}>🇪🇸 España</option>
+            <option value="Italy" ${user.pays==='Italy'?'selected':''}>🇮🇹 Italia</option>
+            <option value="Belgium" ${user.pays==='Belgium'?'selected':''}>🇧🇪 Belgique</option>
+            <option value="Switzerland" ${user.pays==='Switzerland'?'selected':''}>🇨🇭 Suisse</option>
+            <option value="Netherlands" ${user.pays==='Netherlands'?'selected':''}>🇳🇱 Nederland</option>
           </select>
         </div>
         <div class="form-group"><label class="form-label">Statut</label>
@@ -1739,8 +1767,9 @@ async function enregistrerUtilisateur(id){
   const admin=!!document.getElementById('eu-admin')?.checked;
   const permissions=admin?{}:_collectPerms();
   const langue=gv('eu-langue')||'fr';
+  const pays=gv('eu-pays')||null;
   try{
-    await API.updateUser(id, { nom:gv('eu-nom'), email:gv('eu-email'), admin, permissions, langue, actif: gv('eu-actif')==='1' });
+    await API.updateUser(id, { nom:gv('eu-nom'), email:gv('eu-email'), admin, permissions, langue, actif: gv('eu-actif')==='1', pays });
     closeModal(); toast('Utilisateur mis à jour'); chargerListeUtilisateurs();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }

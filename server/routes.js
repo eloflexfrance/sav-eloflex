@@ -126,14 +126,14 @@ router.get('/users', adminOnly, async (req, res) => {
 
 router.post('/users', adminOnly, async (req, res) => {
   try {
-    const { nom, email, mot_de_passe, admin: isAdmin, permissions = {}, langue = 'fr' } = req.body;
+    const { nom, email, mot_de_passe, admin: isAdmin, permissions = {}, langue = 'fr', pays = null } = req.body;
     if (!nom || !email || !mot_de_passe) return res.status(400).json({ error: 'Nom, email et mot de passe sont requis.' });
     if (mot_de_passe.length < 8) return res.status(400).json({ error: 'Mot de passe : minimum 8 caractères.' });
     const role = isAdmin ? 'admin' : 'utilisateur';
     const hash = await bcrypt.hash(mot_de_passe, 12);
     const user = await db.run(
-      'INSERT INTO users (nom, email, password_hash, role, permissions, langue) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, nom, email, role, permissions, langue, actif',
-      [nom.trim(), email.toLowerCase().trim(), hash, role, JSON.stringify(permissions), langue || 'fr']
+      'INSERT INTO users (nom, email, password_hash, role, permissions, langue, pays) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, nom, email, role, permissions, langue, actif, pays',
+      [nom.trim(), email.toLowerCase().trim(), hash, role, JSON.stringify(permissions), langue || 'fr', pays || null]
     );
     res.status(201).json(user);
   } catch (e) {
@@ -145,7 +145,7 @@ router.post('/users', adminOnly, async (req, res) => {
 router.put('/users/:id', adminOnly, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { nom, email, admin: isAdmin, permissions, actif, langue } = req.body;
+    const { nom, email, admin: isAdmin, permissions, actif, langue, pays } = req.body;
     if (id === res.locals.user.id && isAdmin === false) {
       return res.status(400).json({ error: 'Vous ne pouvez pas retirer votre propre accès admin.' });
     }
@@ -157,9 +157,10 @@ router.put('/users/:id', adminOnly, async (req, res) => {
     if (permissions !== undefined){ sets.push(`permissions=$${++idx}`); p.push(JSON.stringify(permissions)); }
     if (langue !== undefined)     { sets.push(`langue=$${++idx}`);      p.push(langue); }
     if (actif !== undefined)      { sets.push(`actif=$${++idx}`);       p.push(Boolean(actif)); }
+    if (pays !== undefined)       { sets.push(`pays=$${++idx}`);        p.push(pays || null); }
     if (!sets.length) return res.status(400).json({ error: 'Aucune modification.' });
     p.push(id);
-    const user = await db.run(`UPDATE users SET ${sets.join(',')} WHERE id=$${++idx} RETURNING id, nom, email, role, permissions, langue, actif`, p);
+    const user = await db.run(`UPDATE users SET ${sets.join(',')} WHERE id=$${++idx} RETURNING id, nom, email, role, permissions, langue, actif, pays`, p);
     if (!user) return res.status(404).json({ error: 'Utilisateur introuvable.' });
     res.json(user);
   } catch (e) {
@@ -1541,6 +1542,9 @@ router.get('/commandes', async (req, res) => {
                FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
     const conds = [], p = [];
     let idx = 0;
+    // Filtre pays : utilisateur avec pays défini → voit uniquement ses commandes
+    const userPays = res.locals.user?.pays || null;
+    if (userPays) { conds.push(`(cmd.pays=$${++idx} OR cmd.pays IS NULL)`); p.push(userPays); }
     if (client_id)   { conds.push(`cmd.client_id=$${++idx}`); p.push(client_id); }
     if (distributeur){ conds.push(`cmd.distributeur_nom ILIKE $${++idx}`); p.push(`%${distributeur}%`); }
     if (annee)       { conds.push(`(cmd.annee_onglet=$${++idx} OR (cmd.annee_onglet IS NULL AND EXTRACT(YEAR FROM cmd.date_commande::date)=$${idx}))`); p.push(parseInt(annee)); }
@@ -1567,9 +1571,11 @@ router.get('/commandes', async (req, res) => {
 router.get('/commandes/stats', async (req, res) => {
   try {
     const annee = req.query.annee ? parseInt(req.query.annee) : null;
+    const userPays = res.locals.user?.pays || null;
+    const paysFilter = userPays ? `AND (pays = '${userPays.replace(/'/g,"''")}' OR pays IS NULL)` : '';
     const anneeFilter = annee
-      ? `(annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1))`
-      : 'TRUE';
+      ? `(annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1)) ${paysFilter}`
+      : `TRUE ${paysFilter}`;
     const params = annee ? [annee] : [];
 
     // Calcul SQL du statut (miroir de la fonction JS statutCommande + isRealTracking)
@@ -1872,7 +1878,7 @@ router.put('/commandes/:id', async (req, res) => {
       'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib',
       'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
       'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation',
-      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane'];
+      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'pays'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
