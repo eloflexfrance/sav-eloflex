@@ -393,13 +393,14 @@ textarea.form-input { resize: vertical; min-height: 70px }
   box-shadow: var(--shadow-card);
 }
 .qs-results {
-  position: absolute; top: calc(100% + 8px); left: 0; right: 0;
-  background: rgba(240,248,255,.94);
+  position: fixed;
+  background: rgba(240,248,255,.97);
   backdrop-filter: var(--blur-lg); -webkit-backdrop-filter: var(--blur-lg);
   border: 0.5px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(80,130,200,.20), 0 1px 0 #fff inset;
-  z-index: 300; max-height: 420px; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(80,130,200,.25), 0 1px 0 #fff inset;
+  z-index: 9999; max-height: 420px; overflow-y: auto;
+  min-width: 360px;
 }
 .qs-section-label { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .6px; padding: 10px 14px 4px }
 .qs-item { padding: 10px 14px; cursor: pointer; border-bottom: 0.5px solid var(--border-dark); transition: background .1s; color: var(--text) }
