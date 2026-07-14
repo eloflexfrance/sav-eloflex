@@ -1562,7 +1562,8 @@ router.get('/commandes', async (req, res) => {
     sql += ' ORDER BY cmd.date_commande DESC NULLS LAST, cmd.id DESC';
     let rows = await db.all(sql, p);
     rows = rows.map(r => ({ ...r, statut_calc: statutCommande(r) }));
-    if (statut) rows = rows.filter(r => r.statut_calc === statut);
+    const mois = req.query.mois ? parseInt(req.query.mois) : null;
+    if (mois) { conds.push(`EXTRACT(MONTH FROM cmd.date_commande::date)=$${++idx}`); p.push(mois); }
     const total = rows.length;
     const pp = Math.min(parseInt(per_page) || 100, 500);
     const startIdx = (Math.max(parseInt(page) || 1, 1) - 1) * pp;
@@ -1751,25 +1752,45 @@ router.post('/pennylane/generer-facture/:cmdId', adminOrOp, async (req, res) => 
 
 // ── Fin Pennylane ──────────────────────────────────────────────────
 
+// ── Alertes : non expédié 7j après saisie + non facturé 7j après expédition ──
 router.get('/commandes/alertes-blocage', async (req, res) => {
   try {
-    const seuil = parseInt(req.query.jours)||7;
-    const rows = await db.all(`
+    const jours = parseInt(req.query.jours)||7;
+    const userPays = res.locals.user?.pays || req.query.pays || null;
+    const paysFilter = userPays ? `AND (cmd.pays = '${userPays.replace(/'/g,"''")}' OR cmd.pays IS NULL)` : '';
+
+    // Alerte 1 : non expédiée N jours après la date de commande
+    const nonExpedies = await db.all(`
       SELECT cmd.id, cmd.distributeur_nom, cmd.bdc, cmd.modele, cmd.date_commande,
-             cmd.num_suivi, cmd.statut,
+             cmd.num_suivi, cmd.statut, 'non_expedie' AS type_alerte,
              ROUND(DATE_PART('day', NOW() - cmd.date_commande::timestamp))::int AS jours_attente
       FROM commandes cmd
       WHERE cmd.date_commande IS NOT NULL
-        AND (cmd.statut IS NULL OR cmd.statut IN ('Auto','En préparation'))
+        AND (cmd.statut IS NULL OR cmd.statut IN ('Auto','En préparation','En attente confirmation'))
         AND cmd.date_livraison IS NULL
-        AND (cmd.num_suivi IS NULL
-             OR LENGTH(REGEXP_REPLACE(cmd.num_suivi,'\\s+','','g')) < 8
-             OR NOT (REGEXP_REPLACE(cmd.num_suivi,'\\s+','','g') ~ '[0-9]'))
+        AND (cmd.num_suivi IS NULL OR LENGTH(TRIM(cmd.num_suivi)) < 8)
+        AND cmd.statut NOT IN ('Annulé','Problème')
         AND DATE_PART('day', NOW() - cmd.date_commande::timestamp) >= $1
-      ORDER BY jours_attente DESC
-      LIMIT 50
-    `, [seuil]);
-    res.json(rows);
+        ${paysFilter}
+      ORDER BY jours_attente DESC LIMIT 30
+    `, [jours]);
+
+    // Alerte 2 : non facturée N jours après expédition/livraison
+    const nonFacturees = await db.all(`
+      SELECT cmd.id, cmd.distributeur_nom, cmd.bdc, cmd.modele, cmd.date_livraison,
+             cmd.num_suivi, cmd.statut, 'non_facturee' AS type_alerte,
+             ROUND(DATE_PART('day', NOW() - COALESCE(cmd.date_livraison, cmd.date_commande)::timestamp))::int AS jours_attente
+      FROM commandes cmd
+      WHERE (cmd.num_facture IS NULL OR cmd.num_facture = '')
+        AND (cmd.statut IN ('Livré','Expédié') OR (cmd.statut IN ('Auto') AND cmd.date_livraison IS NOT NULL))
+        AND cmd.statut NOT IN ('Annulé','Facturé','Problème')
+        AND COALESCE(cmd.date_livraison, cmd.date_commande) IS NOT NULL
+        AND DATE_PART('day', NOW() - COALESCE(cmd.date_livraison, cmd.date_commande)::timestamp) >= $1
+        ${paysFilter}
+      ORDER BY jours_attente DESC LIMIT 30
+    `, [jours]);
+
+    res.json({ non_expedies: nonExpedies, non_facturees: nonFacturees });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

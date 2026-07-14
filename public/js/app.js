@@ -1,7 +1,10 @@
 // public/js/app.js v2
 
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
-let CMD_FILTERS = { annee:'', statut:'', groupe:'', distributeur:'', q:'' };
+let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
+// Colonnes visibles en Suivi commandes (persistées en localStorage)
+const CMD_COLS_DEFAULT = { facture: false, date_facture: false, demo_origine: false };
+let CMD_COLS = JSON.parse(localStorage.getItem('sav_cmd_cols') || JSON.stringify(CMD_COLS_DEFAULT));
 let CACHE = { catalogue:[], params:{} };
 let TMP_PRODUITS = [];
 let CURRENT_USER = null; // Chargé au démarrage via /api/auth/me
@@ -662,28 +665,30 @@ async function renderCommandes(ttl,c,a){
   const years = Object.keys(stats.par_annee||{}).filter(Boolean).sort((x,y)=>y-x);
 
   c.innerHTML=`
-    <div style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Année ${anneeFiltre}</div>
     <div id="doublons-banner"></div>
-    <div class="cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px">
-      <div class="card"><div style="font-size:22px;font-weight:700">${stats.total}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_total')||'Total commandes'}</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--text)">${stats.en_attente||0}</div><div style="font-size:12px;color:var(--text2)">⏳ En attente</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--danger,#d33)">${stats.en_preparation}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_en_prep')||'En préparation'}</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:#d8a32a">${stats.expedie}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_expedie')||'Expédiées'}</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:#2a9d4d">${stats.livre}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_livre')||'Livrées'}</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--accent)">${stats.facture||0}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_facture_statut')||'Facturé'}</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:var(--warning)">${stats.demo||0}</div><div style="font-size:12px;color:var(--text2)">🔄 ${t('cmd_demo_count')||'Démos'}</div></div>
-      <div class="card"><div style="font-size:22px;font-weight:700;color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div><div style="font-size:12px;color:var(--text2)">${t('cmd_probleme')||'Problème'}</div></div>
+    <div class="cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
+      <div class="card" style="text-align:center;padding:12px 8px"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">${t('cmd_total')||'Total'}</div><div style="font-size:24px;font-weight:700">${stats.total}</div></div>
+      <div class="card" style="text-align:center;padding:12px 8px"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">⏳ En attente</div><div style="font-size:24px;font-weight:700">${stats.en_attente||0}</div></div>
+      <div class="card" style="text-align:center;padding:12px 8px"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">${t('cmd_en_prep')||'En prép.'}</div><div style="font-size:24px;font-weight:700;color:var(--danger)">${stats.en_preparation}</div></div>
+      <div class="card" style="text-align:center;padding:12px 8px"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">${t('cmd_expedie')||'Expédié'}</div><div style="font-size:24px;font-weight:700;color:var(--warning)">${stats.expedie}</div></div>
+      <div class="card" style="text-align:center;padding:12px 8px"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">${t('cmd_livre')||'Livré'}</div><div style="font-size:24px;font-weight:700;color:var(--success)">${stats.livre}</div></div>
+      <div class="card" style="text-align:center;padding:12px 8px"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">${t('cmd_facture_statut')||'Facturé'}</div><div style="font-size:24px;font-weight:700;color:var(--accent)">${stats.facture||0}</div></div>
+      <div class="card" style="text-align:center;padding:12px 8px"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">🔄 ${t('cmd_demo_count')||'Démos'}</div><div style="font-size:24px;font-weight:700;color:var(--warning)">${stats.demo||0}</div></div>
+      <div class="card" style="text-align:center;padding:12px 8px"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">${t('cmd_probleme')||'Problème'}</div><div style="font-size:24px;font-weight:700;color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-      <input class="search-bar" style="max-width:240px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série, suivi...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;renderCommandesTable(1)">
-      <select id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;render()">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+      <input class="form-input" style="max-width:220px;padding:6px 10px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;renderCommandesTable(1)">
+      <select class="form-input" style="width:auto;padding:6px 10px" id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;CMD_FILTERS.mois='';render()">
         <option value="">${t('cmd_toutes_annees')||'Toutes années'}</option>
         ${years.map(y=>`<option value="${y}" ${CMD_FILTERS.annee==y?'selected':''}>${y}</option>`).join('')}
       </select>
-      <select id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
+      <select class="form-input" style="width:auto;padding:6px 10px" id="cmd-f-mois" onchange="CMD_FILTERS.mois=this.value;renderCommandesTable(1)">
+        <option value="">Tous les mois</option>
+        ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'].map((m,i)=>`<option value="${i+1}" ${CMD_FILTERS.mois==i+1?'selected':''}>${m}</option>`).join('')}
+      </select>
+      <select class="form-input" style="width:auto;padding:6px 10px" id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
         <option value="">${t('cmd_tous_statuts')||'Tous statuts'}</option>
-        <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ ${t('cmd_en_attente')||'En attente confirmation'}</option>
-        <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
+        <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ ${t('cmd_en_attente')||'En attente'}</option>
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
         <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
         <option value="Livré" ${CMD_FILTERS.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
@@ -691,12 +696,19 @@ async function renderCommandes(ttl,c,a){
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
-      <input id="cmd-f-distrib" placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)" style="max-width:200px">
-      ${CMD_FILTERS.distributeur||CMD_FILTERS.statut||CMD_FILTERS.q
-        ? `<button class="btn sm" onclick="CMD_FILTERS.distributeur='';CMD_FILTERS.statut='';CMD_FILTERS.q='';render()" title="Effacer tous les filtres" style="white-space:nowrap">
-            <i class="ti ti-x"></i> Effacer les filtres
-           </button>`
-        : ''}
+      <input class="form-input" style="width:auto;max-width:180px;padding:6px 10px" id="cmd-f-distrib" placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)">
+      <button class="btn sm" onclick="toggleColsPanel()" title="Colonnes visibles"><i class="ti ti-layout-columns"></i></button>
+      ${CMD_FILTERS.distributeur||CMD_FILTERS.statut||CMD_FILTERS.q||CMD_FILTERS.mois
+        ? `<button class="btn sm" onclick="CMD_FILTERS={annee:CMD_FILTERS.annee,mois:'',statut:'',groupe:'',distributeur:'',q:''};render()" title="Effacer filtres"><i class="ti ti-x"></i></button>`:''}
+    </div>
+    <div id="cmd-cols-panel" style="display:none;padding:10px 14px;margin-bottom:8px;background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:var(--radius);backdrop-filter:blur(12px)">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Colonnes optionnelles</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.facture?'checked':''} onchange="CMD_COLS.facture=this.checked;saveCmdCols();renderCommandesTable(1)"> N° Facture</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_facture?'checked':''} onchange="CMD_COLS.date_facture=this.checked;saveCmdCols();renderCommandesTable(1)"> Date facturation</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> 🔄 Origine démo</label>
+      </div>
+    </div>
       ${CMD_FILTERS.distributeur
         ? `<span style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--accent-bg);border:0.5px solid var(--accent);border-radius:var(--radius);font-size:12px;color:var(--accent);font-weight:600">
             <i class="ti ti-building-store" style="font-size:12px"></i>
@@ -747,12 +759,15 @@ async function renderCommandesTable(page=1){
         <th>${t('col_client')||'Distributeur'}</th>
         <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th><th>Date livraison</th><th>${t('cmd_serie')||'N° série'}</th>
-        <th>${t('col_statut')||'Statut'}</th><th style="text-align:center">  </th>
+        ${CMD_COLS.facture?`<th>${t('cmd_facture')||'N° Facture'}</th>`:''}
+        ${CMD_COLS.date_facture?'<th>Date facturation</th>':''}
+        ${CMD_COLS.demo_origine?'<th>🔄 Origine démo</th>':''}
+        <th>${t('col_statut')||'Statut'}</th><th></th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
         <td>${fd(cm.date_commande)}</td>
         <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
-        ${!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'France')}</span></td>`:''}
+        ${!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span></td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
@@ -766,6 +781,9 @@ async function renderCommandesTable(page=1){
         })()}</td>
         <td style="font-size:12px;color:var(--text2)">${cm.date_livraison?fd(cm.date_livraison):'—'}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
+        ${CMD_COLS.facture?`<td class="mono" style="font-size:11px">${esc(cm.num_facture||'')}</td>`:''}
+        ${CMD_COLS.date_facture?`<td style="font-size:11px;color:var(--text2)">${cm.date_livraison&&cm.num_facture?fd(cm.date_livraison):'—'}</td>`:''}
+        ${CMD_COLS.demo_origine?`<td style="font-size:11px">${cm.demo_origine_nom?`<span class="badge hg" title="Origine démo">🔄 ${esc(cm.demo_origine_nom)}</span>`:'—'}</td>`:''}
         <td onclick="event.stopPropagation()" style="position:relative">
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i></span>
         </td>
@@ -1266,6 +1284,14 @@ function ouvrirAvoirVF(num){
   const account = window._VF_ACCOUNT;
   if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
   window.open(`https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(num)}`, '_blank', 'noopener');
+}
+
+function toggleColsPanel(){
+  const el = document.getElementById('cmd-cols-panel');
+  if(el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+function saveCmdCols(){
+  localStorage.setItem('sav_cmd_cols', JSON.stringify(CMD_COLS));
 }
 
 function majBdcConfirme(){
@@ -1934,7 +1960,7 @@ let CMD_VIEW = 'liste'; // 'liste' | 'kanban'
 async function renderCommandesKanban(){
   const wrap=$('cmd-table-wrap'); if(!wrap) return;
   wrap.innerHTML=`<div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> Chargement…</div>`;
-  const res = await API.commandes({ annee: CMD_FILTERS.annee, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
+  const res = await API.commandes({ annee: CMD_FILTERS.annee, mois: CMD_FILTERS.mois, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
   const list = res.rows||[];
   const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème'];
   const grouped = {};
@@ -2017,18 +2043,29 @@ async function chargerAlertesBlocage(){
   el.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div>`;
   try{
     const jours = parseInt($('blocage-seuil')?.value)||7;
-    const rows = await API.commandesAlertesBlocage(jours);
-    if(!rows.length){ el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> Aucune commande bloquée — tout est à jour !</div>`; return; }
+    const data = await API.commandesAlertesBlocage(jours);
+    // Support ancien format (tableau) et nouveau format (objet avec 2 listes)
+    const nonExp  = Array.isArray(data) ? data : (data.non_expedies||[]);
+    const nonFact = Array.isArray(data) ? [] : (data.non_facturees||[]);
+    if(!nonExp.length && !nonFact.length){
+      el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> Aucune alerte — tout est à jour !</div>`;
+      return;
+    }
+    const tableRow = (r, type) => `<tr onclick="modalCommande(${r.id})" style="cursor:pointer">
+      <td><span class="badge ${type==='non_expedie'?'attente':'urgent'}" style="font-size:10px">${type==='non_expedie'?'📦 Non expédié':'🧾 Non facturé'}</span></td>
+      <td>${esc(r.distributeur_nom)}</td>
+      <td class="mono">${esc(r.bdc||'')}</td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.modele||'')}</td>
+      <td>${fd(r.date_commande||r.date_livraison)}</td>
+      <td><span class="badge ${r.jours_attente>14?'urgent':'hg'}">${r.jours_attente}j</span></td>
+      <td><button class="btn sm" onclick="event.stopPropagation();modalCommande(${r.id})"><i class="ti ti-pencil"></i></button></td>
+    </tr>`;
     el.innerHTML=`<div class="table-wrap"><table class="t">
-      <thead><tr><th>Distributeur</th><th>Bdc</th><th>Modèle</th><th>${t('cmd_date_commande')||'Date commande'}</th><th>Jours attente</th><th></th></tr></thead>
-      <tbody>${rows.map(r=>`<tr onclick="modalCommande(${r.id})" style="cursor:pointer">
-        <td>${esc(r.distributeur_nom)}</td>
-        <td class="mono">${esc(r.bdc||'')}</td>
-        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.modele||'')}</td>
-        <td>${fd(r.date_commande)}</td>
-        <td><span class="badge ${r.jours_attente>14?'urgent':'attente'}">${r.jours_attente}j</span></td>
-        <td><button class="btn sm primary" onclick="event.stopPropagation();modalCommande(${r.id})"><i class="ti ti-pencil"></i></button></td>
-      </tr>`).join('')}</tbody>
+      <thead><tr><th>Type</th><th>Distributeur</th><th>Bdc</th><th>Modèle</th><th>Date réf.</th><th>Délai</th><th></th></tr></thead>
+      <tbody>
+        ${nonExp.map(r=>tableRow(r,'non_expedie')).join('')}
+        ${nonFact.map(r=>tableRow(r,'non_facturee')).join('')}
+      </tbody>
     </table></div>`;
   }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
 }

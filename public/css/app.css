@@ -412,3 +412,32 @@ textarea.form-input { resize: vertical; min-height: 70px }
 
 /* ─────────────────── Dark toggle désactivé ─────────────────── */
 body.dark { }
+
+/* ─────────────────── Stat cards — hauteur égale ─────────────────── */
+.stats-grid-cmd { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
+.stats-grid-cmd .card {
+  flex: 1 1 100px; min-width: 90px; max-width: 160px;
+  min-height: 72px; display: flex; flex-direction: column;
+  justify-content: center; text-align: center; padding: 12px 10px;
+}
+
+/* ─────────────────── Filtre bar — glass theme ─────────────────── */
+#cmd-f-annee, #cmd-f-mois, #cmd-f-statut, #cmd-f-distrib,
+select[id^="cmd-f-"], input[id^="cmd-f-"] {
+  background: rgba(255,255,255,0.60) !important;
+  border: 0.5px solid rgba(100,150,200,.30) !important;
+  border-radius: 10px !important;
+  color: var(--text) !important;
+  backdrop-filter: blur(8px);
+  padding: 6px 10px;
+}
+
+/* ─────────────────── Statut bar select — fond opaque ─────────────────── */
+#cmd-statut {
+  background: rgba(255,255,255,0.88) !important;
+  border: 0.5px solid rgba(100,150,200,.40) !important;
+  border-radius: 8px !important;
+  color: var(--text) !important;
+  font-weight: 600;
+}
+#cmd-statut option { background: #fff; color: #1a2d4a }
