@@ -3010,11 +3010,21 @@ function quickSearch(q){
   },200);
 }
 function clearQuickSearch(){const el=$('qs-results');if(el)el.style.display='none';}
+function positionQsResults(){
+  const inp = document.getElementById('qs-input');
+  let el = document.getElementById('qs-results');
+  if(!inp || !el) return;
+  // Sortir du stacking context backdrop-filter du parent
+  if(el.parentElement !== document.body) document.body.appendChild(el);
+  const r = inp.getBoundingClientRect();
+  el.style.cssText += ';position:fixed !important;top:'+(r.bottom+6)+'px;left:'+r.left+'px;width:'+Math.max(r.width,400)+'px;z-index:99999 !important';
+}
+
 function showQuickResults(res,q){
   const el=$('qs-results');if(!el)return;
   const{fauteuils=[],clients=[],commandes=[]}=res;
   if(!fauteuils.length&&!clients.length&&!commandes.length){
-    el.innerHTML=`<div class="qs-empty"><i class="ti ti-search-off"></i> Aucun résultat pour "<b>${esc(q)}</b>"</div>`;
+    positionQsResults();el.innerHTML=`<div class="qs-empty"><i class="ti ti-search-off"></i> Aucun résultat pour "<b>${esc(q)}</b>"</div>`;
     el.style.display='block';return;
   }
   let html='';
