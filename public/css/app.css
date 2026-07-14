@@ -441,3 +441,21 @@ select[id^="cmd-f-"], input[id^="cmd-f-"] {
   font-weight: 600;
 }
 #cmd-statut option { background: #fff; color: #1a2d4a }
+
+/* Stat cards : annuler le padding du .card pour les cellules de la grille stats */
+.cards > .card { padding: 0; box-sizing: border-box; }
+
+/* ═══ FIX DÉFINITIF : stat cards hauteur uniforme ═══
+   Écrase les styles inline et le padding du .card par défaut
+   pour forcer toutes les cellules à 72px exact.           */
+div.cards { grid-auto-rows: 72px !important; align-items: stretch !important; }
+div.cards > .card {
+  padding: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+}
