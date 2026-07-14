@@ -3,7 +3,7 @@
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
-const CMD_COLS_DEFAULT = { facture: false, date_facture: false, demo_origine: false };
+const CMD_COLS_DEFAULT = { facture: false, date_facture: false, demo_origine: false, edi: false };
 let CMD_COLS = JSON.parse(localStorage.getItem('sav_cmd_cols') || JSON.stringify(CMD_COLS_DEFAULT));
 let CACHE = { catalogue:[], params:{} };
 let TMP_PRODUITS = [];
@@ -344,6 +344,7 @@ async function renderClient(ttl,c,a){
         <div class="section-title"><i class="ti ti-user"></i>Fiche distributeur</div>
         <table style="width:100%;font-size:12px">
           ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Ville',cl.ville],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
+          ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">💳 EDI — Prélèvement</span></td></tr>`:''}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
@@ -707,6 +708,7 @@ async function renderCommandes(ttl,c,a){
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.facture?'checked':''} onchange="CMD_COLS.facture=this.checked;saveCmdCols();renderCommandesTable(1)"> N° Facture</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_facture?'checked':''} onchange="CMD_COLS.date_facture=this.checked;saveCmdCols();renderCommandesTable(1)"> Date facturation</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> 🔄 Origine démo</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.edi?'checked':''} onchange="CMD_COLS.edi=this.checked;saveCmdCols();renderCommandesTable(1)"> 💳 EDI (prélèvement)</label>
       </div>
     </div>
       ${CMD_FILTERS.distributeur
@@ -762,13 +764,14 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.facture?`<th>${t('cmd_facture')||'N° Facture'}</th>`:''}
         ${CMD_COLS.date_facture?'<th>Date facturation</th>':''}
         ${CMD_COLS.demo_origine?'<th>🔄 Origine démo</th>':''}
+        ${CMD_COLS.edi?'<th>💳 EDI</th>':''}
         <th>${t('col_statut')||'Statut'}</th><th></th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
         <td>${fd(cm.date_commande)}</td>
         <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
         ${!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
-        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span></td>
+        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span> <button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="Ouvrir la fiche client" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button></td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
         <td class="mono">${(()=>{
@@ -784,6 +787,7 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.facture?`<td class="mono" style="font-size:11px">${esc(cm.num_facture||'')}</td>`:''}
         ${CMD_COLS.date_facture?`<td style="font-size:11px;color:var(--text2)">${cm.date_livraison&&cm.num_facture?fd(cm.date_livraison):'—'}</td>`:''}
         ${CMD_COLS.demo_origine?`<td style="font-size:11px">${cm.demo_origine_nom?`<span class="badge hg" title="Origine démo">🔄 ${esc(cm.demo_origine_nom)}</span>`:'—'}</td>`:''}
+        ${CMD_COLS.edi?`<td>${cm.client_edi?'<span class="badge ouvert" style="font-size:10px">💳 EDI</span>':'—'}</td>`:''}
         <td onclick="event.stopPropagation()" style="position:relative">
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i></span>
         </td>
@@ -819,6 +823,7 @@ async function modalCommande(id){
     <div class="modal-header">
       <i class="ti ti-clipboard-list" style="font-size:18px;color:var(--accent)"></i>
       <h2 style="flex:1">${id?(t('cmd_edit')||'Modifier'):(t('cmd_add')||'Nouvelle commande')}${cm.distributeur_nom?` <span style="font-weight:400;color:var(--text2);font-size:15px">— ${esc(cm.distributeur_nom)}</span>`:''}</h2>
+      ${cm.client_edi?`<span class="badge ouvert" style="font-size:11px;margin-right:4px">💳 EDI</span>`:''}
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
     <div style="display:flex;border-bottom:0.5px solid var(--border-s)">
@@ -2355,10 +2360,17 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" value="${esc(d.email||'')}"></div>
   <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
+  <div class="form-group" style="grid-column:1/-1">
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.edi?'rgba(46,124,246,.08)':'var(--surface)'}">
+      <input type="checkbox" id="f-edi" ${d.edi?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)">
+      <div><div style="font-size:13px;font-weight:600;color:var(--accent)">💳 EDI — Prélèvement automatique</div>
+      <div style="font-size:11px;color:var(--text2)">Ce distributeur règle ses factures par prélèvement EDI</div></div>
+    </label>
+  </div>
 </div>`;}
 function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function saveClient(id){const data={nom:gv('f-nom'),type:gv('f-type'),contact:gv('f-contact'),email:gv('f-email'),tel:gv('f-tel'),ville:gv('f-ville')};if(!data.nom){alert('Nom requis');return;}try{if(id)await API.updateClient(id,data);else await API.createClient(data);toast(id?'Client mis à jour':'Client créé');closeModal();render();}catch(e){alert(e.message);}}
+async function saveClient(id){const data={nom:gv('f-nom'),type:gv('f-type'),contact:gv('f-contact'),email:gv('f-email'),tel:gv('f-tel'),ville:gv('f-ville'),edi:!!document.getElementById('f-edi')?.checked};if(!data.nom){alert('Nom requis');return;}try{if(id)await API.updateClient(id,data);else await API.createClient(data);toast(id?'Client mis à jour':'Client créé');closeModal();render();}catch(e){alert(e.message);}}
 async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;await API.deleteClient(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
 
 async function modalPortail(id,token){
