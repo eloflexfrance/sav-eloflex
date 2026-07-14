@@ -4,7 +4,8 @@ let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
 const CMD_COLS_DEFAULT = { facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
-let CMD_COLS = JSON.parse(localStorage.getItem('sav_cmd_cols') || JSON.stringify(CMD_COLS_DEFAULT));
+// Merge stored prefs with defaults — nouvelles colonnes héritent de false si absentes du stockage
+let CMD_COLS = { ...CMD_COLS_DEFAULT, ...JSON.parse(localStorage.getItem('sav_cmd_cols') || '{}') };
 let CACHE = { catalogue:[], params:{} };
 let TMP_PRODUITS = [];
 let CURRENT_USER = null; // Chargé au démarrage via /api/auth/me
