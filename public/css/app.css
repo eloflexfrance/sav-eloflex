@@ -413,17 +413,8 @@ textarea.form-input { resize: vertical; min-height: 70px }
 /* ─────────────────── Dark toggle désactivé ─────────────────── */
 body.dark { }
 
-/* ─────────────────── Stat cards — hauteur égale ─────────────────── */
-.stats-grid-cmd { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
-.stats-grid-cmd .card {
-  flex: 1 1 100px; min-width: 90px; max-width: 160px;
-  min-height: 72px; display: flex; flex-direction: column;
-  justify-content: center; text-align: center; padding: 12px 10px;
-}
-
-/* ─────────────────── Filtre bar — glass theme ─────────────────── */
-#cmd-f-annee, #cmd-f-mois, #cmd-f-statut, #cmd-f-distrib,
-select[id^="cmd-f-"], input[id^="cmd-f-"] {
+/* ─── Filtres Suivi commandes — glass theme ─── */
+#cmd-f-annee, #cmd-f-mois, #cmd-f-statut, #cmd-f-distrib {
   background: rgba(255,255,255,0.60) !important;
   border: 0.5px solid rgba(100,150,200,.30) !important;
   border-radius: 10px !important;
@@ -432,55 +423,33 @@ select[id^="cmd-f-"], input[id^="cmd-f-"] {
   padding: 6px 10px;
 }
 
-/* ─────────────────── Statut bar select — fond opaque ─────────────────── */
+/* ─── Statut select (barre persistante modal) — fond opaque ─── */
 #cmd-statut {
-  background: rgba(255,255,255,0.88) !important;
+  background: rgba(255,255,255,0.92) !important;
+  color: var(--text) !important;
   border: 0.5px solid rgba(100,150,200,.40) !important;
   border-radius: 8px !important;
-  color: var(--text) !important;
   font-weight: 600;
 }
-#cmd-statut option { background: #fff; color: #1a2d4a }
 
-/* Stat cards : annuler le padding du .card pour les cellules de la grille stats */
-.cards > .card { padding: 0; box-sizing: border-box; }
-
-/* ═══ FIX DÉFINITIF : stat cards hauteur uniforme ═══
-   Écrase les styles inline et le padding du .card par défaut
-   pour forcer toutes les cellules à 72px exact.           */
-div.cards { grid-auto-rows: 72px !important; align-items: stretch !important; }
+/* ─── Stat cards : toutes identiques ─── */
+div.cards {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)) !important;
+  grid-auto-rows: 72px !important;
+  gap: 8px !important;
+  margin-bottom: 14px !important;
+  align-items: stretch !important;
+}
 div.cards > .card {
-  padding: 0 !important;
+  padding: 0 8px !important;
   min-height: 0 !important;
-  height: 100% !important;
+  max-height: none !important;
+  box-sizing: border-box !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
   gap: 4px !important;
-}
-
-/* ═══ FIX FINAL v2 : flex container forcé ═══ */
-div.cards {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  height: 78px !important;
-  align-items: stretch !important;
-  gap: 8px !important;
-  grid-template-columns: unset !important;
-  grid-auto-rows: unset !important;
-}
-div.cards > .card {
-  flex: 1 1 0 !important;
-  min-width: 0 !important;
-  padding: 0 !important;
-  min-height: 0 !important;
-  height: auto !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 3px !important;
-  overflow: hidden !important;
+  text-align: center !important;
 }
