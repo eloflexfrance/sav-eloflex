@@ -386,8 +386,7 @@ textarea.form-input { resize: vertical; min-height: 70px }
 .quick-search-bar {
   position: relative; display: flex; align-items: center; gap: 10px;
   margin-bottom: 16px;
-  background: rgba(255,255,255,.60);
-  backdrop-filter: var(--blur-md); -webkit-backdrop-filter: var(--blur-md);
+  background: rgba(255,255,255,.75);
   border: 0.5px solid var(--border);
   border-radius: 16px; padding: 10px 14px;
   box-shadow: var(--shadow-card);
