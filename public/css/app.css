@@ -459,3 +459,28 @@ div.cards > .card {
   justify-content: center !important;
   gap: 4px !important;
 }
+
+/* ═══ FIX FINAL v2 : flex container forcé ═══ */
+div.cards {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  height: 78px !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  grid-template-columns: unset !important;
+  grid-auto-rows: unset !important;
+}
+div.cards > .card {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  overflow: hidden !important;
+}
