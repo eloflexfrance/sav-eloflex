@@ -666,7 +666,7 @@ async function renderCommandes(ttl,c,a){
 
   c.innerHTML=`
     <div id="doublons-banner"></div>
-    <div class="cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
+    <div class="cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));grid-auto-rows:72px;gap:8px;margin-bottom:14px;align-items:stretch">
       <div class="card" style="text-align:center;padding:10px 8px;min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;white-space:nowrap">Total</div><div style="font-size:26px;font-weight:700;line-height:1">${stats.total}</div></div>
       <div class="card" style="text-align:center;padding:10px 8px;min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;white-space:nowrap">⏳ Attente</div><div style="font-size:26px;font-weight:700;line-height:1">${stats.en_attente||0}</div></div>
       <div class="card" style="text-align:center;padding:10px 8px;min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;white-space:nowrap">En prép.</div><div style="font-size:26px;font-weight:700;line-height:1;color:var(--danger)">${stats.en_preparation}</div></div>
