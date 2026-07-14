@@ -3,7 +3,7 @@
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
-const CMD_COLS_DEFAULT = { facture: false, date_facture: false, demo_origine: false, edi: false };
+const CMD_COLS_DEFAULT = { facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
 let CMD_COLS = JSON.parse(localStorage.getItem('sav_cmd_cols') || JSON.stringify(CMD_COLS_DEFAULT));
 let CACHE = { catalogue:[], params:{} };
 let TMP_PRODUITS = [];
@@ -709,6 +709,9 @@ async function renderCommandes(ttl,c,a){
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_facture?'checked':''} onchange="CMD_COLS.date_facture=this.checked;saveCmdCols();renderCommandesTable(1)"> Date facturation</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> 🔄 Origine démo</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.edi?'checked':''} onchange="CMD_COLS.edi=this.checked;saveCmdCols();renderCommandesTable(1)"> 💳 EDI (prélèvement)</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.pays?'checked':''} onchange="CMD_COLS.pays=this.checked;saveCmdCols();renderCommandesTable(1)"> 🌍 Pays</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.retour?'checked':''} onchange="CMD_COLS.retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ↩ Retour</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_retour?'checked':''} onchange="CMD_COLS.date_retour=this.checked;saveCmdCols();renderCommandesTable(1)"> 📅 Date retour</label>
       </div>
     </div>
       ${CMD_FILTERS.distributeur
@@ -757,7 +760,7 @@ async function renderCommandesTable(page=1){
     <div class="table-wrap"><table class="t">
       <thead><tr>
         <th>${t('col_date')||'Date'}</th><th style="width:75px">Groupe</th>
-        ${!CURRENT_USER.pays?'<th style="width:80px">Pays</th>':''}
+        ${CMD_COLS.pays&&!CURRENT_USER.pays?'<th style="width:80px">Pays</th>':''}
         <th>${t('col_client')||'Distributeur'}</th>
         <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th><th>Date livraison</th><th>${t('cmd_serie')||'N° série'}</th>
@@ -765,12 +768,14 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.date_facture?'<th>Date facturation</th>':''}
         ${CMD_COLS.demo_origine?'<th>🔄 Origine démo</th>':''}
         ${CMD_COLS.edi?'<th>💳 EDI</th>':''}
+        ${CMD_COLS.retour?'<th>↩ Retour</th>':''}
+        ${CMD_COLS.date_retour?'<th>Date retour</th>':''}
         <th>${t('col_statut')||'Statut'}</th><th></th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
         <td>${fd(cm.date_commande)}</td>
         <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
-        ${!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
+        ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span> <button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="Ouvrir la fiche client" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button></td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
@@ -788,6 +793,8 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.date_facture?`<td style="font-size:11px;color:var(--text2)">${cm.date_livraison&&cm.num_facture?fd(cm.date_livraison):'—'}</td>`:''}
         ${CMD_COLS.demo_origine?`<td style="font-size:11px">${cm.demo_origine_nom?`<span class="badge hg" title="Origine démo">🔄 ${esc(cm.demo_origine_nom)}</span>`:'—'}</td>`:''}
         ${CMD_COLS.edi?`<td>${cm.client_edi?'<span class="badge ouvert" style="font-size:10px">💳 EDI</span>':'—'}</td>`:''}
+        ${CMD_COLS.retour?`<td class="mono" style="font-size:11px">${esc(cm.num_retour||'—')}</td>`:''}
+        ${CMD_COLS.date_retour?`<td style="font-size:11px;color:var(--text2)">${cm.date_retour?fd(cm.date_retour):'—'}</td>`:''}
         <td onclick="event.stopPropagation()" style="position:relative">
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i></span>
         </td>
