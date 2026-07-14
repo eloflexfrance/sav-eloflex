@@ -439,17 +439,17 @@ div.cards {
   grid-auto-rows: 72px !important;
   gap: 8px !important;
   margin-bottom: 14px !important;
-  align-items: stretch !important;
 }
+/* On laisse grid-auto-rows:72px gérer la hauteur — pas de height sur les items */
 div.cards > .card {
-  padding: 0 8px !important;
+  padding: 4px 6px !important;
   min-height: 0 !important;
-  max-height: none !important;
   box-sizing: border-box !important;
+  overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 4px !important;
+  gap: 3px !important;
   text-align: center !important;
 }
