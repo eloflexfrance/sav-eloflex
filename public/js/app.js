@@ -64,10 +64,22 @@ const MODULES = [
   { key:'parametres',    label:'Paramètres' },
 ];
 
+// Modules qui héritent d'un autre module si non défini explicitement
+const PERM_FALLBACK = {
+  'devis':      'commandes',   // Devis hérite de commandes
+  'dashboard':  'commandes',   // Tableau de bord toujours accessible si commandes
+};
+
 function hasAccess(module) {
   if (isAdmin()) return true;
-  const p = (CURRENT_USER?.permissions || {})[module];
-  return p === 'write' || p === 'read';  // 'hidden', 'none', undefined = bloqué
+  const perms = CURRENT_USER?.permissions || {};
+  let p = perms[module];
+  // Si la clé n'existe pas (module ajouté après la création du compte)
+  // → on utilise le module parent comme fallback
+  if (p === undefined && PERM_FALLBACK[module]) {
+    p = perms[PERM_FALLBACK[module]];
+  }
+  return p === 'write' || p === 'read';
 }
 function canWrite(module) {
   if (isAdmin()) return true;

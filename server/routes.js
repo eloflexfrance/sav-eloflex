@@ -1788,14 +1788,24 @@ router.post('/devis/sync-vf', adminOnly, async (req, res) => {
       });
       if (!Array.isArray(data) || !data.length) break;
       for (const inv of data) {
+        // Récupérer le détail si montant non disponible dans la liste
+        let invDetail = inv;
+        const montantListe = parseFloat(inv2.total_price_gross || inv2.total_price_net || inv2.price_gross || 0);
+        if (montantListe === 0 && inv2.id) {
+          try {
+            const { data: det } = await vfApi.get(`/invoices/${inv2.id}.json`);
+            if (det && det.id) invDetail = det;
+          } catch(_) {}
+        }
+        const inv2 = { ...inv, ...invDetail };
         // Vérifier si déjà converti en BDC dans VF (statut accepted)
-        const statutVF = inv.status || inv.payment_status || '';
+        const statutVF = inv2.status || inv2.payment_status || '';
         const estConverti = statutVF === 'accepted' || statutVF === 'paid';
         // Vérifier si un client_order existe pour ce devis dans nos commandes
-        const deja = await db.get('SELECT id FROM commandes WHERE vf_commande_id=$1', [inv.id]);
+        const deja = await db.get('SELECT id FROM commandes WHERE vf_commande_id=$1', [inv2.id]);
         const dejaConvertiLocal = !!deja;
         const statutFinal = estConverti || dejaConvertiLocal ? 'converti' : 'ouvert';
-        const lignes = (inv.positions || []).map(p => ({
+        const lignes = (inv2.positions || []).map(p => ({
           nom: p.name, qte: p.quantity, prix: p.price_net, total: p.total_price_gross
         }));
         await db.run(
@@ -1808,9 +1818,16 @@ router.post('/devis/sync-vf', adminOnly, async (req, res) => {
                          ELSE devis.statut END,
              vf_statut=$10, distributeur_nom=$3, client_email=$4,
              montant=$7, lignes=$11, updated_at=NOW()`,
-          [inv.id, inv.number, inv.buyer_name, inv.buyer_email||null,
-           (inv.issue_date||'').slice(0,10), (inv.payment_to||'').slice(0,10),
-           parseFloat(inv.total_price_gross)||0, inv.currency||'EUR',
+          [inv2.id, inv2.number, inv2.buyer_name, inv2.buyer_email||null,
+           (inv2.issue_date||'').slice(0,10), (inv2.payment_to||'').slice(0,10),
+           (() => {
+             // VosFactures peut retourner le montant sous différents noms selon la version
+             const t = parseFloat(inv2.total_price_gross || inv2.price_gross || inv2.total || 0);
+             if (t > 0) return t;
+             // Fallback : sommer les positions
+             const pos = inv2.positions || [];
+             return pos.reduce((s, p) => s + (parseFloat(p.total_price_gross || p.price_gross || 0)), 0);
+           })(), inv2.currency||'EUR',
            statutFinal, statutVF, JSON.stringify(lignes)]
         );
         total++; if(dejaConvertiLocal || estConverti) updated++; else created++;
@@ -2114,9 +2131,9 @@ router.get('/commandes/:id/factures-vf-suggestions', async (req, res) => {
 
     const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
     const factures = (Array.isArray(data) ? data : []).slice(0, 10).map(inv => ({
-      id: inv.id, numero: inv.number, date: inv.issue_date || inv.sell_date,
-      montant_ttc: inv.price_gross,
-      url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}`
+      id: inv2.id, numero: inv2.number, date: inv2.issue_date || inv2.sell_date,
+      montant_ttc: inv2.price_gross,
+      url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv2.id}`
     }));
 
     // Tente d'extraire un n° de série pour chaque facture candidate (détail)
@@ -2156,7 +2173,7 @@ router.get('/vosfactures/facture-lookup', async (req, res) => {
     const inv = Array.isArray(data) ? data.find(d => String(d.number).trim() === numero) || data[0] : null;
     if (!inv) return res.json({ configured: true, found: false });
 
-    const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
+    const { data: detail } = await vfApi.get(`/invoices/${inv2.id}.json`);
     const positions = detail.positions || detail.invoice_items || [];
     const texte = [detail.description || '', ...positions.map(p => [p.name || '', p.description || ''].join(' '))].join(' ');
     const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
@@ -2164,10 +2181,10 @@ router.get('/vosfactures/facture-lookup', async (req, res) => {
 
     res.json({
       configured: true, found: true,
-      numero: inv.number, date: inv.issue_date || inv.sell_date,
+      numero: inv2.number, date: inv2.issue_date || inv2.sell_date,
       num_serie: m ? m[0].trim() : null,
-      buyer_name: inv.buyer_name,
-      montant_ttc: inv.price_gross
+      buyer_name: inv2.buyer_name,
+      montant_ttc: inv2.price_gross
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2281,7 +2298,7 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
 
     if (!inv) return res.json({ configured: true, found: false });
 
-    const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
+    const { data: detail } = await vfApi.get(`/invoices/${inv2.id}.json`);
     const positions = detail.positions || detail.invoice_items || [];
 
     // Règles d'exclusion : retirer les frais génériques, mais garder les deux exceptions explicites
@@ -2349,13 +2366,13 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
 
     res.json({
       configured: true, found: true,
-      vf_id:         inv.id,
-      numero:        detail.number || inv.number,  // numéro exact tel que dans VosFactures
+      vf_id:         inv2.id,
+      numero:        detail.number || inv2.number,  // numéro exact tel que dans VosFactures
       date_commande: (detail.issue_date || detail.sell_date || '').slice(0, 10) || null,
-      distributeur:  detail.buyer_name || inv.buyer_name || null,
+      distributeur:  detail.buyer_name || inv2.buyer_name || null,
       modele, quantite, lignes,
       num_serie: mSerie ? mSerie[0].trim() : null,
-      kind: detail.kind || inv.kind,
+      kind: detail.kind || inv2.kind,
       modele_demo: modeleDemo,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
