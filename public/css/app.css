@@ -191,13 +191,13 @@ body::after {
   background: rgba(255,255,255,.60);
   backdrop-filter: var(--blur-sm); -webkit-backdrop-filter: var(--blur-sm);
   border: 0.5px solid var(--border);
-  border-radius: 16px; padding: 14px;
+  border-radius: 14px; padding: 10px 12px;
   box-shadow: var(--shadow-card);
   transition: transform .15s, box-shadow .15s;
 }
 .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(80,130,200,.18), 0 1px 0 #fff inset }
 .stat-label { font-size: 11px; color: var(--text3); margin-bottom: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em }
-.stat-value { font-size: 24px; font-weight: 700; color: var(--text) }
+.stat-value { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; white-space: nowrap }
 
 /* ─────────────────── Tableaux ─────────────────── */
 .table-wrap { overflow-x: auto }
