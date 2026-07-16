@@ -1846,7 +1846,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     const devis = await db.get('SELECT * FROM devis WHERE id=$1', [req.params.id]);
     if (!devis) return res.status(404).json({ error: 'Devis introuvable' });
     const email = req.body.email || devis.client_email;
-    if (!email) return res.json({ ok: false, reason: 'Pas d'email pour ce distributeur' });
+    if (!email) return res.json({ ok: false, reason: 'Pas d\'email pour ce distributeur' });
     const lignes = JSON.parse(devis.lignes || '[]');
     const jours = Math.round((Date.now() - new Date(devis.date_devis).getTime()) / 86400000);
     const nodemailer = require('nodemailer');
@@ -1894,7 +1894,6 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
 });
 
 // ── Fin Devis ──────────────────────────────────────────────────────
-────
 
 // ── Alertes : non expédié 7j après saisie + non facturé 7j après expédition ──
 router.get('/commandes/alertes-blocage', async (req, res) => {
