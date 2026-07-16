@@ -2194,9 +2194,9 @@ router.get('/commandes/:id/factures-vf-suggestions', async (req, res) => {
 
     const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
     const factures = (Array.isArray(data) ? data : []).slice(0, 10).map(inv => ({
-      id: inv2.id, numero: inv2.number, date: inv2.issue_date || inv2.sell_date,
-      montant_ttc: inv2.price_gross,
-      url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv2.id}`
+      id: inv.id, numero: inv.number, date: inv.issue_date || inv.sell_date,
+      montant_ttc: inv.price_gross,
+      url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${inv.id}`
     }));
 
     // Tente d'extraire un n° de série pour chaque facture candidate (détail)
@@ -2236,7 +2236,7 @@ router.get('/vosfactures/facture-lookup', async (req, res) => {
     const inv = Array.isArray(data) ? data.find(d => String(d.number).trim() === numero) || data[0] : null;
     if (!inv) return res.json({ configured: true, found: false });
 
-    const { data: detail } = await vfApi.get(`/invoices/${inv2.id}.json`);
+    const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
     const positions = detail.positions || detail.invoice_items || [];
     const texte = [detail.description || '', ...positions.map(p => [p.name || '', p.description || ''].join(' '))].join(' ');
     const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
@@ -2244,10 +2244,10 @@ router.get('/vosfactures/facture-lookup', async (req, res) => {
 
     res.json({
       configured: true, found: true,
-      numero: inv2.number, date: inv2.issue_date || inv2.sell_date,
+      numero: inv.number, date: inv.issue_date || inv.sell_date,
       num_serie: m ? m[0].trim() : null,
-      buyer_name: inv2.buyer_name,
-      montant_ttc: inv2.price_gross
+      buyer_name: inv.buyer_name,
+      montant_ttc: inv.price_gross
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -2361,7 +2361,7 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
 
     if (!inv) return res.json({ configured: true, found: false });
 
-    const { data: detail } = await vfApi.get(`/invoices/${inv2.id}.json`);
+    const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
     const positions = detail.positions || detail.invoice_items || [];
 
     // Règles d'exclusion : retirer les frais génériques, mais garder les deux exceptions explicites
@@ -2429,13 +2429,13 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
 
     res.json({
       configured: true, found: true,
-      vf_id:         inv2.id,
-      numero:        detail.number || inv2.number,  // numéro exact tel que dans VosFactures
+      vf_id:         inv.id,
+      numero:        detail.number || inv.number,  // numéro exact tel que dans VosFactures
       date_commande: (detail.issue_date || detail.sell_date || '').slice(0, 10) || null,
-      distributeur:  detail.buyer_name || inv2.buyer_name || null,
+      distributeur:  detail.buyer_name || inv.buyer_name || null,
       modele, quantite, lignes,
       num_serie: mSerie ? mSerie[0].trim() : null,
-      kind: detail.kind || inv2.kind,
+      kind: detail.kind || inv.kind,
       modele_demo: modeleDemo,
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
