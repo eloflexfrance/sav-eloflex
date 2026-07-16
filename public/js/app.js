@@ -60,6 +60,7 @@ const MODULES = [
   { key:'alertes',       label:'Alertes' },
   { key:'retours_suede', label:'Retours Suède' },
   { key:'transferts',    label:'Transferts fauteuils' },
+  { key:'devis',         label:'Devis VosFactures' },
   { key:'parametres',    label:'Paramètres' },
 ];
 
