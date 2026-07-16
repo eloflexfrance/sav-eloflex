@@ -7,8 +7,11 @@ let DEVIS_FILTRE = 'ouvert'; // ouvert | converti | ignoré
 
 async function renderDevis(ttl, c, a){
   ttl.textContent = 'Devis VosFactures';
+  const sinceSync = _devisLastSync ? Math.round((Date.now()-_devisLastSync)/60000) : null;
+  const syncLabel = sinceSync === null ? 'Jamais synchronisé' : sinceSync < 60 ? `Sync il y a ${sinceSync} min` : `Sync il y a ${Math.round(sinceSync/60)}h`;
   a.innerHTML = `
-    <button class="btn" onclick="syncDevisVF()"><i class="ti ti-refresh"></i> Sync VosFactures</button>`;
+    <span style="font-size:11px;color:var(--text2)">${syncLabel}</span>
+    <button class="btn" onclick="syncDevisVF(true)"><i class="ti ti-refresh"></i> Sync VosFactures</button>`;
   
   c.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
@@ -23,6 +26,7 @@ async function renderDevis(ttl, c, a){
 
 async function chargerDevis(){
   const el = document.getElementById('devis-list'); if(!el) return;
+  syncDevisVF(false); // auto-sync si > 6h
   try{
     const list = await API.devis(DEVIS_FILTRE);
     if(!list.length){
@@ -56,13 +60,24 @@ async function chargerDevis(){
   }catch(e){ el.innerHTML=`<div style="color:var(--danger);padding:16px">${esc(e.message)}</div>`; }
 }
 
-async function syncDevisVF(){
-  toast('Synchronisation des devis en cours…','ti-loader-2');
+let _devisLastSync = parseInt(localStorage.getItem('sav_devis_last_sync')||'0');
+
+async function syncDevisVF(manuel=false){
+  if(!manuel){
+    // Auto-sync : uniquement si la dernière sync date de plus de 6h
+    const sixH = 6 * 60 * 60 * 1000;
+    if(Date.now() - _devisLastSync < sixH) return; // trop récent
+  }
+  toast('Synchronisation des devis…','ti-loader-2');
   try{
     const r = await API.devisSyncVF();
-    if(r.ok){ toast(`${r.total} devis sync — ${r.updated} convertis détectés`,'ti-check'); chargerDevis(); }
-    else toast(`Erreur : ${r.reason||r.error}`,'ti-alert-circle','var(--warning)');
-  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+    if(r.ok){
+      _devisLastSync = Date.now();
+      localStorage.setItem('sav_devis_last_sync', _devisLastSync);
+      if(manuel) toast(`${r.total} devis sync — ${r.updated} convertis détectés`,'ti-check');
+      chargerDevis();
+    } else if(manuel) toast(`Erreur : ${r.reason||r.error}`,'ti-alert-circle','var(--warning)');
+  }catch(e){ if(manuel) toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 async function changerStatutDevis(id, statut){
