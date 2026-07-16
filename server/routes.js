@@ -1910,6 +1910,46 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── DEBUG DEVIS (temporaire) ─────────────────────────────────────
+router.get('/devis/debug-vf', adminOnly, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN) return res.json({ error: 'Non configuré' });
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    // Récupérer 1 devis en liste
+    const { data: list } = await vfApi.get('/invoices.json', {
+      params: { kind: 'estimate', per_page: 1, page: 1 }
+    });
+    if (!Array.isArray(list) || !list.length) return res.json({ empty: true });
+    const first = list[0];
+    // Récupérer le détail complet du même devis
+    const { data: detail } = await vfApi.get(`/invoices/${first.id}.json`);
+    res.json({
+      list_fields: Object.keys(first),
+      list_amounts: {
+        total_price_gross: first.total_price_gross,
+        total_price_net:   first.total_price_net,
+        price_gross:       first.price_gross,
+        price_net:         first.price_net,
+        total:             first.total,
+      },
+      detail_fields: Object.keys(detail),
+      detail_amounts: {
+        total_price_gross: detail.total_price_gross,
+        total_price_net:   detail.total_price_net,
+        price_gross:       detail.price_gross,
+        price_net:         detail.price_net,
+        total:             detail.total,
+      },
+      list_sample: first,
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 // ── Fin Devis ──────────────────────────────────────────────────────
 
 // ── Alertes : non expédié 7j après saisie + non facturé 7j après expédition ──
