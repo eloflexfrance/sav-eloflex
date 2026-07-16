@@ -97,4 +97,10 @@ const API = {
   pennylaneSyncCommandes:(full)=>API.post(`/pennylane/sync-commandes${full?'?historique=1':''}`),
   pennylaneGenererFacture:(id)=>API.post(`/pennylane/generer-facture/${id}`,{}),
   pennylane_bdc_lookup:(numero)=>API.get(`/pennylane/bdc-lookup?numero=${encodeURIComponent(numero)}`),
+  // ── Devis ──
+  devis:(statut)=>API.get(`/devis${statut?'?statut='+statut:''}`),
+  devisSyncVF:()=>API.post('/devis/sync-vf',{}),
+  devisStatut:(id,statut,notes)=>API.put(`/devis/${id}/statut`,{statut,notes}),
+  devisRelances:(id)=>API.get(`/devis/${id}/relances`),
+  devisRelance:(id,email,notes)=>API.post(`/devis/${id}/relance`,{email,notes}),
 };

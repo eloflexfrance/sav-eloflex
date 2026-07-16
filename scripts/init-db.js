@@ -205,6 +205,35 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS pays TEXT DEFAULT 'France'`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_origine_nom TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_localisation_actuelle TEXT`);
+
+      // ── Devis VosFactures ──────────────────────────────────────────
+      await client.query(`CREATE TABLE IF NOT EXISTS devis (
+        id SERIAL PRIMARY KEY,
+        vf_id BIGINT UNIQUE,
+        numero TEXT,
+        distributeur_nom TEXT,
+        client_email TEXT,
+        date_devis TEXT,
+        date_expiration TEXT,
+        montant NUMERIC(12,2),
+        devise TEXT DEFAULT 'EUR',
+        statut TEXT DEFAULT 'ouvert',
+        vf_statut TEXT,
+        lignes JSONB DEFAULT '[]',
+        notes TEXT,
+        nb_relances INTEGER DEFAULT 0,
+        derniere_relance TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE TABLE IF NOT EXISTS devis_relances (
+        id SERIAL PRIMARY KEY,
+        devis_id INTEGER REFERENCES devis(id) ON DELETE CASCADE,
+        date_envoi TIMESTAMPTZ DEFAULT NOW(),
+        email_dest TEXT,
+        statut TEXT DEFAULT 'envoyé',
+        notes TEXT
+      )`);
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pays TEXT`);
       // pays NULL sur users = admin global (voit tous les pays)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS ref_suede TEXT`);

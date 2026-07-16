@@ -1750,7 +1750,151 @@ router.post('/pennylane/generer-facture/:cmdId', adminOrOp, async (req, res) => 
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Fin Pennylane ──────────────────────────────────────────────────
+// ── Fin Pennylane ──────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════
+// ── DEVIS VosFactures ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+
+router.get('/devis', async (req, res) => {
+  try {
+    const statut = req.query.statut || 'ouvert';
+    const rows = await db.all(
+      `SELECT d.*, COUNT(dr.id)::int AS nb_relances_hist
+       FROM devis d LEFT JOIN devis_relances dr ON dr.devis_id=d.id
+       WHERE d.statut=$1 GROUP BY d.id ORDER BY d.date_devis DESC`,
+      [statut]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/devis/sync-vf', adminOnly, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT)
+      return res.json({ ok: false, reason: 'VosFactures non configuré' });
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    const dateMin = new Date(); dateMin.setDate(dateMin.getDate() - 90);
+    const dateStr = dateMin.toISOString().slice(0, 10);
+    let page = 1, total = 0, created = 0, updated = 0;
+    while(true) {
+      const { data } = await vfApi.get('/invoices.json', {
+        params: { kind: 'estimate', page, per_page: 50, date_from: dateStr, order: 'issue_date.desc' }
+      });
+      if (!Array.isArray(data) || !data.length) break;
+      for (const inv of data) {
+        // Vérifier si déjà converti en BDC dans VF (statut accepted)
+        const statutVF = inv.status || inv.payment_status || '';
+        const estConverti = statutVF === 'accepted' || statutVF === 'paid';
+        // Vérifier si un client_order existe pour ce devis dans nos commandes
+        const deja = await db.get('SELECT id FROM commandes WHERE vf_commande_id=$1', [inv.id]);
+        const dejaConvertiLocal = !!deja;
+        const statutFinal = estConverti || dejaConvertiLocal ? 'converti' : 'ouvert';
+        const lignes = (inv.positions || []).map(p => ({
+          nom: p.name, qte: p.quantity, prix: p.price_net, total: p.total_price_gross
+        }));
+        await db.run(
+          `INSERT INTO devis (vf_id, numero, distributeur_nom, client_email, date_devis, date_expiration,
+             montant, devise, statut, vf_statut, lignes, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+           ON CONFLICT (vf_id) DO UPDATE SET
+             statut=CASE WHEN devis.statut='ignoré' THEN 'ignoré'
+                         WHEN $9='converti' THEN 'converti'
+                         ELSE devis.statut END,
+             vf_statut=$10, distributeur_nom=$3, client_email=$4,
+             montant=$7, lignes=$11, updated_at=NOW()`,
+          [inv.id, inv.number, inv.buyer_name, inv.buyer_email||null,
+           (inv.issue_date||'').slice(0,10), (inv.payment_to||'').slice(0,10),
+           parseFloat(inv.total_price_gross)||0, inv.currency||'EUR',
+           statutFinal, statutVF, JSON.stringify(lignes)]
+        );
+        total++; if(dejaConvertiLocal || estConverti) updated++; else created++;
+      }
+      if (data.length < 50) break;
+      page++;
+    }
+    res.json({ ok: true, total, created, updated });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/devis/:id/statut', adminOrOp, async (req, res) => {
+  try {
+    const { statut, notes } = req.body;
+    await db.run('UPDATE devis SET statut=$1, notes=COALESCE($2,notes), updated_at=NOW() WHERE id=$3',
+      [statut, notes||null, req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/devis/:id/relances', async (req, res) => {
+  try {
+    const rows = await db.all('SELECT * FROM devis_relances WHERE devis_id=$1 ORDER BY date_envoi DESC', [req.params.id]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
+  try {
+    const params = {}; const prows = await db.all('SELECT cle, valeur FROM parametres');
+    prows.forEach(p => params[p.cle] = p.valeur);
+    if (!params.email_smtp_host) return res.json({ ok: false, reason: 'SMTP non configuré' });
+    const devis = await db.get('SELECT * FROM devis WHERE id=$1', [req.params.id]);
+    if (!devis) return res.status(404).json({ error: 'Devis introuvable' });
+    const email = req.body.email || devis.client_email;
+    if (!email) return res.json({ ok: false, reason: 'Pas d'email pour ce distributeur' });
+    const lignes = JSON.parse(devis.lignes || '[]');
+    const jours = Math.round((Date.now() - new Date(devis.date_devis).getTime()) / 86400000);
+    const nodemailer = require('nodemailer');
+    const tr = nodemailer.createTransport({
+      host: params.email_smtp_host, port: parseInt(params.email_smtp_port)||587,
+      secure: false, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass }
+    });
+    await tr.sendMail({
+      from: params.email_from || params.email_smtp_user,
+      to: email,
+      cc: 'info@eloflex.fr',
+      subject: `[Éloflex] Relance devis ${devis.numero}`,
+      html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
+        <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0;font-size:18px">Éloflex France — Relance devis</h2>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
+          <p>Bonjour,</p>
+          <p>Nous revenons vers vous concernant notre devis <strong>${devis.numero}</strong> établi le <strong>${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</strong> (il y a ${jours} jours).</p>
+          <p>Ce devis n'a pas encore été converti en bon de commande. Nous souhaitons savoir si vous avez des questions ou si nous pouvons vous apporter des informations complémentaires.</p>
+          <table style="border-collapse:collapse;width:100%;font-size:13px;margin:16px 0;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">N° Devis</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${devis.numero}</strong></td></tr>
+            <tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Date</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</td></tr>
+            ${devis.date_expiration?`<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Validité</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_expiration).toLocaleDateString('fr-FR')}</td></tr>`:''}
+            <tr${devis.date_expiration?'':' style="background:#f8f9fa"'}><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Articles</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${lignes.map(l=>`${l.nom} ×${l.qte}`).join('<br>') || '—'}</td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555">Total HT</td><td style="padding:9px 14px"><strong>${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</strong></td></tr>
+          </table>
+          <p>N'hésitez pas à nous contacter pour toute question.</p>
+          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">Éloflex France — Service commercial<br>
+          <a href="mailto:info@eloflex.fr" style="color:#1a3a5c">info@eloflex.fr</a></p>
+        </div>
+      </div>`
+    });
+    // Enregistrer la relance
+    await db.run(
+      'INSERT INTO devis_relances (devis_id, email_dest, notes) VALUES ($1,$2,$3)',
+      [devis.id, email, req.body.notes||null]
+    );
+    await db.run(
+      'UPDATE devis SET nb_relances=nb_relances+1, derniere_relance=NOW(), updated_at=NOW() WHERE id=$1',
+      [devis.id]
+    );
+    res.json({ ok: true, to: email });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Fin Devis ──────────────────────────────────────────────────────
+────
 
 // ── Alertes : non expédié 7j après saisie + non facturé 7j après expédition ──
 router.get('/commandes/alertes-blocage', async (req, res) => {
@@ -2244,6 +2388,7 @@ router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => 
     await tr.sendMail({
       from: params.email_from || params.email_smtp_user, to: cmd.client_email,
       subject: `[Éloflex] Confirmation de commande ${cmd.bdc || '#' + cmd.id}`,
+      cc: 'info@eloflex.fr',
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
           <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Éloflex France — Confirmation de commande</h2>
@@ -2449,6 +2594,7 @@ router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
     await transporter.sendMail({
       from: params.email_from||params.email_smtp_user, to: cmd.client_email,
       subject: `[Éloflex] Expédition de votre commande ${cmd.bdc||'#'+cmd.id}`,
+      cc: 'info@eloflex.fr',
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
           <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Éloflex France — Votre commande est en route !</h2>
