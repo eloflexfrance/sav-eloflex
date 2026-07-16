@@ -1788,16 +1788,14 @@ router.post('/devis/sync-vf', adminOnly, async (req, res) => {
       });
       if (!Array.isArray(data) || !data.length) break;
       for (const inv of data) {
-        // Récupérer le détail si montant non disponible dans la liste
-        let invDetail = inv;
-        const montantListe = parseFloat(inv2.total_price_gross || inv2.total_price_net || inv2.price_gross || 0);
-        if (montantListe === 0 && inv2.id) {
-          try {
-            const { data: det } = await vfApi.get(`/invoices/${inv2.id}.json`);
-            if (det && det.id) invDetail = det;
-          } catch(_) {}
-        }
-        const inv2 = { ...inv, ...invDetail };
+        // Toujours récupérer le détail complet pour avoir les montants et lignes
+        let detail = inv;
+        try {
+          const { data: det } = await vfApi.get(`/invoices/${inv.id}.json`);
+          if (det && det.id) detail = det;
+        } catch(_) {}
+        // Fusionner liste + détail (le détail prime)
+        const inv2 = { ...inv, ...detail };
         // Vérifier si déjà converti en BDC dans VF (statut accepted)
         const statutVF = inv2.status || inv2.payment_status || '';
         const estConverti = statutVF === 'accepted' || statutVF === 'paid';
