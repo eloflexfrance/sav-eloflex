@@ -548,7 +548,7 @@ async function renderExpeditions(ttl,c,a){
 }
 
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
-const cmdStatutClass = s => s==='Livré'?'g':s==='Facturé'?'g':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='En attente confirmation'?'ouvert':'ouvert';
+const cmdStatutClass = s => s==='Livré'?'g':s==='Facturé'?'facture':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='En attente confirmation'?'ouvert':'ouvert';
 
 const STATUTS_CMD = ['Auto','En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
 

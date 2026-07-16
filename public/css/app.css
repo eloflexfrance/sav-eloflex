@@ -453,3 +453,10 @@ div.cards > .card {
   gap: 3px !important;
   text-align: center !important;
 }
+
+/* Badge Facturé — violet distinct de Livré (vert) */
+.badge.facture {
+  background: rgba(124,58,237,0.12);
+  color: #7c3aed;
+  border: 0.5px solid rgba(124,58,237,0.25);
+}
