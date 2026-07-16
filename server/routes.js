@@ -1796,6 +1796,20 @@ router.post('/devis/sync-vf', adminOnly, async (req, res) => {
         } catch(_) {}
         // Fusionner liste + détail (le détail prime)
         const inv2 = { ...inv, ...detail };
+        // LOG temporaire pour diagnostic montants (premier devis seulement)
+        if (total === 0) {
+          console.log('[DEVIS DEBUG] Champs disponibles:', Object.keys(inv2).join(', '));
+          console.log('[DEVIS DEBUG] Montants:', JSON.stringify({
+            total_price_gross: inv2.total_price_gross,
+            total_price_net:   inv2.total_price_net,
+            price_gross:       inv2.price_gross,
+            price_net:         inv2.price_net,
+            total:             inv2.total,
+            gross_price:       inv2.gross_price,
+            net_price:         inv2.net_price,
+            amount:            inv2.amount,
+          }));
+        }
         // Vérifier si déjà converti en BDC dans VF (statut accepted)
         const statutVF = inv2.status || inv2.payment_status || '';
         const estConverti = statutVF === 'accepted' || statutVF === 'paid';
@@ -1819,12 +1833,23 @@ router.post('/devis/sync-vf', adminOnly, async (req, res) => {
           [inv2.id, inv2.number, inv2.buyer_name, inv2.buyer_email||null,
            (inv2.issue_date||'').slice(0,10), (inv2.payment_to||'').slice(0,10),
            (() => {
-             // VosFactures peut retourner le montant sous différents noms selon la version
-             const t = parseFloat(inv2.total_price_gross || inv2.price_gross || inv2.total || 0);
-             if (t > 0) return t;
+             // Champs confirmés par debug VosFactures : price_gross (TTC), price_net (HT)
+             const vals = [inv2.price_gross, inv2.price_net, inv2.total_price_gross, inv2.total_price_net, inv2.total];
+             for (const v of vals) {
+               const n = parseFloat(v);
+               if (n > 0) return n;
+             }
              // Fallback : sommer les positions
              const pos = inv2.positions || [];
-             return pos.reduce((s, p) => s + (parseFloat(p.total_price_gross || p.price_gross || 0)), 0);
+             if (pos.length) {
+               const s = pos.reduce((acc, p) => {
+                 const pv = [p.total_price_gross, p.price_gross, p.total_price_net, p.price_net];
+                 for (const v of pv) { const n = parseFloat(v); if (n > 0) return acc + n; }
+                 return acc;
+               }, 0);
+               if (s > 0) return s;
+             }
+             return 0;
            })(), inv2.currency||'EUR',
            statutFinal, statutVF, JSON.stringify(lignes)]
         );
