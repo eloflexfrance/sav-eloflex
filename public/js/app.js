@@ -3,7 +3,7 @@
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
-const CMD_COLS_DEFAULT = { facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
+const CMD_COLS_DEFAULT = { num_annuel: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
 // Merge stored prefs with defaults — nouvelles colonnes héritent de false si absentes du stockage
 let CMD_COLS = { ...CMD_COLS_DEFAULT, ...JSON.parse(localStorage.getItem('sav_cmd_cols') || '{}') };
 let CACHE = { catalogue:[], params:{} };
@@ -273,7 +273,8 @@ async function chargerCommandesDashboard(){
         <tbody>${list.map(cm=>{
           const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
           return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
-            <td>${fd(cm.date_commande)}</td>
+            ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:11px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
+        <td>${fd(cm.date_commande)}</td>
             <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
             <td>${esc(cm.distributeur_nom)}</td>
             <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
@@ -420,7 +421,8 @@ async function chargerCommandesClient(distribNom){
       <tbody>${list.map(cm=>{
         const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
         return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
-          <td>${fd(cm.date_commande)}</td>
+          ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:11px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
+        <td>${fd(cm.date_commande)}</td>
           <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
           <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
           <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
@@ -720,6 +722,7 @@ async function renderCommandes(ttl,c,a){
     <div id="cmd-cols-panel" style="display:none;padding:10px 14px;margin-bottom:8px;background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:var(--radius);backdrop-filter:blur(12px)">
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Colonnes optionnelles</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.num_annuel?'checked':''} onchange="CMD_COLS.num_annuel=this.checked;saveCmdCols();renderCommandesTable(1)"> # N° annuel</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.facture?'checked':''} onchange="CMD_COLS.facture=this.checked;saveCmdCols();renderCommandesTable(1)"> N° Facture</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_facture?'checked':''} onchange="CMD_COLS.date_facture=this.checked;saveCmdCols();renderCommandesTable(1)"> Date facturation</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> 🔄 Origine démo</label>
@@ -774,6 +777,7 @@ async function renderCommandesTable(page=1){
   wrap.innerHTML=`${nav}
     <div class="table-wrap"><table class="t">
       <thead><tr>
+        ${CMD_COLS.num_annuel?'<th style="width:40px;text-align:center;color:var(--text3)">#</th>':''}
         <th>${t('col_date')||'Date'}</th><th style="width:75px">Groupe</th>
         ${CMD_COLS.pays&&!CURRENT_USER.pays?'<th style="width:80px">Pays</th>':''}
         <th>${t('col_client')||'Distributeur'}</th>
@@ -788,6 +792,7 @@ async function renderCommandesTable(page=1){
         <th>${t('col_statut')||'Statut'}</th><th></th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
+        ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:11px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
         <td>${fd(cm.date_commande)}</td>
         <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
         ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
