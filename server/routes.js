@@ -1494,7 +1494,7 @@ router.post('/email/notification-intervention', async (req, res) => {
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({
       host: params.email_smtp_host, port: parseInt(params.email_smtp_port)||587,
-      secure: false, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass }
+      secure: parseInt(params.email_smtp_port)===465, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass }
     });
 
     await transporter.sendMail({
@@ -1893,20 +1893,23 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     const jours = Math.round((Date.now() - new Date(devis.date_devis).getTime()) / 86400000);
     const nodemailer = require('nodemailer');
     // Vérifier que tous les paramètres SMTP sont présents
+    // Utiliser le compte relance dédié si configuré, sinon fallback sur le compte SAV
     const smtpHost = params.email_smtp_host;
     const smtpPort = parseInt(params.email_smtp_port)||587;
-    const smtpUser = params.email_smtp_user;
-    const smtpPass = params.email_smtp_pass;
-    console.log('[SMTP] host:', smtpHost, 'port:', smtpPort, 'user:', smtpUser ? smtpUser : 'VIDE');
+    const smtpUser = params.email_smtp_user_relance || params.email_smtp_user;
+    const smtpPass = params.email_smtp_pass_relance || params.email_smtp_pass;
+    const fromAddr = params.email_from_relance || params.email_from || smtpUser;
+    console.log('[SMTP RELANCE] host:', smtpHost, 'port:', smtpPort, 'user:', smtpUser||'VIDE');
     if (!smtpHost || !smtpUser || !smtpPass) {
       return res.json({ ok: false, reason: `SMTP incomplet — manquant : ${!smtpHost?'host ':''} ${!smtpUser?'utilisateur ':''} ${!smtpPass?'mot de passe':''}`.trim() });
     }
     const tr = nodemailer.createTransport({
       host: smtpHost, port: smtpPort,
-      secure: false, auth: { user: smtpUser, pass: smtpPass }
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass }
     });
     await tr.sendMail({
-      from: params.email_from || params.email_smtp_user,
+      from: fromAddr,
       to: email,
       cc: params.email_cc_relance || 'info@eloflex.fr',
       subject: `[Éloflex] Relance devis ${devis.numero}`,
@@ -2702,8 +2705,8 @@ router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => 
     const types = [cmd.type_fauteuil_neuf && '🆕 Fauteuil Neuf', cmd.type_fauteuil_demo && '🔄 Fauteuil Démo', cmd.type_pieces && '📦 Pièces détachées'].filter(Boolean).join(', ');
 
     const nodemailer = require('nodemailer');
-    const tr = nodemailer.createTransport({ host: params.email_smtp_host, port: parseInt(params.email_smtp_port) || 587,
-      secure: false, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass } });
+    const tr = nodemailer.createTransport({ host: params.email_smtp_host, port: parseInt(params.email_smtp_port)||587,
+      secure: parseInt(params.email_smtp_port)===465, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass } });
     await tr.sendMail({
       from: params.email_from || params.email_smtp_user, to: cmd.client_email,
       subject: `[Éloflex] Confirmation de commande ${cmd.bdc || '#' + cmd.id}`,
@@ -2909,7 +2912,7 @@ router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
 
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({ host:params.email_smtp_host, port:parseInt(params.email_smtp_port)||587,
-      secure:false, auth:{user:params.email_smtp_user, pass:params.email_smtp_pass} });
+      secure:parseInt(params.email_smtp_port)===465, auth:{user:params.email_smtp_user, pass:params.email_smtp_pass} });
     await transporter.sendMail({
       from: params.email_from||params.email_smtp_user, to: cmd.client_email,
       subject: `[Éloflex] Expédition de votre commande ${cmd.bdc||'#'+cmd.id}`,
