@@ -1913,7 +1913,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
             <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">N° Devis</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${devis.numero}</strong></td></tr>
             <tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Date</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</td></tr>
             ${devis.date_expiration?`<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Validité</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_expiration).toLocaleDateString('fr-FR')}</td></tr>`:''}
-            <tr${devis.date_expiration?'':' style="background:#f8f9fa"'}><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Articles</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${lignes.map(l=>`${l.nom} ×${l.qte}`).join('<br>') || '—'}</td></tr>
+            <tr${devis.date_expiration?'':' style="background:#f8f9fa"'}><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Articles</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${(Array.isArray(lignes)?lignes:[]).map(l=>`${l.nom||''} ×${l.qte||1}`).join('<br>') || '—'}</td></tr>
             <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555">Total HT</td><td style="padding:9px 14px"><strong>${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</strong></td></tr>
           </table>
           <p>N'hésitez pas à nous contacter pour toute question.</p>
@@ -1922,7 +1922,8 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
         </div>
       </div>`
     });
-    // Enregistrer la relance EN BASE avant de répondre
+    console.log(`[EMAIL OK] Relance devis ${devis.numero} envoyée à ${email}`);
+    // Enregistrer EN BASE avant de répondre
     await db.run(
       'INSERT INTO devis_relances (devis_id, email_dest, notes) VALUES ($1,$2,$3)',
       [devis.id, email, req.body.notes||null]
@@ -1931,10 +1932,9 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
       'UPDATE devis SET nb_relances=nb_relances+1, derniere_relance=NOW(), updated_at=NOW() WHERE id=$1',
       [devis.id]
     );
-    // Répondre seulement après que tout soit terminé
     res.json({ ok: true, to: email });
   } catch(e) {
-    console.error('[RELANCE DEVIS]', e);
+    console.error('[EMAIL ERR] Relance devis:', e?.message || String(e));
     if (!res.headersSent) res.status(500).json({ error: e?.message || String(e) });
   }
 });

@@ -129,11 +129,11 @@ async function envoyerRelanceDevis(id){
       return;
     }
     if(r.ok){
-      toast((t('devis_relance_envoyee')||'Relance envoyée à')+' '+r.to,'ti-mail');
+      toast('✅ Relance envoyée à '+r.to,'ti-check','var(--success)');
       closeModal();
       chargerDevis();
     } else {
-      toast('Erreur : '+(r.reason||r.error||JSON.stringify(r)),'ti-alert-circle','var(--warning)');
+      toast('Erreur : '+(r.reason||r.error||JSON.stringify(r)),'ti-alert-circle','var(--danger)');
     }
   }catch(e){
     toast('Erreur réseau : '+e.message,'ti-alert-circle','var(--danger)');
