@@ -1633,6 +1633,8 @@ async function renderParametres(ttl,c,a){
         <div class="form-group"><label class="form-label">${t('param_smtp_user')}</label><input class="form-input" id="p-smtp-user" placeholder="sav@eloflex.fr" value="${esc(p.email_smtp_user||'')}"></div>
         <div class="form-group"><label class="form-label">${t('param_smtp_pass')}</label><input class="form-input" id="p-smtp-pass" type="password" placeholder="••••••••" value="${esc(p.email_smtp_pass||'')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('param_email_from')}</label><input class="form-input" id="p-email-from" placeholder="SAV Éloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
+        <div class="form-group"><label class="form-label">CC — Emails SAV (confirmations, expéditions)</label><input class="form-input" id="p-email-cc-sav" placeholder="sav@eloflex.fr" value="${esc(p.email_cc_sav||'sav@eloflex.fr')}"></div>
+        <div class="form-group"><label class="form-label">CC — Emails relances devis & BDC</label><input class="form-input" id="p-email-cc-relance" placeholder="info@eloflex.fr" value="${esc(p.email_cc_relance||'info@eloflex.fr')}"></div>
       </div>
     </div>
     <div class="param-section">
@@ -2445,7 +2447,7 @@ async function regenererToken(id){if(!confirm('Régénérer invalide l\'ancien l
 
 // ── MODALES FAUTEUILS ─────────────────────────────────────────────
 
-function fauteuilForm(d={}){const mods=['Eloflex S','Eloflex M','Eloflex L','Eloflex M+','Eloflex XL'];return `<div class="grid-2">
+function fauteuilForm(d={}){const mods=['Modèle L','Modèle F','Modèle P','Modèle D2','Modèle X','Modèle H','Modèle C3','Modèle C','Modèle K','Modèle H2','Modèle S1'];return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Modèle *</label><select class="form-input" id="f-modele">${mods.map(m=>`<option ${d.modele===m?'selected':''}>${m}</option>`).join('')}</select></div>
   <div class="form-group"><label class="form-label">N° de série *</label><input class="form-input" id="f-serie" value="${esc(d.serie||'')}"></div>
   <div class="form-group"><label class="form-label">Année</label><input class="form-input" id="f-annee" type="number" value="${d.annee||new Date().getFullYear()}"></div>

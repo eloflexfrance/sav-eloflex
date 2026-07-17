@@ -1897,7 +1897,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     await tr.sendMail({
       from: params.email_from || params.email_smtp_user,
       to: email,
-      cc: 'info@eloflex.fr',
+      cc: params.email_cc_relance || 'info@eloflex.fr',
       subject: `[Éloflex] Relance devis ${devis.numero}`,
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
@@ -2692,7 +2692,7 @@ router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => 
     await tr.sendMail({
       from: params.email_from || params.email_smtp_user, to: cmd.client_email,
       subject: `[Éloflex] Confirmation de commande ${cmd.bdc || '#' + cmd.id}`,
-      cc: 'info@eloflex.fr',
+      cc: 'sav@eloflex.fr',
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
           <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Éloflex France — Confirmation de commande</h2>
@@ -2898,7 +2898,7 @@ router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
     await transporter.sendMail({
       from: params.email_from||params.email_smtp_user, to: cmd.client_email,
       subject: `[Éloflex] Expédition de votre commande ${cmd.bdc||'#'+cmd.id}`,
-      cc: 'info@eloflex.fr',
+      cc: 'sav@eloflex.fr',
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
           <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Éloflex France — Votre commande est en route !</h2>
