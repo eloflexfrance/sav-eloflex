@@ -1549,7 +1549,7 @@ router.get('/commandes', async (req, res) => {
                c.edi AS client_edi,
                ROW_NUMBER() OVER (
                  PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
-                 ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
+                 ORDER BY cmd.date_commande DESC NULLS LAST, cmd.id DESC
                ) AS num_annuel
                FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
     const conds = [], p = [];

@@ -2,6 +2,7 @@
 
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
+let _cmdReqId = 0; // anti-race condition pour la recherche commandes
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
 const CMD_COLS_DEFAULT = { num_annuel: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
 // Merge stored prefs with defaults — nouvelles colonnes héritent de false si absentes du stockage
@@ -695,7 +696,7 @@ async function renderCommandes(ttl,c,a){
       <div class="stat-card"><div class="stat-label">Problème</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-      <input class="form-input" style="max-width:220px;padding:6px 10px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;renderCommandesTable(1)">
+      <input class="form-input" style="max-width:220px;padding:6px 10px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;clearTimeout(window._cmdSearchTimer);window._cmdSearchTimer=setTimeout(()=>renderCommandesTable(1),300)">
       <select class="form-input" style="width:auto;padding:6px 10px" id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;CMD_FILTERS.mois='';render()">
         <option value="">${t('cmd_toutes_annees')||'Toutes années'}</option>
         ${years.map(y=>`<option value="${y}" ${CMD_FILTERS.annee==y?'selected':''}>${y}</option>`).join('')}
@@ -768,9 +769,19 @@ async function renderCommandesTable(page=1){
   // Navigation pagination
   const nav = nbPages > 1 ? `
     <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
+      <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(1)" title="Première page"><i class="ti ti-chevron-left-pipe"></i></button>
       <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(${page-1})"><i class="ti ti-chevron-left"></i></button>
-      <span style="color:var(--text2)">Page <b>${page}</b> / ${nbPages}</span>
+      <span style="color:var(--text2);display:flex;align-items:center;gap:6px">
+        Page <b>${page}</b> /
+        <input type="number" min="1" max="${nbPages}" value="${page}"
+          style="width:52px;padding:3px 6px;border:0.5px solid var(--border-dark);border-radius:6px;background:rgba(255,255,255,.7);font-size:12px;font-weight:600;text-align:center;color:var(--text)"
+          onkeydown="if(event.key==='Enter'){const p=parseInt(this.value);if(p>=1&&p<=${nbPages})renderCommandesTable(p);}"
+          onblur="const p=parseInt(this.value);if(p>=1&&p<=${nbPages})renderCommandesTable(p);"
+          onclick="this.select()">
+        <b>${nbPages}</b>
+      </span>
       <button class="btn sm" ${page>=nbPages?'disabled':''} onclick="renderCommandesTable(${page+1})"><i class="ti ti-chevron-right"></i></button>
+      <button class="btn sm" ${page>=nbPages?'disabled':''} onclick="renderCommandesTable(${nbPages})" title="Dernière page"><i class="ti ti-chevron-right-pipe"></i></button>
       <span style="color:var(--text3);font-size:12px">${total} résultat(s)</span>
     </div>` : `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">${total} ${t('cmd_resultats')||'résultat(s)'}</div>`;
 
@@ -2036,6 +2047,7 @@ async function renderCommandesKanban(){
   const wrap=$('cmd-table-wrap'); if(!wrap) return;
   wrap.innerHTML=`<div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> Chargement…</div>`;
   const res = await API.commandes({ annee: CMD_FILTERS.annee, mois: CMD_FILTERS.mois, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
+  if(reqId !== _cmdReqId) return; // une requête plus récente est déjà en cours
   const list = res.rows||[];
   const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème'];
   const grouped = {};
