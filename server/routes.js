@@ -1975,6 +1975,231 @@ router.get('/devis/debug-vf', adminOnly, async (req, res) => {
 });
 // ── Fin Devis ──────────────────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════════════
+// ── SUIVI TRANSPORTEURS (Colissimo + Chronopost) ─────────────────
+// ══════════════════════════════════════════════════════════════════
+
+// ── Détection automatique du transporteur ────────────────────────
+function detecterTransporteur(numero) {
+  if (!numero) return null;
+  const n = numero.trim().replace(/\s+/g,'').toUpperCase();
+  // Colissimo / La Poste
+  if (/^(6[A-Z]|7[A-BD-HJ-NP-Z]|8F|4L|9L|CA|CB|CC|CY|EC|EE|EM|EN|EP|EQ|EV|EX|FA|FB|FI|FL|FX|LA|LB|LD|LO|LP|LT|LV|LX|LY|MH|MM|MT|MW|MY|PR|PW|PX|RA|RB|RE|RH|RM|RV|RW|RX|SD|SE|TH|TO|TP|TV|TW|TX|TY|UA|UB|UC|UE|UF|UG|UH|UI|UJ|UL|UM|UN|UO|UP|UQ|UR|US|UT|UU|UV|UW|UX|UY|UZ|VA|VB|VC|VD|VE|VF|VH|VI|VJ|VK|VL|VM|VN|VO|VP|VQ|VR|VS|VT|VU|VV|VW|VX|VY|VZ|XD|XF|YA|YB|YC|YD|YE|YF|YG|YH|YI|YJ|YK|YL|YM|YN|YO|YP|YQ|YR|YS|YT|YU|YV|YW|YX|YY|YZ)/i.test(n)) return 'colissimo';
+  // Chronopost (8L, XC, XX, etc.)
+  if (/^(8L|XC|XX|XD|XE|AR|AF|GR|LA|LB|LC|LD|LE|LF|LG|LH|LI|LJ|LK|LL|LM|LN|LO|LP|LQ|LR|LS|LT|LU|LV|LW|LX|LY|LZ)/i.test(n)) return 'chronopost';
+  // Colissimo simple (13 chiffres commençant par 6 ou 9)
+  if (/^[69]\d{12}$/.test(n)) return 'colissimo';
+  // Chronopost (13 caractères commençant par 8)
+  if (/^8\d{12}$/.test(n)) return 'chronopost';
+  return null;
+}
+
+// ── Mapping statuts Colissimo → notre statut ─────────────────────
+const COLISSIMO_LIVRES  = ['LIVCFM','LIVGAR','REMIEX','CFDOMA','CFBTE','LIVSIGNE','LIVDOMICILE'];
+const COLISSIMO_PROBLEMES = ['COLFCR','COLPRE','COLRFI','COLRPT','NLIVEX1','NLIVEX2','NLIVEX3'];
+
+function mapStatutColissimo(events) {
+  if (!events || !events.length) return null;
+  const last = events[0];
+  const code = (last.code || last.type || '').toUpperCase();
+  if (COLISSIMO_LIVRES.some(c => code.includes(c))) return 'Livré';
+  if (COLISSIMO_PROBLEMES.some(c => code.includes(c))) return 'Problème';
+  return 'Expédié';
+}
+
+// ── Mapping statuts Chronopost → notre statut ────────────────────
+function mapStatutChronopost(events) {
+  if (!events || !events.length) return null;
+  const last = events[0];
+  const code = (last.code || last.deliveryCode || last.type || '').toUpperCase();
+  const label = (last.label || last.eventLabel || '').toLowerCase();
+  if (code === 'D' || label.includes('livré') || label.includes('remis')) return 'Livré';
+  if (code === 'I' || label.includes('incident') || label.includes('refus') || label.includes('retour')) return 'Problème';
+  return 'Expédié';
+}
+
+// ── Appel API Colissimo ───────────────────────────────────────────
+async function fetchColissimo(numero) {
+  const key = process.env.LAPOSTE_API_KEY;
+  if (!key) return null;
+  const axios = require('axios');
+  const { data } = await axios.get(
+    `https://api.laposte.fr/suivi/v2/idships/${encodeURIComponent(numero)}?lang=fr_FR`,
+    { headers: { 'X-Okapi-Key': key, 'Accept': 'application/json' }, timeout: 8000 }
+  );
+  const events = (data.shipment?.event || []).map(e => ({
+    date:  e.date,
+    label: e.label,
+    code:  e.code,
+    lieu:  e.location || '',
+  }));
+  return { events, statut: mapStatutColissimo(events), transporteur: 'Colissimo' };
+}
+
+// ── Chronopost : lien direct + 17track en fallback ───────────────
+async function fetchChronopost(numero) {
+  // Option 1 : API 17track (agrégateur multi-transporteurs, clé gratuite optionnelle)
+  const key17 = process.env.TRACK17_API_KEY;
+  if (key17) {
+    try {
+      const axios = require('axios');
+      const { data } = await axios.post(
+        'https://api.17track.net/track/v2.2/gettrackinfo',
+        JSON.stringify([{ number: numero }]),
+        { headers: { '17token': key17, 'Content-Type': 'application/json' }, timeout: 8000 }
+      );
+      const info = data?.data?.accepted?.[0]?.track;
+      if (info) {
+        const events = (info.tracking?.providers?.[0]?.events || []).map(e => ({
+          date:  e.time_utc || e.time,
+          label: e.description || e.description_translation || '',
+          code:  e.code || '',
+          lieu:  e.location || '',
+        }));
+        const lastStatus = info.latest_status?.status;
+        const statut = lastStatus === 'Delivered' ? 'Livré' :
+                       lastStatus === 'Exception'  ? 'Problème' : 'Expédié';
+        return { events, statut, transporteur: 'Chronopost' };
+      }
+    } catch(_) {}
+  }
+  // Option 2 : lien direct vers suivi Chronopost (pas d'API requise)
+  return {
+    found: false,
+    lien: `https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=${encodeURIComponent(numero)}`,
+    transporteur: 'Chronopost',
+    message: 'Cliquer pour suivre sur chronopost.fr'
+  };
+}
+
+// ── 17track : agrégateur universel (Chronopost, Colissimo, DPD...) ─
+async function fetch17track(numeros) {
+  const key = process.env.TRACK17_API_KEY;
+  if (!key) return null;
+  const axios = require('axios');
+  const payload = Array.isArray(numeros) ? numeros.map(n => ({ number: n })) : [{ number: numeros }];
+  const { data } = await axios.post(
+    'https://api.17track.net/track/v2.2/gettrackinfo',
+    JSON.stringify(payload),
+    { headers: { '17token': key, 'Content-Type': 'application/json' }, timeout: 10000 }
+  );
+  const results = {};
+  for (const item of (data?.data?.accepted || [])) {
+    const track  = item.track || {};
+    const events = (track.tracking?.providers?.[0]?.events || []).map(e => ({
+      date:  (e.time_utc || e.time || '').slice(0, 16).replace('T', ' '),
+      label: e.description_translation || e.description || '',
+      code:  String(e.code || ''),
+      lieu:  e.location || '',
+    }));
+    const tag   = track.latest_status?.status || '';
+    const statut = tag === 'Delivered' ? 'Livré'
+                 : tag === 'Exception' || tag === 'Undelivered' ? 'Problème'
+                 : events.length ? 'Expédié' : null;
+    const carrier = track.carrier_code
+      ? (track.carrier_code.toString().includes('chronopost') ? 'Chronopost' : 
+         track.carrier_code.toString().includes('laposte') || track.carrier_code.toString().includes('colissimo') ? 'Colissimo' :
+         track.carrier_name || track.carrier_code)
+      : null;
+    results[item.number] = { found: true, events, statut, transporteur: carrier || detecterTransporteur(item.number) || '?' };
+  }
+  return results;
+}
+
+// ── Fonction centrale de suivi ────────────────────────────────────
+async function fetchTracking(numero) {
+  if (!numero || numero.length < 8) return null;
+  const transporteur = detecterTransporteur(numero);
+  try {
+    // 1. Priorité : 17track (supporte tous les transporteurs)
+    if (process.env.TRACK17_API_KEY) {
+      const results = await fetch17track(numero);
+      if (results?.[numero]) return results[numero];
+    }
+    // 2. Fallback : API La Poste directe (Colissimo)
+    if (transporteur === 'colissimo') return await fetchColissimo(numero);
+    // 3. Fallback Chronopost : lien direct
+    if (transporteur === 'chronopost') return await fetchChronopost(numero);
+  } catch(e) {
+    console.error('[TRACKING] Erreur', numero, e.message);
+  }
+  // 4. Dernier recours : lien direct transporteur
+  const liens = {
+    chronopost: `https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=${encodeURIComponent(numero)}`,
+    colissimo:  `https://www.laposte.fr/outils/suivre-vos-envois?code=${encodeURIComponent(numero)}`,
+  };
+  return {
+    found: false,
+    lien: liens[transporteur] || `https://www.17track.net/fr/track#nums=${encodeURIComponent(numero)}`,
+    transporteur: transporteur || 'Inconnu',
+    message: 'Cliquer pour suivre en ligne'
+  };
+}
+
+// ── Route : suivi en temps réel d'un numéro ──────────────────────
+router.get('/tracking/:numero', async (req, res) => {
+  try {
+    const result = await fetchTracking(req.params.numero);
+    if (!result) return res.json({ found: false, transporteur: detecterTransporteur(req.params.numero) });
+    res.json({ found: true, ...result });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Route : sync batch de toutes les commandes "Expédié" ─────────
+router.post('/tracking/sync', adminOnly, async (req, res) => {
+  try {
+    const commandes = await db.all(`
+      SELECT id, num_suivi, statut, transporteur
+      FROM commandes
+      WHERE num_suivi IS NOT NULL
+        AND LENGTH(TRIM(num_suivi)) >= 8
+        AND (statut IS NULL OR statut NOT IN ('Livré','Facturé','Annulé'))
+        AND (tracking_derniere_verif IS NULL
+             OR tracking_derniere_verif < NOW() - INTERVAL '2 hours')
+      ORDER BY date_commande DESC
+      LIMIT 100
+    `);
+
+    let updated = 0, errors = 0;
+    // Utiliser 17track en bulk (jusqu'à 40 colis par appel = économise les quotas)
+    const use17track = !!process.env.TRACK17_API_KEY;
+    const CHUNK = 40;
+    for (let i = 0; i < commandes.length; i += CHUNK) {
+      const chunk = commandes.slice(i, i + CHUNK);
+      let results17 = {};
+      if (use17track) {
+        try {
+          results17 = await fetch17track(chunk.map(c => c.num_suivi)) || {};
+        } catch(_) {}
+      }
+      for (const cmd of chunk) {
+        try {
+          const result = results17[cmd.num_suivi] || (!use17track ? await fetchTracking(cmd.num_suivi) : null);
+          if (!result || !result.found) continue;
+          const { events, statut, transporteur } = result;
+          const nouveauStatut = (statut === 'Livré' || statut === 'Problème') ? statut : null;
+          await db.run(`
+            UPDATE commandes SET
+              tracking_statut=$1,
+              tracking_events=$2,
+              tracking_derniere_verif=NOW(),
+              tracking_transporter=$3
+              ${nouveauStatut ? `,statut='${nouveauStatut}'` : ''}
+              ${nouveauStatut === 'Livré' && !cmd.date_livraison ? `,date_livraison=CURRENT_DATE::text` : ''}
+            WHERE id=$4
+          `, [statut, JSON.stringify((events||[]).slice(0,10)), transporteur, cmd.id]);
+          if (nouveauStatut) updated++;
+        } catch(e) { errors++; }
+      }
+      if (i + CHUNK < commandes.length) await new Promise(r => setTimeout(r, 500));
+    }
+    res.json({ ok: true, checked: commandes.length, updated, errors });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Fin Tracking ──────────────────────────────────────────────────
+
+
 // ── Alertes : non expédié 7j après saisie + non facturé 7j après expédition ──
 router.get('/commandes/alertes-blocage', async (req, res) => {
   try {

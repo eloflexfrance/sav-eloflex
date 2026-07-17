@@ -1321,6 +1321,38 @@ function saveCmdCols(){
   localStorage.setItem('sav_cmd_cols', JSON.stringify(CMD_COLS));
 }
 
+async function voirSuiviTracking(numero){
+  const el = document.getElementById('tracking-widget');
+  if(el) el.innerHTML = '<span style="font-size:11px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement du suivi…</span>';
+  try{
+    const r = await API.tracking(numero);
+    if(!el) return;
+    if(!r.found){
+      const lien = r.lien ? `<a href="${r.lien}" target="_blank" rel="noopener" class="btn sm" style="margin-top:4px">
+        <i class="ti ti-external-link"></i> Suivre sur ${esc(r.transporteur||'le site')}
+      </a>` : '';
+      el.innerHTML = `<div style="font-size:11px;color:var(--text3)">${r.message||'Suivi non disponible'} ${lien}</div>`;
+      return;
+    }
+    const events = r.events||[];
+    el.innerHTML = `<div style="background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:4px">
+      <div style="font-size:11px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        <span class="badge ${r.statut==='Livré'?'g':r.statut==='Problème'?'urgent':'attente'}">${r.statut||'En cours'}</span>
+        <span style="color:var(--text2)">${esc(r.transporteur||'')}</span>
+      </div>
+      <div style="font-size:11px;max-height:160px;overflow-y:auto">
+        ${events.slice(0,5).map(e=>`<div style="padding:3px 0;border-bottom:0.5px solid var(--border);display:flex;gap:8px">
+          <span style="color:var(--text3);white-space:nowrap">${e.date?e.date.slice(0,10):''}</span>
+          <span>${esc(e.label||'')}</span>
+          ${e.lieu?`<span style="color:var(--text3)">${esc(e.lieu)}</span>`:''}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }catch(e){
+    if(el) el.innerHTML = `<span style="font-size:11px;color:var(--danger)">${esc(e.message)}</span>`;
+  }
+}
+
 function majBdcConfirme(){
   const neuf  = !!document.getElementById('cmd-type-fauteuil-neuf')?.checked;
   const demo  = !!document.getElementById('cmd-type-fauteuil-demo')?.checked;

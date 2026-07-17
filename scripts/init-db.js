@@ -205,6 +205,10 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS pays TEXT DEFAULT 'France'`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_origine_nom TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_localisation_actuelle TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS tracking_statut TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS tracking_events JSONB DEFAULT '[]'`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS tracking_derniere_verif TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS tracking_transporter TEXT`);
 
       // ── Devis VosFactures ──────────────────────────────────────────
       await client.query(`CREATE TABLE IF NOT EXISTS devis (

@@ -103,4 +103,7 @@ const API = {
   devisStatut:(id,statut,notes)=>API.put(`/devis/${id}/statut`,{statut,notes}),
   devisRelances:(id)=>API.get(`/devis/${id}/relances`),
   devisRelance:(id,email,notes)=>API.post(`/devis/${id}/relance`,{email,notes}),
+  // ── Tracking ──
+  tracking:(numero)=>API.get(`/tracking/${encodeURIComponent(numero)}`),
+  trackingSync:()=>API.post('/tracking/sync',{}),
 };
