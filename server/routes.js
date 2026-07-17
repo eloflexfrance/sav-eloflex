@@ -1939,24 +1939,62 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
           <h2 style="color:#fff;margin:0;font-size:18px">Éloflex France — Relance devis</h2>
         </div>
         <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
-          <p>Bonjour,</p>
-          <p>Nous revenons vers vous concernant notre devis <strong>${devis.numero}</strong> établi le <strong>${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</strong> (il y a ${jours} jours).</p>
-          <p>Ce devis n'a pas encore été converti en bon de commande.</p>
+          <p style="font-size:14px;color:#222;">Bonjour,</p>
+          <p style="font-size:14px;color:#222;">Nous revenons vers vous concernant notre devis <strong>${devis.numero}</strong> établi le <strong>${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</strong> (il y a ${jours} jours).</p>
+          <p style="font-size:14px;color:#222;">Ce devis n'a pas été validé ou signé.</p>
+          <p style="font-size:14px;color:#222;">L'avez-vous bien reçu, est-il toujours d'actualité ?</p>
           <table style="border-collapse:collapse;width:100%;font-size:13px;margin:16px 0;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
             <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">N° Devis</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${devis.numero}</strong></td></tr>
             <tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Date</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</td></tr>
             ${devis.date_expiration?`<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Validité</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_expiration).toLocaleDateString('fr-FR')}</td></tr>`:''}
             <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Articles</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${(Array.isArray(lignes)?lignes:[]).map(l=>`${l.nom||''} ×${l.qte||1}`).join('<br>') || '—'}</td></tr>
-            <tr><td style="padding:9px 14px;font-weight:600;color:#555">Total HT</td><td style="padding:9px 14px"><strong>${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</strong></td></tr>
+            <tr><td style="padding:9px 14px;font-weight:600;color:#555">Montant HT</td><td style="padding:9px 14px"><strong>${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</strong></td></tr>
           </table>
-          <div style="text-align:center;margin:24px 0">
-            <a href="${vfUrl}" style="background:#1a3a5c;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;display:inline-block">📄 Voir le devis en ligne</a>
+          <p style="font-size:14px;color:#222;">Vous trouverez ci-joint le devis. Vous pouvez également le consulter et le <strong>signer directement en ligne</strong> en cliquant sur le bouton ci-dessous :</p>
+          <div style="text-align:center;margin:20px 0">
+            <a href="${vfUrl}" style="background:#1F3A5F;color:#fff;padding:13px 30px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:bold;display:inline-block;letter-spacing:0.3px">📄 Signer le document</a>
           </div>
-          <p>N'hésitez pas à nous contacter pour toute question.</p>
-          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">
-            Éloflex France — Service commercial<br>
-            <a href="mailto:info@eloflex.fr" style="color:#1a3a5c">info@eloflex.fr</a>
-          </p>
+          <p style="font-size:14px;color:#222;">N'hésitez pas à nous contacter pour toute question au <strong>09 67 66 51 29</strong> ou par mail à <a href="mailto:info@eloflex.fr" style="color:#2B7DC7;">info@eloflex.fr</a></p>
+          
+      <!-- SIGNATURE -->
+      <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;margin-top:24px;border-top:1px solid #e5e7eb;padding-top:16px;">
+        <tr>
+          <td style="padding-bottom:16px;">
+            <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;">
+              <tr>
+                <td valign="middle" style="padding-right:20px;border-right:2px solid #E1E6EB;">
+                  <img src="https://sensode.com/eloflex/wp-content/uploads/logo-signature.png" alt="Éloflex" width="185" style="display:block;border:0;">
+                </td>
+                <td valign="middle" style="padding-left:20px;font-family:Arial,Helvetica,sans-serif;color:#333;">
+                  <div style="font-size:17px;font-weight:bold;color:#1F3A5F;margin-bottom:7px;">Brice&nbsp;<span style="color:#555;font-weight:bold;">SERVICE TECHNIQUE</span></div>
+                  <div style="font-size:14px;color:#333;line-height:22px;">
+                    <a href="mailto:info@eloflex.fr" style="color:#2B7DC7;text-decoration:none;">info@eloflex.fr</a>
+                    &nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://eloflex.fr" style="color:#2B7DC7;text-decoration:none;">eloflex.fr</a>
+                  </div>
+                  <div style="font-size:14px;color:#333;line-height:22px;">Tél. : <span style="color:#2B7DC7;">09&nbsp;67&nbsp;66&nbsp;51&nbsp;29</span></div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <table cellpadding="0" cellspacing="0" border="0" role="presentation" width="580" bgcolor="#FFF4C2" style="width:580px;border-collapse:collapse;border-left:4px solid #F2C200;">
+              <tr>
+                <td style="padding:16px 22px;">
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#1F5FA6;margin-bottom:3px;">INFORMATION IMPORTANTE – NOUVEAUX CODES LPP</div>
+                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555;margin-bottom:14px;">Nos codes LPP fabricant ont été mis à jour.</div>
+                  <table width="100%" style="width:100%;border-collapse:collapse;">
+                    <tr><td valign="top" style="padding:9px 0;border-top:1px solid #EAD98A;font-size:13px;color:#222;line-height:17px;"><strong>Modèles L · F · D2 · P · R</strong><br><span style="font-size:11px;color:#777;">4545512 – VPH, achat neuf, FRE-B, modulaire à propulsion par moteur électrique – classe B</span></td><td valign="top" align="right" style="padding:9px 0 9px 18px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;text-transform:uppercase;">Nouveau LPPR</span><br><strong style="font-size:16px;color:#1F5FA6;">9570265</strong></td></tr>
+                    <tr><td valign="top" style="padding:9px 0;border-top:1px solid #EAD98A;font-size:13px;color:#222;line-height:17px;"><strong>Coussins EASE ONE · EASE WEDGE</strong><br><span style="font-size:11px;color:#777;">4947601 – VPH, adjonction, PAP forfait B adjonctions membre inférieur</span></td><td valign="top" align="right" style="padding:9px 0 9px 18px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;text-transform:uppercase;">Nouveau LPPR</span><br><strong style="font-size:16px;color:#1F5FA6;">9903695</strong></td></tr>
+                    <tr><td valign="top" style="padding:9px 0;border-top:1px solid #EAD98A;font-size:13px;color:#222;line-height:17px;"><strong>Commande tierce personne KIT A</strong><br><span style="font-size:11px;color:#777;">4965183 – VPH, adjonction, boîtier de commande personnalisé pour FRE, FREP et FREV</span></td><td valign="top" align="right" style="padding:9px 0 9px 18px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;text-transform:uppercase;">Nouveau LPPR</span><br><strong style="font-size:16px;color:#1F5FA6;">9948893</strong></td></tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
         </div>
       </div>`
     }, { headers: { 'api-key': brevoKey, 'Content-Type': 'application/json' }, timeout: 15000 });
