@@ -1892,9 +1892,18 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
                  : (typeof devis.lignes === 'string' ? JSON.parse(devis.lignes || '[]') : []);
     const jours = Math.round((Date.now() - new Date(devis.date_devis).getTime()) / 86400000);
     const nodemailer = require('nodemailer');
+    // Vérifier que tous les paramètres SMTP sont présents
+    const smtpHost = params.email_smtp_host;
+    const smtpPort = parseInt(params.email_smtp_port)||587;
+    const smtpUser = params.email_smtp_user;
+    const smtpPass = params.email_smtp_pass;
+    console.log('[SMTP] host:', smtpHost, 'port:', smtpPort, 'user:', smtpUser ? smtpUser : 'VIDE');
+    if (!smtpHost || !smtpUser || !smtpPass) {
+      return res.json({ ok: false, reason: `SMTP incomplet — manquant : ${!smtpHost?'host ':''} ${!smtpUser?'utilisateur ':''} ${!smtpPass?'mot de passe':''}`.trim() });
+    }
     const tr = nodemailer.createTransport({
-      host: params.email_smtp_host, port: parseInt(params.email_smtp_port)||587,
-      secure: false, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass }
+      host: smtpHost, port: smtpPort,
+      secure: false, auth: { user: smtpUser, pass: smtpPass }
     });
     await tr.sendMail({
       from: params.email_from || params.email_smtp_user,
