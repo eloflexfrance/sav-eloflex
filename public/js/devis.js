@@ -107,15 +107,38 @@ function modalRelanceDevis(id, email, nom){
 }
 
 async function envoyerRelanceDevis(id){
-  const email = document.getElementById('relance-email')?.value?.trim();
-  const notes = document.getElementById('relance-notes')?.value?.trim();
+  const emailEl = document.getElementById('relance-email');
+  const notesEl = document.getElementById('relance-notes');
+  const email = emailEl?.value?.trim();
+  const notes = notesEl?.value?.trim();
   if(!email){ toast('Email requis','ti-alert-circle','var(--warning)'); return; }
   toast('Envoi en cours…','ti-loader-2');
   try{
-    const r = await API.devisRelance(id, email, notes);
-    if(r.ok){ toast(`${t('devis_relance_envoyee')||'Relance envoyée à'} ${r.to}`,'ti-mail'); closeModal(); chargerDevis(); }
-    else toast(`Erreur : ${r.reason}`,'ti-alert-circle','var(--warning)');
-  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+    // Fetch direct pour diagnostic complet
+    const resp = await fetch('/api/devis/'+id+'/relance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, notes })
+    });
+    const rawText = await resp.text();
+    console.log('[RELANCE] status:', resp.status, 'body:', rawText);
+    let r;
+    try { r = JSON.parse(rawText); }
+    catch(_) {
+      toast('Erreur serveur ('+resp.status+'): '+rawText.slice(0,80), 'ti-alert-circle', 'var(--danger)');
+      return;
+    }
+    if(r.ok){
+      toast((t('devis_relance_envoyee')||'Relance envoyée à')+' '+r.to,'ti-mail');
+      closeModal();
+      chargerDevis();
+    } else {
+      toast('Erreur : '+(r.reason||r.error||JSON.stringify(r)),'ti-alert-circle','var(--warning)');
+    }
+  }catch(e){
+    toast('Erreur réseau : '+e.message,'ti-alert-circle','var(--danger)');
+    console.error('[RELANCE] Exception:', e);
+  }
 }
 
 async function voirRelancesDevis(id){
