@@ -2238,7 +2238,12 @@ async function saveParametres(){
     email_smtp_port:gv('p-smtp-port')||'587',
     email_smtp_user:gv('p-smtp-user')||'',
     email_smtp_pass:gv('p-smtp-pass')||'',
-    email_from:gv('p-email-from')||''
+    email_from:gv('p-email-from')||'',
+    email_cc_sav:gv('p-email-cc-sav')||'sav@eloflex.fr',
+    email_cc_relance:gv('p-email-cc-relance')||'info@eloflex.fr',
+    email_from_relance:gv('p-email-from-relance')||'',
+    email_smtp_user_relance:gv('p-smtp-user-relance')||'',
+    email_smtp_pass_relance:gv('p-smtp-pass-relance')||''
   };
   await API.saveParametres(p);
   if(p.mode_sombre==='1') document.body.classList.add('dark'); else document.body.classList.remove('dark');
