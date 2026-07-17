@@ -1641,9 +1641,9 @@ async function renderParametres(ttl,c,a){
       <h3><i class="ti ti-mail"></i> Email relances devis (compte séparé)</h3>
       <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Utilisé pour les relances devis et BDC commercial. Laissez vide pour utiliser le même compte que SAV.</div>
       <div class="grid-2">
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Expéditeur relances</label><input class="form-input" id="p-email-from-relance" placeholder="info@eloflex.fr" value="${esc(p.email_from_relance||'')}"></div>
-        <div class="form-group"><label class="form-label">Utilisateur SMTP relances</label><input class="form-input" id="p-smtp-user-relance" placeholder="info@eloflex.fr" value="${esc(p.email_smtp_user_relance||'')}"></div>
-        <div class="form-group"><label class="form-label">Mot de passe SMTP relances</label><input class="form-input" type="password" id="p-smtp-pass-relance" placeholder="••••••••" value="${esc(p.email_smtp_pass_relance||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Expéditeur relances</label><input class="form-input" id="p-email-from-relance" placeholder="info@eloflex.fr" value="${esc(p.email_from_relance||p.email_from||'')}"></div>
+        <div class="form-group"><label class="form-label">Utilisateur SMTP relances</label><input class="form-input" id="p-smtp-user-relance" placeholder="Même que SAV si vide" value="${esc(p.email_smtp_user_relance||'')}"></div>
+        <div class="form-group"><label class="form-label">Mot de passe SMTP relances</label><input class="form-input" type="password" autocomplete="new-password" id="p-smtp-pass-relance" placeholder="Même que SAV si vide" value="${esc(p.email_smtp_pass_relance||'')}"></div>
       </div>
     </div>
     <div class="param-section">

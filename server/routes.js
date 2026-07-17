@@ -773,9 +773,15 @@ router.put('/parametres', adminOnly, async (req, res) => {
     const pgClient = await db.pool.connect();
     try {
       await pgClient.query('BEGIN');
-      for (const [k, v] of Object.entries(req.body))
-        await pgClient.query('INSERT INTO parametres (cle,valeur) VALUES ($1,$2) ON CONFLICT (cle) DO UPDATE SET valeur=EXCLUDED.valeur', [k, String(v)]);
+      for (const [k, v] of Object.entries(req.body)) {
+        const val = (v === null || v === undefined) ? '' : String(v);
+        await pgClient.query('INSERT INTO parametres (cle,valeur) VALUES ($1,$2) ON CONFLICT (cle) DO UPDATE SET valeur=EXCLUDED.valeur', [k, val]);
+      }
       await pgClient.query('COMMIT');
+      // Log email relance fields for debug
+      const relUser = req.body.email_smtp_user_relance;
+      const relFrom = req.body.email_from_relance;
+      if(relUser || relFrom) console.log('[PARAMS] Relance saved - user:', relUser||'vide', 'from:', relFrom||'vide');
     } catch (e) { await pgClient.query('ROLLBACK'); throw e; }
     finally { pgClient.release(); }
     res.json({ ok: true });
