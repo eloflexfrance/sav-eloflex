@@ -1934,69 +1934,87 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
       cc: [{ email: params.email_cc_relance || 'info@eloflex.fr' }],
       subject: `[Éloflex] Relance devis ${devis.numero}`,
       ...(pdfAttachment ? { attachment: [pdfAttachment] } : {}),
-      htmlContent: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
-        <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
-          <h2 style="color:#fff;margin:0;font-size:18px">Éloflex France — Relance devis</h2>
-        </div>
-        <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
-          <p style="font-size:14px;color:#222;">Bonjour,</p>
-          <p style="font-size:14px;color:#222;">Nous revenons vers vous concernant notre devis <strong>${devis.numero}</strong> établi le <strong>${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</strong> (il y a ${jours} jours).</p>
-          <p style="font-size:14px;color:#222;">Ce devis n'a pas été validé ou signé.</p>
-          <p style="font-size:14px;color:#222;">L'avez-vous bien reçu, est-il toujours d'actualité ?</p>
-          <table style="border-collapse:collapse;width:100%;font-size:13px;margin:16px 0;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
-            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">N° Devis</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${devis.numero}</strong></td></tr>
-            <tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Date</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</td></tr>
-            ${devis.date_expiration?`<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Validité</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_expiration).toLocaleDateString('fr-FR')}</td></tr>`:''}
-            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Articles</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${(Array.isArray(lignes)?lignes:[]).map(l=>`${l.nom||''} ×${l.qte||1}`).join('<br>') || '—'}</td></tr>
-            <tr><td style="padding:9px 14px;font-weight:600;color:#555">Montant HT</td><td style="padding:9px 14px"><strong>${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</strong></td></tr>
-          </table>
-          <p style="font-size:14px;color:#222;">Vous trouverez ci-joint le devis. Vous pouvez également le consulter et le <strong>signer directement en ligne</strong> en cliquant sur le bouton ci-dessous :</p>
-          <div style="text-align:center;margin:20px 0">
-            <a href="${vfUrl}" style="background:#1F3A5F;color:#fff;padding:13px 30px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:bold;display:inline-block;letter-spacing:0.3px">📄 Signer le document</a>
-          </div>
-          <p style="font-size:14px;color:#222;">N'hésitez pas à nous contacter pour toute question au <strong>09 67 66 51 29</strong> ou par mail à <a href="mailto:info@eloflex.fr" style="color:#2B7DC7;">info@eloflex.fr</a></p>
-          
-      <!-- SIGNATURE -->
-      <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;margin-top:24px;border-top:1px solid #e5e7eb;padding-top:16px;">
-        <tr>
-          <td style="padding-bottom:16px;">
-            <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;">
-              <tr>
-                <td valign="middle" style="padding-right:20px;border-right:2px solid #E1E6EB;">
-                  <img src="https://sensode.com/eloflex/wp-content/uploads/logo-signature.png" alt="Éloflex" width="185" style="display:block;border:0;">
-                </td>
-                <td valign="middle" style="padding-left:20px;font-family:Arial,Helvetica,sans-serif;color:#333;">
-                  <div style="font-size:17px;font-weight:bold;color:#1F3A5F;margin-bottom:7px;">Brice&nbsp;<span style="color:#555;font-weight:bold;">SERVICE TECHNIQUE</span></div>
-                  <div style="font-size:14px;color:#333;line-height:22px;">
-                    <a href="mailto:info@eloflex.fr" style="color:#2B7DC7;text-decoration:none;">info@eloflex.fr</a>
-                    &nbsp;&nbsp;·&nbsp;&nbsp;<a href="https://eloflex.fr" style="color:#2B7DC7;text-decoration:none;">eloflex.fr</a>
-                  </div>
-                  <div style="font-size:14px;color:#333;line-height:22px;">Tél. : <span style="color:#2B7DC7;">09&nbsp;67&nbsp;66&nbsp;51&nbsp;29</span></div>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td>
-            <table cellpadding="0" cellspacing="0" border="0" role="presentation" width="580" bgcolor="#FFF4C2" style="width:580px;border-collapse:collapse;border-left:4px solid #F2C200;">
-              <tr>
-                <td style="padding:16px 22px;">
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:#1F5FA6;margin-bottom:3px;">INFORMATION IMPORTANTE – NOUVEAUX CODES LPP</div>
-                  <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555;margin-bottom:14px;">Nos codes LPP fabricant ont été mis à jour.</div>
-                  <table width="100%" style="width:100%;border-collapse:collapse;">
-                    <tr><td valign="top" style="padding:9px 0;border-top:1px solid #EAD98A;font-size:13px;color:#222;line-height:17px;"><strong>Modèles L · F · D2 · P · R</strong><br><span style="font-size:11px;color:#777;">4545512 – VPH, achat neuf, FRE-B, modulaire à propulsion par moteur électrique – classe B</span></td><td valign="top" align="right" style="padding:9px 0 9px 18px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;text-transform:uppercase;">Nouveau LPPR</span><br><strong style="font-size:16px;color:#1F5FA6;">9570265</strong></td></tr>
-                    <tr><td valign="top" style="padding:9px 0;border-top:1px solid #EAD98A;font-size:13px;color:#222;line-height:17px;"><strong>Coussins EASE ONE · EASE WEDGE</strong><br><span style="font-size:11px;color:#777;">4947601 – VPH, adjonction, PAP forfait B adjonctions membre inférieur</span></td><td valign="top" align="right" style="padding:9px 0 9px 18px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;text-transform:uppercase;">Nouveau LPPR</span><br><strong style="font-size:16px;color:#1F5FA6;">9903695</strong></td></tr>
-                    <tr><td valign="top" style="padding:9px 0;border-top:1px solid #EAD98A;font-size:13px;color:#222;line-height:17px;"><strong>Commande tierce personne KIT A</strong><br><span style="font-size:11px;color:#777;">4965183 – VPH, adjonction, boîtier de commande personnalisé pour FRE, FREP et FREV</span></td><td valign="top" align="right" style="padding:9px 0 9px 18px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;text-transform:uppercase;">Nouveau LPPR</span><br><strong style="font-size:16px;color:#1F5FA6;">9948893</strong></td></tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-        </div>
-      </div>`
+      htmlContent: `<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#EEF2F7;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EEF2F7;padding:32px 0;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.10);">
+
+  <!-- HEADER -->
+  <tr><td style="background:#1F3A5F;padding:28px 36px;">
+    <img src="https://sensode.com/eloflex/wp-content/uploads/logo-signature.png" alt="Eloflex" width="160" style="display:block;border:0;margin-bottom:16px;">
+    <div style="color:#ffffff;font-size:22px;font-weight:bold;">Relance devis</div>
+    <div style="color:#A8C4E0;font-size:13px;margin-top:4px;">Devis n° ${devis.numero} — ${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</div>
+  </td></tr>
+
+  <!-- BODY -->
+  <tr><td style="background:#ffffff;padding:32px 36px;">
+    <p style="margin:0 0 14px;font-size:15px;color:#222222;">Bonjour,</p>
+    <p style="margin:0 0 14px;font-size:15px;color:#222222;line-height:1.6;">Nous revenons vers vous concernant notre devis <strong style="color:#1F3A5F;">${devis.numero}</strong> établi le <strong>${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</strong> (il y a ${jours} jour${jours>1?'s':''}).</p>
+    <p style="margin:0 0 8px;font-size:15px;color:#222222;">Ce devis n'a pas été validé ou signé.</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#222222;">L'avez-vous bien reçu, est-il toujours d'actualité ?</p>
+
+    <!-- TABLEAU -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-bottom:24px;border-radius:6px;overflow:hidden;">
+      <tr style="background:#1F3A5F;"><td colspan="2" style="padding:10px 16px;font-size:11px;font-weight:bold;color:#fff;text-transform:uppercase;letter-spacing:0.5px;">Récapitulatif du devis</td></tr>
+      <tr style="background:#F5F8FC;"><td style="padding:10px 16px;font-size:13px;font-weight:bold;color:#555;border-bottom:1px solid #E3EAF3;width:150px;">N° Devis</td><td style="padding:10px 16px;font-size:13px;color:#1F3A5F;font-weight:bold;border-bottom:1px solid #E3EAF3;">${devis.numero}</td></tr>
+      <tr><td style="padding:10px 16px;font-size:13px;font-weight:bold;color:#555;border-bottom:1px solid #E3EAF3;">Date</td><td style="padding:10px 16px;font-size:13px;color:#333;border-bottom:1px solid #E3EAF3;">${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</td></tr>
+      ${devis.date_expiration?`<tr style="background:#F5F8FC;"><td style="padding:10px 16px;font-size:13px;font-weight:bold;color:#555;border-bottom:1px solid #E3EAF3;">Validité</td><td style="padding:10px 16px;font-size:13px;color:#333;border-bottom:1px solid #E3EAF3;">${new Date(devis.date_expiration).toLocaleDateString('fr-FR')}</td></tr>`:''}
+      <tr style="background:#F5F8FC;"><td style="padding:10px 16px;font-size:13px;font-weight:bold;color:#555;border-bottom:1px solid #E3EAF3;">Articles</td><td style="padding:10px 16px;font-size:13px;color:#333;border-bottom:1px solid #E3EAF3;line-height:1.7;">${(Array.isArray(lignes)?lignes:[]).map(l=>`${l.nom||''} <strong style="color:#2B7DC7;">x${l.qte||1}</strong>`).join('<br>') || '—'}</td></tr>
+      <tr style="background:#1F3A5F;"><td style="padding:12px 16px;font-size:13px;font-weight:bold;color:#A8C4E0;">Montant HT</td><td style="padding:12px 16px;font-size:17px;font-weight:bold;color:#ffffff;">${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</td></tr>
+    </table>
+
+    <p style="margin:0 0 20px;font-size:14px;color:#333;line-height:1.6;">Vous trouverez ci-joint le devis. Vous pouvez également le consulter et le <strong>signer directement en ligne</strong> :</p>
+
+    <!-- BOUTON -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
+      <tr><td align="center">
+        <a href="${vfUrl}" style="display:inline-block;background:#2B7DC7;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:6px;font-size:15px;font-weight:bold;">✍️ Signer le document</a>
+      </td></tr>
+    </table>
+
+    <p style="margin:0 0 28px;font-size:14px;color:#555;line-height:1.6;">N'hésitez pas à nous contacter pour toute question au <strong style="color:#1F3A5F;">09 67 66 51 29</strong> ou par mail à <a href="mailto:info@eloflex.fr" style="color:#2B7DC7;text-decoration:none;">info@eloflex.fr</a></p>
+
+    <!-- SEPARATEUR -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;"><tr><td style="border-top:2px solid #E3EAF3;font-size:0;">&nbsp;</td></tr></table>
+
+    <!-- SIGNATURE -->
+    <table cellpadding="0" cellspacing="0" border="0" width="100%">
+      <tr>
+        <td valign="middle" width="160" style="padding-right:20px;border-right:2px solid #E3EAF3;">
+          <img src="https://sensode.com/eloflex/wp-content/uploads/logo-signature.png" alt="Eloflex" width="145" style="display:block;border:0;">
+        </td>
+        <td valign="middle" style="padding-left:20px;">
+          <div style="font-size:18px;font-weight:bold;color:#1F3A5F;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.3px;">ÉLOFLEX FRANCE</div>
+          <div style="font-size:13px;color:#444444;line-height:22px;"><a href="mailto:info@eloflex.fr" style="color:#2B7DC7;text-decoration:none;">info@eloflex.fr</a> &nbsp;·&nbsp; <a href="https://eloflex.fr" style="color:#2B7DC7;text-decoration:none;">eloflex.fr</a></div>
+          <div style="font-size:13px;color:#444444;">Tél. : <strong style="color:#2B7DC7;">09 67 66 51 29</strong> <span style="color:#888;font-size:12px;">(service commercial)</span></div>
+          <div style="font-size:13px;color:#444444;">Mob. : <strong style="color:#2B7DC7;">07 64 37 47 40</strong> <span style="color:#888;font-size:12px;">(service technique)</span></div>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+
+  <!-- BLOC LPP -->
+  <tr><td style="background:#FFF8DC;border-top:4px solid #F2C200;padding:18px 36px;">
+    <div style="font-size:13px;font-weight:bold;color:#1F5FA6;margin-bottom:3px;">INFORMATION IMPORTANTE – NOUVEAUX CODES LPP</div>
+    <div style="font-size:12px;color:#666666;margin-bottom:12px;">Nos codes LPP fabricant ont été mis à jour.</div>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr><td style="padding:7px 0;border-top:1px solid #EAD98A;font-size:12px;color:#222;line-height:16px;"><strong>Modèles L · F · D2 · P · R</strong><br><span style="font-size:11px;color:#777;">4545512 – VPH, achat neuf, FRE-B, classe B</span></td><td align="right" style="padding:7px 0 7px 10px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;display:block;">Nouveau LPPR</span><strong style="font-size:15px;color:#1F5FA6;">9570265</strong></td></tr>
+      <tr><td style="padding:7px 0;border-top:1px solid #EAD98A;font-size:12px;color:#222;line-height:16px;"><strong>Coussins EASE ONE · EASE WEDGE</strong><br><span style="font-size:11px;color:#777;">4947601 – VPH, adjonction, PAP forfait B</span></td><td align="right" style="padding:7px 0 7px 10px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;display:block;">Nouveau LPPR</span><strong style="font-size:15px;color:#1F5FA6;">9903695</strong></td></tr>
+      <tr><td style="padding:7px 0;border-top:1px solid #EAD98A;font-size:12px;color:#222;line-height:16px;"><strong>Commande tierce personne KIT A</strong><br><span style="font-size:11px;color:#777;">4965183 – VPH, adjonction, boîtier personnalisé</span></td><td align="right" style="padding:7px 0 7px 10px;border-top:1px solid #EAD98A;white-space:nowrap;"><span style="font-size:10px;color:#777;display:block;">Nouveau LPPR</span><strong style="font-size:15px;color:#1F5FA6;">9948893</strong></td></tr>
+    </table>
+  </td></tr>
+
+  <!-- FOOTER -->
+  <tr><td style="background:#1F3A5F;padding:14px 36px;text-align:center;">
+    <div style="font-size:12px;color:#A8C4E0;">© Éloflex France &nbsp;·&nbsp; <a href="https://eloflex.fr" style="color:#A8C4E0;text-decoration:none;">eloflex.fr</a> &nbsp;·&nbsp; 09 67 66 51 29</div>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body></html>`
     }, { headers: { 'api-key': brevoKey, 'Content-Type': 'application/json' }, timeout: 15000 });
         console.log(`[EMAIL OK] Relance devis ${devis.numero} envoyée à ${email}`);
     // Enregistrer EN BASE avant de répondre
