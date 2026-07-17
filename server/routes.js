@@ -1887,7 +1887,9 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     if (!devis) return res.status(404).json({ error: 'Devis introuvable' });
     const email = req.body.email || devis.client_email;
     if (!email) return res.json({ ok: false, reason: 'Pas d\'email pour ce distributeur' });
-    const lignes = JSON.parse(devis.lignes || '[]');
+    // lignes est JSONB → déjà un objet JS, pas besoin de JSON.parse
+    const lignes = Array.isArray(devis.lignes) ? devis.lignes
+                 : (typeof devis.lignes === 'string' ? JSON.parse(devis.lignes || '[]') : []);
     const jours = Math.round((Date.now() - new Date(devis.date_devis).getTime()) / 86400000);
     const nodemailer = require('nodemailer');
     const tr = nodemailer.createTransport({
