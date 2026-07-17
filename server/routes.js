@@ -1900,47 +1900,43 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     const nodemailer = require('nodemailer');
     // Vérifier que tous les paramètres SMTP sont présents
     // Utiliser le compte relance dédié si configuré, sinon fallback sur le compte SAV
-    const smtpHost = params.email_smtp_host;
-    const smtpPort = parseInt(params.email_smtp_port)||587;
-    const smtpUser = params.email_smtp_user_relance || params.email_smtp_user;
-    const smtpPass = params.email_smtp_pass_relance || params.email_smtp_pass;
-    const fromAddr = params.email_from_relance || params.email_from || smtpUser;
-    console.log('[SMTP RELANCE] host:', smtpHost, 'port:', smtpPort, 'user:', smtpUser||'VIDE');
-    if (!smtpHost || !smtpUser || !smtpPass) {
-      return res.json({ ok: false, reason: `SMTP incomplet — manquant : ${!smtpHost?'host ':''} ${!smtpUser?'utilisateur ':''} ${!smtpPass?'mot de passe':''}`.trim() });
+    // API Brevo HTTP (SMTP bloqué par Render)
+    const axios = require('axios');
+    const brevoKey = process.env.BREVO_API_KEY || params.brevo_api_key;
+    const fromAddr = params.email_from_relance || params.email_from || 'info@eloflex.fr';
+    console.log('[EMAIL RELANCE] Brevo API → to:', email, 'from:', fromAddr);
+    if (!brevoKey) {
+      return res.json({ ok: false, reason: 'Clé API Brevo manquante — ajoutez BREVO_API_KEY dans Render' });
     }
-    const tr = nodemailer.createTransport({
-      host: smtpHost, port: smtpPort,
-      secure: smtpPort === 465,
-      auth: { user: smtpUser, pass: smtpPass }
-    });
-    await tr.sendMail({
-      from: fromAddr,
-      to: email,
-      cc: params.email_cc_relance || 'info@eloflex.fr',
+    await axios.post('https://api.brevo.com/v3/smtp/email', {
+      sender: { name: 'Éloflex France', email: fromAddr },
+      to: [{ email }],
+      cc: [{ email: params.email_cc_relance || 'info@eloflex.fr' }],
       subject: `[Éloflex] Relance devis ${devis.numero}`,
-      html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
+      htmlContent: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
           <h2 style="color:#fff;margin:0;font-size:18px">Éloflex France — Relance devis</h2>
         </div>
         <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
           <p>Bonjour,</p>
           <p>Nous revenons vers vous concernant notre devis <strong>${devis.numero}</strong> établi le <strong>${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</strong> (il y a ${jours} jours).</p>
-          <p>Ce devis n'a pas encore été converti en bon de commande. Nous souhaitons savoir si vous avez des questions ou si nous pouvons vous apporter des informations complémentaires.</p>
+          <p>Ce devis n'a pas encore été converti en bon de commande.</p>
           <table style="border-collapse:collapse;width:100%;font-size:13px;margin:16px 0;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
             <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">N° Devis</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${devis.numero}</strong></td></tr>
             <tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Date</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_devis).toLocaleDateString('fr-FR')}</td></tr>
             ${devis.date_expiration?`<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Validité</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${new Date(devis.date_expiration).toLocaleDateString('fr-FR')}</td></tr>`:''}
-            <tr${devis.date_expiration?'':' style="background:#f8f9fa"'}><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Articles</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${(Array.isArray(lignes)?lignes:[]).map(l=>`${l.nom||''} ×${l.qte||1}`).join('<br>') || '—'}</td></tr>
-            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555">Total HT</td><td style="padding:9px 14px"><strong>${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</strong></td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Articles</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${(Array.isArray(lignes)?lignes:[]).map(l=>`${l.nom||''} ×${l.qte||1}`).join('<br>') || '—'}</td></tr>
+            <tr><td style="padding:9px 14px;font-weight:600;color:#555">Total HT</td><td style="padding:9px 14px"><strong>${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</strong></td></tr>
           </table>
           <p>N'hésitez pas à nous contacter pour toute question.</p>
-          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">Éloflex France — Service commercial<br>
-          <a href="mailto:info@eloflex.fr" style="color:#1a3a5c">info@eloflex.fr</a></p>
+          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">
+            Éloflex France — Service commercial<br>
+            <a href="mailto:info@eloflex.fr" style="color:#1a3a5c">info@eloflex.fr</a>
+          </p>
         </div>
       </div>`
-    });
-    console.log(`[EMAIL OK] Relance devis ${devis.numero} envoyée à ${email}`);
+    }, { headers: { 'api-key': brevoKey, 'Content-Type': 'application/json' }, timeout: 15000 });
+        console.log(`[EMAIL OK] Relance devis ${devis.numero} envoyée à ${email}`);
     // Enregistrer EN BASE avant de répondre
     await db.run(
       'INSERT INTO devis_relances (devis_id, email_dest, notes) VALUES ($1,$2,$3)',
