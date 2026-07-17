@@ -1989,7 +1989,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
           <div style="font-size:18px;font-weight:bold;color:#1F3A5F;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.3px;">ÉLOFLEX FRANCE</div>
           <div style="font-size:13px;color:#444444;line-height:22px;"><a href="mailto:info@eloflex.fr" style="color:#2B7DC7;text-decoration:none;">info@eloflex.fr</a> &nbsp;·&nbsp; <a href="https://eloflex.fr" style="color:#2B7DC7;text-decoration:none;">eloflex.fr</a></div>
           <div style="font-size:13px;color:#444444;">Tél. : <strong style="color:#2B7DC7;">09 67 66 51 29</strong> <span style="color:#888;font-size:12px;">(service commercial)</span></div>
-          <div style="font-size:13px;color:#444444;">Mob. : <strong style="color:#2B7DC7;">07 64 37 47 40</strong> <span style="color:#888;font-size:12px;">(service technique)</span></div>
+          <div style="font-size:13px;color:#444444;">Mob. : <strong style="color:#2B7DC7;">07 54 37 47 40</strong> <span style="color:#888;font-size:12px;">(service technique)</span></div>
         </td>
       </tr>
     </table>
