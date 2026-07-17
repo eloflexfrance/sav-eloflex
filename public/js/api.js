@@ -1,8 +1,36 @@
 // public/js/api.js v2
 const API = {
   base: '/api',
-  async get(p){const r=await fetch(this.base+p);if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  async post(p,b){const r=await fetch(this.base+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
+  async get(p){
+    const r = await fetch(this.base+p);
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch(_) { throw new Error('Réponse invalide ('+r.status+'): '+text.slice(0,120)); }
+    if(!r.ok) throw new Error(data.error||data.message||r.statusText);
+    return data;
+  },
+  async post(p,b){
+    const r = await fetch(this.base+p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch(_) { throw new Error('Réponse invalide ('+r.status+'): '+text.slice(0,120)); }
+    if(!r.ok) throw new Error(data.error||data.message||r.statusText);
+    return data;
+  },
+  async put(p,b){
+    const r = await fetch(this.base+p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch(_) { throw new Error('Réponse invalide ('+r.status+'): '+text.slice(0,120)); }
+    if(!r.ok) throw new Error(data.error||data.message||r.statusText);
+    return data;
+  },
+  async delete(p){
+    const r = await fetch(this.base+p,{method:'DELETE'});
+    const text = await r.text();
+    if(!text) return {};
+    try { return JSON.parse(text); } catch(_) { return {}; }
+  },
   async put(p,b){const r=await fetch(this.base+p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
   async patch(p,b){const r=await fetch(this.base+p,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
   async del(p){const r=await fetch(this.base+p,{method:'DELETE'});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
