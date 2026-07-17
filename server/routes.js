@@ -1920,7 +1920,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
         </div>
       </div>`
     });
-    // Enregistrer la relance
+    // Enregistrer la relance EN BASE avant de répondre
     await db.run(
       'INSERT INTO devis_relances (devis_id, email_dest, notes) VALUES ($1,$2,$3)',
       [devis.id, email, req.body.notes||null]
@@ -1929,8 +1929,12 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
       'UPDATE devis SET nb_relances=nb_relances+1, derniere_relance=NOW(), updated_at=NOW() WHERE id=$1',
       [devis.id]
     );
+    // Répondre seulement après que tout soit terminé
     res.json({ ok: true, to: email });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    console.error('[RELANCE DEVIS]', e);
+    if (!res.headersSent) res.status(500).json({ error: e?.message || String(e) });
+  }
 });
 
 
