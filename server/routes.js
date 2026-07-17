@@ -1908,11 +1908,32 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     if (!brevoKey) {
       return res.json({ ok: false, reason: 'Clé API Brevo manquante — ajoutez BREVO_API_KEY dans Render' });
     }
+    // Récupérer le PDF du devis depuis VosFactures
+    let pdfAttachment = null;
+    if (process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT && devis.vf_id) {
+      try {
+        const pdfResp = await axios.get(
+          `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${devis.vf_id}.pdf`,
+          { params: { api_token: process.env.VOSFACTURES_API_TOKEN }, responseType: 'arraybuffer', timeout: 10000 }
+        );
+        pdfAttachment = {
+          name: `Devis-${devis.numero}.pdf`,
+          content: Buffer.from(pdfResp.data).toString('base64')
+        };
+        console.log('[PDF] Devis PDF récupéré:', pdfAttachment.name);
+      } catch(pdfErr) {
+        console.warn('[PDF] Impossible de récupérer le PDF:', pdfErr.message);
+      }
+    }
+
+    const vfUrl = `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${devis.vf_id}`;
+
     await axios.post('https://api.brevo.com/v3/smtp/email', {
       sender: { name: 'Éloflex France', email: fromAddr },
       to: [{ email }],
       cc: [{ email: params.email_cc_relance || 'info@eloflex.fr' }],
       subject: `[Éloflex] Relance devis ${devis.numero}`,
+      ...(pdfAttachment ? { attachment: [pdfAttachment] } : {}),
       htmlContent: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
           <h2 style="color:#fff;margin:0;font-size:18px">Éloflex France — Relance devis</h2>
@@ -1928,6 +1949,9 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
             <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Articles</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${(Array.isArray(lignes)?lignes:[]).map(l=>`${l.nom||''} ×${l.qte||1}`).join('<br>') || '—'}</td></tr>
             <tr><td style="padding:9px 14px;font-weight:600;color:#555">Total HT</td><td style="padding:9px 14px"><strong>${parseFloat(devis.montant||0).toLocaleString('fr-FR',{style:'currency',currency:devis.devise||'EUR'})}</strong></td></tr>
           </table>
+          <div style="text-align:center;margin:24px 0">
+            <a href="${vfUrl}" style="background:#1a3a5c;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;display:inline-block">📄 Voir le devis en ligne</a>
+          </div>
           <p>N'hésitez pas à nous contacter pour toute question.</p>
           <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">
             Éloflex France — Service commercial<br>
