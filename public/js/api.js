@@ -135,4 +135,5 @@ const API = {
   tracking:(numero)=>API.get(`/tracking/${encodeURIComponent(numero)}`),
   trackingSync:()=>API.post('/tracking/sync',{}),
   syncPaiementsVF:()=>API.post('/commandes/sync-paiements-vf',{}),
+  syncPaiementCommande:(id)=>API.post(`/commandes/${id}/sync-paiement`,{}),
 };
