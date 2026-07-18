@@ -1553,7 +1553,7 @@ router.get('/commandes', async (req, res) => {
                c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
                ROW_NUMBER() OVER (
                  PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
-                 ORDER BY cmd.date_commande DESC NULLS LAST, cmd.id DESC
+                 ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
                ) AS num_annuel
                FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
     const conds = [], p = [];
@@ -3059,3 +3059,55 @@ router.post('/commandes/fix-suivi', adminOnly, async (req, res) => {
 });
 
 module.exports = router;
+// ── Sync paiement commande individuelle ──────────────────────────
+router.post('/commandes/:id/sync-paiement', adminOrOp, async (req, res) => {
+  try {
+    const cmd = await db.get('SELECT id, num_facture, facture_vf_id FROM commandes WHERE id=$1', [req.params.id]);
+    if (!cmd || !cmd.num_facture) return res.json({ ok: false, reason: 'Pas de numéro de facture' });
+    if (!process.env.VOSFACTURES_API_TOKEN) return res.json({ ok: false, reason: 'VosFactures non configuré' });
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    let vfId = cmd.facture_vf_id;
+    if (!vfId) {
+      const norm = s => String(s||'').toLowerCase().replace(/[\s\-\/\.]+/g,'');
+      const n = norm(cmd.num_facture);
+      for (const kind of ['vat','receipt','proforma']) {
+        try {
+          const { data } = await vfApi.get('/invoices.json', { params: { number: cmd.num_facture, kind, per_page: 10 } });
+          if (Array.isArray(data) && data.length) {
+            const inv = data.find(d => norm(d.number) === n || norm(d.number).endsWith(n));
+            if (inv) { vfId = inv.id; break; }
+          }
+        } catch(_) {}
+      }
+      if (!vfId) {
+        try {
+          const { data } = await vfApi.get('/invoices.json', { params: { search_text: cmd.num_facture, per_page: 20 } });
+          if (Array.isArray(data)) {
+            const norm = s => String(s||'').toLowerCase().replace(/[\s\-\/\.]+/g,'');
+            const n = norm(cmd.num_facture);
+            const inv = data.find(d => norm(d.number) === n || norm(d.number).endsWith(n));
+            if (inv) vfId = inv.id;
+          }
+        } catch(_) {}
+      }
+    }
+    if (!vfId) return res.json({ ok: false, reason: 'Facture "'+cmd.num_facture+'" introuvable dans VosFactures' });
+    const { data: detail } = await vfApi.get('/invoices/'+vfId+'.json');
+    const raw = { payment_status: detail.payment_status, status: detail.status, paid_date: detail.paid_date, payment_to: detail.payment_to, paid_sum: detail.paid_sum };
+    const isPaid = detail.payment_status === 'paid' || !!detail.paid_date || detail.paid === true;
+    const today = new Date().toISOString().slice(0,10);
+    const paymentTo = (detail.payment_to||'').slice(0,10);
+    const isOverdue = paymentTo && paymentTo < today && !isPaid;
+    const statut = isPaid ? 'paye' : isOverdue ? 'impaye' : 'en_attente';
+    await db.run('UPDATE commandes SET facture_paiement_statut=$1, facture_date_echeance=$2, facture_vf_id=$3 WHERE id=$4', [statut, paymentTo||null, vfId, cmd.id]);
+    console.log('[PAIEMENT]', cmd.num_facture, 'vfId:', vfId, JSON.stringify(raw), '->', statut);
+    res.json({ ok: true, vfId, statut, raw });
+  } catch(e) { console.error('[PAIEMENT ERR]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+
