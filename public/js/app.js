@@ -257,7 +257,7 @@ async function chargerCommandesDashboard(){
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_facture_statut')||'Facturé'}</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
-        <div class="stat-card"><div class="stat-label" style="color:var(--danger)">⚠️ Impayés</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
+        <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="Voir les commandes impayées"><div class="stat-label" style="color:var(--danger)">⚠️ Impayés</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
         <div class="stat-card"><div class="stat-label">🔄 ${t('cmd_demo_count')||'Démos'}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_probleme')||'Problème'}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
       </div>
@@ -693,7 +693,7 @@ async function renderCommandes(ttl,c,a){
       <div class="stat-card"><div class="stat-label">Expédié</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
       <div class="stat-card"><div class="stat-label">Livré</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
       <div class="stat-card"><div class="stat-label">Facturé</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
-      <div class="stat-card"><div class="stat-label" style="color:var(--danger)">⚠️ Impayés</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
+      <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="Voir les commandes impayées"><div class="stat-label" style="color:var(--danger)">⚠️ Impayés</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
       <div class="stat-card"><div class="stat-label">🔄 Démos</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
       <div class="stat-card"><div class="stat-label">Problème</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
     </div>

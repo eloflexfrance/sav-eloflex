@@ -2314,6 +2314,20 @@ router.post('/tracking/sync', adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── Helper Brevo pour emails SAV ─────────────────────────────────
+async function sendBrevoMail({ from, fromName, to, cc, subject, html }) {
+  const axios = require('axios');
+  const key = process.env.BREVO_API_KEY;
+  if (!key) throw new Error('BREVO_API_KEY manquante');
+  await axios.post('https://api.brevo.com/v3/smtp/email', {
+    sender: { name: fromName||'Éloflex France', email: from||'sav@eloflex.fr' },
+    to: [{ email: to }],
+    ...(cc ? { cc: [{ email: cc }] } : {}),
+    subject, htmlContent: html
+  }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 15000 });
+}
+
 // ── Fin Tracking ──────────────────────────────────────────────────
 
 
