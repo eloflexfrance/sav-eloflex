@@ -1063,7 +1063,7 @@ async function modalCommande(id){
           <div class="form-group"><label class="form-label">${t('cmd_facture_vf_label')||'N° facture VosFactures'}</label>
             <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
           </div>
-          ${id&&cm.num_facture?'<button class="btn sm" type="button" onclick="syncPaiementCommande('+id+')" title="Vérifier paiement VF" style="padding:3px 7px"><i class="ti ti-refresh" style="font-size:13px"></i></button>':''}
+          ${id&&cm.num_facture?`<button class="btn sm" style="padding:2px 6px" title="Vérifier paiement VosFactures" onclick="syncPaiementCommande(${id})"><i class="ti ti-refresh" style="font-size:12px"></i></button>`:''}
           ${cm.facture_paiement_statut?'<span class="badge '+(cm.facture_paiement_statut==="payé"?"g":cm.facture_paiement_statut==="impayé"?"urgent":"attente")+'" style="font-size:11px">'+(cm.facture_paiement_statut==="payé"?"✅ Payé":cm.facture_paiement_statut==="impayé"?"⚠️ Impayé":"⏳ En attente")+'</span>':''}
           <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
@@ -3459,9 +3459,10 @@ applyNavTranslations();
 
 
 async function syncPaiementCommande(id){
-  toast('Vérification paiement VosFactures…','ti-loader-2');
+  toast('Vérification paiement VF…','ti-loader-2');
   try{
-    const r = await API.syncPaiementCommande(id);
+    const resp = await fetch('/api/commandes/'+id+'/sync-paiement',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const r = await resp.json();
     if(r.ok){
       const label = r.statut==='payé'?'✅ Payé':r.statut==='impayé'?'⚠️ Impayé':'⏳ En attente';
       toast('Statut paiement : '+label,'ti-check',r.statut==='payé'?'var(--success)':r.statut==='impayé'?'var(--danger)':'var(--warning)');
