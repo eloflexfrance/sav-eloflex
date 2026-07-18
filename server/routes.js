@@ -1569,6 +1569,20 @@ router.get('/commandes', async (req, res) => {
     if (groupe)      { conds.push(`cmd.groupe=$${++idx}`); p.push(groupe); }
     if (date_from)   { conds.push(`cmd.date_commande>=$${++idx}`); p.push(date_from); }
     if (date_to)     { conds.push(`cmd.date_commande<=$${++idx}`); p.push(date_to); }
+    if (statut && statut !== 'Tous') {
+      // Filtre sur statut calculé (miroir de statut_calc JS)
+      const statutExpr = `CASE
+        WHEN cmd.facture_paiement_statut IN ('paye','payé','paid') THEN 'Payé'
+        WHEN cmd.facture_paiement_statut IN ('impaye','impayé') THEN 'Impayé'
+        WHEN cmd.statut IS NOT NULL AND cmd.statut != 'Auto' THEN cmd.statut
+        WHEN cmd.num_facture IS NOT NULL AND cmd.num_facture != '' THEN 'Facturé'
+        WHEN cmd.date_livraison IS NOT NULL THEN 'Livré'
+        WHEN cmd.num_suivi IS NOT NULL AND LENGTH(TRIM(cmd.num_suivi)) >= 8 THEN 'Expédié'
+        ELSE 'En préparation'
+      END`;
+      conds.push(`(${statutExpr}) = $${++idx}`);
+      p.push(statut);
+    }
     if (q) {
       const qq = `%${q}%`;
       conds.push(`(cmd.distributeur_nom ILIKE $${++idx} OR cmd.bdc ILIKE $${idx} OR cmd.num_serie ILIKE $${idx} OR cmd.num_suivi ILIKE $${idx} OR cmd.client_final ILIKE $${idx} OR cmd.num_facture ILIKE $${idx} OR cmd.modele ILIKE $${idx} OR cmd.accessoire ILIKE $${idx})`);
