@@ -3471,5 +3471,6 @@ async function syncPaiementCommande(id){
     } else toast('Erreur : '+(r.reason||r.error||'Inconnu'),'ti-alert-circle','var(--warning)');
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
+window.syncPaiementCommande = syncPaiementCommande;
 
 })();
