@@ -2046,8 +2046,8 @@ let CMD_VIEW = 'liste'; // 'liste' | 'kanban'
 async function renderCommandesKanban(){
   const wrap=$('cmd-table-wrap'); if(!wrap) return;
   wrap.innerHTML=`<div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> Chargement…</div>`;
+  const reqId = ++_cmdReqId;
   const res = await API.commandes({ annee: CMD_FILTERS.annee, mois: CMD_FILTERS.mois, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
-  if(reqId !== _cmdReqId) return; // une requête plus récente est déjà en cours
   const list = res.rows||[];
   const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème'];
   const grouped = {};
