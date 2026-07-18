@@ -3060,7 +3060,7 @@ router.post('/commandes/fix-suivi', adminOnly, async (req, res) => {
 
 
 // ── Sync paiement via URL navigateur (pas besoin d'UI) ──────────
-router.get('/commandes/sync-paiement-facture', adminOnly, async (req, res) => {
+router.get('/paiement-vf/sync', adminOnly, async (req, res) => {
   const numFacture = req.query.num;
   const vfIdDirect = req.query.vfid;
   if (!numFacture && !vfIdDirect) return res.json({ error: 'Paramètre ?num=NUMERO ou ?vfid=ID requis' });
