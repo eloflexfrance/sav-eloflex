@@ -1534,8 +1534,9 @@ function isRealTracking(s) {
 
 function statutCommande(cmd) {
   // Paiement VF prime sur tout (même sur statut manuel Facturé)
-  if (cmd.facture_paiement_statut === 'payé') return 'Payé';
-  if (cmd.facture_paiement_statut === 'impayé') return 'Impayé';
+  const fp = cmd.facture_paiement_statut;
+  if (fp === 'paye' || fp === 'payé' || fp === 'paid') return 'Payé';
+  if (fp === 'impaye' || fp === 'impayé') return 'Impayé';
   // Statut manuel (sauf Auto)
   if (cmd.statut && cmd.statut !== 'Auto') return cmd.statut;
   // Priorité descendante : facture > livraison > expédition > préparation
