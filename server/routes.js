@@ -3058,6 +3058,67 @@ router.post('/commandes/fix-suivi', adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── Sync paiement via URL navigateur (pas besoin d'UI) ──────────
+router.get('/commandes/sync-paiement-facture', adminOnly, async (req, res) => {
+  const numFacture = req.query.num;
+  const vfIdDirect = req.query.vfid;
+  if (!numFacture && !vfIdDirect) return res.json({ error: 'Paramètre ?num=NUMERO ou ?vfid=ID requis' });
+  try {
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    let vfId = vfIdDirect ? parseInt(vfIdDirect) : null;
+    let matchedNumber = numFacture;
+    // Si pas d'ID direct, chercher par numéro
+    if (!vfId && numFacture) {
+      const norm = s => String(s||'').toLowerCase().replace(/[\s\-\/\.]+/g,'');
+      const n = norm(numFacture);
+      for (const kind of ['vat','receipt','proforma']) {
+        try {
+          const { data } = await vfApi.get('/invoices.json', { params: { number: numFacture, kind, per_page: 10 } });
+          if (Array.isArray(data) && data.length) {
+            const inv = data.find(d => norm(d.number) === n || norm(d.number).endsWith(n) || String(d.id) === numFacture);
+            if (inv) { vfId = inv.id; matchedNumber = inv.number; break; }
+          }
+        } catch(_) {}
+      }
+      // Fallback search_text
+      if (!vfId) {
+        const { data } = await vfApi.get('/invoices.json', { params: { search_text: numFacture, per_page: 20 } });
+        if (Array.isArray(data)) {
+          const norm = s => String(s||'').toLowerCase().replace(/[\s\-\/\.]+/g,'');
+          const n = norm(numFacture);
+          const inv = data.find(d => norm(d.number) === n || norm(d.number).endsWith(n));
+          if (inv) { vfId = inv.id; matchedNumber = inv.number; }
+        }
+      }
+    }
+    if (!vfId) return res.json({ ok: false, reason: `Facture "${numFacture}" introuvable`, tip: 'Essayez avec ?vfid=534309345' });
+    // Récupérer le détail
+    const { data: detail } = await vfApi.get(`/invoices/${vfId}.json`);
+    const raw = {
+      number: detail.number, payment_status: detail.payment_status,
+      status: detail.status, paid_date: detail.paid_date,
+      payment_to: detail.payment_to, paid_sum: detail.paid_sum, paid: detail.paid
+    };
+    const isPaid = detail.payment_status === 'paid' || !!detail.paid_date || detail.paid === true || detail.paid_sum >= detail.price_gross_total;
+    const today = new Date().toISOString().slice(0,10);
+    const paymentTo = (detail.payment_to||'').slice(0,10);
+    const isOverdue = paymentTo && paymentTo < today && !isPaid;
+    const statut = isPaid ? 'paye' : isOverdue ? 'impaye' : 'en_attente';
+    // Mettre à jour toutes les commandes avec ce numéro de facture
+    const updated = await db.run(
+      'UPDATE commandes SET facture_paiement_statut=$1, facture_date_echeance=$2, facture_vf_id=$3 WHERE num_facture=$4 OR num_facture=$5',
+      [statut, paymentTo||null, vfId, numFacture, matchedNumber]
+    );
+    res.json({ ok: true, vfId, matchedNumber, statut, isPaid, raw });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 // ── Sync paiement commande individuelle ──────────────────────────
 router.post('/commandes/:id/sync-paiement', adminOrOp, async (req, res) => {
