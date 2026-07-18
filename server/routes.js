@@ -1600,7 +1600,10 @@ router.get('/commandes/stats', async (req, res) => {
     // Calcul SQL du statut (miroir de la fonction JS statutCommande + isRealTracking)
     const statutExpr = `
       CASE
+        WHEN facture_paiement_statut IN ('paye','payé','paid') THEN 'Payé'
+        WHEN facture_paiement_statut IN ('impaye','impayé') THEN 'Impayé'
         WHEN statut IS NOT NULL AND statut != 'Auto' THEN statut
+        WHEN num_facture IS NOT NULL AND num_facture != '' THEN 'Facturé'
         WHEN date_livraison IS NOT NULL THEN 'Livré'
         WHEN num_suivi IS NOT NULL
           AND LENGTH(REGEXP_REPLACE(num_suivi, '\\s+', '', 'g')) >= 8
@@ -1618,6 +1621,8 @@ router.get('/commandes/stats', async (req, res) => {
         SUM(CASE WHEN (${statutExpr}) = 'En attente confirmation' THEN 1 ELSE 0 END) AS en_attente,
         SUM(CASE WHEN (${statutExpr}) = 'Expédié'                 THEN 1 ELSE 0 END) AS expedie,
         SUM(CASE WHEN (${statutExpr}) = 'Livré'          THEN 1 ELSE 0 END) AS livre,
+        SUM(CASE WHEN (${statutExpr}) = 'Payé'           THEN 1 ELSE 0 END) AS paye,
+        SUM(CASE WHEN (${statutExpr}) = 'Impayé'         THEN 1 ELSE 0 END) AS impaye,
         SUM(CASE WHEN (${statutExpr}) = 'Problème'       THEN 1 ELSE 0 END) AS probleme,
         SUM(CASE WHEN (${statutExpr}) = 'Facturé'        THEN 1 ELSE 0 END) AS facture,
         SUM(CASE WHEN modele_demo = TRUE                 THEN 1 ELSE 0 END) AS demo,
@@ -1644,7 +1649,9 @@ router.get('/commandes/stats', async (req, res) => {
       livre:          parseInt(counts.livre)          || 0,
       probleme:       parseInt(counts.probleme)       || 0,
       facture:        parseInt(counts.facture)        || 0,
-      demo:           parseInt(counts.demo)           || 0,
+      impaye:         parseInt(counts.impaye)          || 0,
+      paye:           parseInt(counts.paye)            || 0,
+      demo:           parseInt(counts.demo)            || 0,
       fauteuils_serie:parseInt(counts.fauteuils_serie)|| 0,
       par_annee: parAnnee,
       annee_filtre: annee
