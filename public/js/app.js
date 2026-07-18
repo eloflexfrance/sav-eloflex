@@ -768,7 +768,7 @@ async function renderCommandesTable(page=1){
 
   // Navigation pagination
   const nav = nbPages > 1 ? `
-    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 14px;background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:12px;backdrop-filter:blur(8px);font-size:13px">
       <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(1)" title="Première page"><i class="ti ti-chevron-left-pipe"></i></button>
       <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(${page-1})"><i class="ti ti-chevron-left"></i></button>
       <span style="color:var(--text2);display:flex;align-items:center;gap:6px">
