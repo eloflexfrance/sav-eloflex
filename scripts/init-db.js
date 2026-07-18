@@ -209,6 +209,9 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS tracking_events JSONB DEFAULT '[]'`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS tracking_derniere_verif TIMESTAMPTZ`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS tracking_transporter TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_paiement_statut TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_date_echeance TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_vf_id BIGINT`);
 
       // ── Devis VosFactures ──────────────────────────────────────────
       await client.query(`CREATE TABLE IF NOT EXISTS devis (

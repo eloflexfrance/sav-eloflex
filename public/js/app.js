@@ -4,7 +4,7 @@ let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
 let _cmdReqId = 0; // anti-race condition pour la recherche commandes
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
-const CMD_COLS_DEFAULT = { num_annuel: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
+const CMD_COLS_DEFAULT = { num_annuel: false, paiement: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
 // Merge stored prefs with defaults — nouvelles colonnes héritent de false si absentes du stockage
 let CMD_COLS = { ...CMD_COLS_DEFAULT, ...JSON.parse(localStorage.getItem('sav_cmd_cols') || '{}') };
 let CACHE = { catalogue:[], params:{} };
@@ -724,6 +724,7 @@ async function renderCommandes(ttl,c,a){
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Colonnes optionnelles</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.num_annuel?'checked':''} onchange="CMD_COLS.num_annuel=this.checked;saveCmdCols();renderCommandesTable(1)"> # N° annuel</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.paiement?'checked':''} onchange="CMD_COLS.paiement=this.checked;saveCmdCols();renderCommandesTable(1)"> 💳 Paiement VF</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.facture?'checked':''} onchange="CMD_COLS.facture=this.checked;saveCmdCols();renderCommandesTable(1)"> N° Facture</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_facture?'checked':''} onchange="CMD_COLS.date_facture=this.checked;saveCmdCols();renderCommandesTable(1)"> Date facturation</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> 🔄 Origine démo</label>
@@ -798,6 +799,7 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.date_facture?'<th>Date facturation</th>':''}
         ${CMD_COLS.demo_origine?'<th>🔄 Origine démo</th>':''}
         ${CMD_COLS.edi?'<th>💳 EDI</th>':''}
+        ${CMD_COLS.paiement?'<th>Paiement</th>':''}
         ${CMD_COLS.retour?'<th>↩ Retour</th>':''}
         ${CMD_COLS.date_retour?'<th>Date retour</th>':''}
         <th>${t('col_statut')||'Statut'}</th><th></th>
@@ -824,6 +826,13 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.date_facture?`<td style="font-size:11px;color:var(--text2)">${cm.date_livraison&&cm.num_facture?fd(cm.date_livraison):'—'}</td>`:''}
         ${CMD_COLS.demo_origine?`<td style="font-size:11px">${cm.demo_origine_nom?`<span class="badge hg" title="Origine démo">🔄 ${esc(cm.demo_origine_nom)}</span>`:'—'}</td>`:''}
         ${CMD_COLS.edi?`<td>${cm.client_edi?'<span class="badge ouvert" style="font-size:10px">💳 EDI</span>':'—'}</td>`:''}
+        ${CMD_COLS.paiement?`<td>${cm.facture_paiement_statut?
+  `<span class="badge ${cm.facture_paiement_statut==='payé'?'g':cm.facture_paiement_statut==='impayé'?'urgent':cm.facture_paiement_statut==='partiel'?'hg':'attente'}" style="font-size:10px">${
+    cm.facture_paiement_statut==='payé'?'✅ Payé':
+    cm.facture_paiement_statut==='impayé'?'⚠️ Impayé':
+    cm.facture_paiement_statut==='partiel'?'🔸 Partiel':'⏳ En attente'
+  }${cm.facture_date_echeance&&cm.facture_paiement_statut!=='payé'?` <span style="font-size:9px;opacity:.8">${fd(cm.facture_date_echeance)}</span>`:''}</span>`
+  :'—'}</td>`:''}
         ${CMD_COLS.retour?`<td class="mono" style="font-size:11px">${esc(cm.num_retour||'—')}</td>`:''}
         ${CMD_COLS.date_retour?`<td style="font-size:11px;color:var(--text2)">${cm.date_retour?fd(cm.date_retour):'—'}</td>`:''}
         <td onclick="event.stopPropagation()" style="position:relative">

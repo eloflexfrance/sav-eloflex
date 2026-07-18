@@ -1546,7 +1546,7 @@ router.get('/commandes', async (req, res) => {
   try {
     const { distributeur, client_id, statut, annee, groupe, q, date_from, date_to, page = 1, per_page = 100 } = req.query;
     let sql = `SELECT cmd.*, c.nom AS client_nom, c.ville AS client_ville,
-               c.edi AS client_edi,
+               c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
                ROW_NUMBER() OVER (
                  PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
                  ORDER BY cmd.date_commande DESC NULLS LAST, cmd.id DESC
