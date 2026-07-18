@@ -1533,10 +1533,11 @@ function isRealTracking(s) {
 }
 
 function statutCommande(cmd) {
-  if (cmd.statut && cmd.statut !== 'Auto') return cmd.statut;
-  // Statut paiement VosFactures (priorité sur Facturé)
+  // Paiement VF prime sur tout (même sur statut manuel Facturé)
   if (cmd.facture_paiement_statut === 'payé') return 'Payé';
   if (cmd.facture_paiement_statut === 'impayé') return 'Impayé';
+  // Statut manuel (sauf Auto)
+  if (cmd.statut && cmd.statut !== 'Auto') return cmd.statut;
   // Priorité descendante : facture > livraison > expédition > préparation
   if (cmd.num_facture) return 'Facturé';
   if (cmd.date_livraison) return 'Livré';

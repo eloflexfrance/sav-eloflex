@@ -1431,7 +1431,7 @@ function majReliquatSection(){
   if(wrap) wrap.style.background = checked ? 'var(--warning-bg)' : 'var(--surface)';
 }
 
-const STATUTS_LISTE = ['Auto','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
+const STATUTS_LISTE = ['Auto','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Problème','Annulé'];
 
 function toggleStatutMenu(e, id, statutActuel){
   // Fermer tout menu ouvert
