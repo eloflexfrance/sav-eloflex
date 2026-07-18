@@ -3193,7 +3193,61 @@ router.get('/paiement-vf/sync-all', adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ── Sync paiements automatique (appelée par cron 6h) ─────────────
+async function syncPaiementsAuto() {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN) return;
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    const norm = s => String(s||'').toLowerCase().replace(/[\s\-\/\.]+/g,'');
+    const commandes = await db.all(`
+      SELECT id, num_facture, facture_vf_id, facture_paiement_statut
+      FROM commandes
+      WHERE num_facture IS NOT NULL AND num_facture != ''
+        AND (facture_paiement_statut IS NULL OR facture_paiement_statut NOT IN ('paye','payé','paid'))
+      ORDER BY id DESC LIMIT 150
+    `);
+    let updated = 0;
+    for (const cmd of commandes) {
+      try {
+        let vfId = cmd.facture_vf_id;
+        if (!vfId) {
+          const n = norm(cmd.num_facture);
+          for (const kind of ['vat','receipt']) {
+            try {
+              const { data } = await vfApi.get('/invoices.json', { params: { number: cmd.num_facture, kind, per_page: 5 } });
+              if (Array.isArray(data)) {
+                const inv = data.find(d => norm(d.number) === n || norm(d.number).endsWith(n));
+                if (inv) { vfId = inv.id; break; }
+              }
+            } catch(_) {}
+          }
+        }
+        if (!vfId) continue;
+        const { data: detail } = await vfApi.get(`/invoices/${vfId}.json`);
+        const isPaid = detail.payment_status === 'paid' || !!detail.paid_date;
+        const today = new Date().toISOString().slice(0,10);
+        const paymentTo = (detail.payment_to||'').slice(0,10);
+        const isOverdue = paymentTo && paymentTo < today && !isPaid;
+        const statut = isPaid ? 'paye' : isOverdue ? 'impaye' : 'en_attente';
+        await db.run('UPDATE commandes SET facture_paiement_statut=$1, facture_date_echeance=$2, facture_vf_id=$3 WHERE id=$4',
+          [statut, paymentTo||null, vfId, cmd.id]);
+        if (statut !== cmd.facture_paiement_statut) updated++;
+        await new Promise(r => setTimeout(r, 200));
+      } catch(_) {}
+    }
+    console.log(`[CRON PAIEMENTS] ${commandes.length} vérifiées, ${updated} mises à jour`);
+  } catch(e) { console.error('[CRON PAIEMENTS ERR]', e.message); }
+}
+
 module.exports = router;
+module.exports.syncPaiementsAuto = syncPaiementsAuto;
+
 // ── Sync paiement commande individuelle ──────────────────────────
 router.post('/commandes/:id/sync-paiement', adminOrOp, async (req, res) => {
   try {
