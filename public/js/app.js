@@ -909,7 +909,7 @@ async function modalCommande(id){
           <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
             <select class="form-input" id="cmd-groupe">
               <option value="">— Choisir —</option>
-              ${['De base','Bastide','Providom','Distri club','Particulier'].map(g=>`<option value="${g}" ${cm.groupe===g?'selected':''}>${g}</option>`).join('')}
+              ${['De base','Bastide','Providom','Distri club','Négocié','Particulier'].map(g=>`<option value="${g}" ${cm.groupe===g?'selected':''}>${g}</option>`).join('')}
             </select>
           </div>
           <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle / Article'}</label>
