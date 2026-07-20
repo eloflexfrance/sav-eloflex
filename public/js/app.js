@@ -3479,6 +3479,16 @@ window.syncPaiementCommande = syncPaiementCommande;
 
 })();
 
+// ── Helpers globaux (hors IIFE) ───────────────────────────────────
+function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function _fd(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } }
+
+
+
+// ── Helpers globaux (accessibles hors IIFE) ──────────────────────
+function __esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function __fd(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } }
+
 // ── NOTES INTERNES ────────────────────────────────────────────────
 async function renderNotesTab(cmdId) {
   if (!cmdId) return '<div class="empty"><i class="ti ti-message-circle"></i> Enregistrez la commande pour ajouter des notes.</div>';
@@ -3492,12 +3502,12 @@ async function renderNotesTab(cmdId) {
         ${notes.length ? notes.map(n => `
           <div style="background:rgba(255,255,255,.7);border:0.5px solid var(--border);border-radius:10px;padding:12px 14px;position:relative">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <span style="background:var(--accent);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${esc((n.user_nom||'?')[0].toUpperCase())}</span>
-              <strong style="font-size:13px;color:var(--text)">${esc(n.user_nom||'Inconnu')}</strong>
-              <span style="font-size:11px;color:var(--text3);margin-left:auto">${fd(n.created_at?.slice(0,10))} ${n.created_at?.slice(11,16)||''}</span>
+              <span style="background:var(--accent);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${_esc((n.user_nom||'?')[0].toUpperCase())}</span>
+              <strong style="font-size:13px;color:var(--text)">${_esc(n.user_nom||'Inconnu')}</strong>
+              <span style="font-size:11px;color:var(--text3);margin-left:auto">${_fd(n.created_at?.slice(0,10))} ${n.created_at?.slice(11,16)||''}</span>
               ${CURRENT_USER?.role==='admin'||n.user_id===CURRENT_USER?.id?`<button onclick="deleteNote(${cmdId},${n.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:0 2px" title="Supprimer">✕</button>`:''}
             </div>
-            <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${esc(n.texte)}</div>
+            <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${_esc(n.texte)}</div>
           </div>`).join('') : '<div class="empty" style="padding:32px"><i class="ti ti-message-plus"></i> Aucune note — soyez le premier à commenter</div>'}
       </div>
       <div style="padding:12px 16px;border-top:0.5px solid var(--border);background:rgba(255,255,255,.5);display:flex;gap:8px;align-items:flex-end">
@@ -3510,7 +3520,7 @@ async function renderNotesTab(cmdId) {
       </div>
     </div>`;
     return html;
-  } catch(e) { return `<div class="empty" style="color:var(--danger)">${esc(e.message)}</div>`; }
+  } catch(e) { return `<div class="empty" style="color:var(--danger)">${_esc(e.message)}</div>`; }
 }
 window.renderNotesTab = renderNotesTab;
 
@@ -3551,17 +3561,17 @@ async function renderDiscussions(ttl, c, a) {
              onmouseover="this.style.background='rgba(255,255,255,.9)'"
              onmouseout="this.style.background='rgba(255,255,255,.65)'" >
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-            <span style="background:var(--accent);color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((n.user_nom||'?')[0].toUpperCase())}</span>
-            <strong style="font-size:13px">${esc(n.user_nom||'?')}</strong>
+            <span style="background:var(--accent);color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${_esc((n.user_nom||'?')[0].toUpperCase())}</span>
+            <strong style="font-size:13px">${_esc(n.user_nom||'?')}</strong>
             <span style="font-size:11px;color:var(--text3)">${n.created_at?.slice(0,10)||''} ${n.created_at?.slice(11,16)||''}</span>
-            <span class="badge ouvert" style="font-size:10px;margin-left:auto">${esc(n.bdc||('#'+n.commande_id))}</span>
-            <span style="font-size:11px;color:var(--text2)">${esc(n.distributeur_nom||'')}</span>
+            <span class="badge ouvert" style="font-size:10px;margin-left:auto">${_esc(n.bdc||('#'+n.commande_id))}</span>
+            <span style="font-size:11px;color:var(--text2)">${_esc(n.distributeur_nom||'')}</span>
           </div>
-          <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${esc(n.texte)}</div>
+          <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${_esc(n.texte)}</div>
         </div>`).join('')
       : '<div class="empty"><i class="ti ti-messages"></i> Aucune discussion — ouvrez une commande et ajoutez une note</div>'}
     </div>`;
-  } catch(e) { c.innerHTML = `<div class="empty" style="color:var(--danger)">${esc(e.message)}</div>`; }
+  } catch(e) { c.innerHTML = `<div class="empty" style="color:var(--danger)">${_esc(e.message)}</div>`; }
 }
 
 function ouvrirCommande(cmdId) {
