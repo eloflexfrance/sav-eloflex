@@ -3479,105 +3479,102 @@ window.syncPaiementCommande = syncPaiementCommande;
 
 })();
 
-// ── Helpers globaux (hors IIFE) ───────────────────────────────────
-function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function _fd(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } }
+const _esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const _fd  = d => { if(!d) return '-'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } };
 
-
-
-// ── Helpers globaux (accessibles hors IIFE) ──────────────────────
-function __esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function __fd(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } }
-
-// ── NOTES INTERNES ────────────────────────────────────────────────
-async function renderNotesTab(cmdId) {
-  if (!cmdId) return '<div class="empty"><i class="ti ti-message-circle"></i> Enregistrez la commande pour ajouter des notes.</div>';
-  try {
-    const notes = await API.notes(cmdId);
-    // Update badge
-    const badge = document.getElementById('notes-badge');
-    if (badge) { if (notes.length) { badge.textContent = notes.length; badge.style.display=''; } else badge.style.display='none'; }
-    const html = `<div style="display:flex;flex-direction:column;gap:0;height:100%">
-      <div id="notes-list" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
-        ${notes.length ? notes.map(n => `
-          <div style="background:rgba(255,255,255,.7);border:0.5px solid var(--border);border-radius:10px;padding:12px 14px;position:relative">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <span style="background:var(--accent);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${_esc((n.user_nom||'?')[0].toUpperCase())}</span>
-              <strong style="font-size:13px;color:var(--text)">${_esc(n.user_nom||'Inconnu')}</strong>
-              <span style="font-size:11px;color:var(--text3);margin-left:auto">${_fd(n.created_at?.slice(0,10))} ${n.created_at?.slice(11,16)||''}</span>
-              ${CURRENT_USER?.role==='admin'||n.user_id===CURRENT_USER?.id?`<button onclick="deleteNote(${cmdId},${n.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:0 2px" title="Supprimer">✕</button>`:''}
-            </div>
-            <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${_esc(n.texte)}</div>
-          </div>`).join('') : '<div class="empty" style="padding:32px"><i class="ti ti-message-plus"></i> Aucune note — soyez le premier à commenter</div>'}
-      </div>
-      <div style="padding:12px 16px;border-top:0.5px solid var(--border);background:rgba(255,255,255,.5);display:flex;gap:8px;align-items:flex-end">
-        <textarea id="note-input" placeholder="Ajouter une note interne…" rows="2"
-          style="flex:1;border:0.5px solid var(--border-dark);border-radius:8px;padding:8px 10px;font-size:13px;resize:none;background:rgba(255,255,255,.8);font-family:inherit"
-          onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendNote(${cmdId})}"></textarea>
-        <button class="btn primary" onclick="sendNote(${cmdId})" style="height:36px;padding:0 14px" title="Ctrl+Entrée">
-          <i class="ti ti-send"></i>
-        </button>
-      </div>
-    </div>`;
-    return html;
-  } catch(e) { return `<div class="empty" style="color:var(--danger)">${_esc(e.message)}</div>`; }
-}
-window.renderNotesTab = renderNotesTab;
-
-async function sendNote(cmdId) {
-  const inp = document.getElementById('note-input');
-  if (!inp || !inp.value.trim()) return;
-  try {
-    await API.addNote(cmdId, inp.value.trim());
-    inp.value = '';
-    // Refresh notes tab
-    const tab = document.getElementById('tab-notes');
-    if (tab) tab.innerHTML = await renderNotesTab(cmdId);
-  } catch(e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
-}
-window.sendNote = sendNote;
-
-async function deleteNote(cmdId, noteId) {
-  if (!confirm('Supprimer cette note ?')) return;
-  try {
-    await API.deleteNote(cmdId, noteId);
-    const tab = document.getElementById('tab-notes');
-    if (tab) tab.innerHTML = await renderNotesTab(cmdId);
-  } catch(e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
-}
-window.deleteNote = deleteNote;
-
-// ── Vue Discussions globale ───────────────────────────────────────
 async function renderDiscussions(ttl, c, a) {
   ttl.textContent = 'Discussions';
   a.innerHTML = '';
-  c.innerHTML = '<div class="empty"><i class="ti ti-loader-2"></i> Chargement…</div>';
+  c.innerHTML = '<div style="padding:20px;color:#888">Chargement des discussions...</div>';
   try {
-    const notes = await API.notesRecent(100);
-    c.innerHTML = `<div style="max-width:720px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px">
-      ${notes.length ? notes.map(n => `
-        <div style="background:rgba(255,255,255,.65);border:0.5px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:.15s"
-             onclick="ouvrirCommande(${n.commande_id})"
-             onmouseover="this.style.background='rgba(255,255,255,.9)'"
-             onmouseout="this.style.background='rgba(255,255,255,.65)'" >
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-            <span style="background:var(--accent);color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${_esc((n.user_nom||'?')[0].toUpperCase())}</span>
-            <strong style="font-size:13px">${_esc(n.user_nom||'?')}</strong>
-            <span style="font-size:11px;color:var(--text3)">${n.created_at?.slice(0,10)||''} ${n.created_at?.slice(11,16)||''}</span>
-            <span class="badge ouvert" style="font-size:10px;margin-left:auto">${_esc(n.bdc||('#'+n.commande_id))}</span>
-            <span style="font-size:11px;color:var(--text2)">${_esc(n.distributeur_nom||'')}</span>
-          </div>
-          <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${_esc(n.texte)}</div>
-        </div>`).join('')
-      : '<div class="empty"><i class="ti ti-messages"></i> Aucune discussion — ouvrez une commande et ajoutez une note</div>'}
-    </div>`;
-  } catch(e) { c.innerHTML = `<div class="empty" style="color:var(--danger)">${_esc(e.message)}</div>`; }
+    const resp = await fetch('/api/notes/recent?limit=100');
+    if (!resp.ok) { c.innerHTML = '<div style="padding:20px;color:red">Erreur ' + resp.status + '</div>'; return; }
+    const notes = await resp.json();
+    if (!notes.length) { c.innerHTML = '<div style="padding:40px;text-align:center;color:#aaa">Aucune discussion pour l\'instant.<br>Ajoutez des notes dans les fiches commandes.</div>'; return; }
+    let html = '<div style="max-width:720px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px">';
+    for (const n of notes) {
+      html += '<div style="background:rgba(255,255,255,.65);border:0.5px solid #dde3ef;border-radius:12px;padding:14px 16px;cursor:pointer" onclick="_ouvrirCommande(' + n.commande_id + ')">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
+      html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + _esc(String(n.user_nom||'?')[0].toUpperCase()) + '</span>';
+      html += '<strong style="font-size:13px">' + _esc(n.user_nom||'?') + '</strong>';
+      html += '<span style="font-size:11px;color:#aaa;margin-left:auto">' + String(n.created_at||'').slice(0,16).replace('T',' ') + '</span>';
+      html += '<span style="background:rgba(46,124,246,.12);color:#2e7cf6;border-radius:99px;padding:2px 8px;font-size:10px">' + _esc(n.bdc||('#'+n.commande_id)) + '</span>';
+      html += '<span style="font-size:11px;color:#666">' + _esc(n.distributeur_nom||'') + '</span>';
+      html += '</div>';
+      html += '<div style="font-size:13px;color:#1a2d4a;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    c.innerHTML = html;
+  } catch(e) {
+    c.innerHTML = '<div style="padding:20px;color:red">Erreur : ' + String(e.message) + '</div>';
+  }
 }
+window.renderDiscussions = renderDiscussions;
 
-function ouvrirCommande(cmdId) {
-  STATE.view = 'commandes';
-  render();
-  setTimeout(() => modalCommande(cmdId), 500);
+function _ouvrirCommande(cmdId) {
+  if (typeof STATE !== 'undefined') STATE.view = 'commandes';
+  if (typeof render === 'function') render();
+  setTimeout(function() { if (typeof modalCommande === 'function') modalCommande(cmdId); }, 500);
 }
-window.ouvrirCommande = ouvrirCommande;
+window._ouvrirCommande = _ouvrirCommande;
+
+async function renderNotesTab(cmdId) {
+  if (!cmdId) return '<div style="padding:20px;color:#aaa;text-align:center">Enregistrez la commande pour ajouter des notes.</div>';
+  try {
+    const resp = await fetch('/api/commandes/' + cmdId + '/notes');
+    if (!resp.ok) throw new Error('Erreur ' + resp.status);
+    const notes = await resp.json();
+    let html = '<div id="tab-notes" style="display:flex;flex-direction:column;height:380px;overflow:hidden">';
+    html += '<div style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px">';
+    if (notes.length) {
+      for (const n of notes) {
+        html += '<div style="background:rgba(255,255,255,.7);border:0.5px solid #dde3ef;border-radius:10px;padding:12px 14px">';
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+        html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + _esc(String(n.user_nom||'?')[0].toUpperCase()) + '</span>';
+        html += '<strong style="font-size:13px">' + _esc(n.user_nom||'?') + '</strong>';
+        html += '<span style="font-size:11px;color:#aaa;margin-left:auto">' + String(n.created_at||'').slice(0,16).replace('T',' ') + '</span>';
+        html += '<button onclick="_deleteNote(' + cmdId + ',' + n.id + ')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:12px;padding:0 3px" title="Supprimer">x</button>';
+        html += '</div>';
+        html += '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
+        html += '</div>';
+      }
+    } else {
+      html += '<div style="padding:30px;text-align:center;color:#aaa">Aucune note - ajoutez un commentaire ci-dessous.</div>';
+    }
+    html += '</div>';
+    html += '<div style="padding:10px 14px;border-top:0.5px solid #dde3ef;background:rgba(255,255,255,.5);display:flex;gap:8px">';
+    html += '<textarea id="ni-' + cmdId + '" placeholder="Ajouter une note interne..." rows="2" style="flex:1;border:0.5px solid #c0c8d8;border-radius:8px;padding:7px 10px;font-size:13px;resize:none;background:rgba(255,255,255,.8)"></textarea>';
+    html += '<button onclick="_sendNote(' + cmdId + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer">Envoyer</button>';
+    html += '</div>';
+    html += '</div>';
+    return html;
+  } catch(e) {
+    return '<div style="padding:20px;color:red">Erreur : ' + String(e.message) + '</div>';
+  }
+}
+window.renderNotesTab = renderNotesTab;
+
+async function _sendNote(cmdId) {
+  const inp = document.getElementById('ni-' + cmdId);
+  if (!inp || !inp.value.trim()) return;
+  try {
+    const r = await fetch('/api/commandes/' + cmdId + '/notes', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({texte: inp.value.trim()})});
+    if (!r.ok) throw new Error('Erreur ' + r.status);
+    inp.value = '';
+    const tab = document.getElementById('tab-notes');
+    if (tab) tab.innerHTML = await renderNotesTab(cmdId);
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+window._sendNote = _sendNote;
+
+async function _deleteNote(cmdId, noteId) {
+  if (!confirm('Supprimer cette note ?')) return;
+  try {
+    await fetch('/api/commandes/' + cmdId + '/notes/' + noteId, {method:'DELETE'});
+    const tab = document.getElementById('tab-notes');
+    if (tab) tab.innerHTML = await renderNotesTab(cmdId);
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+window._deleteNote = _deleteNote;
 
