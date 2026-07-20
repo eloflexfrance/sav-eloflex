@@ -3385,4 +3385,4 @@ router.post('/commandes/:id/sync-paiement', adminOrOp, async (req, res) => {
   } catch(e) { console.error('[PAIEMENT ERR]', e.message); res.status(500).json({ error: e.message }); }
 });
 
-
+module.exports = router;
