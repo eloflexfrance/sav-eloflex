@@ -213,6 +213,23 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_date_echeance TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_vf_id BIGINT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_final_type TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_nom TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_prenom TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_adresse TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_cp TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_ville TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_tel TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_email TEXT`);
+      await client.query(`CREATE TABLE IF NOT EXISTS clients_finaux (
+        id SERIAL PRIMARY KEY,
+        type TEXT NOT NULL,
+        nom TEXT, prenom TEXT, adresse TEXT, cp TEXT, ville TEXT, tel TEXT, email TEXT,
+        nb_commandes INTEGER DEFAULT 1,
+        derniere_commande TIMESTAMPTZ DEFAULT NOW(),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_cf_nom ON clients_finaux(nom)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_cf_ville ON clients_finaux(ville)`);
       await client.query(`CREATE TABLE IF NOT EXISTS commande_notes (
         id SERIAL PRIMARY KEY,
         commande_id INTEGER REFERENCES commandes(id) ON DELETE CASCADE,

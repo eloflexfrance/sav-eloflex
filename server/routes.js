@@ -114,6 +114,7 @@ function requireRole(...roles) {
     next();
   };
 }
+const requireAuth = requireRole();
 const adminOnly = requireRole('admin');
 const adminOrOp  = requireRole('admin', 'operateur');
 
@@ -2467,14 +2468,14 @@ router.post('/commandes', async (req, res) => {
     }
     const row = await db.run(
       `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele, quantite, accessoire,
-        bdc, date_commande, vf_order_id, client_final, client_final_type, num_suivi, transporteur, date_livraison, num_serie, num_facture,
+        bdc, date_commande, vf_order_id, client_final, client_final_type, cf_nom, cf_prenom, cf_adresse, cf_cp, cf_ville, cf_tel, cf_email, num_suivi, transporteur, date_livraison, num_serie, num_facture,
         invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo,
         num_retour, transporteur_retour, date_retour, num_commande_distrib,
         commande_type, ref_suede, date_envoi_suede, confirmation_recue, date_confirmation)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
-       d.vf_order_id || null, d.client_final || null, d.client_final_type || null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
+       d.vf_order_id || null, d.client_final || null, d.client_final_type || null, d.cf_nom||null, d.cf_prenom||null, d.cf_adresse||null, d.cf_cp||null, d.cf_ville||null, d.cf_tel||null, d.cf_email||null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
        d.num_serie || null, d.num_facture || null, d.invoice_se || null, d.informations || null, d.statut || 'Auto',
        d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null, d.modele_demo ? true : false,
        d.num_retour || null, d.transporteur_retour || null, d.date_retour || null, d.num_commande_distrib || null,
@@ -3384,5 +3385,43 @@ router.post('/commandes/:id/sync-paiement', adminOrOp, async (req, res) => {
     res.json({ ok: true, vfId, statut, raw });
   } catch(e) { console.error('[PAIEMENT ERR]', e.message); res.status(500).json({ error: e.message }); }
 });
+
+
+// ── CLIENTS FINAUX (autocomplete + historique) ────────────────────
+router.get('/clients-finaux/suggest', requireAuth, async (req, res) => {
+  try {
+    const q = (req.query.q||'').trim();
+    const type = req.query.type || '';
+    if (q.length < 2) return res.json([]);
+    const pattern = '%' + q + '%';
+    const rows = await db.all(`
+      SELECT id, type, nom, prenom, adresse, cp, ville, tel, email, nb_commandes
+      FROM clients_finaux
+      WHERE (nom ILIKE $1 OR prenom ILIKE $1 OR ville ILIKE $1 OR email ILIKE $1)
+        ${type ? "AND type = '" + type.replace(/'/g,"''") + "'" : ''}
+      ORDER BY nb_commandes DESC, derniere_commande DESC
+      LIMIT 8
+    `, [pattern]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Upsert client final dans l'historique
+async function upsertClientFinal(data) {
+  if (!data || !data.nom) return;
+  try {
+    const existing = await db.get(
+      'SELECT id, nb_commandes FROM clients_finaux WHERE type=$1 AND nom=$2 AND (cp=$3 OR cp IS NULL)',
+      [data.type||'', data.nom, data.cp||null]
+    );
+    if (existing) {
+      await db.run('UPDATE clients_finaux SET nb_commandes=nb_commandes+1, derniere_commande=NOW(), prenom=$1, adresse=$2, cp=$3, ville=$4, tel=$5, email=$6 WHERE id=$7',
+        [data.prenom||null, data.adresse||null, data.cp||null, data.ville||null, data.tel||null, data.email||null, existing.id]);
+    } else {
+      await db.run('INSERT INTO clients_finaux (type,nom,prenom,adresse,cp,ville,tel,email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [data.type||'', data.nom||null, data.prenom||null, data.adresse||null, data.cp||null, data.ville||null, data.tel||null, data.email||null]);
+    }
+  } catch(e) { console.error('[CF UPSERT]', e.message); }
+}
 
 module.exports = router;

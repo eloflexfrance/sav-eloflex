@@ -1006,12 +1006,54 @@ async function modalCommande(id){
             <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="Nom du bénéficiaire">
           </div>
           <div class="form-group"><label class="form-label">Type de destinataire</label>
-            <select class="form-input" id="cmd-clientfinal-type">
+            <select class="form-input" id="cmd-clientfinal-type" onchange="toggleClientFinalForm(this.value)">
               <option value="">— Même adresse que le distributeur</option>
               <option value="particulier" ${cm.client_final_type==='particulier'?'selected':''}>🏠 Particulier</option>
               <option value="entreprise" ${cm.client_final_type==='entreprise'?'selected':''}>🏢 Entreprise / Structure</option>
             </select>
           </div>
+        </div>
+        <div id="cf-form" style="${cm.client_final_type?'':'display:none'}">
+          <div style="background:rgba(255,255,255,.5);border:0.5px solid var(--border);border-radius:10px;padding:14px 16px;margin-top:4px">
+            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+              Adresse de livraison — ${cm.client_final_type==='particulier'?'🏠 Particulier':'🏢 Entreprise / Structure'}
+            </div>
+            <div class="grid-2">
+              <div class="form-group" style="position:relative">
+                <label class="form-label">${cm.client_final_type==='particulier'?'Nom':'Raison sociale / Nom'}</label>
+                <input class="form-input" id="cf-nom" value="${esc(cm.cf_nom||'')}" placeholder="Nom / Raison sociale"
+                  oninput="cfAutocomplete(this,'nom')">
+                <div id="cf-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:999;max-height:180px;overflow-y:auto"></div>
+              </div>
+              ${cm.client_final_type==='particulier'?`
+              <div class="form-group">
+                <label class="form-label">Prénom</label>
+                <input class="form-input" id="cf-prenom" value="${esc(cm.cf_prenom||'')}" placeholder="Prénom">
+              </div>`:'<div></div>'}
+              <div class="form-group" style="grid-column:1/-1">
+                <label class="form-label">Adresse</label>
+                <input class="form-input" id="cf-adresse" value="${esc(cm.cf_adresse||'')}" placeholder="Numéro et nom de rue">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Code postal</label>
+                <input class="form-input" id="cf-cp" value="${esc(cm.cf_cp||'')}" placeholder="75001" oninput="cfAutocomplete(this,'cp')">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Ville</label>
+                <input class="form-input" id="cf-ville" value="${esc(cm.cf_ville||'')}" placeholder="Paris" oninput="cfAutocomplete(this,'ville')">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Téléphone</label>
+                <input class="form-input" id="cf-tel" type="tel" value="${esc(cm.cf_tel||'')}" placeholder="06 00 00 00 00">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email</label>
+                <input class="form-input" id="cf-email" type="email" value="${esc(cm.cf_email||'')}" placeholder="contact@example.fr">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2" style="display:none">
           <div class="form-group"><label class="form-label">N° suivi</label>
             <input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal();majStatutBadge()" placeholder="${t('cmd_num_transporteur_placeholder')||'Numéro transporteur'}">
           </div>
@@ -1513,7 +1555,13 @@ async function enregistrerCommande(id){
     distributeur_nom: gv('cmd-distrib'), groupe: gv('cmd-groupe'), modele: gv('cmd-modele'),
     quantite: parseInt(gv('cmd-quantite'))||1,
     bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
-    client_final: gv('cmd-clientfinal'), client_final_type: gv('cmd-clientfinal-type')||null, num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
+    client_final: gv('cf-nom') || gv('cmd-clientfinal'),
+    client_final_type: gv('cmd-clientfinal-type')||null,
+    cf_nom: gv('cf-nom')||null, cf_prenom: gv('cf-prenom')||null,
+    cf_adresse: gv('cf-adresse')||null, cf_cp: gv('cf-cp')||null,
+    cf_ville: gv('cf-ville')||null, cf_tel: gv('cf-tel')||null,
+    cf_email: gv('cf-email')||null,
+    num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
     date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
     informations: gv('cmd-infos'),
@@ -3521,6 +3569,78 @@ window.syncPaiementCommande = syncPaiementCommande;
 })();
 
 const _esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const _fd  = d => { if(!d) return '-'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } };
+
+function toggleClientFinalForm(type) {
+  var form = document.getElementById('cf-form');
+  if (form) form.style.display = type ? '' : 'none';
+}
+window.toggleClientFinalForm = toggleClientFinalForm;
+
+var _cfTimer = null;
+function cfAutocomplete(input, field) {
+  clearTimeout(_cfTimer);
+  var q = input.value.trim();
+  if (q.length < 2) { hideCfSuggest(); return; }
+  var typeEl = document.getElementById('cmd-clientfinal-type');
+  var type = typeEl ? typeEl.value : '';
+  _cfTimer = setTimeout(function() {
+    fetch('/api/clients-finaux/suggest?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type))
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        var box = document.getElementById('cf-suggest');
+        if (!box || !rows.length) { hideCfSuggest(); return; }
+        box._rows = rows;
+        var html = '';
+        for (var i = 0; i < rows.length; i++) {
+          var row = rows[i];
+          var label = _esc([row.nom, row.prenom].filter(Boolean).join(' '));
+          var sub = _esc([row.adresse, row.cp, row.ville].filter(Boolean).join(', '));
+          html += '<div onclick="cfSelect(' + row.id + ')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #f0f0f0">';
+          html += '<div style="font-weight:600">' + label + '</div>';
+          if (sub) html += '<div style="font-size:11px;color:#888">' + sub + '</div>';
+          html += '</div>';
+        }
+        box.innerHTML = html;
+        box.style.display = '';
+      })
+      .catch(function() {});
+  }, 250);
+}
+window.cfAutocomplete = cfAutocomplete;
+
+function cfSelect(id) {
+  var box = document.getElementById('cf-suggest');
+  var rows = box ? (box._rows || []) : [];
+  var row = null;
+  for (var i = 0; i < rows.length; i++) { if (rows[i].id === id) { row = rows[i]; break; } }
+  if (!row) return;
+  ['nom','prenom','adresse','cp','ville','tel','email'].forEach(function(f) {
+    var el = document.getElementById('cf-' + f);
+    if (el) el.value = row[f] || '';
+  });
+  hideCfSuggest();
+}
+window.cfSelect = cfSelect;
+
+function hideCfSuggest() {
+  var box = document.getElementById('cf-suggest');
+  if (box) box.style.display = 'none';
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // Vue Discussions — non-async pour éviter les problèmes de Promise
 function renderDiscussions(ttl, c, a) {
