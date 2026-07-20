@@ -526,6 +526,16 @@ async function renderInterventions(ttl,c,a){
       <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
       <td>${esc(i.technicien||'')}</td>
       <td style="text-align:center;color:var(--text3);font-size:11px">${i.nb_photos||''}</td>
+      <td style="font-size:11px">${esc(i.envoi_transporteur||'—')}</td>
+      <td style="font-size:11px">
+        ${i.envoi_numero
+          ? `<a href="${lienhSuiviInter(i.envoi_transporteur, i.envoi_numero)}" target="_blank" rel="noopener"
+               style="color:var(--accent);font-family:monospace;text-decoration:none" title="Suivre le colis">
+               <i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.envoi_numero)}
+             </a>`
+          : '—'}
+      </td>
+      <td style="font-size:11px">${i.envoi_date ? fd(i.envoi_date) : '—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -540,7 +550,7 @@ async function renderExpeditions(ttl,c,a){
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px">${t('exp_subtitle')}</div>
     ${list.length===0?`<div class="empty"><i class="ti ti-truck-delivery"></i>${t('exp_empty')}</div>`:`
     <div class="table-wrap"><table class="t">
-      <thead><tr><th>N°</th><th>${t('col_client')}</th><th>${t('inter_fauteuil').replace(' *','')}</th><th>${t('col_transporteur')}</th><th>${t('col_suivi')}</th><th>${t('col_date_envoi')}</th><th>${t('col_jours')}</th><th>${t('col_statut')}</th></tr></thead>
+      <thead><tr><th>N°</th><th>${t('col_client')}</th><th>${t('inter_fauteuil').replace(' *','')}</th><th>${t('col_transporteur')||'Transporteur'}</th><th>${t('col_suivi')||'N° Suivi'}</th><th>${t('col_date_envoi')||'Date envoi'}</th></tr></thead>
       <tbody>${list.map(i=>`<tr onclick="viewIntervention(${i.id})">
         <td>#${i.id}</td><td>${esc(i.client_nom)}</td>
         <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
@@ -3567,6 +3577,25 @@ async function syncPaiementCommande(id){
 window.syncPaiementCommande = syncPaiementCommande;
 
 })();
+
+function lienhSuiviInter(transporteur, numero) {
+  if (!numero) return '#';
+  var t = (transporteur||'').toLowerCase();
+  if (t.includes('chronopost') || /^8L|^XC/i.test(numero))
+    return 'https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=' + encodeURIComponent(numero);
+  if (t.includes('colissimo') || t.includes('la poste') || /^6[A-Z]|^7[A-Z]/i.test(numero))
+    return 'https://www.laposte.fr/outils/suivre-vos-envois?code=' + encodeURIComponent(numero);
+  if (t.includes('dpd'))
+    return 'https://www.dpd.fr/trace/' + encodeURIComponent(numero);
+  if (t.includes('ups'))
+    return 'https://www.ups.com/track?tracknum=' + encodeURIComponent(numero);
+  if (t.includes('dhl'))
+    return 'https://www.dhl.com/fr-fr/home/tracking.html?tracking-id=' + encodeURIComponent(numero);
+  return 'https://www.17track.net/fr/track#nums=' + encodeURIComponent(numero);
+}
+window.lienhSuiviInter = lienhSuiviInter;
+
+
 
 const _esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const _fd  = d => { if(!d) return '-'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } };
