@@ -3266,7 +3266,7 @@ module.exports = router;
 // ══════════════════════════════════════════════════════════════════
 
 // GET notes d'une commande
-router.get('/commandes/:id/notes', requireAuth, async (req, res) => {
+router.get('/commandes/:id/notes', adminOrOp, async (req, res) => {
   try {
     const notes = await db.all(
       'SELECT * FROM commande_notes WHERE commande_id=$1 ORDER BY created_at ASC',
@@ -3277,7 +3277,7 @@ router.get('/commandes/:id/notes', requireAuth, async (req, res) => {
 });
 
 // POST ajouter une note
-router.post('/commandes/:id/notes', requireAuth, async (req, res) => {
+router.post('/commandes/:id/notes', adminOrOp, async (req, res) => {
   try {
     const { texte } = req.body;
     if (!texte || !texte.trim()) return res.status(400).json({ error: 'Texte vide' });
@@ -3291,7 +3291,7 @@ router.post('/commandes/:id/notes', requireAuth, async (req, res) => {
 });
 
 // DELETE une note (auteur ou admin)
-router.delete('/commandes/:id/notes/:noteId', requireAuth, async (req, res) => {
+router.delete('/commandes/:id/notes/:noteId', adminOrOp, async (req, res) => {
   try {
     const user = res.locals.user;
     const note = await db.get('SELECT * FROM commande_notes WHERE id=$1', [req.params.noteId]);
@@ -3304,7 +3304,7 @@ router.delete('/commandes/:id/notes/:noteId', requireAuth, async (req, res) => {
 });
 
 // GET fil de discussions global (toutes commandes, récentes)
-router.get('/notes/recent', requireAuth, async (req, res) => {
+router.get('/notes/recent', adminOrOp, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit)||50;
     const notes = await db.all(`
@@ -3320,7 +3320,7 @@ router.get('/notes/recent', requireAuth, async (req, res) => {
 });
 
 // GET nombre de notes par commande (pour badges)
-router.get('/notes/counts', requireAuth, async (req, res) => {
+router.get('/notes/counts', adminOrOp, async (req, res) => {
   try {
     const rows = await db.all(
       'SELECT commande_id, COUNT(*) AS nb FROM commande_notes GROUP BY commande_id'
