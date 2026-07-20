@@ -159,6 +159,7 @@ async function render(){
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
+    else if(STATE.view==='discussions')   { renderDiscussions(ttl,c,a); return; }
     else if(STATE.view==='parametres')    await renderParametres(ttl,c,a);
     else if(STATE.view==='retours-suede')  await renderRetoursSuede(ttl,c,a);
     else if(STATE.view==='transferts')     await renderTransferts(ttl,c,a);
