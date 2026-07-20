@@ -135,5 +135,11 @@ const API = {
   tracking:(numero)=>API.get(`/tracking/${encodeURIComponent(numero)}`),
   trackingSync:()=>API.post('/tracking/sync',{}),
   syncPaiementsVF:()=>API.post('/commandes/sync-paiements-vf',{}),
+  // Notes internes
+  notes:(id)=>API.get(`/commandes/${id}/notes`),
+  addNote:(id,texte)=>API.post(`/commandes/${id}/notes`,{texte}),
+  deleteNote:(cmdId,noteId)=>API.delete(`/commandes/${cmdId}/notes/${noteId}`),
+  notesRecent:(limit=50)=>API.get(`/notes/recent?limit=${limit}`),
+  notesCounts:()=>API.get('/notes/counts'),
   syncPaiementCommande:(id)=>API.post(`/commandes/${id}/sync-paiement`,{}),
 };

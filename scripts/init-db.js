@@ -212,6 +212,16 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_paiement_statut TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_date_echeance TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_vf_id BIGINT`);
+      await client.query(`CREATE TABLE IF NOT EXISTS commande_notes (
+        id SERIAL PRIMARY KEY,
+        commande_id INTEGER REFERENCES commandes(id) ON DELETE CASCADE,
+        user_id INTEGER,
+        user_nom TEXT,
+        texte TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_commande ON commande_notes(commande_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_created ON commande_notes(created_at DESC)`);
 
       // ── Devis VosFactures ──────────────────────────────────────────
       await client.query(`CREATE TABLE IF NOT EXISTS devis (

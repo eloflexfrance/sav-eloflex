@@ -3260,6 +3260,78 @@ async function syncPaiementsAuto() {
 }
 
 module.exports = router;
+
+// ══════════════════════════════════════════════════════════════════
+// ── NOTES INTERNES ───────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+
+// GET notes d'une commande
+router.get('/commandes/:id/notes', requireAuth, async (req, res) => {
+  try {
+    const notes = await db.all(
+      'SELECT * FROM commande_notes WHERE commande_id=$1 ORDER BY created_at ASC',
+      [req.params.id]
+    );
+    res.json(notes);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST ajouter une note
+router.post('/commandes/:id/notes', requireAuth, async (req, res) => {
+  try {
+    const { texte } = req.body;
+    if (!texte || !texte.trim()) return res.status(400).json({ error: 'Texte vide' });
+    const user = res.locals.user;
+    const note = await db.get(
+      'INSERT INTO commande_notes (commande_id, user_id, user_nom, texte) VALUES ($1,$2,$3,$4) RETURNING *',
+      [req.params.id, user.id, user.nom || user.email, texte.trim()]
+    );
+    res.json(note);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE une note (auteur ou admin)
+router.delete('/commandes/:id/notes/:noteId', requireAuth, async (req, res) => {
+  try {
+    const user = res.locals.user;
+    const note = await db.get('SELECT * FROM commande_notes WHERE id=$1', [req.params.noteId]);
+    if (!note) return res.status(404).json({ error: 'Note introuvable' });
+    if (note.user_id !== user.id && user.role !== 'admin')
+      return res.status(403).json({ error: 'Non autorisé' });
+    await db.run('DELETE FROM commande_notes WHERE id=$1', [req.params.noteId]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET fil de discussions global (toutes commandes, récentes)
+router.get('/notes/recent', requireAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit)||50;
+    const notes = await db.all(`
+      SELECT n.*, c.bdc, c.distributeur_nom, c.num_serie, c.statut,
+             c.date_commande
+      FROM commande_notes n
+      LEFT JOIN commandes c ON c.id = n.commande_id
+      ORDER BY n.created_at DESC
+      LIMIT $1
+    `, [limit]);
+    res.json(notes);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET nombre de notes par commande (pour badges)
+router.get('/notes/counts', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(
+      'SELECT commande_id, COUNT(*) AS nb FROM commande_notes GROUP BY commande_id'
+    );
+    const map = {};
+    rows.forEach(r => map[r.commande_id] = parseInt(r.nb));
+    res.json(map);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Fin Notes ─────────────────────────────────────────────────────
 module.exports.syncPaiementsAuto = syncPaiementsAuto;
 
 // ── Sync paiement commande individuelle ──────────────────────────

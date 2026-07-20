@@ -466,3 +466,13 @@ div.cards > .card {
   0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,.4); }
   50%       { box-shadow: 0 0 0 6px rgba(220,38,38,.0); }
 }
+
+/* Onglet Notes dans modal */
+#tab-notes {
+  display: flex;
+  flex-direction: column;
+  height: 380px;
+  overflow: hidden;
+}
+#notes-list::-webkit-scrollbar { width: 4px; }
+#notes-list::-webkit-scrollbar-thumb { background: var(--border-dark); border-radius: 4px; }

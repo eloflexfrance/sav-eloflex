@@ -67,6 +67,7 @@ const MODULES = [
 
 // Modules qui héritent d'un autre module si non défini explicitement
 const PERM_FALLBACK = {
+  'discussions': 'commandes',
   'devis':      'commandes',   // Devis hérite de commandes
   'dashboard':  'commandes',   // Tableau de bord toujours accessible si commandes
 };
@@ -881,6 +882,7 @@ async function modalCommande(id){
       ${tabBtn('commande',t('cmd_tab_commande')||'Commande','ti-clipboard-list',false)}
       ${tabBtn('expedition',t('cmd_tab_expedition')||'Expédition','ti-truck-delivery',hasExp)}
       ${tabBtn('facturation',t('cmd_tab_facturation')||'Facturation','ti-receipt-2',hasFact)}
+      ${tabBtn('notes','Notes 💬','ti-message-circle',false)}
     </div>
     <div style="display:flex;align-items:center;gap:10px;padding:10px 22px;background:var(--bg);border-bottom:0.5px solid var(--border-s)">
       <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">${t('cmd_statut_label')||'STATUT'}</span>
@@ -3476,3 +3478,96 @@ async function syncPaiementCommande(id){
 window.syncPaiementCommande = syncPaiementCommande;
 
 })();
+
+// ── NOTES INTERNES ────────────────────────────────────────────────
+async function renderNotesTab(cmdId) {
+  if (!cmdId) return '<div class="empty"><i class="ti ti-message-circle"></i> Enregistrez la commande pour ajouter des notes.</div>';
+  try {
+    const notes = await API.notes(cmdId);
+    // Update badge
+    const badge = document.getElementById('notes-badge');
+    if (badge) { if (notes.length) { badge.textContent = notes.length; badge.style.display=''; } else badge.style.display='none'; }
+    const html = `<div style="display:flex;flex-direction:column;gap:0;height:100%">
+      <div id="notes-list" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
+        ${notes.length ? notes.map(n => `
+          <div style="background:rgba(255,255,255,.7);border:0.5px solid var(--border);border-radius:10px;padding:12px 14px;position:relative">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span style="background:var(--accent);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${esc((n.user_nom||'?')[0].toUpperCase())}</span>
+              <strong style="font-size:13px;color:var(--text)">${esc(n.user_nom||'Inconnu')}</strong>
+              <span style="font-size:11px;color:var(--text3);margin-left:auto">${fd(n.created_at?.slice(0,10))} ${n.created_at?.slice(11,16)||''}</span>
+              ${CURRENT_USER?.role==='admin'||n.user_id===CURRENT_USER?.id?`<button onclick="deleteNote(${cmdId},${n.id})" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;padding:0 2px" title="Supprimer">✕</button>`:''}
+            </div>
+            <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${esc(n.texte)}</div>
+          </div>`).join('') : '<div class="empty" style="padding:32px"><i class="ti ti-message-plus"></i> Aucune note — soyez le premier à commenter</div>'}
+      </div>
+      <div style="padding:12px 16px;border-top:0.5px solid var(--border);background:rgba(255,255,255,.5);display:flex;gap:8px;align-items:flex-end">
+        <textarea id="note-input" placeholder="Ajouter une note interne…" rows="2"
+          style="flex:1;border:0.5px solid var(--border-dark);border-radius:8px;padding:8px 10px;font-size:13px;resize:none;background:rgba(255,255,255,.8);font-family:inherit"
+          onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendNote(${cmdId})}"></textarea>
+        <button class="btn primary" onclick="sendNote(${cmdId})" style="height:36px;padding:0 14px" title="Ctrl+Entrée">
+          <i class="ti ti-send"></i>
+        </button>
+      </div>
+    </div>`;
+    return html;
+  } catch(e) { return `<div class="empty" style="color:var(--danger)">${esc(e.message)}</div>`; }
+}
+window.renderNotesTab = renderNotesTab;
+
+async function sendNote(cmdId) {
+  const inp = document.getElementById('note-input');
+  if (!inp || !inp.value.trim()) return;
+  try {
+    await API.addNote(cmdId, inp.value.trim());
+    inp.value = '';
+    // Refresh notes tab
+    const tab = document.getElementById('tab-notes');
+    if (tab) tab.innerHTML = await renderNotesTab(cmdId);
+  } catch(e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+window.sendNote = sendNote;
+
+async function deleteNote(cmdId, noteId) {
+  if (!confirm('Supprimer cette note ?')) return;
+  try {
+    await API.deleteNote(cmdId, noteId);
+    const tab = document.getElementById('tab-notes');
+    if (tab) tab.innerHTML = await renderNotesTab(cmdId);
+  } catch(e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+window.deleteNote = deleteNote;
+
+// ── Vue Discussions globale ───────────────────────────────────────
+async function renderDiscussions(ttl, c, a) {
+  ttl.textContent = 'Discussions';
+  a.innerHTML = '';
+  c.innerHTML = '<div class="empty"><i class="ti ti-loader-2"></i> Chargement…</div>';
+  try {
+    const notes = await API.notesRecent(100);
+    c.innerHTML = `<div style="max-width:720px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px">
+      ${notes.length ? notes.map(n => `
+        <div style="background:rgba(255,255,255,.65);border:0.5px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:.15s"
+             onclick="ouvrirCommande(${n.commande_id})"
+             onmouseover="this.style.background='rgba(255,255,255,.9)'"
+             onmouseout="this.style.background='rgba(255,255,255,.65)'" >
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <span style="background:var(--accent);color:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((n.user_nom||'?')[0].toUpperCase())}</span>
+            <strong style="font-size:13px">${esc(n.user_nom||'?')}</strong>
+            <span style="font-size:11px;color:var(--text3)">${n.created_at?.slice(0,10)||''} ${n.created_at?.slice(11,16)||''}</span>
+            <span class="badge ouvert" style="font-size:10px;margin-left:auto">${esc(n.bdc||('#'+n.commande_id))}</span>
+            <span style="font-size:11px;color:var(--text2)">${esc(n.distributeur_nom||'')}</span>
+          </div>
+          <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${esc(n.texte)}</div>
+        </div>`).join('')
+      : '<div class="empty"><i class="ti ti-messages"></i> Aucune discussion — ouvrez une commande et ajoutez une note</div>'}
+    </div>`;
+  } catch(e) { c.innerHTML = `<div class="empty" style="color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+function ouvrirCommande(cmdId) {
+  STATE.view = 'commandes';
+  render();
+  setTimeout(() => modalCommande(cmdId), 500);
+}
+window.ouvrirCommande = ouvrirCommande;
+
