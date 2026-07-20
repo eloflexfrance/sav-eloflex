@@ -845,7 +845,7 @@ async function renderCommandesTable(page=1){
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i></span>
         </td>
         <td style="text-align:center">
-          ${cm.client_final?`<i class="ti ti-user-check" style="color:var(--accent)" title="Client final : ${esc(cm.client_final)}"></i>`:''}
+          ${cm.client_final ? clientFinalBadge(cm) : ''}
           ${cm.num_retour?`<i class="ti ti-arrow-back-up" style="color:var(--danger);margin-left:2px" title="Retour : ${esc(cm.num_retour)}${cm.date_retour?' — reçu le '+fd(cm.date_retour):''}"></i>`:''}
           ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--text2);margin-left:2px" title="${esc(cm.informations)}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
@@ -1002,8 +1002,15 @@ async function modalCommande(id){
 
       <div id="cmd-tab-expedition" style="${initTab!=='expedition'?'display:none':''}">
         <div class="grid-2">
-          <div class="form-group" style="grid-column:1/-1"><label class="form-label">Client final</label>
-            <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="${t('cmd_client_beneficiaire')||'Nom du client bénéficiaire'}">
+          <div class="form-group"><label class="form-label">Client final (bénéficiaire)</label>
+            <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="Nom du bénéficiaire">
+          </div>
+          <div class="form-group"><label class="form-label">Type de destinataire</label>
+            <select class="form-input" id="cmd-clientfinal-type">
+              <option value="">— Même adresse que le distributeur</option>
+              <option value="particulier" ${cm.client_final_type==='particulier'?'selected':''}>🏠 Particulier</option>
+              <option value="entreprise" ${cm.client_final_type==='entreprise'?'selected':''}>🏢 Entreprise / Structure</option>
+            </select>
           </div>
           <div class="form-group"><label class="form-label">N° suivi</label>
             <input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal();majStatutBadge()" placeholder="${t('cmd_num_transporteur_placeholder')||'Numéro transporteur'}">
@@ -1463,6 +1470,14 @@ function majReliquatSection(){
   if(wrap) wrap.style.background = checked ? 'var(--warning-bg)' : 'var(--surface)';
 }
 
+function clientFinalBadge(cm) {
+  const t = cm.client_final_type;
+  const icon = t==='particulier' ? '🏠' : t==='entreprise' ? '🏢' : '👤';
+  const bg   = t==='particulier' ? 'rgba(124,58,237,.12)' : t==='entreprise' ? 'rgba(16,185,129,.12)' : 'rgba(46,124,246,.12)';
+  const col  = t==='particulier' ? '#7c3aed' : t==='entreprise' ? '#059669' : '#2e7cf6';
+  return '<span title="'+esc(cm.client_final)+'" style="display:inline-flex;align-items:center;gap:3px;background:'+bg+';color:'+col+';border-radius:99px;padding:1px 6px;font-size:10px;font-weight:600">'+icon+' '+esc(cm.client_final)+'</span>';
+}
+
 const STATUTS_LISTE = ['Auto','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Problème','Annulé'];
 
 function toggleStatutMenu(e, id, statutActuel){
@@ -1498,7 +1513,7 @@ async function enregistrerCommande(id){
     distributeur_nom: gv('cmd-distrib'), groupe: gv('cmd-groupe'), modele: gv('cmd-modele'),
     quantite: parseInt(gv('cmd-quantite'))||1,
     bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
-    client_final: gv('cmd-clientfinal'), num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
+    client_final: gv('cmd-clientfinal'), client_final_type: gv('cmd-clientfinal-type')||null, num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
     date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
     informations: gv('cmd-infos'),
