@@ -1063,7 +1063,7 @@ async function modalCommande(id){
             </div>
           </div>
         </div>
-        <div class="grid-2" style="display:none">
+        <div class="grid-2">
           <div class="form-group"><label class="form-label">N° suivi</label>
             <input class="form-input mono" id="cmd-suivi" value="${esc(cm.num_suivi||'')}" oninput="majLienSuiviModal();majStatutBadge()" placeholder="${t('cmd_num_transporteur_placeholder')||'Numéro transporteur'}">
           </div>
