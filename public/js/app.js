@@ -856,6 +856,7 @@ async function renderCommandesTable(page=1){
 }
 
 async function modalCommande(id){
+  window._currentCmdId = id;
   let cm = id ? await API.commande(id) : {statut:'Auto', quantite:1};
 
   const hasExp  = !!(cm.num_suivi || cm.date_livraison || cm.num_bordereau || cm.num_serie);
@@ -1128,7 +1129,7 @@ async function modalCommande(id){
 }
 
 function switchCmdTab(tab){
-  ['commande','expedition','facturation'].forEach(k=>{
+  ['commande','expedition','facturation','notes'].forEach(k=>{
     const panel = document.getElementById('cmd-tab-'+k);
     const btn   = document.getElementById('tab-btn-'+k);
     if(panel) panel.style.display = k===tab ? '' : 'none';
@@ -1138,6 +1139,30 @@ function switchCmdTab(tab){
     }
   });
   if(tab==='expedition') setTimeout(()=>{ majLienSuiviModal(); majZonePreuveLivraison(); renderRetourLignes(); }, 30);
+  if(tab==='notes') {
+    // Cacher tous les panels et injecter les notes dans un conteneur dédié
+    ['commande','expedition','facturation'].forEach(k=>{
+      const p = document.getElementById('cmd-tab-'+k);
+      if(p) p.style.display='none';
+    });
+    const cmdId = window._currentCmdId;
+    let notesDiv = document.getElementById('cmd-notes-panel');
+    if(!notesDiv) {
+      notesDiv = document.createElement('div');
+      notesDiv.id = 'cmd-notes-panel';
+      notesDiv.style.cssText = 'height:370px;overflow:hidden;display:flex;flex-direction:column';
+      // Insert after the last visible tab panel
+      const factPanel = document.getElementById('cmd-tab-facturation');
+      if(factPanel && factPanel.parentNode) factPanel.parentNode.appendChild(notesDiv);
+    }
+    notesDiv.style.display = '';
+    notesDiv.innerHTML = '<div style="padding:20px;color:#aaa;text-align:center">Chargement...</div>';
+    if(cmdId) renderNotesTab(cmdId).then(function(h){ notesDiv.innerHTML = h; });
+  } else {
+    // Cacher le panel notes si on revient sur un autre onglet
+    const notesDiv = document.getElementById('cmd-notes-panel');
+    if(notesDiv) notesDiv.style.display='none';
+  }
 }
 
 
