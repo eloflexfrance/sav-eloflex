@@ -3480,101 +3480,117 @@ window.syncPaiementCommande = syncPaiementCommande;
 })();
 
 const _esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const _fd  = d => { if(!d) return '-'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } };
 
-async function renderDiscussions(ttl, c, a) {
+// Vue Discussions — non-async pour éviter les problèmes de Promise
+function renderDiscussions(ttl, c, a) {
   ttl.textContent = 'Discussions';
   a.innerHTML = '';
-  c.innerHTML = '<div style="padding:20px;color:#888">Chargement des discussions...</div>';
-  try {
-    const resp = await fetch('/api/notes/recent?limit=100');
-    if (!resp.ok) { c.innerHTML = '<div style="padding:20px;color:red">Erreur ' + resp.status + '</div>'; return; }
-    const notes = await resp.json();
-    if (!notes.length) { c.innerHTML = '<div style="padding:40px;text-align:center;color:#aaa">Aucune discussion pour l\'instant.<br>Ajoutez des notes dans les fiches commandes.</div>'; return; }
-    let html = '<div style="max-width:720px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px">';
-    for (const n of notes) {
-      html += '<div style="background:rgba(255,255,255,.65);border:0.5px solid #dde3ef;border-radius:12px;padding:14px 16px;cursor:pointer" onclick="_ouvrirCommande(' + n.commande_id + ')">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
-      html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + _esc(String(n.user_nom||'?')[0].toUpperCase()) + '</span>';
-      html += '<strong style="font-size:13px">' + _esc(n.user_nom||'?') + '</strong>';
-      html += '<span style="font-size:11px;color:#aaa;margin-left:auto">' + String(n.created_at||'').slice(0,16).replace('T',' ') + '</span>';
-      html += '<span style="background:rgba(46,124,246,.12);color:#2e7cf6;border-radius:99px;padding:2px 8px;font-size:10px">' + _esc(n.bdc||('#'+n.commande_id)) + '</span>';
-      html += '<span style="font-size:11px;color:#666">' + _esc(n.distributeur_nom||'') + '</span>';
+  c.innerHTML = '<div style="padding:20px;color:#888"><i class="ti ti-loader-2"></i> Chargement des discussions...</div>';
+  
+  fetch('/api/notes/recent?limit=100')
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(notes) {
+      if (!Array.isArray(notes)) { c.innerHTML = '<div style="padding:20px;color:red">Réponse invalide</div>'; return; }
+      if (!notes.length) {
+        c.innerHTML = '<div style="padding:40px;text-align:center;color:#aaa"><i class="ti ti-messages" style="font-size:32px"></i><br><br>Aucune discussion pour l\'instant.<br>Ouvrez une fiche commande et ajoutez une note.</div>';
+        return;
+      }
+      var html = '<div style="max-width:720px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px">';
+      for (var i = 0; i < notes.length; i++) {
+        var n = notes[i];
+        var ini = String(n.user_nom||'?')[0].toUpperCase();
+        var dt = String(n.created_at||'').slice(0,16).replace('T',' ');
+        html += '<div style="background:rgba(255,255,255,.65);border:0.5px solid #dde3ef;border-radius:12px;padding:14px 16px;cursor:pointer" onclick="_ouvrirCmd(' + n.commande_id + ')">';
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
+        html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + _esc(ini) + '</span>';
+        html += '<strong style="font-size:13px">' + _esc(n.user_nom||'?') + '</strong>';
+        html += '<span style="font-size:11px;color:#aaa;margin-left:auto">' + dt + '</span>';
+        html += '<span style="background:rgba(46,124,246,.12);color:#2e7cf6;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:600">' + _esc(n.bdc||'#'+n.commande_id) + '</span>';
+        html += '<span style="font-size:11px;color:#666">' + _esc(n.distributeur_nom||'') + '</span>';
+        html += '</div>';
+        html += '<div style="font-size:13px;color:#1a2d4a;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
+        html += '</div>';
+      }
       html += '</div>';
-      html += '<div style="font-size:13px;color:#1a2d4a;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
-      html += '</div>';
-    }
-    html += '</div>';
-    c.innerHTML = html;
-  } catch(e) {
-    c.innerHTML = '<div style="padding:20px;color:red">Erreur : ' + String(e.message) + '</div>';
-  }
+      c.innerHTML = html;
+    })
+    .catch(function(e) {
+      c.innerHTML = '<div style="padding:20px;color:red;font-size:13px">Erreur discussions : ' + String(e.message||e) + '</div>';
+    });
 }
 window.renderDiscussions = renderDiscussions;
 
-function _ouvrirCommande(cmdId) {
+function _ouvrirCmd(id) {
   if (typeof STATE !== 'undefined') STATE.view = 'commandes';
   if (typeof render === 'function') render();
-  setTimeout(function() { if (typeof modalCommande === 'function') modalCommande(cmdId); }, 500);
+  setTimeout(function() { if (typeof modalCommande === 'function') modalCommande(id); }, 600);
 }
-window._ouvrirCommande = _ouvrirCommande;
+window._ouvrirCmd = _ouvrirCmd;
 
-async function renderNotesTab(cmdId) {
-  if (!cmdId) return '<div style="padding:20px;color:#aaa;text-align:center">Enregistrez la commande pour ajouter des notes.</div>';
-  try {
-    const resp = await fetch('/api/commandes/' + cmdId + '/notes');
-    if (!resp.ok) throw new Error('Erreur ' + resp.status);
-    const notes = await resp.json();
-    let html = '<div id="tab-notes" style="display:flex;flex-direction:column;height:380px;overflow:hidden">';
-    html += '<div style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px">';
-    if (notes.length) {
-      for (const n of notes) {
-        html += '<div style="background:rgba(255,255,255,.7);border:0.5px solid #dde3ef;border-radius:10px;padding:12px 14px">';
-        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-        html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + _esc(String(n.user_nom||'?')[0].toUpperCase()) + '</span>';
-        html += '<strong style="font-size:13px">' + _esc(n.user_nom||'?') + '</strong>';
-        html += '<span style="font-size:11px;color:#aaa;margin-left:auto">' + String(n.created_at||'').slice(0,16).replace('T',' ') + '</span>';
-        html += '<button onclick="_deleteNote(' + cmdId + ',' + n.id + ')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:12px;padding:0 3px" title="Supprimer">x</button>';
-        html += '</div>';
-        html += '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
-        html += '</div>';
+// Onglet Notes dans fiche commande
+function renderNotesTab(cmdId) {
+  if (!cmdId) return Promise.resolve('<div style="padding:20px;color:#aaa;text-align:center">Enregistrez d\'abord la commande.</div>');
+  return fetch('/api/commandes/' + cmdId + '/notes')
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(notes) {
+      var html = '<div style="display:flex;flex-direction:column;height:370px;overflow:hidden">';
+      html += '<div id="notes-list-' + cmdId + '" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px">';
+      if (notes.length) {
+        for (var i = 0; i < notes.length; i++) {
+          var n = notes[i];
+          var ini = String(n.user_nom||'?')[0].toUpperCase();
+          var dt = String(n.created_at||'').slice(0,16).replace('T',' ');
+          html += '<div style="background:rgba(255,255,255,.7);border:0.5px solid #dde3ef;border-radius:9px;padding:10px 12px">';
+          html += '<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">';
+          html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">' + _esc(ini) + '</span>';
+          html += '<strong style="font-size:12px">' + _esc(n.user_nom||'?') + '</strong>';
+          html += '<span style="font-size:10px;color:#aaa;margin-left:auto">' + dt + '</span>';
+          html += '<button onclick="_delNote(' + cmdId + ',' + n.id + ')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:11px;line-height:1;padding:0 2px">✕</button>';
+          html += '</div>';
+          html += '<div style="font-size:12px;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
+          html += '</div>';
+        }
+      } else {
+        html += '<div style="padding:24px;text-align:center;color:#aaa;font-size:12px">Aucune note — ajoutez un commentaire ci-dessous.</div>';
       }
-    } else {
-      html += '<div style="padding:30px;text-align:center;color:#aaa">Aucune note - ajoutez un commentaire ci-dessous.</div>';
-    }
-    html += '</div>';
-    html += '<div style="padding:10px 14px;border-top:0.5px solid #dde3ef;background:rgba(255,255,255,.5);display:flex;gap:8px">';
-    html += '<textarea id="ni-' + cmdId + '" placeholder="Ajouter une note interne..." rows="2" style="flex:1;border:0.5px solid #c0c8d8;border-radius:8px;padding:7px 10px;font-size:13px;resize:none;background:rgba(255,255,255,.8)"></textarea>';
-    html += '<button onclick="_sendNote(' + cmdId + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer">Envoyer</button>';
-    html += '</div>';
-    html += '</div>';
-    return html;
-  } catch(e) {
-    return '<div style="padding:20px;color:red">Erreur : ' + String(e.message) + '</div>';
-  }
+      html += '</div>';
+      html += '<div style="padding:10px 12px;border-top:0.5px solid #dde3ef;display:flex;gap:8px">';
+      html += '<textarea id="ni-' + cmdId + '" placeholder="Ajouter une note..." rows="2" style="flex:1;border:0.5px solid #c0c8d8;border-radius:7px;padding:6px 9px;font-size:12px;resize:none;background:rgba(255,255,255,.8)"></textarea>';
+      html += '<button onclick="_sendNote(' + cmdId + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:7px 12px;cursor:pointer;font-size:12px">&#10148;</button>';
+      html += '</div>';
+      html += '</div>';
+      return html;
+    })
+    .catch(function(e) { return '<div style="padding:20px;color:red;font-size:12px">Erreur : ' + String(e.message) + '</div>'; });
 }
 window.renderNotesTab = renderNotesTab;
 
-async function _sendNote(cmdId) {
-  const inp = document.getElementById('ni-' + cmdId);
+function _sendNote(cmdId) {
+  var inp = document.getElementById('ni-' + cmdId);
   if (!inp || !inp.value.trim()) return;
-  try {
-    const r = await fetch('/api/commandes/' + cmdId + '/notes', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({texte: inp.value.trim()})});
-    if (!r.ok) throw new Error('Erreur ' + r.status);
-    inp.value = '';
-    const tab = document.getElementById('tab-notes');
-    if (tab) tab.innerHTML = await renderNotesTab(cmdId);
-  } catch(e) { alert('Erreur : ' + e.message); }
+  var txt = inp.value.trim();
+  fetch('/api/commandes/' + cmdId + '/notes', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({texte: txt})})
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function() {
+      inp.value = '';
+      var tab = document.getElementById('tab-notes');
+      if (tab) renderNotesTab(cmdId).then(function(h) { tab.innerHTML = h; });
+    })
+    .catch(function(e) { alert('Erreur : ' + e.message); });
 }
 window._sendNote = _sendNote;
 
-async function _deleteNote(cmdId, noteId) {
+function _delNote(cmdId, noteId) {
   if (!confirm('Supprimer cette note ?')) return;
-  try {
-    await fetch('/api/commandes/' + cmdId + '/notes/' + noteId, {method:'DELETE'});
-    const tab = document.getElementById('tab-notes');
-    if (tab) tab.innerHTML = await renderNotesTab(cmdId);
-  } catch(e) { alert('Erreur : ' + e.message); }
+  fetch('/api/commandes/' + cmdId + '/notes/' + noteId, {method:'DELETE'})
+    .then(function() {
+      var tab = document.getElementById('tab-notes');
+      if (tab) renderNotesTab(cmdId).then(function(h) { tab.innerHTML = h; });
+    })
+    .catch(function(e) { alert('Erreur : ' + e.message); });
 }
-window._deleteNote = _deleteNote;
+window._delNote = _delNote;
 
