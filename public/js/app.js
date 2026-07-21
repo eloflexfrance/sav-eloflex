@@ -3655,9 +3655,16 @@ function renderCarte(ttl, c, a) {
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">Réseaux</div>' +
       legende +
       '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
-        '<input id="carte-search" placeholder="Rechercher…" oninput="afficherMarkers()" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px">' +
+        '<label style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em;font-weight:700;display:block;margin-bottom:6px">Recherche</label>' +
+        '<input id="carte-search" placeholder="Nom de distributeur…" oninput="afficherMarkers()" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px;margin-bottom:8px">' +
+        '<div style="display:flex;gap:6px">' +
+          '<input id="carte-geo" placeholder="Ville ou code postal" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px">' +
+          '<button onclick="rechercheGeo()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-search"></i></button>' +
+        '</div>' +
+        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666;cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> Afficher rayon <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid #cfcfca;border-radius:4px;padding:1px 4px;font-size:12px"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
       '</div>' +
-      '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">Cliquez un point pour le détail et ajouter une note.</div>' +
+      '<div id="carte-geo-result" style="margin-top:10px;font-size:12px;color:#666"></div>' +
+      '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.</div>' +
     '</div>' +
     '<div id="carte-leaflet" style="flex:1;height:100%;background:#dce4ec"></div>' +
     '</div>';
@@ -3810,6 +3817,119 @@ function sauverNoteCarte(id) {
   }).catch(function(e){ alert('Erreur : ' + e.message); });
 }
 window.sauverNoteCarte = sauverNoteCarte;
+
+var _carteRayonCircle = null;
+var _carteGeoCenter = null;
+
+// Distance entre deux points (formule Haversine, en km)
+function distanceKm(lat1, lng1, lat2, lng2) {
+  var R = 6371;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLng = (lng2 - lng1) * Math.PI / 180;
+  var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function rechercheGeo() {
+  var q = (document.getElementById('carte-geo') || {}).value || '';
+  q = q.trim();
+  var resultEl = document.getElementById('carte-geo-result');
+  if (!q) {
+    // Réinitialiser
+    if (_carteRayonCircle && _carteMap) { _carteMap.removeLayer(_carteRayonCircle); _carteRayonCircle = null; }
+    _carteGeoCenter = null;
+    if (resultEl) resultEl.innerHTML = '';
+    afficherMarkers();
+    return;
+  }
+  if (resultEl) resultEl.innerHTML = '<span style="color:#999">Recherche…</span>';
+
+  // Chercher d'abord dans nos propres points (CP ou ville exacte)
+  var qLow = q.toLowerCase();
+  var localMatch = _cartePoints.find(function(p){
+    return (p.cp && p.cp === q) || (p.ville && p.ville.toLowerCase() === qLow);
+  });
+
+  if (localMatch) {
+    centrerSurGeo(parseFloat(localMatch.lat), parseFloat(localMatch.lng), localMatch.ville || q);
+    return;
+  }
+
+  // Sinon géocoder via l'API (Nominatim)
+  fetch('/api/carte/geocode-adresse?q=' + encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.found) {
+        centrerSurGeo(d.lat, d.lng, q);
+      } else {
+        if (resultEl) resultEl.innerHTML = '<span style="color:#dc2626">Lieu introuvable</span>';
+      }
+    })
+    .catch(function(e){ if (resultEl) resultEl.innerHTML = '<span style="color:#dc2626">Erreur</span>'; });
+}
+window.rechercheGeo = rechercheGeo;
+
+function centrerSurGeo(lat, lng, label) {
+  if (!_carteMap) return;
+  _carteGeoCenter = { lat: lat, lng: lng };
+  var rayonActif = (document.getElementById('carte-rayon-actif') || {}).checked;
+  var rayonKm = parseInt((document.getElementById('carte-rayon') || {}).value || '50');
+
+  // Cercle de rayon
+  if (_carteRayonCircle) { _carteMap.removeLayer(_carteRayonCircle); _carteRayonCircle = null; }
+  if (rayonActif) {
+    _carteRayonCircle = L.circle([lat, lng], {
+      radius: rayonKm * 1000, color: '#2e7cf6', weight: 1.5, fillColor: '#2e7cf6', fillOpacity: 0.08
+    }).addTo(_carteMap);
+    _carteMap.fitBounds(_carteRayonCircle.getBounds(), { padding: [40, 40] });
+  } else {
+    _carteMap.setView([lat, lng], 10);
+  }
+
+  afficherMarkers();
+
+  // Compter et lister les distributeurs proches
+  var proches = _cartePoints.filter(function(p){
+    if (!_carteReseaux[p.reseau]) return false;
+    var dist = distanceKm(lat, lng, parseFloat(p.lat), parseFloat(p.lng));
+    p._dist = dist;
+    return dist <= rayonKm;
+  }).sort(function(a, b){ return a._dist - b._dist; });
+
+  var resultEl = document.getElementById('carte-geo-result');
+  if (resultEl) {
+    if (proches.length) {
+      resultEl.innerHTML = '<div style="font-weight:600;margin-bottom:6px">' + proches.length + ' distributeur' + (proches.length>1?'s':'') + ' dans un rayon de ' + rayonKm + ' km de ' + _esc(label) + ' :</div>' +
+        proches.slice(0, 15).map(function(p){
+          var cfg = RESEAUX_CONFIG[p.reseau] || { color:'#888' };
+          return '<div onclick="zoomSurPoint(' + p.id + ')" style="display:flex;align-items:center;gap:6px;padding:4px 2px;cursor:pointer;border-radius:4px" onmouseover="this.style.background=\'#f0f0ee\'" onmouseout="this.style.background=\'\'">' +
+            '<span style="width:9px;height:9px;border-radius:50%;background:' + cfg.color + ';flex-shrink:0"></span>' +
+            '<span style="flex:1;font-size:12px">' + _esc(p.nom) + '</span>' +
+            '<span style="font-size:11px;color:#999">' + p._dist.toFixed(0) + ' km</span>' +
+            '</div>';
+        }).join('') +
+        (proches.length > 15 ? '<div style="font-size:11px;color:#999;margin-top:4px">… et ' + (proches.length - 15) + ' autres</div>' : '');
+    } else {
+      resultEl.innerHTML = '<span style="color:#999">Aucun distributeur dans ce rayon.</span>';
+    }
+  }
+}
+window.centrerSurGeo = centrerSurGeo;
+
+function zoomSurPoint(id) {
+  var p = _cartePoints.find(function(x){ return x.id === id; });
+  if (!p || !_carteMap) return;
+  _carteMap.setView([parseFloat(p.lat), parseFloat(p.lng)], 13);
+  // Ouvrir le popup du marker correspondant
+  var marker = _carteMarkers.find(function(m){
+    var ll = m.getLatLng();
+    return Math.abs(ll.lat - parseFloat(p.lat)) < 0.0001 && Math.abs(ll.lng - parseFloat(p.lng)) < 0.0001;
+  });
+  if (marker) marker.openPopup();
+}
+window.zoomSurPoint = zoomSurPoint;
 
 function modalPointCarte(id) {
   var p = id ? _cartePoints.find(function(x){ return x.id === id; }) : null;
