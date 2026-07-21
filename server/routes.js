@@ -2472,7 +2472,7 @@ router.post('/commandes', async (req, res) => {
         invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo,
         num_retour, transporteur_retour, date_retour, num_commande_distrib,
         commande_type, ref_suede, date_envoi_suede, confirmation_recue, date_confirmation)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.client_final_type || null, d.cf_nom||null, d.cf_prenom||null, d.cf_adresse||null, d.cf_cp||null, d.cf_ville||null, d.cf_tel||null, d.cf_email||null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
