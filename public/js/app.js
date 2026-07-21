@@ -3605,6 +3605,12 @@ window.syncPaiementCommande = syncPaiementCommande;
 
 })();
 
+// Helpers globaux (hors IIFE)
+function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function _fd(d){ if(!d) return '-'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(e){ return String(d).slice(0,10); } }
+window._esc = _esc; window._fd = _fd;
+
+
 // ═══════════════════════════════════════════════════════════════════
 // CARTE DISTRIBUTEURS (Leaflet + KML importés)
 // ═══════════════════════════════════════════════════════════════════
