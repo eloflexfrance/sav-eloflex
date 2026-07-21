@@ -9,12 +9,15 @@ const PDF = {
     let y = 20;
 
     doc.setFontSize(15); doc.setFont('helvetica', 'bold');
-    doc.text('FICHE INTERVENTION SAV — ÉLOFLEX', 105, y, { align: 'center' });
-    y += 3; doc.setDrawColor(200,200,200); doc.setLineWidth(0.3); doc.line(15, y+4, 195, y+4); y += 12;
+    doc.text('FICHE INTERVENTION SAV — ELOFLEX', 105, y, { align: 'center' });
+    y += 3; doc.setDrawColor(200,200,200); doc.setLineWidth(0.3); doc.line(15, y+4, 195, y+4); y += 10;
+    doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(120,120,120);
+    doc.text('ELOFLEX — 41 rue des Maraichers — 17140 LAGORD', 105, y, { align: 'center' });
+    doc.setTextColor(0,0,0); y += 8;
 
     doc.setFontSize(10);
     const info = [
-      ['N° intervention', `#${inter.id}`],
+      ['N° intervention', `${inter.num_sav || ('#' + inter.id)}`],
       ['Date', this.fd(inter.date)],
       ['Client', inter.client_nom || '—'],
       ['Modèle', inter.modele || '—'],
@@ -78,7 +81,7 @@ const PDF = {
       }
     }
 
-    doc.save(`intervention_${inter.id}_${inter.date}.pdf`);
+    doc.save(`intervention_${inter.num_sav || inter.id}_${inter.date}.pdf`);
   },
 
   fauteuil(f, interventions) {
@@ -86,7 +89,7 @@ const PDF = {
     const doc = new jsPDF();
     let y = 20;
     doc.setFontSize(15); doc.setFont('helvetica', 'bold');
-    doc.text('HISTORIQUE SAV — FAUTEUIL ÉLOFLEX', 105, y, { align: 'center' });
+    doc.text('HISTORIQUE SAV — FAUTEUIL ELOFLEX', 105, y, { align: 'center' });
     y += 4; doc.setDrawColor(200,200,200); doc.line(15, y+3, 195, y+3); y += 11;
     doc.setFontSize(10);
     const info = [
@@ -121,7 +124,7 @@ const PDF = {
     const doc = new jsPDF();
     let y = 20;
     doc.setFontSize(15); doc.setFont('helvetica', 'bold');
-    doc.text('DOSSIER CLIENT SAV — ÉLOFLEX', 105, y, { align: 'center' });
+    doc.text('DOSSIER CLIENT SAV — ELOFLEX', 105, y, { align: 'center' });
     y += 4; doc.setDrawColor(200,200,200); doc.line(15, y+3, 195, y+3); y += 11;
     doc.setFontSize(10);
     [['Nom', cl.nom], ['Contact', cl.contact||'—'], ['Email', cl.email||'—'], ['Téléphone', cl.tel||'—'], ['Ville', cl.ville||'—'], ['Type', cl.type||'—']].forEach(([k,v]) => {

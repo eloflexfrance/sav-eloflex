@@ -1766,7 +1766,7 @@ async function renderParametres(ttl,c,a){
         <div class="form-group"><label class="form-label">${t('param_smtp_port')}</label><input class="form-input" id="p-smtp-port" type="number" value="${p.email_smtp_port||587}"></div>
         <div class="form-group"><label class="form-label">${t('param_smtp_user')}</label><input class="form-input" id="p-smtp-user" placeholder="sav@eloflex.fr" value="${esc(p.email_smtp_user||'')}"></div>
         <div class="form-group"><label class="form-label">${t('param_smtp_pass')}</label><input class="form-input" id="p-smtp-pass" type="password" placeholder="••••••••" value="${esc(p.email_smtp_pass||'')}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('param_email_from')}</label><input class="form-input" id="p-email-from" placeholder="SAV Éloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('param_email_from')}</label><input class="form-input" id="p-email-from" placeholder="SAV Eloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
         <div class="form-group"><label class="form-label">CC — Emails SAV (confirmations, expéditions)</label><input class="form-input" id="p-email-cc-sav" placeholder="sav@eloflex.fr" value="${esc(p.email_cc_sav||'sav@eloflex.fr')}"></div>
         <div class="form-group"><label class="form-label">CC — Emails relances devis & BDC</label><input class="form-input" id="p-email-cc-relance" placeholder="info@eloflex.fr" value="${esc(p.email_cc_relance||'info@eloflex.fr')}"></div>
       </div>
@@ -1783,7 +1783,7 @@ async function renderParametres(ttl,c,a){
     <div class="param-section">
       <h3><i class="ti ti-building"></i>${t('param_societe')}</h3>
       <div class="form-group"><label class="form-label">${t('param_nom_societe')}</label>
-        <input class="form-input" id="p-societe" value="${esc(p.nom_societe||'Éloflex France')}"></div>
+        <input class="form-input" id="p-societe" value="${esc(p.nom_societe||'Eloflex France')}"></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-globe"></i>${t('param_portail')}</h3>
@@ -2435,9 +2435,10 @@ async function viewIntervention(id){
         <div style="text-align:right;padding-top:6px;font-weight:700;font-size:13px">Total HT : ${total.toFixed(2)} €</div>`}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-send"></i>Expédition</div>
-      ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Envoi</div><div style="font-size:12px">${esc(i.envoi_transporteur)} — <span class="mono">${esc(i.envoi_numero)}</span> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun envoi</div>'}
+      ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Envoi</div><div style="font-size:12px">${esc(i.envoi_transporteur)} — <a href="${lienhSuiviInter(i.envoi_transporteur,i.envoi_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.envoi_numero)}</a> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun envoi</div>'}
+      ${i.num_bordereau_vf?`<div style="margin-top:8px"><a href="https://${ENV_VF_ACCOUNT||'eloflex'}.vosfactures.fr/documents?q=${esc(i.num_bordereau_vf)}" target="_blank" style="color:var(--accent);font-size:12px;text-decoration:none"><i class="ti ti-file-invoice" style="font-size:11px"></i> BL/Bordereau : ${esc(i.num_bordereau_vf)}</a></div>`:''}
       <div class="section-title" style="margin-top:10px"><i class="ti ti-arrow-back-up"></i>Retour</div>
-      ${i.retour_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Retour</div><div style="font-size:12px">${esc(i.retour_transporteur)} — <span class="mono">${esc(i.retour_numero)}</span> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun retour</div>'}
+      ${i.retour_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Retour</div><div style="font-size:12px">${esc(i.retour_transporteur)} — <a href="${lienhSuiviInter(i.retour_transporteur,i.retour_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.retour_numero)}</a> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun retour</div>'}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-photo"></i>Photos (${photos.length})</div>
       <div id="photo-gallery">${renderPhotoGallery(photos,i.id)}</div>

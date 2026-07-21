@@ -478,7 +478,7 @@ router.put('/interventions/:id', async (req, res) => {
     try {
       await pgClient.query('BEGIN');
       await pgClient.query(
-        `UPDATE interventions SET type=$1,garantie=$2,statut=$3,description=$4,notes=$5,technicien=$6,
+        `UPDATE interventions SET type=COALESCE($1,type),garantie=COALESCE($2,garantie),statut=COALESCE($3,statut),description=COALESCE($4,description),notes=COALESCE($5,notes),technicien=COALESCE($6,technicien),
           envoi_transporteur=$7,envoi_numero=$8,envoi_date=$9,retour_transporteur=$10,retour_numero=$11,retour_date=$12,
           num_bordereau_vf=$13,num_sav=$14,num_facture=COALESCE($15,num_facture),updated_at=NOW() WHERE id=$16`,
         [type, !!garantie, statut, description, notes, technicien,
@@ -1507,9 +1507,9 @@ router.post('/email/notification-intervention', async (req, res) => {
     await transporter.sendMail({
       from: params.email_from || params.email_smtp_user,
       to: i.client_email,
-      subject: `[SAV Éloflex] ${i.num_sav||'Intervention #'+i.id} — ${i.statut}`,
+      subject: `[Eloflex] ${i.num_sav||'Intervention #'+i.id} — ${i.statut}`,
       html: `<div style="font-family:sans-serif;max-width:520px">
-        <h2 style="color:#1a3a5c">SAV Éloflex — Mise à jour</h2>
+        <h2 style="color:#1a3a5c">Eloflex — Mise à jour</h2>
         <p>Bonjour,</p>
         <p>Votre dossier SAV <strong>${i.num_sav||'#'+i.id}</strong> concernant le fauteuil 
         <strong>${i.modele} (${i.serie})</strong> a été mis à jour.</p>
@@ -1518,7 +1518,7 @@ router.post('/email/notification-intervention', async (req, res) => {
           <tr><td style="padding:6px 10px;background:#f5f5f4;font-weight:600">Type</td><td style="padding:6px 10px">${i.type}</td></tr>
           <tr><td style="padding:6px 10px;background:#f5f5f4;font-weight:600">Description</td><td style="padding:6px 10px">${i.description||'—'}</td></tr>
         </table>
-        <p style="margin-top:16px;font-size:12px;color:#666">Éloflex France — Service Après-Vente</p>
+        <p style="margin-top:16px;font-size:12px;color:#666">Eloflex France — Service Après-Vente</p>
       </div>`
     });
     res.json({ ok: true, to: i.client_email });
@@ -1961,10 +1961,10 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     const vfUrl = `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${devis.vf_id}`;
 
     await axios.post('https://api.brevo.com/v3/smtp/email', {
-      sender: { name: 'Éloflex France', email: fromAddr },
+      sender: { name: 'Eloflex France', email: fromAddr },
       to: [{ email }],
       cc: [{ email: params.email_cc_relance || 'info@eloflex.fr' }],
-      subject: `[Éloflex] Relance devis ${devis.numero}`,
+      subject: `[Eloflex] Relance devis ${devis.numero}`,
       ...(pdfAttachment ? { attachment: [pdfAttachment] } : {}),
       htmlContent: `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"></head>
@@ -2018,7 +2018,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
           <img src="https://sensode.com/eloflex/wp-content/uploads/logo-signature.png" alt="Eloflex" width="145" style="display:block;border:0;">
         </td>
         <td valign="middle" style="padding-left:20px;">
-          <div style="font-size:18px;font-weight:bold;color:#1F3A5F;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.3px;">ÉLOFLEX FRANCE</div>
+          <div style="font-size:18px;font-weight:bold;color:#1F3A5F;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.3px;">ELOFLEX FRANCE</div>
           <div style="font-size:13px;color:#444444;line-height:22px;"><a href="mailto:info@eloflex.fr" style="color:#2B7DC7;text-decoration:none;">info@eloflex.fr</a> &nbsp;·&nbsp; <a href="https://eloflex.fr" style="color:#2B7DC7;text-decoration:none;">eloflex.fr</a></div>
           <div style="font-size:13px;color:#444444;">Tél. : <strong style="color:#2B7DC7;">09 67 66 51 29</strong> <span style="color:#888;font-size:12px;">(service commercial)</span></div>
           <div style="font-size:13px;color:#444444;">Mob. : <strong style="color:#2B7DC7;">07 54 37 47 40</strong> <span style="color:#888;font-size:12px;">(service technique)</span></div>
@@ -2040,7 +2040,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
 
   <!-- FOOTER -->
   <tr><td style="background:#1F3A5F;padding:14px 36px;text-align:center;">
-    <div style="font-size:12px;color:#A8C4E0;">© Éloflex France &nbsp;·&nbsp; <a href="https://eloflex.fr" style="color:#A8C4E0;text-decoration:none;">eloflex.fr</a> &nbsp;·&nbsp; 09 67 66 51 29</div>
+    <div style="font-size:12px;color:#A8C4E0;">© Eloflex France &nbsp;·&nbsp; <a href="https://eloflex.fr" style="color:#A8C4E0;text-decoration:none;">eloflex.fr</a> &nbsp;·&nbsp; 09 67 66 51 29</div>
   </td></tr>
 
 </table>
@@ -2336,7 +2336,7 @@ async function sendBrevoMail({ from, fromName, to, cc, subject, html }) {
   const key = process.env.BREVO_API_KEY;
   if (!key) throw new Error('BREVO_API_KEY manquante');
   await axios.post('https://api.brevo.com/v3/smtp/email', {
-    sender: { name: fromName||'Éloflex France', email: from||'sav@eloflex.fr' },
+    sender: { name: fromName||'Eloflex France', email: from||'sav@eloflex.fr' },
     to: [{ email: to }],
     ...(cc ? { cc: [{ email: cc }] } : {}),
     subject, htmlContent: html
@@ -2837,17 +2837,17 @@ router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => 
       secure: parseInt(params.email_smtp_port)===465, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass } });
     await tr.sendMail({
       from: params.email_from || params.email_smtp_user, to: cmd.client_email,
-      subject: `[Éloflex] Confirmation de commande ${cmd.bdc || '#' + cmd.id}`,
+      subject: `[Eloflex] Confirmation de commande ${cmd.bdc || '#' + cmd.id}`,
       cc: 'sav@eloflex.fr',
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
-          <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Éloflex France — Confirmation de commande</h2>
+          <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Eloflex France — Confirmation de commande</h2>
         </div>
         <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
           <p style="margin:0 0 12px">Bonjour,</p>
           <p style="margin:0 0 16px">Nous avons bien reçu votre commande du <strong>${cmd.date_commande ? new Date(cmd.date_commande).toLocaleDateString('fr-FR') : '—'}</strong>.</p>
           <table style="border-collapse:collapse;width:100%;font-size:13px;margin:0 0 20px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
-            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">Référence Éloflex</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${cmd.bdc || '—'}</strong></td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">Référence Eloflex</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${cmd.bdc || '—'}</strong></td></tr>
             ${cmd.num_commande_distrib ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Votre référence</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${cmd.num_commande_distrib}</strong></td></tr>` : ''}
             ${types ? `<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Type</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${types}</td></tr>` : ''}
             ${cmd.modele ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Article(s)</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.modele}</td></tr>` : ''}
@@ -2858,7 +2858,7 @@ router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => 
             <a href="${confirmUrl}" style="display:inline-block;background:#1a3a5c;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600">✓ Confirmer ma commande</a>
           </div>
           <p style="margin:0 0 4px;font-size:12px;color:#888">Ou confirmez par retour de mail à : <a href="mailto:${params.email_smtp_user}" style="color:#1a3a5c">${params.email_smtp_user}</a></p>
-          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">Éloflex France — Service commercial<br>Cet email a été envoyé automatiquement depuis le système de gestion SAV.</p>
+          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">Eloflex France — Service commercial<br>Cet email a été envoyé automatiquement depuis le système de gestion SAV.</p>
         </div>
       </div>`
     });
@@ -2887,7 +2887,7 @@ router.get('/confirmer-commande/:id/:token', async (req, res) => {
         <div class="check">✅</div>
         <h1>Commande confirmée !</h1>
         <p>Merci <strong>${cmd.distributeur_nom}</strong>, votre bon de commande <strong>${cmd.bdc || '#'+cmd.id}</strong> a bien été confirmé.</p>
-        <p style="font-size:13px;color:#888;margin-top:20px">Équipe Éloflex France — nous allons procéder à la préparation.</p>
+        <p style="font-size:13px;color:#888;margin-top:20px">Équipe Eloflex France — nous allons procéder à la préparation.</p>
       </div></body></html>`);
   } catch(e) { res.status(500).send(`<h2>Erreur : ${e.message}</h2>`); }
 });
@@ -3043,17 +3043,17 @@ router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
       secure:parseInt(params.email_smtp_port)===465, auth:{user:params.email_smtp_user, pass:params.email_smtp_pass} });
     await transporter.sendMail({
       from: params.email_from||params.email_smtp_user, to: cmd.client_email,
-      subject: `[Éloflex] Expédition de votre commande ${cmd.bdc||'#'+cmd.id}`,
+      subject: `[Eloflex] Expédition de votre commande ${cmd.bdc||'#'+cmd.id}`,
       cc: 'sav@eloflex.fr',
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
-          <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Éloflex France — Votre commande est en route !</h2>
+          <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Eloflex France — Votre commande est en route !</h2>
         </div>
         <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
           <table style="border-collapse:collapse;width:100%;font-size:13px;margin:0 0 20px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden">
             <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;width:170px;border-bottom:1px solid #e5e7eb">Distributeur</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.distributeur_nom}</td></tr>
             ${cmd.groupe ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Groupe</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.groupe}</td></tr>` : ''}
-            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Référence Éloflex</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${cmd.bdc||'—'}</strong></td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Référence Eloflex</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb"><strong>${cmd.bdc||'—'}</strong></td></tr>
             ${cmd.num_commande_distrib ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Votre référence</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${cmd.num_commande_distrib}</td></tr>` : ''}
             ${types ? `<tr style="background:#f8f9fa"><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Type</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${types}</td></tr>` : ''}
             ${articlesList ? `<tr><td style="padding:9px 14px;font-weight:600;color:#555;border-bottom:1px solid #e5e7eb">Article(s)</td><td style="padding:9px 14px;border-bottom:1px solid #e5e7eb">${articlesList}</td></tr>` : ''}
@@ -3064,7 +3064,7 @@ router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
           </table>
           ${lienSuivi ? `<div style="text-align:center;margin:24px 0"><a href="${lienSuivi}" style="display:inline-block;background:#1a3a5c;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600">Suivre mon colis →</a></div>` : ''}
           ${cmd.client_final ? `<p style="margin:0 0 16px;font-size:13px;color:#555;background:#f8f9fa;padding:10px 14px;border-radius:6px;border-left:3px solid #1a3a5c"><strong>Client final :</strong> ${cmd.client_final}</p>` : ''}
-          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">Éloflex France — Service commercial<br>Pour toute question, répondez à cet email.</p>
+          <p style="margin:20px 0 0;font-size:12px;color:#aaa;border-top:1px solid #f0f0f0;padding-top:16px">Eloflex France — Service commercial<br>Pour toute question, répondez à cet email.</p>
         </div>
       </div>`
     });
