@@ -1551,13 +1551,25 @@ function statutCommande(cmd) {
 router.get('/commandes', async (req, res) => {
   try {
     const { distributeur, client_id, statut, annee, groupe, q, date_from, date_to, page = 1, per_page = 100 } = req.query;
-    let sql = `SELECT cmd.*, c.nom AS client_nom, c.ville AS client_ville,
-               c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
-               ROW_NUMBER() OVER (
-                 PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
-                 ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
-               ) AS num_annuel
-               FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
+    const slim = req.query.slim === '1';
+    const fields = slim
+      ? `cmd.id, cmd.bdc, cmd.distributeur_nom, cmd.modele, cmd.quantite, cmd.date_commande,
+         cmd.statut, cmd.num_suivi, cmd.transporteur, cmd.date_livraison, cmd.num_serie,
+         cmd.num_facture, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
+         cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
+         cmd.reliquat, cmd.demo_origine_nom, cmd.annee_onglet, cmd.groupe,
+         c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,
+         ROW_NUMBER() OVER (
+           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
+           ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
+         ) AS num_annuel`
+      : `cmd.*, c.nom AS client_nom, c.ville AS client_ville,
+         c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
+         ROW_NUMBER() OVER (
+           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
+           ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
+         ) AS num_annuel`;
+    let sql = `SELECT ${fields} FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
     const conds = [], p = [];
     let idx = 0;
     // Filtre pays : utilisateur avec pays défini → voit uniquement ses commandes
@@ -2817,7 +2829,6 @@ router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => 
   try {
     const params = {}; const prows = await db.all('SELECT cle, valeur FROM parametres');
     prows.forEach(r => params[r.cle] = r.valeur);
-    if (!params.email_smtp_host || !params.email_smtp_user) return res.json({ ok: false, reason: 'SMTP non configuré' });
     const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom, c.email AS client_email
       FROM commandes cmd JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
     if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
@@ -2832,13 +2843,10 @@ router.post('/commandes/:id/email-confirmation', adminOrOp, async (req, res) => 
     // Type de commande
     const types = [cmd.type_fauteuil_neuf && '🆕 Fauteuil Neuf', cmd.type_fauteuil_demo && '🔄 Fauteuil Démo', cmd.type_pieces && '📦 Pièces détachées'].filter(Boolean).join(', ');
 
-    const nodemailer = require('nodemailer');
-    const tr = nodemailer.createTransport({ host: params.email_smtp_host, port: parseInt(params.email_smtp_port)||587,
-      secure: parseInt(params.email_smtp_port)===465, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass } });
-    await tr.sendMail({
-      from: params.email_from || params.email_smtp_user, to: cmd.client_email,
+    await sendBrevoMail({
+      from: params.email_from || 'sav@eloflex.fr', to: cmd.client_email,
+      cc: params.email_cc_sav || 'sav@eloflex.fr',
       subject: `[Eloflex] Confirmation de commande ${cmd.bdc || '#' + cmd.id}`,
-      cc: 'sav@eloflex.fr',
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
         <div style="background:#1a3a5c;padding:20px 24px;border-radius:8px 8px 0 0">
           <h2 style="color:#fff;margin:0;font-size:18px;font-weight:600">Eloflex France — Confirmation de commande</h2>
@@ -3423,5 +3431,151 @@ async function upsertClientFinal(data) {
     }
   } catch(e) { console.error('[CF UPSERT]', e.message); }
 }
+
+
+// ── Rapport mensuel (1er du mois) ────────────────────────────────
+async function envoyerRapportMensuel() {
+  try {
+    const now = new Date();
+    if (now.getDate() !== 1) return; // seulement le 1er du mois
+    const moisPrec = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const moisPrecFin = new Date(now.getFullYear(), now.getMonth(), 0);
+    const debut = moisPrec.toISOString().slice(0,10);
+    const fin = moisPrecFin.toISOString().slice(0,10);
+    const moisLabel = moisPrec.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+    const stats = await db.get(`
+      SELECT COUNT(*) AS total,
+        SUM(CASE WHEN statut='Livré' OR statut='Facturé' THEN 1 ELSE 0 END) AS livrees,
+        SUM(CASE WHEN facture_paiement_statut IN ('impaye','impayé') THEN 1 ELSE 0 END) AS impayes,
+        SUM(CASE WHEN statut='En préparation' OR statut='Auto' THEN 1 ELSE 0 END) AS en_cours
+      FROM commandes WHERE date_commande >= $1 AND date_commande <= $2
+    `, [debut, fin]);
+
+    const impayesDetails = await db.all(`
+      SELECT distributeur_nom, num_facture, facture_date_echeance
+      FROM commandes
+      WHERE facture_paiement_statut IN ('impaye','impayé')
+      ORDER BY facture_date_echeance ASC LIMIT 20
+    `);
+
+    const devisOuverts = await db.get('SELECT COUNT(*) AS nb FROM devis WHERE statut=$1', ['ouvert']);
+
+    const brevoKey = process.env.BREVO_API_KEY;
+    if (!brevoKey) return;
+    const axios = require('axios');
+    await axios.post('https://api.brevo.com/v3/smtp/email', {
+      sender: { name: 'Eloflex SAV', email: 'sav@eloflex.fr' },
+      to: [{ email: 'info@eloflex.fr' }],
+      subject: `[Eloflex] Rapport mensuel — ${moisLabel}`,
+      htmlContent: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+        <div style="background:#1F3A5F;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0">Rapport mensuel Eloflex SAV</h2>
+          <div style="color:#A8C4E0;font-size:13px">${moisLabel}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:24px">
+          <h3 style="color:#1F3A5F;margin-top:0">Commandes du mois</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr style="background:#f8f9fa"><td style="padding:8px 12px;border:1px solid #e5e7eb">Total commandes</td><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:bold">${stats.total}</td></tr>
+            <tr><td style="padding:8px 12px;border:1px solid #e5e7eb">Livrées / Facturées</td><td style="padding:8px 12px;border:1px solid #e5e7eb">${stats.livrees}</td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:8px 12px;border:1px solid #e5e7eb">En cours</td><td style="padding:8px 12px;border:1px solid #e5e7eb">${stats.en_cours}</td></tr>
+            <tr style="color:#dc2626"><td style="padding:8px 12px;border:1px solid #e5e7eb">⚠️ Impayées</td><td style="padding:8px 12px;border:1px solid #e5e7eb;font-weight:bold">${stats.impayes}</td></tr>
+            <tr style="background:#f8f9fa"><td style="padding:8px 12px;border:1px solid #e5e7eb">Devis en attente</td><td style="padding:8px 12px;border:1px solid #e5e7eb">${devisOuverts.nb}</td></tr>
+          </table>
+          ${impayesDetails.length ? `
+          <h3 style="color:#dc2626;margin-top:20px">Factures impayées</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <tr style="background:#fef2f2"><th style="padding:6px 10px;border:1px solid #fecaca;text-align:left">Distributeur</th><th style="padding:6px 10px;border:1px solid #fecaca">N° Facture</th><th style="padding:6px 10px;border:1px solid #fecaca">Échéance</th></tr>
+            ${impayesDetails.map(i => `<tr><td style="padding:6px 10px;border:1px solid #e5e7eb">${i.distributeur_nom||'—'}</td><td style="padding:6px 10px;border:1px solid #e5e7eb;font-family:monospace">${i.num_facture||'—'}</td><td style="padding:6px 10px;border:1px solid #e5e7eb;color:#dc2626">${i.facture_date_echeance||'—'}</td></tr>`).join('')}
+          </table>` : ''}
+          <p style="margin-top:20px;font-size:12px;color:#aaa">Rapport automatique généré le ${new Date().toLocaleDateString('fr-FR')} — Eloflex SAV</p>
+        </div>
+      </div>`
+    }, { headers: { 'api-key': brevoKey, 'Content-Type': 'application/json' }, timeout: 15000 });
+    console.log('[RAPPORT MENSUEL] Envoyé pour', moisLabel);
+  } catch(e) { console.error('[RAPPORT MENSUEL ERR]', e.message); }
+}
+
+// ── Alerte impayés automatique ────────────────────────────────────
+async function alerterImpayes() {
+  try {
+    const brevoKey = process.env.BREVO_API_KEY;
+    if (!brevoKey) return;
+    const today = new Date().toISOString().slice(0,10);
+    // Factures passées en impayé aujourd'hui (date_echeance = hier)
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0,10);
+    const nouvellesImpayes = await db.all(`
+      SELECT distributeur_nom, num_facture, facture_date_echeance, bdc, id
+      FROM commandes
+      WHERE facture_paiement_statut = 'impaye'
+        AND facture_date_echeance = $1
+      ORDER BY distributeur_nom
+    `, [yesterday]);
+    if (!nouvellesImpayes.length) return;
+    const axios = require('axios');
+    await axios.post('https://api.brevo.com/v3/smtp/email', {
+      sender: { name: 'Eloflex SAV', email: 'sav@eloflex.fr' },
+      to: [{ email: 'info@eloflex.fr' }],
+      subject: `[Eloflex] ⚠️ ${nouvellesImpayes.length} facture(s) impayée(s) — échéance dépassée`,
+      htmlContent: `<div style="font-family:Arial,sans-serif;max-width:580px">
+        <div style="background:#dc2626;padding:16px 20px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0">⚠️ Factures impayées — échéance dépassée</h2>
+          <div style="color:#fecaca;font-size:13px">${nouvellesImpayes.length} facture(s) dont l'échéance était le ${yesterday}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:20px">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <tr style="background:#fef2f2"><th style="padding:8px;border:1px solid #fecaca;text-align:left">Distributeur</th><th style="padding:8px;border:1px solid #fecaca">BDC</th><th style="padding:8px;border:1px solid #fecaca">Facture</th><th style="padding:8px;border:1px solid #fecaca">Échéance</th></tr>
+            ${nouvellesImpayes.map(i => `<tr><td style="padding:8px;border:1px solid #e5e7eb">${i.distributeur_nom||'—'}</td><td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace">${i.bdc||'—'}</td><td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace">${i.num_facture||'—'}</td><td style="padding:8px;border:1px solid #e5e7eb;color:#dc2626;font-weight:bold">${i.facture_date_echeance}</td></tr>`).join('')}
+          </table>
+          <p style="margin-top:16px;font-size:12px;color:#aaa">Alerte automatique Eloflex SAV — <a href="https://sav-eloflex.onrender.com" style="color:#2e7cf6">Accéder à l'application</a></p>
+        </div>
+      </div>`
+    }, { headers: { 'api-key': brevoKey, 'Content-Type': 'application/json' }, timeout: 15000 });
+    console.log('[ALERTE IMPAYES]', nouvellesImpayes.length, 'factures');
+  } catch(e) { console.error('[ALERTE IMPAYES ERR]', e.message); }
+}
+
+
+// ── Import IDs produits VosFactures en masse ─────────────────────
+router.post('/catalogue/import-vf-ids', adminOnly, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN) return res.json({ ok: false, reason: 'VF non configuré' });
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    // Récupérer tous les produits VF
+    let allProducts = [], page = 1;
+    while (true) {
+      const { data } = await vfApi.get('/products.json', { params: { per_page: 100, page } });
+      if (!Array.isArray(data) || !data.length) break;
+      allProducts = allProducts.concat(data);
+      if (data.length < 100) break;
+      page++;
+      await new Promise(r => setTimeout(r, 300));
+    }
+    // Récupérer catalogue local
+    const catalogue = await db.all('SELECT id, ref, designation FROM catalogue WHERE vf_product_id IS NULL');
+    const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    let matched = 0;
+    for (const art of catalogue) {
+      const artRef = norm(art.ref);
+      const artDes = norm(art.designation);
+      const match = allProducts.find(p =>
+        norm(p.code) === artRef ||
+        norm(p.name) === artDes ||
+        (artRef.length > 3 && norm(p.code).includes(artRef)) ||
+        (artDes.length > 5 && norm(p.name).includes(artDes))
+      );
+      if (match) {
+        await db.run('UPDATE catalogue SET vf_product_id=$1 WHERE id=$2', [match.id, art.id]);
+        matched++;
+      }
+    }
+    res.json({ ok: true, vf_products: allProducts.length, catalogue: catalogue.length, matched });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
 module.exports = router;

@@ -89,7 +89,7 @@ const API = {
   importExcel:async(file)=>{const fd=new FormData();fd.append('file',file);const r=await fetch('/api/import/excel',{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
   vfSync:()=>API.post('/vosfactures/sync',{}),
   vfLogs:()=>API.get('/vosfactures/logs'),
-  commandes:(p={})=>API.get('/commandes'+('?'+new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([,v])=>v!=null&&v!==''))).toString())),
+  commandes:(p={})=>API.get('/commandes'+('?slim=1&'+new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([,v])=>v!=null&&v!==''))).toString())),
   commande:(id)=>API.get(`/commandes/${id}`),
   commandesStats:(annee,pays)=>API.get(`/commandes/stats${annee||pays?'?'+[annee?'annee='+annee:'',pays?'pays='+encodeURIComponent(pays):''].filter(Boolean).join('&'):''}`),
   createCommande:(d)=>API.post('/commandes',d),

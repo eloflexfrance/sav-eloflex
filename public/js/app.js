@@ -159,7 +159,12 @@ async function render(){
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
-    else if(STATE.view==='discussions')   { renderDiscussions(ttl,c,a); return; }
+    else if(STATE.view==='discussions')   {
+    localStorage.setItem('sav_discussions_seen', Date.now());
+    const badge = document.getElementById('discussions-badge');
+    if(badge) badge.style.display='none';
+    renderDiscussions(ttl,c,a); return;
+  }
     else if(STATE.view==='parametres')    await renderParametres(ttl,c,a);
     else if(STATE.view==='retours-suede')  await renderRetoursSuede(ttl,c,a);
     else if(STATE.view==='transferts')     await renderTransferts(ttl,c,a);
@@ -167,6 +172,19 @@ async function render(){
 }
 
 // ── Badges ────────────────────────────────────────────────────────
+async function refreshDiscussionsBadge(){
+  try {
+    const lastSeen = parseInt(localStorage.getItem('sav_discussions_seen')||'0');
+    const notes = await API.notesRecent(5);
+    const newOnes = notes.filter(n => new Date(n.created_at).getTime() > lastSeen && n.user_id !== CURRENT_USER?.id);
+    const badge = document.getElementById('discussions-badge');
+    if (badge) {
+      if (newOnes.length) { badge.textContent = newOnes.length; badge.style.display=''; }
+      else badge.style.display = 'none';
+    }
+  } catch(_) {}
+}
+
 async function refreshBadges(){
   try{
     const[alertes,exp,cat]=await Promise.all([API.alertes(),API.expeditions(),API.catalogue()]);
@@ -1635,6 +1653,7 @@ async function renderCatalogue(ttl,c,a){
     <input id="cat-search" class="search-bar" placeholder="${t('cat_search')}" value="${esc(STATE.q)}" style="max-width:280px">
     <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')}</button>
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>
+    ${isAdmin()?'<button class="btn" onclick="importerVFIds()" title="Lier IDs VosFactures"><i class="ti ti-plug-connected"></i> Lier VF</button>':''}
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-left:8px;color:var(--text2)" title="Afficher le prix d'achat fournisseur (Eloflex AB)">
       <input type="checkbox" id="cat-show-price" ${localStorage.getItem('sav_show_prix_achat')==='1'?'checked':''} onchange="localStorage.setItem('sav_show_prix_achat',this.checked?'1':'0');document.getElementById('cat-table')?.classList.toggle('show-prix',this.checked)">
       Prix achat 🇸🇪
