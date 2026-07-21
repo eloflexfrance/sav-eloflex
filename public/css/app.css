@@ -476,3 +476,7 @@ div.cards > .card {
 }
 #notes-list::-webkit-scrollbar { width: 4px; }
 #notes-list::-webkit-scrollbar-thumb { background: var(--border-dark); border-radius: 4px; }
+
+/* Catalogue — colonne prix achat cachée par défaut */
+#cat-table .col-prix { display: none; }
+#cat-table.show-prix .col-prix { display: table-cell; }
