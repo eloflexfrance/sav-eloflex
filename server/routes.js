@@ -110,7 +110,9 @@ router.use((req, res, next) => {
 
 function requireRole(...roles) {
   return (req, res, next) => {
-    if (!roles.includes(res.locals.user?.role)) return res.status(403).json({ error: 'Accès refusé pour ce rôle' });
+    const userRole = res.locals.user?.role;
+    if (!res.locals.user) return res.status(403).json({ error: 'Non authentifié' });
+    if (roles.length && !roles.includes(userRole)) return res.status(403).json({ error: 'Accès refusé pour ce rôle' });
     next();
   };
 }

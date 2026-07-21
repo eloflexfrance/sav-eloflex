@@ -3629,12 +3629,12 @@ function renderCarte(ttl, c, a) {
     [new Date().getFullYear(), new Date().getFullYear()-1, new Date().getFullYear()-2].map(function(y){
       return '<option value="'+y+'"'+(y===_carteAnnee?' selected':'')+'>'+y+'</option>';
     }).join('') + '</select>' +
-    (isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
 
   var legende = Object.keys(RESEAUX_CONFIG).map(function(k){
     var r = RESEAUX_CONFIG[k];
-    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px" onmouseover="this.style.background=\'#f5f5f3\'" onmouseout="this.style.background=\'\'">' +
+    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px">' +
       '<input type="checkbox" ' + (_carteReseaux[k]?'checked':'') + ' onchange="_carteReseaux[\'' + k + '\']=this.checked;afficherMarkers()">' +
       '<span style="width:14px;height:14px;border-radius:50%;background:' + r.color + ';border:2px solid #fff;box-shadow:0 0 0 1px #0002"></span>' +
       '<span style="flex:1;font-size:13px">' + r.label + '</span>' +
@@ -3642,27 +3642,37 @@ function renderCarte(ttl, c, a) {
       '</label>';
   }).join('');
 
-  c.innerHTML = '<div style="display:flex;height:calc(100vh - 130px);min-height:500px;gap:0;margin:-18px -20px;border-radius:0">' +
-    '<div style="width:240px;border-right:0.5px solid var(--border);padding:14px;background:var(--surface);overflow:auto;flex-shrink:0">' +
+  // Conteneur en position absolue pour garantir une hauteur
+  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:#fff">' +
+    '<div style="width:240px;border-right:0.5px solid #e3e3e0;padding:14px;overflow:auto;flex-shrink:0;background:#fafafa">' +
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">Réseaux</div>' +
       legende +
-      '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid var(--border)">' +
-        '<input id="carte-search" placeholder="Rechercher…" oninput="afficherMarkers()" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:6px 9px;font-size:13px;background:var(--surface)">' +
+      '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
+        '<input id="carte-search" placeholder="Rechercher…" oninput="afficherMarkers()" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px">' +
       '</div>' +
-      '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">Statut basé sur les commandes de l\'année. Cliquez un point pour voir le détail et ajouter une note.</div>' +
+      '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">Cliquez un point pour le détail et ajouter une note.</div>' +
     '</div>' +
-    '<div id="carte-leaflet" style="flex:1;height:100%;min-height:500px;background:#e8eef4"></div>' +
+    '<div id="carte-leaflet" style="flex:1;height:100%;background:#dce4ec"></div>' +
     '</div>';
 
-  setTimeout(chargerPoints, 100);
+  setTimeout(chargerPoints, 150);
 }
 window.renderCarte = renderCarte;
 
 function chargerPoints() {
   if (typeof L === 'undefined') {
-    var c = document.getElementById('carte-leaflet');
-    if (c) c.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626">Leaflet non chargé. Vérifiez que la librairie est bien incluse dans index.html.</div>';
+    var cc = document.getElementById('carte-leaflet');
+    if (cc) cc.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626">Leaflet non chargé.</div>';
     return;
+  }
+  // Garantir une hauteur explicite sur le conteneur leaflet
+  var leafEl = document.getElementById('carte-leaflet');
+  if (leafEl) {
+    var rect = leafEl.getBoundingClientRect();
+    var h = window.innerHeight - rect.top;
+    if (h < 300) h = 500;
+    leafEl.style.height = h + 'px';
+    console.log('[CARTE] hauteur conteneur:', h, 'top:', rect.top);
   }
   fetch('/api/carte/points?annee=' + _carteAnnee)
     .then(function(r){ return r.json(); })
@@ -3846,6 +3856,11 @@ window.importerKML = importerKML;
 
 
 // ═══════════════════════════════════════════════════════════════════
+function _ouvrirCmd(id) {
+  if (typeof STATE !== 'undefined') STATE.view = 'commandes';
+  if (typeof render === 'function') render();
+  setTimeout(function() { if (typeof modalCommande === 'function') modalCommande(id); }, 600);
+}
 window._ouvrirCmd = _ouvrirCmd;
 
 // Onglet Notes dans fiche commande
