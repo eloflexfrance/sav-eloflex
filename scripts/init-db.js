@@ -213,6 +213,9 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_date_echeance TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_vf_id BIGINT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_final_type TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS lat NUMERIC(10,7)`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS lng NUMERIC(10,7)`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS geocoded_at TIMESTAMPTZ`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_nom TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_prenom TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_adresse TEXT`);

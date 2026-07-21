@@ -68,6 +68,7 @@ const MODULES = [
 // Modules qui héritent d'un autre module si non défini explicitement
 const PERM_FALLBACK = {
   'discussions': 'commandes',
+  'carte': 'commandes',
   'devis':      'commandes',   // Devis hérite de commandes
   'dashboard':  'commandes',   // Tableau de bord toujours accessible si commandes
 };
@@ -159,7 +160,8 @@ async function render(){
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
-    else if(STATE.view==='discussions')   {
+    else if(STATE.view==='carte')         { renderCarte(ttl,c,a); return; }
+  else if(STATE.view==='discussions')   {
     localStorage.setItem('sav_discussions_seen', Date.now());
     const badge = document.getElementById('discussions-badge');
     if(badge) badge.style.display='none';
@@ -3602,6 +3604,130 @@ async function syncPaiementCommande(id){
 window.syncPaiementCommande = syncPaiementCommande;
 
 })();
+
+// ═══════════════════════════════════════════════════════════════════
+// CARTE DISTRIBUTEURS (Leaflet + OpenStreetMap)
+// ═══════════════════════════════════════════════════════════════════
+var _carteMap = null;
+var _carteAnnee = new Date().getFullYear();
+
+function renderCarte(ttl, c, a) {
+  ttl.textContent = 'Carte distributeurs';
+  _carteAnnee = _carteAnnee || new Date().getFullYear();
+
+  a.innerHTML = '<div style="display:flex;gap:8px;align-items:center">' +
+    '<select id="carte-annee" onchange="_carteAnnee=parseInt(this.value);chargerCarte()" style="border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--surface)">' +
+    [new Date().getFullYear(), new Date().getFullYear()-1, new Date().getFullYear()-2].map(function(y) {
+      return '<option value="'+y+'"'+(y===_carteAnnee?' selected':'')+'>'+y+'</option>';
+    }).join('') + '</select>' +
+    '<button onclick="geocoderDistributeurs()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer" title="Géocoder les adresses manquantes"><i class="ti ti-map-pin"></i> Géocoder</button>' +
+    '<a href="/api/carte/kml" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;text-decoration:none;color:var(--text)"><i class="ti ti-download"></i> KML</a>' +
+    '</div>';
+
+  c.innerHTML = '<div id="carte-container" style="position:relative;height:calc(100vh - 120px);border-radius:10px;overflow:hidden">' +
+    '<div id="carte-leaflet" style="width:100%;height:100%"></div>' +
+    '<div id="carte-legende" style="position:absolute;bottom:20px;left:12px;background:rgba(255,255,255,.92);border-radius:8px;padding:10px 14px;font-size:12px;z-index:1000;box-shadow:0 2px 8px rgba(0,0,0,.12)">' +
+    '<div style="font-weight:700;margin-bottom:6px">Légende</div>' +
+    '<div><span style="display:inline-block;width:12px;height:12px;background:#22c55e;border-radius:50%;margin-right:6px"></span>Actif et à jour</div>' +
+    '<div><span style="display:inline-block;width:12px;height:12px;background:#f97316;border-radius:50%;margin-right:6px"></span>Commandes en cours</div>' +
+    '<div><span style="display:inline-block;width:12px;height:12px;background:#ef4444;border-radius:50%;margin-right:6px"></span>Impayé(s)</div>' +
+    '<div><span style="display:inline-block;width:12px;height:12px;background:#94a3b8;border-radius:50%;margin-right:6px"></span>Aucune commande</div>' +
+    '<div id="carte-stats" style="margin-top:8px;padding-top:8px;border-top:0.5px solid #e5e7eb;color:#666"></div>' +
+    '</div>' +
+    '</div>';
+
+  chargerCarte();
+}
+window.renderCarte = renderCarte;
+
+function chargerCarte() {
+  fetch('/api/carte/distributeurs?annee=' + (_carteAnnee || new Date().getFullYear()))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var container = document.getElementById('carte-leaflet');
+      if (!container) return;
+
+      // Init or reset carte Leaflet
+      if (_carteMap) { _carteMap.remove(); _carteMap = null; }
+      _carteMap = L.map('carte-leaflet').setView([46.8, 2.3], 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 18
+      }).addTo(_carteMap);
+
+      var total = data.length, avecCmd = 0, impayes = 0;
+
+      data.forEach(function(d) {
+        if (!d.lat || !d.lng) return;
+        var nb = parseInt(d.nb_commandes) || 0;
+        var enCours = parseInt(d.en_cours) || 0;
+        var imp = parseInt(d.impayes) || 0;
+
+        if (nb > 0) avecCmd++;
+        if (imp > 0) impayes++;
+
+        // Couleur du pin
+        var color = imp > 0 ? '#ef4444' : enCours > 0 ? '#f97316' : nb > 0 ? '#22c55e' : '#94a3b8';
+        var size = Math.max(10, Math.min(28, 10 + nb * 2));
+
+        var icon = L.divIcon({
+          className: '',
+          html: '<div style="width:' + size + 'px;height:' + size + 'px;background:' + color + ';border:2px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:' + Math.max(8, size-6) + 'px;font-weight:700">' + (nb > 0 ? nb : '') + '</div>',
+          iconSize: [size, size],
+          iconAnchor: [size/2, size/2]
+        });
+
+        var marker = L.marker([parseFloat(d.lat), parseFloat(d.lng)], { icon: icon });
+
+        var popup = '<div style="min-width:180px;font-size:13px">' +
+          '<div style="font-weight:700;font-size:14px;margin-bottom:6px">' + (d.nom||'') + '</div>' +
+          '<div style="color:#666;margin-bottom:8px">' + (d.cp||'') + ' ' + (d.ville||'') + '</div>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
+          '<span style="background:' + (imp>0?'#fef2f2':'#f0fdf4') + ';color:' + (imp>0?'#dc2626':'#16a34a') + ';padding:2px 7px;border-radius:99px;font-size:11px">' + nb + ' commande' + (nb>1?'s':'') + '</span>' +
+          (imp > 0 ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:99px;font-size:11px">⚠️ ' + imp + ' impayé' + (imp>1?'s':'') + '</span>' : '') +
+          (enCours > 0 ? '<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:99px;font-size:11px">' + enCours + ' en cours</span>' : '') +
+          '</div>' +
+          '<button onclick="filtrerCommandes(\'' + (d.nom||'').replace(/'/g,"\\'") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:5px 0;font-size:12px;cursor:pointer">Voir ses commandes →</button>' +
+          '</div>';
+
+        marker.bindPopup(popup, { maxWidth: 240 }).addTo(_carteMap);
+      });
+
+      // Stats légende
+      var statsEl = document.getElementById('carte-stats');
+      if (statsEl) statsEl.innerHTML = '<strong>' + total + '</strong> distributeurs — <strong>' + avecCmd + '</strong> actifs en ' + _carteAnnee + (impayes > 0 ? ' — <span style="color:#ef4444"><strong>' + impayes + '</strong> impayés</span>' : '');
+    })
+    .catch(function(e) {
+      var cont = document.getElementById('carte-leaflet');
+      if (cont) cont.innerHTML = '<div style="padding:40px;text-align:center;color:#ef4444">Erreur : ' + e.message + '<br><br>Lancez le géocodage des adresses via le bouton "Géocoder"</div>';
+    });
+}
+window.chargerCarte = chargerCarte;
+
+function filtrerCommandes(distributeur) {
+  if (typeof STATE !== 'undefined') STATE.view = 'commandes';
+  if (typeof CMD_FILTERS !== 'undefined') CMD_FILTERS.distributeur = distributeur;
+  if (typeof render === 'function') render();
+  if (_carteMap) { _carteMap.closePopup(); }
+}
+window.filtrerCommandes = filtrerCommandes;
+
+async function geocoderDistributeurs() {
+  var btn = document.querySelector('button[onclick="geocoderDistributeurs()"]');
+  if (btn) btn.textContent = '⏳ Géocodage…';
+  try {
+    var r = await fetch('/api/carte/geocoder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    var d = await r.json();
+    alert('Géocodage terminé : ' + d.done + ' adresses trouvées, ' + d.errors + ' non trouvées.' + (d.remaining > 0 ? '\n' + d.remaining + ' adresses restantes — relancez.' : '\nTout est géocodé !'));
+    chargerCarte();
+  } catch(e) {
+    alert('Erreur : ' + e.message);
+  }
+  if (btn) { btn.innerHTML = '<i class="ti ti-map-pin"></i> Géocoder'; }
+}
+window.geocoderDistributeurs = geocoderDistributeurs;
+
+
 
 function lienhSuiviInter(transporteur, numero) {
   if (!numero) return '#';

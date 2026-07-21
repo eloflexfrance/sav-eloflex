@@ -3578,4 +3578,84 @@ router.post('/catalogue/import-vf-ids', adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ══════════════════════════════════════════════════════════════════
+// ── CARTE DISTRIBUTEURS ──────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+
+// Géocodage d'un client via Nominatim (OpenStreetMap, gratuit)
+async function geocoderClient(client) {
+  try {
+    const axios = require('axios');
+    const adresse = [client.adresse, client.cp, client.ville, 'France'].filter(Boolean).join(', ');
+    if (!adresse || !client.ville) return null;
+    const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
+      params: { q: adresse, format: 'json', limit: 1, countrycodes: 'fr' },
+      headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
+      timeout: 5000
+    });
+    if (!data || !data.length) return null;
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch(_) { return null; }
+}
+
+// Route: géocoder tous les clients sans coordonnées
+router.post('/carte/geocoder', adminOnly, async (req, res) => {
+  try {
+    const clients = await db.all(
+      'SELECT id, nom, adresse, cp, ville FROM clients WHERE lat IS NULL AND ville IS NOT NULL ORDER BY id LIMIT 50'
+    );
+    let done = 0, errors = 0;
+    for (const cl of clients) {
+      const coords = await geocoderClient(cl);
+      if (coords) {
+        await db.run('UPDATE clients SET lat=$1, lng=$2, geocoded_at=NOW() WHERE id=$3', [coords.lat, coords.lng, cl.id]);
+        done++;
+      } else errors++;
+      await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit: 1 req/sec
+    }
+    const remaining = await db.get('SELECT COUNT(*) AS nb FROM clients WHERE lat IS NULL AND ville IS NOT NULL');
+    res.json({ ok: true, done, errors, remaining: parseInt(remaining.nb) });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Route: données carte (clients géocodés + stats commandes)
+router.get('/carte/distributeurs', requireAuth, async (req, res) => {
+  try {
+    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
+    const rows = await db.all(`
+      SELECT
+        c.id, c.nom, c.ville, c.cp, c.lat, c.lng, c.type, c.tel, c.email,
+        COUNT(cmd.id) AS nb_commandes,
+        SUM(CASE WHEN cmd.statut IS NULL OR cmd.statut='Auto' OR cmd.statut='En préparation' THEN 1 ELSE 0 END) AS en_cours,
+        SUM(CASE WHEN cmd.facture_paiement_statut IN ('impaye','impayé') THEN 1 ELSE 0 END) AS impayes,
+        MAX(cmd.date_commande) AS derniere_commande
+      FROM clients c
+      LEFT JOIN commandes cmd ON cmd.client_id = c.id
+        AND EXTRACT(YEAR FROM cmd.date_commande::date) = $1
+      WHERE c.lat IS NOT NULL AND c.type != 'patient'
+      GROUP BY c.id, c.nom, c.ville, c.cp, c.lat, c.lng, c.type, c.tel, c.email
+      ORDER BY nb_commandes DESC
+    `, [annee]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Route: données pour KML export (pour importer depuis Google My Maps)
+router.get('/carte/kml', adminOnly, async (req, res) => {
+  try {
+    const rows = await db.all('SELECT nom, ville, cp, lat, lng, type FROM clients WHERE lat IS NOT NULL ORDER BY nom');
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document><name>Distributeurs Eloflex</name>
+  ${rows.map(r => `<Placemark><name>${r.nom}</name><description>${r.ville} ${r.cp||''}</description>
+    <Point><coordinates>${r.lng},${r.lat},0</coordinates></Point></Placemark>`).join('\n  ')}
+  </Document></kml>`;
+    res.setHeader('Content-Type', 'application/vnd.google-earth.kml+xml');
+    res.setHeader('Content-Disposition', 'attachment; filename="distributeurs-eloflex.kml"');
+    res.send(kml);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Fin Carte ─────────────────────────────────────────────────────
 module.exports = router;
