@@ -3750,20 +3750,39 @@ router.get('/carte/points', requireAuth, async (req, res) => {
       WHERE EXTRACT(YEAR FROM date_commande::date) = $1
       GROUP BY distributeur_nom
     `, [annee]);
-    // Map par nom normalisé
+    // Map par nom normalisé — match exact PUIS partiel (contains)
     const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-    const statMap = {};
-    stats.forEach(s => { statMap[norm(s.distributeur_nom)] = s; });
+    const statList = stats.map(s => ({ ...s, n: norm(s.distributeur_nom) })).filter(s => s.n.length >= 3);
     const enriched = points.map(p => {
-      const st = statMap[norm(p.nom)] || {};
-      return {
-        ...p,
-        nb_commandes: parseInt(st.nb_commandes)||0,
-        impayes: parseInt(st.impayes)||0,
-        en_cours: parseInt(st.en_cours)||0
-      };
+      const pn = norm(p.nom);
+      // 1. Match exact
+      let matches = statList.filter(s => s.n === pn);
+      // 2. Sinon match partiel : le nom carte contient le nom commande, ou l'inverse (min 4 car pour éviter faux positifs)
+      if (!matches.length && pn.length >= 4) {
+        matches = statList.filter(s => (s.n.length >= 4) && (s.n.includes(pn) || pn.includes(s.n)));
+      }
+      // Agréger tous les matches trouvés
+      const agg = matches.reduce((a, s) => ({
+        nb_commandes: a.nb_commandes + (parseInt(s.nb_commandes)||0),
+        impayes: a.impayes + (parseInt(s.impayes)||0),
+        en_cours: a.en_cours + (parseInt(s.en_cours)||0)
+      }), { nb_commandes: 0, impayes: 0, en_cours: 0 });
+      return { ...p, ...agg, matched_names: matches.map(m => m.distributeur_nom) };
     });
     res.json(enriched);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// Route debug: lister tous les noms de distributeurs des commandes
+router.get('/carte/debug-noms', requireAuth, async (req, res) => {
+  try {
+    const q = (req.query.q || '').toLowerCase();
+    const commandes = await db.all("SELECT DISTINCT distributeur_nom FROM commandes WHERE distributeur_nom IS NOT NULL ORDER BY distributeur_nom");
+    const carte = await db.all("SELECT DISTINCT nom, reseau FROM distributeurs_carte ORDER BY nom");
+    const cmdNoms = commandes.map(c => c.distributeur_nom).filter(n => !q || n.toLowerCase().includes(q));
+    const carteNoms = carte.filter(c => !q || c.nom.toLowerCase().includes(q));
+    res.json({ commandes: cmdNoms, carte: carteNoms });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
