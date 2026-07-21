@@ -216,6 +216,21 @@ async function initDB() {
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS lat NUMERIC(10,7)`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS lng NUMERIC(10,7)`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS geocoded_at TIMESTAMPTZ`);
+      await client.query(`CREATE TABLE IF NOT EXISTS distributeurs_carte (
+        id SERIAL PRIMARY KEY,
+        reseau TEXT NOT NULL,
+        nom TEXT NOT NULL,
+        description TEXT,
+        adresse TEXT, cp TEXT, ville TEXT, tel TEXT, email TEXT,
+        lat NUMERIC(10,7) NOT NULL,
+        lng NUMERIC(10,7) NOT NULL,
+        note_interne TEXT,
+        client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_reseau ON distributeurs_carte(reseau)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_nom ON distributeurs_carte(nom)`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_nom TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_prenom TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_adresse TEXT`);

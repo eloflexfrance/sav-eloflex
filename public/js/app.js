@@ -3606,269 +3606,222 @@ window.syncPaiementCommande = syncPaiementCommande;
 })();
 
 // ═══════════════════════════════════════════════════════════════════
-// CARTE DISTRIBUTEURS (Leaflet + OpenStreetMap)
+// CARTE DISTRIBUTEURS (Leaflet + KML importés)
 // ═══════════════════════════════════════════════════════════════════
 var _carteMap = null;
 var _carteAnnee = new Date().getFullYear();
+var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true };
+var _carteMarkers = [];
+var _cartePoints = [];
+
+var RESEAUX_CONFIG = {
+  base:       { label: 'De base',            color: '#e24b4a', letter: 'B' },
+  bastide:    { label: 'Bastide',            color: '#378add', letter: 'A' },
+  providom:   { label: 'Providom',           color: '#ef9f27', letter: 'P' },
+  districlub: { label: 'DistriClub Medical', color: '#7f77dd', letter: 'D' }
+};
 
 function renderCarte(ttl, c, a) {
   ttl.textContent = 'Carte distributeurs';
-  _carteAnnee = _carteAnnee || new Date().getFullYear();
 
   a.innerHTML = '<div style="display:flex;gap:8px;align-items:center">' +
-    '<select id="carte-annee" onchange="_carteAnnee=parseInt(this.value);chargerCarte()" style="border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--surface)">' +
-    [new Date().getFullYear(), new Date().getFullYear()-1, new Date().getFullYear()-2].map(function(y) {
+    '<select id="carte-annee" onchange="_carteAnnee=parseInt(this.value);chargerPoints()" style="border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--surface)">' +
+    [new Date().getFullYear(), new Date().getFullYear()-1, new Date().getFullYear()-2].map(function(y){
       return '<option value="'+y+'"'+(y===_carteAnnee?' selected':'')+'>'+y+'</option>';
     }).join('') + '</select>' +
-    '<button onclick="geocoderDistributeurs()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer" title="Géocoder les adresses manquantes"><i class="ti ti-map-pin"></i> Géocoder</button>' +
-    '<a href="/api/carte/kml" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;text-decoration:none;color:var(--text)"><i class="ti ti-download"></i> KML</a>' +
+    (isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
 
-  c.innerHTML = '<div id="carte-container" style="position:relative;height:calc(100vh - 120px);border-radius:10px;overflow:hidden">' +
-    '<div id="carte-leaflet" style="width:100%;height:100%"></div>' +
-    '<div id="carte-legende" style="position:absolute;bottom:20px;left:12px;background:rgba(255,255,255,.92);border-radius:8px;padding:10px 14px;font-size:12px;z-index:1000;box-shadow:0 2px 8px rgba(0,0,0,.12)">' +
-    '<div style="font-weight:700;margin-bottom:6px">Légende</div>' +
-    '<div><span style="display:inline-block;width:12px;height:12px;background:#22c55e;border-radius:50%;margin-right:6px"></span>Actif et à jour</div>' +
-    '<div><span style="display:inline-block;width:12px;height:12px;background:#f97316;border-radius:50%;margin-right:6px"></span>Commandes en cours</div>' +
-    '<div><span style="display:inline-block;width:12px;height:12px;background:#ef4444;border-radius:50%;margin-right:6px"></span>Impayé(s)</div>' +
-    '<div><span style="display:inline-block;width:12px;height:12px;background:#94a3b8;border-radius:50%;margin-right:6px"></span>Aucune commande</div>' +
-    '<div id="carte-stats" style="margin-top:8px;padding-top:8px;border-top:0.5px solid #e5e7eb;color:#666"></div>' +
+  var legende = Object.keys(RESEAUX_CONFIG).map(function(k){
+    var r = RESEAUX_CONFIG[k];
+    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px" onmouseover="this.style.background=\'#f5f5f3\'" onmouseout="this.style.background=\'\'">' +
+      '<input type="checkbox" ' + (_carteReseaux[k]?'checked':'') + ' onchange="_carteReseaux[\'' + k + '\']=this.checked;afficherMarkers()">' +
+      '<span style="width:14px;height:14px;border-radius:50%;background:' + r.color + ';border:2px solid #fff;box-shadow:0 0 0 1px #0002"></span>' +
+      '<span style="flex:1;font-size:13px">' + r.label + '</span>' +
+      '<span id="cnt-' + k + '" style="font-size:12px;color:#999">0</span>' +
+      '</label>';
+  }).join('');
+
+  c.innerHTML = '<div style="display:flex;height:calc(100vh - 120px);gap:0">' +
+    '<div style="width:240px;border-right:0.5px solid var(--border);padding:14px;background:var(--surface);overflow:auto">' +
+      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">Réseaux</div>' +
+      legende +
+      '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid var(--border)">' +
+        '<input id="carte-search" placeholder="Rechercher…" oninput="afficherMarkers()" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:6px 9px;font-size:13px;background:var(--surface)">' +
+      '</div>' +
+      '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">Statut basé sur les commandes de l\'année. Cliquez un point pour voir le détail et ajouter une note.</div>' +
     '</div>' +
+    '<div id="carte-leaflet" style="flex:1;height:100%"></div>' +
     '</div>';
 
-  chargerCarte();
+  setTimeout(chargerPoints, 100);
 }
 window.renderCarte = renderCarte;
 
-function chargerCarte() {
-  fetch('/api/carte/distributeurs?annee=' + (_carteAnnee || new Date().getFullYear()))
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var container = document.getElementById('carte-leaflet');
-      if (!container) return;
+function chargerPoints() {
+  fetch('/api/carte/points?annee=' + _carteAnnee)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!Array.isArray(data)) return;
+      _cartePoints = data;
 
-      // Init or reset carte Leaflet
-      if (_carteMap) { _carteMap.remove(); _carteMap = null; }
-      _carteMap = L.map('carte-leaflet').setView([46.8, 2.3], 6);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 18
-      }).addTo(_carteMap);
-
-      var total = data.length, avecCmd = 0, impayes = 0;
-
-      data.forEach(function(d) {
-        if (!d.lat || !d.lng) return;
-        var nb = parseInt(d.nb_commandes) || 0;
-        var enCours = parseInt(d.en_cours) || 0;
-        var imp = parseInt(d.impayes) || 0;
-
-        if (nb > 0) avecCmd++;
-        if (imp > 0) impayes++;
-
-        // Couleur du pin
-        var color = imp > 0 ? '#ef4444' : enCours > 0 ? '#f97316' : nb > 0 ? '#22c55e' : '#94a3b8';
-        var size = Math.max(10, Math.min(28, 10 + nb * 2));
-
-        var icon = L.divIcon({
-          className: '',
-          html: '<div style="width:' + size + 'px;height:' + size + 'px;background:' + color + ';border:2px solid #fff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;color:#fff;font-size:' + Math.max(8, size-6) + 'px;font-weight:700">' + (nb > 0 ? nb : '') + '</div>',
-          iconSize: [size, size],
-          iconAnchor: [size/2, size/2]
-        });
-
-        var marker = L.marker([parseFloat(d.lat), parseFloat(d.lng)], { icon: icon });
-
-        var popup = '<div style="min-width:180px;font-size:13px">' +
-          '<div style="font-weight:700;font-size:14px;margin-bottom:6px">' + (d.nom||'') + '</div>' +
-          '<div style="color:#666;margin-bottom:8px">' + (d.cp||'') + ' ' + (d.ville||'') + '</div>' +
-          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
-          '<span style="background:' + (imp>0?'#fef2f2':'#f0fdf4') + ';color:' + (imp>0?'#dc2626':'#16a34a') + ';padding:2px 7px;border-radius:99px;font-size:11px">' + nb + ' commande' + (nb>1?'s':'') + '</span>' +
-          (imp > 0 ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:99px;font-size:11px">⚠️ ' + imp + ' impayé' + (imp>1?'s':'') + '</span>' : '') +
-          (enCours > 0 ? '<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:99px;font-size:11px">' + enCours + ' en cours</span>' : '') +
-          '</div>' +
-          '<button onclick="filtrerCommandes(\'' + (d.nom||'').replace(/'/g,"\\'") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:5px 0;font-size:12px;cursor:pointer">Voir ses commandes →</button>' +
-          '</div>';
-
-        marker.bindPopup(popup, { maxWidth: 240 }).addTo(_carteMap);
+      // Compteurs par réseau
+      Object.keys(RESEAUX_CONFIG).forEach(function(k){
+        var el = document.getElementById('cnt-' + k);
+        if (el) el.textContent = data.filter(function(p){ return p.reseau === k; }).length;
       });
 
-      // Stats légende
-      var statsEl = document.getElementById('carte-stats');
-      if (statsEl) statsEl.innerHTML = '<strong>' + total + '</strong> distributeurs — <strong>' + avecCmd + '</strong> actifs en ' + _carteAnnee + (impayes > 0 ? ' — <span style="color:#ef4444"><strong>' + impayes + '</strong> impayés</span>' : '');
+      // Init carte
+      var container = document.getElementById('carte-leaflet');
+      if (!container) return;
+      if (_carteMap) { _carteMap.remove(); _carteMap = null; }
+      _carteMap = L.map('carte-leaflet', { preferCanvas: false }).setView([46.6, 2.4], 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap', maxZoom: 19
+      }).addTo(_carteMap);
+
+      afficherMarkers();
     })
-    .catch(function(e) {
-      var cont = document.getElementById('carte-leaflet');
-      if (cont) cont.innerHTML = '<div style="padding:40px;text-align:center;color:#ef4444">Erreur : ' + e.message + '<br><br>Lancez le géocodage des adresses via le bouton "Géocoder"</div>';
+    .catch(function(e){
+      var c = document.getElementById('carte-leaflet');
+      if (c) c.innerHTML = '<div style="padding:40px;text-align:center;color:#888">Aucun point pour le moment.<br>' + (typeof isAdmin==='function'&&isAdmin() ? 'Importez vos fichiers KML via le bouton en haut.' : '') + '</div>';
     });
 }
-window.chargerCarte = chargerCarte;
+window.chargerPoints = chargerPoints;
 
-function filtrerCommandes(distributeur) {
-  if (typeof STATE !== 'undefined') STATE.view = 'commandes';
-  if (typeof CMD_FILTERS !== 'undefined') CMD_FILTERS.distributeur = distributeur;
-  if (typeof render === 'function') render();
-  if (_carteMap) { _carteMap.closePopup(); }
+function pinIconCarte(reseau, point) {
+  var cfg = RESEAUX_CONFIG[reseau] || { color:'#888', letter:'?' };
+  // Anneau de statut selon commandes
+  var ring = point.impayes > 0 ? '#ef4444' : point.en_cours > 0 ? '#f97316' : point.nb_commandes > 0 ? '#22c55e' : '#cbd5e1';
+  var noted = point.note_interne ? '<div style="position:absolute;top:-2px;right:-2px;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
+  var html = '<div style="position:relative">' +
+    '<svg width="30" height="42" viewBox="0 0 30 42">' +
+    '<circle cx="15" cy="15" r="14" fill="none" stroke="' + ring + '" stroke-width="3"/>' +
+    '<path d="M15 3C9 3 4 8 4 14c0 8 11 24 11 24s11-16 11-24C26 8 21 3 15 3z" fill="' + cfg.color + '" stroke="#fff" stroke-width="1.5"/>' +
+    '<circle cx="15" cy="14" r="7" fill="#fff"/>' +
+    '<text x="15" y="17.5" text-anchor="middle" font-size="10" font-weight="700" fill="' + cfg.color + '">' + cfg.letter + '</text>' +
+    '</svg>' + noted + '</div>';
+  return L.divIcon({ html: html, className: '', iconSize: [30,42], iconAnchor: [15,42], popupAnchor: [0,-38] });
 }
-window.filtrerCommandes = filtrerCommandes;
 
-async function geocoderDistributeurs() {
-  var btn = document.querySelector('button[onclick="geocoderDistributeurs()"]');
-  if (btn) btn.textContent = '⏳ Géocodage…';
-  try {
-    var r = await fetch('/api/carte/geocoder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    var d = await r.json();
-    alert('Géocodage terminé : ' + d.done + ' adresses trouvées, ' + d.errors + ' non trouvées.' + (d.remaining > 0 ? '\n' + d.remaining + ' adresses restantes — relancez.' : '\nTout est géocodé !'));
-    chargerCarte();
-  } catch(e) {
-    alert('Erreur : ' + e.message);
-  }
-  if (btn) { btn.innerHTML = '<i class="ti ti-map-pin"></i> Géocoder'; }
-}
-window.geocoderDistributeurs = geocoderDistributeurs;
+function afficherMarkers() {
+  if (!_carteMap) return;
+  var q = (document.getElementById('carte-search') || {}).value || '';
+  q = q.trim().toLowerCase();
 
+  // Retirer les anciens
+  _carteMarkers.forEach(function(m){ _carteMap.removeLayer(m); });
+  _carteMarkers = [];
 
-
-function lienhSuiviInter(transporteur, numero) {
-  if (!numero) return '#';
-  var t = (transporteur||'').toLowerCase();
-  if (t.includes('chronopost') || /^8L|^XC/i.test(numero))
-    return 'https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=' + encodeURIComponent(numero);
-  if (t.includes('colissimo') || t.includes('la poste') || /^6[A-Z]|^7[A-Z]/i.test(numero))
-    return 'https://www.laposte.fr/outils/suivre-vos-envois?code=' + encodeURIComponent(numero);
-  if (t.includes('dpd'))
-    return 'https://www.dpd.fr/trace/' + encodeURIComponent(numero);
-  if (t.includes('ups'))
-    return 'https://www.ups.com/track?tracknum=' + encodeURIComponent(numero);
-  if (t.includes('dhl'))
-    return 'https://www.dhl.com/fr-fr/home/tracking.html?tracking-id=' + encodeURIComponent(numero);
-  return 'https://www.17track.net/fr/track#nums=' + encodeURIComponent(numero);
-}
-window.lienhSuiviInter = lienhSuiviInter;
-
-
-
-const _esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const _fd  = d => { if(!d) return '-'; try{ return new Date(d).toLocaleDateString('fr-FR'); }catch(_){ return String(d).slice(0,10); } };
-
-function toggleClientFinalForm(type) {
-  var form = document.getElementById('cf-form');
-  if (form) form.style.display = type ? '' : 'none';
-}
-window.toggleClientFinalForm = toggleClientFinalForm;
-
-var _cfTimer = null;
-function cfAutocomplete(input, field) {
-  clearTimeout(_cfTimer);
-  var q = input.value.trim();
-  if (q.length < 2) { hideCfSuggest(); return; }
-  var typeEl = document.getElementById('cmd-clientfinal-type');
-  var type = typeEl ? typeEl.value : '';
-  _cfTimer = setTimeout(function() {
-    fetch('/api/clients-finaux/suggest?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type))
-      .then(function(r) { return r.json(); })
-      .then(function(rows) {
-        var box = document.getElementById('cf-suggest');
-        if (!box || !rows.length) { hideCfSuggest(); return; }
-        box._rows = rows;
-        var html = '';
-        for (var i = 0; i < rows.length; i++) {
-          var row = rows[i];
-          var label = _esc([row.nom, row.prenom].filter(Boolean).join(' '));
-          var sub = _esc([row.adresse, row.cp, row.ville].filter(Boolean).join(', '));
-          html += '<div onclick="cfSelect(' + row.id + ')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #f0f0f0">';
-          html += '<div style="font-weight:600">' + label + '</div>';
-          if (sub) html += '<div style="font-size:11px;color:#888">' + sub + '</div>';
-          html += '</div>';
-        }
-        box.innerHTML = html;
-        box.style.display = '';
-      })
-      .catch(function() {});
-  }, 250);
-}
-window.cfAutocomplete = cfAutocomplete;
-
-function cfSelect(id) {
-  var box = document.getElementById('cf-suggest');
-  var rows = box ? (box._rows || []) : [];
-  var row = null;
-  for (var i = 0; i < rows.length; i++) { if (rows[i].id === id) { row = rows[i]; break; } }
-  if (!row) return;
-  ['nom','prenom','adresse','cp','ville','tel','email'].forEach(function(f) {
-    var el = document.getElementById('cf-' + f);
-    if (el) el.value = row[f] || '';
+  var bounds = [];
+  _cartePoints.forEach(function(p){
+    if (!_carteReseaux[p.reseau]) return;
+    if (q && (p.nom + ' ' + (p.ville||'') + ' ' + (p.description||'')).toLowerCase().indexOf(q) < 0) return;
+    var marker = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon: pinIconCarte(p.reseau, p) });
+    marker.bindPopup(function(){ return popupCarte(p); }, { maxWidth: 280 });
+    marker.on('popupopen', function(e){ wirePopupCarte(e, p); });
+    marker.addTo(_carteMap);
+    _carteMarkers.push(marker);
+    bounds.push([parseFloat(p.lat), parseFloat(p.lng)]);
   });
-  hideCfSuggest();
+
+  if (bounds.length && !_carteMap._fitted) {
+    _carteMap.fitBounds(bounds, { padding: [40,40] });
+    _carteMap._fitted = true;
+  }
 }
-window.cfSelect = cfSelect;
+window.afficherMarkers = afficherMarkers;
 
-function hideCfSuggest() {
-  var box = document.getElementById('cf-suggest');
-  if (box) box.style.display = 'none';
+function popupCarte(p) {
+  var cfg = RESEAUX_CONFIG[p.reseau] || { label:'?', color:'#888' };
+  var statutTxt = p.impayes > 0 ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:99px;font-size:11px">⚠️ ' + p.impayes + ' impayé' + (p.impayes>1?'s':'') + '</span>'
+    : p.en_cours > 0 ? '<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:99px;font-size:11px">' + p.en_cours + ' en cours</span>'
+    : p.nb_commandes > 0 ? '<span style="background:#f0fdf4;color:#16a34a;padding:2px 7px;border-radius:99px;font-size:11px">à jour</span>'
+    : '<span style="background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;font-size:11px">aucune commande</span>';
+
+  return '<div style="width:250px;font-size:13px">' +
+    '<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + cfg.label + '</div>' +
+    '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + _esc(p.nom) + '</div>' +
+    '<div style="color:#666;line-height:1.5;margin-bottom:8px">' +
+      (p.adresse ? _esc(p.adresse) + '<br>' : '') +
+      (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
+      (p.tel ? '<i class="ti ti-phone" style="font-size:11px"></i> ' + _esc(p.tel) + '<br>' : '') +
+      (p.email ? '<i class="ti ti-mail" style="font-size:11px"></i> ' + _esc(p.email) : '') +
+    '</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:11px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
+      statutTxt +
+    '</div>' +
+    (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
+    '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px">Note interne</label>' +
+    '<textarea id="carte-note-' + p.id + '" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px;font-size:12px;resize:vertical;font-family:inherit">' + _esc(p.note_interne||'') + '</textarea>' +
+    '<button onclick="sauverNoteCarte(' + p.id + ')" style="margin-top:5px;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">Enregistrer</button>' +
+    '</div>';
 }
 
+function wirePopupCarte(e, p) { /* rien de spécial */ }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-// Vue Discussions — non-async pour éviter les problèmes de Promise
-function renderDiscussions(ttl, c, a) {
-  ttl.textContent = 'Discussions';
-  a.innerHTML = '';
-  c.innerHTML = '<div style="padding:20px;color:#888"><i class="ti ti-loader-2"></i> Chargement des discussions...</div>';
-  
-  fetch('/api/notes/recent?limit=100')
-    .then(function(r) {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(function(notes) {
-      if (!Array.isArray(notes)) { c.innerHTML = '<div style="padding:20px;color:red">Réponse invalide</div>'; return; }
-      if (!notes.length) {
-        c.innerHTML = '<div style="padding:40px;text-align:center;color:#aaa"><i class="ti ti-messages" style="font-size:32px"></i><br><br>Aucune discussion pour l\'instant.<br>Ouvrez une fiche commande et ajoutez une note.</div>';
-        return;
-      }
-      var html = '<div style="max-width:720px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:12px">';
-      for (var i = 0; i < notes.length; i++) {
-        var n = notes[i];
-        var ini = String(n.user_nom||'?')[0].toUpperCase();
-        var dt = String(n.created_at||'').slice(0,16).replace('T',' ');
-        html += '<div style="background:rgba(255,255,255,.65);border:0.5px solid #dde3ef;border-radius:12px;padding:14px 16px;cursor:pointer" onclick="_ouvrirCmd(' + n.commande_id + ')">';
-        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
-        html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + _esc(ini) + '</span>';
-        html += '<strong style="font-size:13px">' + _esc(n.user_nom||'?') + '</strong>';
-        html += '<span style="font-size:11px;color:#aaa;margin-left:auto">' + dt + '</span>';
-        html += '<span style="background:rgba(46,124,246,.12);color:#2e7cf6;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:600">' + _esc(n.bdc||'#'+n.commande_id) + '</span>';
-        html += '<span style="font-size:11px;color:#666">' + _esc(n.distributeur_nom||'') + '</span>';
-        html += '</div>';
-        html += '<div style="font-size:13px;color:#1a2d4a;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
-        html += '</div>';
-      }
-      html += '</div>';
-      c.innerHTML = html;
-    })
-    .catch(function(e) {
-      c.innerHTML = '<div style="padding:20px;color:red;font-size:13px">Erreur discussions : ' + String(e.message||e) + '</div>';
-    });
-}
-window.renderDiscussions = renderDiscussions;
-
-function _ouvrirCmd(id) {
+function filtrerParDistrib(nom) {
   if (typeof STATE !== 'undefined') STATE.view = 'commandes';
+  if (typeof CMD_FILTERS !== 'undefined') CMD_FILTERS.distributeur = nom;
   if (typeof render === 'function') render();
-  setTimeout(function() { if (typeof modalCommande === 'function') modalCommande(id); }, 600);
 }
+window.filtrerParDistrib = filtrerParDistrib;
+
+function sauverNoteCarte(id) {
+  var ta = document.getElementById('carte-note-' + id);
+  if (!ta) return;
+  var note = ta.value;
+  fetch('/api/carte/points/' + id + '/note', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: note })
+  }).then(function(r){ return r.json(); }).then(function(){
+    var pt = _cartePoints.find(function(x){ return x.id === id; });
+    if (pt) pt.note_interne = note;
+    afficherMarkers();
+    if (typeof toast === 'function') toast('Note enregistrée', 'ti-check', 'var(--success)');
+  }).catch(function(e){ alert('Erreur : ' + e.message); });
+}
+window.sauverNoteCarte = sauverNoteCarte;
+
+function importerKML(files) {
+  if (!files || !files.length) return;
+  var reseauMap = {
+    'de_base': 'base', 'debase': 'base', 'base': 'base',
+    'bastide': 'bastide',
+    'providom': 'providom',
+    'districlub': 'districlub', 'districlub_medical': 'districlub', 'districlub': 'districlub'
+  };
+  var arr = Array.from(files);
+  var done = 0, total = arr.length;
+  toast('Import de ' + total + ' fichier(s)…', 'ti-loader-2');
+
+  arr.forEach(function(file){
+    var fname = file.name.toLowerCase().replace('.kml','');
+    var reseau = null;
+    for (var key in reseauMap) { if (fname.indexOf(key) >= 0) { reseau = reseauMap[key]; break; } }
+    if (!reseau) {
+      if (fname.indexOf('base') >= 0) reseau = 'base';
+      else { done++; return; }
+    }
+    var reader = new FileReader();
+    reader.onload = function() {
+      fetch('/api/carte/import-kml', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reseau: reseau, kml: reader.result })
+      }).then(function(r){ return r.json(); }).then(function(d){
+        done++;
+        if (d.ok && typeof toast === 'function') toast(RESEAUX_CONFIG[reseau].label + ' : ' + d.inserted + ' points', 'ti-check', 'var(--success)');
+        if (done === total) { setTimeout(chargerPoints, 500); }
+      }).catch(function(e){ done++; alert('Erreur import : ' + e.message); });
+    };
+    reader.readAsText(file);
+  });
+}
+window.importerKML = importerKML;
+
+
+
+// ═══════════════════════════════════════════════════════════════════
 window._ouvrirCmd = _ouvrirCmd;
 
 // Onglet Notes dans fiche commande

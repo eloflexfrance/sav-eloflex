@@ -3658,4 +3658,129 @@ router.get('/carte/kml', adminOnly, async (req, res) => {
 });
 
 // ── Fin Carte ─────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════
+// ── CARTE DISTRIBUTEURS (KML import) ─────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+
+// Parse KML content et extraire les placemarks
+function parseKmlContent(kmlText, reseau) {
+  const placemarks = [];
+  // Extraction basique par regex (pas de lib XML nécessaire)
+  const pmRegex = /<Placemark>([\s\S]*?)<\/Placemark>/g;
+  let match;
+  while ((match = pmRegex.exec(kmlText)) !== null) {
+    const pm = match[1];
+    const nameM = pm.match(/<name>([\s\S]*?)<\/name>/);
+    const descM = pm.match(/<description>([\s\S]*?)<\/description>/);
+    const coordM = pm.match(/<coordinates>([\s\S]*?)<\/coordinates>/);
+    if (!coordM) continue;
+    const name = nameM ? nameM[1].replace(/<!\[CDATA\[|\]\]>/g,'').trim() : '';
+    let desc = descM ? descM[1].replace(/<!\[CDATA\[|\]\]>/g,'').trim() : '';
+    // Ignorer les polygones (territoires), ne garder que les Points
+    if (pm.includes('<Polygon>') || pm.includes('<LineString>')) continue;
+    const coordText = coordM[1].trim();
+    const coordPairs = coordText.split(/\s+/).map(c => {
+      const [lng, lat] = c.split(',').map(Number);
+      return { lat, lng };
+    }).filter(p => !isNaN(p.lat) && !isNaN(p.lng));
+    if (!coordPairs.length) continue;
+    let lat, lng;
+    if (coordPairs.length === 1) {
+      lat = coordPairs[0].lat; lng = coordPairs[0].lng;
+    } else {
+      // Centroïde du polygone
+      lat = coordPairs.reduce((s,p)=>s+p.lat,0)/coordPairs.length;
+      lng = coordPairs.reduce((s,p)=>s+p.lng,0)/coordPairs.length;
+    }
+    // Parser l'adresse depuis la description (format: NOM<br>adresse<br>CP VILLE<br>tel<br>email)
+    const parts = desc.replace(/<br\s*\/?>/gi, '\n').split('\n').map(s=>s.trim()).filter(Boolean);
+    let adresse = '', cp = '', ville = '', tel = '', email = '';
+    for (const p of parts) {
+      const cpVille = p.match(/\b(\d{5})\s+([A-ZÀ-Ÿ][A-Za-zÀ-ÿ\s\-]+)/);
+      const emailM = p.match(/[\w.\-]+@[\w.\-]+\.\w+/);
+      const telM = p.match(/(?:0|\+33)[\s.]?[1-9](?:[\s.]?\d{2}){4}/);
+      if (cpVille && !cp) { cp = cpVille[1]; ville = cpVille[2].trim(); }
+      else if (emailM && !email) email = emailM[0];
+      else if (telM && !tel) tel = telM[0].trim();
+      else if (!adresse && p !== name && !cpVille && !emailM && !telM) adresse = p;
+    }
+    placemarks.push({ reseau, nom: name, description: desc, adresse, cp, ville, tel, email, lat, lng });
+  }
+  return placemarks;
+}
+
+// Route: import KML (remplace tous les points d'un réseau)
+router.post('/carte/import-kml', adminOnly, async (req, res) => {
+  try {
+    const { reseau, kml } = req.body;
+    if (!reseau || !kml) return res.status(400).json({ error: 'reseau et kml requis' });
+    const points = parseKmlContent(kml, reseau);
+    if (!points.length) return res.json({ ok: false, reason: 'Aucun point trouvé dans le KML' });
+    // Supprimer les anciens points de ce réseau
+    await db.run('DELETE FROM distributeurs_carte WHERE reseau=$1', [reseau]);
+    // Insérer les nouveaux
+    let inserted = 0;
+    for (const p of points) {
+      await db.run(
+        `INSERT INTO distributeurs_carte (reseau, nom, description, adresse, cp, ville, tel, email, lat, lng)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [p.reseau, p.nom, p.description, p.adresse||null, p.cp||null, p.ville||null, p.tel||null, p.email||null, p.lat, p.lng]
+      );
+      inserted++;
+    }
+    res.json({ ok: true, reseau, inserted });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Route: données carte (points + correspondance commandes)
+router.get('/carte/points', requireAuth, async (req, res) => {
+  try {
+    const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
+    const points = await db.all('SELECT * FROM distributeurs_carte ORDER BY reseau, nom');
+    // Correspondance avec les commandes par nom de distributeur
+    const stats = await db.all(`
+      SELECT distributeur_nom,
+        COUNT(*) AS nb_commandes,
+        SUM(CASE WHEN facture_paiement_statut IN ('impaye','impayé') THEN 1 ELSE 0 END) AS impayes,
+        SUM(CASE WHEN statut IS NULL OR statut='Auto' OR statut='En préparation' THEN 1 ELSE 0 END) AS en_cours
+      FROM commandes
+      WHERE EXTRACT(YEAR FROM date_commande::date) = $1
+      GROUP BY distributeur_nom
+    `, [annee]);
+    // Map par nom normalisé
+    const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const statMap = {};
+    stats.forEach(s => { statMap[norm(s.distributeur_nom)] = s; });
+    const enriched = points.map(p => {
+      const st = statMap[norm(p.nom)] || {};
+      return {
+        ...p,
+        nb_commandes: parseInt(st.nb_commandes)||0,
+        impayes: parseInt(st.impayes)||0,
+        en_cours: parseInt(st.en_cours)||0
+      };
+    });
+    res.json(enriched);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Route: sauvegarder note interne d'un point
+router.put('/carte/points/:id/note', requireAuth, async (req, res) => {
+  try {
+    const { note } = req.body;
+    await db.run('UPDATE distributeurs_carte SET note_interne=$1, updated_at=NOW() WHERE id=$2', [note||null, req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Route: compteurs par réseau
+router.get('/carte/reseaux', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all('SELECT reseau, COUNT(*) AS nb FROM distributeurs_carte GROUP BY reseau');
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Fin Carte ─────────────────────────────────────────────────────
 module.exports = router;
