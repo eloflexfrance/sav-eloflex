@@ -3785,4 +3785,59 @@ router.get('/carte/reseaux', requireAuth, async (req, res) => {
 });
 
 // ── Fin Carte ─────────────────────────────────────────────────────
+
+// ── CRUD point carte (ajout/modif/suppression manuelle) ──────────
+router.post('/carte/points', adminOnly, async (req, res) => {
+  try {
+    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng } = req.body;
+    if (!reseau || !nom || lat == null || lng == null)
+      return res.status(400).json({ error: 'reseau, nom, lat, lng requis' });
+    const row = await db.get(
+      `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [reseau, nom, adresse||null, cp||null, ville||null, tel||null, email||null, parseFloat(lat), parseFloat(lng)]
+    );
+    res.json({ ok: true, point: row });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/carte/points/:id', adminOnly, async (req, res) => {
+  try {
+    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng } = req.body;
+    const row = await db.get(
+      `UPDATE distributeurs_carte SET
+        reseau=COALESCE($1,reseau), nom=COALESCE($2,nom), adresse=$3, cp=$4, ville=$5,
+        tel=$6, email=$7, lat=COALESCE($8,lat), lng=COALESCE($9,lng), updated_at=NOW()
+       WHERE id=$10 RETURNING *`,
+      [reseau||null, nom||null, adresse||null, cp||null, ville||null, tel||null, email||null,
+       lat!=null?parseFloat(lat):null, lng!=null?parseFloat(lng):null, req.params.id]
+    );
+    if (!row) return res.status(404).json({ error: 'Point introuvable' });
+    res.json({ ok: true, point: row });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/carte/points/:id', adminOnly, async (req, res) => {
+  try {
+    await db.run('DELETE FROM distributeurs_carte WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Géocodage d'une adresse (pour trouver lat/lng lors de l'ajout manuel)
+router.get('/carte/geocode-adresse', adminOnly, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q) return res.json({ found: false });
+    const axios = require('axios');
+    const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
+      params: { q: q + ', France', format: 'json', limit: 1, countrycodes: 'fr' },
+      headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
+      timeout: 8000
+    });
+    if (data && data.length) res.json({ found: true, lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name });
+    else res.json({ found: false });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

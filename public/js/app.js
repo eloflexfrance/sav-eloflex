@@ -3635,6 +3635,7 @@ function renderCarte(ttl, c, a) {
     [new Date().getFullYear(), new Date().getFullYear()-1, new Date().getFullYear()-2].map(function(y){
       return '<option value="'+y+'"'+(y===_carteAnnee?' selected':'')+'>'+y+'</option>';
     }).join('') + '</select>' +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-plus"></i> Ajouter</button>' : '') +
     (typeof isAdmin==='function' && isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
 
@@ -3781,7 +3782,8 @@ function popupCarte(p) {
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
     '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px">Note interne</label>' +
     '<textarea id="carte-note-' + p.id + '" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px;font-size:12px;resize:vertical;font-family:inherit">' + _esc(p.note_interne||'') + '</textarea>' +
-    '<button onclick="sauverNoteCarte(' + p.id + ')" style="margin-top:5px;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">Enregistrer</button>' +
+    '<button onclick="sauverNoteCarte(' + p.id + ')" style="margin-top:5px;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">Enregistrer note</button>' +
+    (typeof isAdmin==='function' && isAdmin() ? '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid #eee;display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 0;font-size:12px;cursor:pointer"><i class="ti ti-edit"></i> Modifier</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
     '</div>';
 }
 
@@ -3808,6 +3810,113 @@ function sauverNoteCarte(id) {
   }).catch(function(e){ alert('Erreur : ' + e.message); });
 }
 window.sauverNoteCarte = sauverNoteCarte;
+
+function modalPointCarte(id) {
+  var p = id ? _cartePoints.find(function(x){ return x.id === id; }) : null;
+  var titre = p ? 'Modifier le distributeur' : 'Nouveau distributeur';
+  var reseauOpts = Object.keys(RESEAUX_CONFIG).map(function(k){
+    return '<option value="' + k + '"' + (p && p.reseau===k ? ' selected' : '') + '>' + RESEAUX_CONFIG[k].label + '</option>';
+  }).join('');
+
+  var html = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)fermerModalPoint()">' +
+    '<div style="background:#fff;border-radius:12px;padding:24px;width:440px;max-width:92vw;max-height:88vh;overflow:auto" onclick="event.stopPropagation()">' +
+      '<h3 style="margin:0 0 16px;font-size:16px">' + titre + '</h3>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Réseau</label><select id="pc-reseau" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + reseauOpts + '</select></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Nom du distributeur *</label><input id="pc-nom" value="' + (p?_esc(p.nom):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Adresse</label><input id="pc-adresse" value="' + (p&&p.adresse?_esc(p.adresse):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '<div style="display:flex;gap:8px"><div style="width:110px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Code postal</label><input id="pc-cp" value="' + (p&&p.cp?_esc(p.cp):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
+        '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Téléphone</label><input id="pc-tel" value="' + (p&&p.tel?_esc(p.tel):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
+        '<div style="background:#f8f9fa;border-radius:8px;padding:10px 12px">' +
+          '<div style="display:flex;gap:8px;align-items:flex-end">' +
+            '<div style="width:120px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Latitude *</label><input id="pc-lat" value="' + (p?p.lat:'') + '" placeholder="48.85" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+            '<div style="width:120px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Longitude *</label><input id="pc-lng" value="' + (p?p.lng:'') + '" placeholder="2.35" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+            '<button onclick="geocoderAdresse()" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:12px;cursor:pointer;white-space:nowrap"><i class="ti ti-map-pin"></i> Trouver</button>' +
+          '</div>' +
+          '<div style="font-size:11px;color:#999;margin-top:5px">Cliquez "Trouver" pour localiser depuis l\'adresse, ou saisissez les coordonnées manuellement.</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end">' +
+        '<button onclick="fermerModalPoint()" style="background:var(--surface);border:0.5px solid #cfcfca;border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer">Annuler</button>' +
+        '<button onclick="sauverPointCarte(' + (id||'null') + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer">Enregistrer</button>' +
+      '</div>' +
+    '</div></div>';
+
+  var div = document.createElement('div');
+  div.id = 'modal-point-carte';
+  div.innerHTML = html;
+  document.body.appendChild(div);
+  if (_carteMap) _carteMap.closePopup();
+}
+window.modalPointCarte = modalPointCarte;
+
+function fermerModalPoint() {
+  var m = document.getElementById('modal-point-carte');
+  if (m) m.remove();
+}
+window.fermerModalPoint = fermerModalPoint;
+
+function geocoderAdresse() {
+  var adresse = [document.getElementById('pc-adresse').value, document.getElementById('pc-cp').value, document.getElementById('pc-ville').value].filter(Boolean).join(', ');
+  if (!adresse) { alert('Renseignez au moins la ville.'); return; }
+  fetch('/api/carte/geocode-adresse?q=' + encodeURIComponent(adresse))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.found) {
+        document.getElementById('pc-lat').value = d.lat.toFixed(6);
+        document.getElementById('pc-lng').value = d.lng.toFixed(6);
+        if (typeof toast === 'function') toast('Coordonnées trouvées', 'ti-check', 'var(--success)');
+      } else alert('Adresse introuvable. Saisissez les coordonnées manuellement.');
+    })
+    .catch(function(e){ alert('Erreur : ' + e.message); });
+}
+window.geocoderAdresse = geocoderAdresse;
+
+function sauverPointCarte(id) {
+  var data = {
+    reseau: document.getElementById('pc-reseau').value,
+    nom: document.getElementById('pc-nom').value.trim(),
+    adresse: document.getElementById('pc-adresse').value.trim(),
+    cp: document.getElementById('pc-cp').value.trim(),
+    ville: document.getElementById('pc-ville').value.trim(),
+    tel: document.getElementById('pc-tel').value.trim(),
+    email: document.getElementById('pc-email').value.trim(),
+    lat: parseFloat(document.getElementById('pc-lat').value),
+    lng: parseFloat(document.getElementById('pc-lng').value)
+  };
+  if (!data.nom || isNaN(data.lat) || isNaN(data.lng)) {
+    alert('Nom, latitude et longitude sont obligatoires.');
+    return;
+  }
+  var url = id ? '/api/carte/points/' + id : '/api/carte/points';
+  var method = id ? 'PUT' : 'POST';
+  fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.ok) {
+        fermerModalPoint();
+        chargerPoints();
+        if (typeof toast === 'function') toast(id ? 'Distributeur modifié' : 'Distributeur ajouté', 'ti-check', 'var(--success)');
+      } else alert('Erreur : ' + (d.error || 'inconnue'));
+    })
+    .catch(function(e){ alert('Erreur : ' + e.message); });
+}
+window.sauverPointCarte = sauverPointCarte;
+
+function supprimerPointCarte(id) {
+  var p = _cartePoints.find(function(x){ return x.id === id; });
+  if (!confirm('Supprimer "' + (p ? p.nom : 'ce distributeur') + '" de la carte ?')) return;
+  fetch('/api/carte/points/' + id, { method: 'DELETE' })
+    .then(function(r){ return r.json(); })
+    .then(function(){
+      chargerPoints();
+      if (typeof toast === 'function') toast('Distributeur supprimé', 'ti-check', 'var(--success)');
+    })
+    .catch(function(e){ alert('Erreur : ' + e.message); });
+}
+window.supprimerPointCarte = supprimerPointCarte;
 
 function importerKML(files) {
   if (!files || !files.length) return;
