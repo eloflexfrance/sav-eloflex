@@ -3659,11 +3659,17 @@ function renderCarte(ttl, c, a) {
 window.renderCarte = renderCarte;
 
 function chargerPoints() {
+  if (typeof L === 'undefined') {
+    var c = document.getElementById('carte-leaflet');
+    if (c) c.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626">Leaflet non chargé. Vérifiez que la librairie est bien incluse dans index.html.</div>';
+    return;
+  }
   fetch('/api/carte/points?annee=' + _carteAnnee)
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if (!Array.isArray(data)) return;
+      if (!Array.isArray(data)) { console.error('Carte: réponse invalide', data); return; }
       _cartePoints = data;
+      console.log('[CARTE]', data.length, 'points chargés');
 
       // Compteurs par réseau
       Object.keys(RESEAUX_CONFIG).forEach(function(k){
@@ -3679,8 +3685,9 @@ function chargerPoints() {
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap', maxZoom: 19
       }).addTo(_carteMap);
-
-      afficherMarkers();
+      _carteMap._fitted = false;
+      // Forcer le recalcul de la taille (Leaflet a besoin d'un conteneur dimensionné)
+      setTimeout(function(){ if(_carteMap) _carteMap.invalidateSize(); afficherMarkers(); }, 200);
     })
     .catch(function(e){
       var c = document.getElementById('carte-leaflet');
@@ -3785,23 +3792,34 @@ window.sauverNoteCarte = sauverNoteCarte;
 
 function importerKML(files) {
   if (!files || !files.length) return;
-  var reseauMap = {
-    'de_base': 'base', 'debase': 'base', 'base': 'base',
-    'bastide': 'bastide',
-    'providom': 'providom',
-    'districlub': 'districlub', 'districlub_medical': 'districlub', 'districlub': 'districlub'
-  };
   var arr = Array.from(files);
-  var done = 0, total = arr.length;
-  toast('Import de ' + total + ' fichier(s)…', 'ti-loader-2');
+  toast('Import de ' + arr.length + ' fichier(s)…', 'ti-loader-2');
 
-  arr.forEach(function(file){
-    var fname = file.name.toLowerCase().replace('.kml','');
-    var reseau = null;
-    for (var key in reseauMap) { if (fname.indexOf(key) >= 0) { reseau = reseauMap[key]; break; } }
+  function detectReseau(fname) {
+    fname = fname.toLowerCase();
+    if (fname.indexOf('bastide') >= 0) return 'bastide';
+    if (fname.indexOf('providom') >= 0) return 'providom';
+    if (fname.indexOf('districlub') >= 0 || fname.indexOf('distri') >= 0 || fname.indexOf('dcm') >= 0) return 'districlub';
+    if (fname.indexOf('base') >= 0) return 'base';
+    return null;
+  }
+
+  // Traitement SÉQUENTIEL pour éviter les race conditions
+  var idx = 0;
+  var resultats = [];
+  function suivant() {
+    if (idx >= arr.length) {
+      // Tout est importé
+      var msg = resultats.map(function(r){ return r.label + ': ' + r.inserted; }).join(' — ');
+      if (typeof toast === 'function') toast('Import terminé : ' + msg, 'ti-check', 'var(--success)');
+      setTimeout(chargerPoints, 300);
+      return;
+    }
+    var file = arr[idx];
+    var reseau = detectReseau(file.name);
     if (!reseau) {
-      if (fname.indexOf('base') >= 0) reseau = 'base';
-      else { done++; return; }
+      resultats.push({ label: file.name + ' (réseau inconnu)', inserted: 0 });
+      idx++; suivant(); return;
     }
     var reader = new FileReader();
     reader.onload = function() {
@@ -3809,13 +3827,16 @@ function importerKML(files) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reseau: reseau, kml: reader.result })
       }).then(function(r){ return r.json(); }).then(function(d){
-        done++;
-        if (d.ok && typeof toast === 'function') toast(RESEAUX_CONFIG[reseau].label + ' : ' + d.inserted + ' points', 'ti-check', 'var(--success)');
-        if (done === total) { setTimeout(chargerPoints, 500); }
-      }).catch(function(e){ done++; alert('Erreur import : ' + e.message); });
+        resultats.push({ label: (RESEAUX_CONFIG[reseau]||{}).label || reseau, inserted: d.inserted || 0 });
+        idx++; suivant();
+      }).catch(function(e){
+        resultats.push({ label: reseau + ' (erreur)', inserted: 0 });
+        idx++; suivant();
+      });
     };
     reader.readAsText(file);
-  });
+  }
+  suivant();
 }
 window.importerKML = importerKML;
 
