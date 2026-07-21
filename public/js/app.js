@@ -2,7 +2,6 @@
 
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
-let SHOW_PRIX_ACHAT = localStorage.getItem('sav_show_prix_achat') === '1';
 let _cmdReqId = 0; // anti-race condition pour la recherche commandes
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
 const CMD_COLS_DEFAULT = { num_annuel: false, paiement: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
@@ -1637,7 +1636,7 @@ async function renderCatalogue(ttl,c,a){
     <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')}</button>
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin-left:8px;color:var(--text2)" title="Afficher le prix d'achat fournisseur (Eloflex AB)">
-      <input type="checkbox" id="cat-show-price" ${SHOW_PRIX_ACHAT?'checked':''} onchange="SHOW_PRIX_ACHAT=this.checked;localStorage.setItem('sav_show_prix_achat',this.checked?'1':'0');renderCatalogue(document.getElementById('topbar-title'),document.getElementById('view-content'),document.getElementById('topbar-actions'))">
+      <input type="checkbox" id="cat-show-price" ${localStorage.getItem('sav_show_prix_achat')==='1'?'checked':''} onchange="localStorage.setItem('sav_show_prix_achat',this.checked?'1':'0');renderCatalogue(document.getElementById('topbar-title'),document.getElementById('view-content'),document.getElementById('topbar-actions'))">
       Prix achat 🇸🇪
     </label>
   </div>`;
@@ -1657,12 +1656,12 @@ async function chargerListeCatalogue(){
   if(reqId !== _catalogueReqId) return;
   CACHE.catalogue = list;
   el.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_fournisseur')}</th><th>${t('col_ref_fou')}</th>${SHOW_PRIX_ACHAT?`<th>${t('col_prix')}</th>`:''}<th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">VF</th></tr></thead>
+    <thead><tr><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_fournisseur')}</th><th>${t('col_ref_fou')}</th>${localStorage.getItem('sav_show_prix_achat')==='1'?`<th>${t('col_prix')}</th>`:''}<th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">VF</th></tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
       <td style="color:var(--text3)">${esc(p.fournisseur||'')}</td>
       <td class="mono">${esc(p.ref_fournisseur||'')}</td>
-      ${SHOW_PRIX_ACHAT?`<td style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>`:''}
+      ${localStorage.getItem('sav_show_prix_achat')==='1'?`<td style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>`:''}
       <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
       <td style="font-size:11px;color:var(--text3)">${p.stock_alerte}</td>
       <td style="text-align:center">${p.vf_product_id?`<a href="https://eloflex.vosfactures.fr/products/${p.vf_product_id}" target="_blank" onclick="event.stopPropagation()" title="Voir sur VosFactures" style="color:var(--accent);font-size:13px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
