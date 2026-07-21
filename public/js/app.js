@@ -3642,8 +3642,8 @@ function renderCarte(ttl, c, a) {
       '</label>';
   }).join('');
 
-  c.innerHTML = '<div style="display:flex;height:calc(100vh - 120px);gap:0">' +
-    '<div style="width:240px;border-right:0.5px solid var(--border);padding:14px;background:var(--surface);overflow:auto">' +
+  c.innerHTML = '<div style="display:flex;height:calc(100vh - 130px);min-height:500px;gap:0;margin:-18px -20px;border-radius:0">' +
+    '<div style="width:240px;border-right:0.5px solid var(--border);padding:14px;background:var(--surface);overflow:auto;flex-shrink:0">' +
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">Réseaux</div>' +
       legende +
       '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid var(--border)">' +
@@ -3651,7 +3651,7 @@ function renderCarte(ttl, c, a) {
       '</div>' +
       '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">Statut basé sur les commandes de l\'année. Cliquez un point pour voir le détail et ajouter une note.</div>' +
     '</div>' +
-    '<div id="carte-leaflet" style="flex:1;height:100%"></div>' +
+    '<div id="carte-leaflet" style="flex:1;height:100%;min-height:500px;background:#e8eef4"></div>' +
     '</div>';
 
   setTimeout(chargerPoints, 100);
@@ -3687,7 +3687,10 @@ function chargerPoints() {
       }).addTo(_carteMap);
       _carteMap._fitted = false;
       // Forcer le recalcul de la taille (Leaflet a besoin d'un conteneur dimensionné)
-      setTimeout(function(){ if(_carteMap) _carteMap.invalidateSize(); afficherMarkers(); }, 200);
+      afficherMarkers();
+      setTimeout(function(){ if(_carteMap) _carteMap.invalidateSize(); }, 100);
+      setTimeout(function(){ if(_carteMap) _carteMap.invalidateSize(); }, 400);
+      setTimeout(function(){ if(_carteMap) _carteMap.invalidateSize(); }, 900);
     })
     .catch(function(e){
       var c = document.getElementById('carte-leaflet');
