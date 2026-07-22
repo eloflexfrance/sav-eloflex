@@ -3620,6 +3620,18 @@ var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true };
 var _carteMarkers = [];
 var _cartePoints = [];
 
+// Limites de la France métropolitaine (Corse incluse)
+var FRANCE_BOUNDS = [[41.30, -5.20], [51.15, 9.60]];
+var _carteResizeBound = false;
+
+// Cadre la carte sur la France, au zoom maximal permis par la fenêtre
+function cadrerFrance() {
+  if (!_carteMap) return;
+  _carteMap.invalidateSize();
+  _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
+}
+window.cadrerFrance = cadrerFrance;
+
 var RESEAUX_CONFIG = {
   base:       { label: 'De base',            color: '#e24b4a', letter: 'B' },
   bastide:    { label: 'Bastide',            color: '#378add', letter: 'A' },
@@ -3635,6 +3647,7 @@ function renderCarte(ttl, c, a) {
     [new Date().getFullYear(), new Date().getFullYear()-1, new Date().getFullYear()-2].map(function(y){
       return '<option value="'+y+'"'+(y===_carteAnnee?' selected':'')+'>'+y+'</option>';
     }).join('') + '</select>' +
+    '<button onclick="cadrerFrance()" title="Recentrer sur la France" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-focus-centered"></i> Recentrer</button>' +
     (typeof isAdmin==='function' && isAdmin() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-plus"></i> Ajouter</button>' : '') +
     (typeof isAdmin==='function' && isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
@@ -3705,16 +3718,34 @@ function chargerPoints() {
       var container = document.getElementById('carte-leaflet');
       if (!container) return;
       if (_carteMap) { _carteMap.remove(); _carteMap = null; }
-      _carteMap = L.map('carte-leaflet', { preferCanvas: false }).setView([46.6, 2.4], 6);
+      _carteMap = L.map('carte-leaflet', { preferCanvas: false });
+      _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap', maxZoom: 19
       }).addTo(_carteMap);
-      _carteMap._fitted = false;
-      // Forcer le recalcul de la taille (Leaflet a besoin d'un conteneur dimensionné)
       afficherMarkers();
-      setTimeout(function(){ if(_carteMap) _carteMap.invalidateSize(); }, 100);
-      setTimeout(function(){ if(_carteMap) _carteMap.invalidateSize(); }, 400);
-      setTimeout(function(){ if(_carteMap) _carteMap.invalidateSize(); }, 900);
+      // Le conteneur n'a pas toujours sa taille finale à l'init : recadrer après stabilisation
+      setTimeout(cadrerFrance, 100);
+      setTimeout(cadrerFrance, 400);
+      setTimeout(cadrerFrance, 900);
+
+      // Recadrer automatiquement quand la fenêtre change de taille
+      if (!_carteResizeBound) {
+        _carteResizeBound = true;
+        var tmr = null;
+        window.addEventListener('resize', function(){
+          if (!_carteMap || !document.getElementById('carte-leaflet')) return;
+          clearTimeout(tmr);
+          tmr = setTimeout(function(){
+            var el = document.getElementById('carte-leaflet');
+            if (el) {
+              var h = window.innerHeight - el.getBoundingClientRect().top;
+              el.style.height = (h < 300 ? 500 : h) + 'px';
+            }
+            cadrerFrance();
+          }, 150);
+        });
+      }
     })
     .catch(function(e){
       var c = document.getElementById('carte-leaflet');
@@ -3759,10 +3790,6 @@ function afficherMarkers() {
     bounds.push([parseFloat(p.lat), parseFloat(p.lng)]);
   });
 
-  if (bounds.length && !_carteMap._fitted) {
-    _carteMap.fitBounds(bounds, { padding: [40,40] });
-    _carteMap._fitted = true;
-  }
 }
 window.afficherMarkers = afficherMarkers;
 
