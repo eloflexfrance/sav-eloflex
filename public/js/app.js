@@ -3821,27 +3821,13 @@ function libellePays(code) {
 window.optionsPays = optionsPays; window.libellePays = libellePays;
 var _carteResizeBound = false;
 
-// Cadre la carte : France seule si tous les points y sont, sinon sur l'ensemble des points
+// Cadre la carte sur la France, au zoom maximal permis par la fenêtre.
+// Les points situés hors de France restent sur la carte : on les atteint
+// en dézoomant, ou via la recherche par nom / par ville qui zoome dessus.
 function cadrerFrance() {
   if (!_carteMap) return;
   _carteMap.invalidateSize();
-
-  var hors = (_cartePoints || []).filter(function(p){
-    if (!_carteReseaux[p.reseau]) return false;
-    var la = parseFloat(p.lat), ln = parseFloat(p.lng);
-    return la < FRANCE_BOUNDS[0][0] || la > FRANCE_BOUNDS[1][0]
-        || ln < FRANCE_BOUNDS[0][1] || ln > FRANCE_BOUNDS[1][1];
-  });
-
-  if (!hors.length) {
-    _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
-    return;
-  }
-  // Des distributeurs sont hors de France : on englobe tout le monde
-  var tous = (_cartePoints || []).filter(function(p){ return _carteReseaux[p.reseau]; })
-    .map(function(p){ return [parseFloat(p.lat), parseFloat(p.lng)]; });
-  tous.push(FRANCE_BOUNDS[0], FRANCE_BOUNDS[1]);
-  _carteMap.fitBounds(tous, { padding: [25, 25], animate: false });
+  _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
 }
 window.cadrerFrance = cadrerFrance;
 
