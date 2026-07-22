@@ -262,7 +262,10 @@ router.get('/clients', async (req, res) => {
       `SELECT c.*,
         (SELECT COUNT(*)::int FROM fauteuils f WHERE f.client_id=c.id) AS nb_fauteuils,
         (SELECT COUNT(*)::int FROM interventions i WHERE i.client_id=c.id) AS nb_interventions
-       FROM clients c WHERE c.nom ILIKE $1 OR c.contact ILIKE $1 OR c.ville ILIKE $1 ORDER BY c.nom`,
+       FROM clients c
+       WHERE c.nom ILIKE $1 OR c.contact ILIKE $1 OR c.ville ILIKE $1
+          OR c.adresse ILIKE $1 OR c.cp ILIKE $1 OR c.email ILIKE $1
+       ORDER BY c.nom`,
       [q]
     );
     res.json(rows);
@@ -295,14 +298,17 @@ router.get('/clients/:id', async (req, res) => {
 
 router.post('/clients', async (req, res) => {
   try {
-    const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte } = req.body;
+    const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte,
+            adresse, adresse2, cp, pays } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
-      `INSERT INTO clients (nom,contact,email,tel,ville,type,token_portail,edi,sur_carte,reseau_carte)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO clients (nom,contact,email,tel,ville,type,token_portail,edi,sur_carte,reseau_carte,
+                            adresse,adresse2,cp,pays)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [nom, contact||null, email||null, tel||null, ville||null, type||'Distributeur', token,
-       !!edi, !!sur_carte, reseau_carte||null]
+       !!edi, !!sur_carte, reseau_carte||null,
+       adresse||null, adresse2||null, cp||null, pays||null]
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
@@ -312,15 +318,18 @@ router.post('/clients', async (req, res) => {
 
 router.put('/clients/:id', async (req, res) => {
   try {
-    const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte } = req.body;
-    const avant = await db.get('SELECT ville, lat, lng FROM clients WHERE id=$1', [req.params.id]);
+    const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte,
+            adresse, adresse2, cp, pays } = req.body;
+    const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
       `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,ville=$5,type=$6,
-       edi=$7,sur_carte=$8,reseau_carte=$9,updated_at=NOW() WHERE id=$10 RETURNING *`,
-      [nom, contact, email, tel, ville, type, !!edi, !!sur_carte, reseau_carte||null, req.params.id]
+       edi=$7,sur_carte=$8,reseau_carte=$9,
+       adresse=$10,adresse2=$11,cp=$12,pays=$13,updated_at=NOW() WHERE id=$14 RETURNING *`,
+      [nom, contact, email, tel, ville, type, !!edi, !!sur_carte, reseau_carte||null,
+       adresse||null, adresse2||null, cp||null, pays||null, req.params.id]
     );
-    // Ville modifiée : les anciennes coordonnées ne valent plus rien
-    if (avant && avant.ville !== ville) {
+    // Adresse modifiée : les anciennes coordonnées ne valent plus rien
+    if (avant && (avant.ville !== ville || avant.adresse !== (adresse||null) || avant.cp !== (cp||null))) {
       await db.run('UPDATE clients SET lat=NULL, lng=NULL WHERE id=$1', [req.params.id]);
     }
     const carte = await syncClientCarte(req.params.id);
@@ -3929,37 +3938,51 @@ async function syncClientCarte(clientId) {
 
   const reseau = cl.reseau_carte || 'base';
 
-  // Coordonnées : celles du client, sinon géocodage de la ville
+  // Coordonnées : celles du client, sinon géocodage
   let lat = cl.lat, lng = cl.lng;
+  let precision = 'existante';
   if (lat == null || lng == null) {
-    if (!cl.ville) return { ok: false, reason: 'ville manquante — impossible de localiser ce client' };
-    try {
-      const axios = require('axios');
-      const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
-        params: { q: cl.ville + ', France', format: 'json', limit: 1, countrycodes: 'fr' },
-        headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
-        timeout: 8000
-      });
-      if (!data || !data.length) return { ok: false, reason: 'ville "' + cl.ville + '" introuvable' };
-      lat = parseFloat(data[0].lat); lng = parseFloat(data[0].lon);
-      await db.run('UPDATE clients SET lat=$1, lng=$2, geocoded_at=NOW() WHERE id=$3', [lat, lng, clientId]);
-    } catch(e) { return { ok: false, reason: 'géocodage indisponible' }; }
+    if (!cl.ville && !cl.cp) return { ok: false, reason: 'ville ou code postal manquant — impossible de localiser ce client' };
+    const axios = require('axios');
+    // On tente d'abord l'adresse complète (précise au numéro), puis on retombe sur CP + ville
+    const tentatives = [];
+    if (cl.adresse) tentatives.push({ q: [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(', '), p: 'adresse' });
+    if (cl.cp || cl.ville) tentatives.push({ q: [cl.cp, cl.ville].filter(Boolean).join(' '), p: 'ville' });
+    for (const tent of tentatives) {
+      try {
+        const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
+          params: { q: tent.q + ', France', format: 'json', limit: 1, countrycodes: 'fr' },
+          headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
+          timeout: 8000
+        });
+        if (data && data.length) {
+          lat = parseFloat(data[0].lat); lng = parseFloat(data[0].lon);
+          precision = tent.p;
+          break;
+        }
+      } catch(e) { /* on essaie la tentative suivante */ }
+      await new Promise(r => setTimeout(r, 1100)); // limite Nominatim
+    }
+    if (lat == null || lng == null) return { ok: false, reason: 'adresse introuvable — positionnez le point manuellement depuis la carte' };
+    await db.run('UPDATE clients SET lat=$1, lng=$2, geocoded_at=NOW() WHERE id=$3', [lat, lng, clientId]);
   }
+
+  const adrCarte = [cl.adresse, cl.adresse2].filter(Boolean).join(' — ') || null;
 
   if (existant) {
     await db.run(
-      `UPDATE distributeurs_carte SET reseau=$1, nom=$2, ville=$3, tel=$4, email=$5,
-       lat=$6, lng=$7, updated_at=NOW() WHERE id=$8`,
-      [reseau, cl.nom, cl.ville||null, cl.tel||null, cl.email||null, lat, lng, existant.id]
+      `UPDATE distributeurs_carte SET reseau=$1, nom=$2, adresse=$3, cp=$4, ville=$5,
+       tel=$6, email=$7, lat=$8, lng=$9, updated_at=NOW() WHERE id=$10`,
+      [reseau, cl.nom, adrCarte, cl.cp||null, cl.ville||null, cl.tel||null, cl.email||null, lat, lng, existant.id]
     );
-    return { ok: true, action: 'maj', lat, lng };
+    return { ok: true, action: 'maj', lat, lng, precision };
   }
   await db.run(
-    `INSERT INTO distributeurs_carte (reseau, nom, ville, tel, email, lat, lng, client_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [reseau, cl.nom, cl.ville||null, cl.tel||null, cl.email||null, lat, lng, clientId]
+    `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [reseau, cl.nom, adrCarte, cl.cp||null, cl.ville||null, cl.tel||null, cl.email||null, lat, lng, clientId]
   );
-  return { ok: true, action: 'cree', lat, lng };
+  return { ok: true, action: 'cree', lat, lng, precision };
 }
 
 // Resynchronise tous les clients marqués « sur la carte »

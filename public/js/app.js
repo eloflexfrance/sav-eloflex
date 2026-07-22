@@ -358,11 +358,11 @@ async function chargerListeClients(){
   const list = await API.clients(window._clientsQ||'');
   if(reqId !== _clientsReqId) return; // réponse périmée — une requête plus récente a pris le relais
   el.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>${t('col_distributeur')}</th><th>${t('col_contact')}</th><th>${t('col_ville')}</th><th>${t('col_fauteuils')}</th><th>${t('col_interventions')}</th><th></th></tr></thead>
+    <thead><tr><th>${t('col_distributeur')}</th><th>${t('col_contact')}</th><th>Adresse</th><th>${t('col_fauteuils')}</th><th>${t('col_interventions')}</th><th></th></tr></thead>
     <tbody>${list.map(cl=>`<tr onclick="setView('client',{clientId:${cl.id}})">
       <td><div style="font-weight:600">${esc(cl.nom)}</div><div style="font-size:11px;color:var(--text3)">${esc(cl.type)}</div></td>
       <td><div>${esc(cl.contact||'')}</div><div style="font-size:11px;color:var(--text3)">${esc(cl.email||'')}</div></td>
-      <td>${esc(cl.ville||'')}</td><td>${cl.nb_fauteuils}</td><td>${cl.nb_interventions}</td>
+      <td>${cl.adresse?`<div style="font-size:11px;color:var(--text3)">${esc(cl.adresse)}</div>`:''}<div>${esc([cl.cp,cl.ville].filter(Boolean).join(' ')||'—')}</div></td><td>${cl.nb_fauteuils}</td><td>${cl.nb_interventions}</td>
       <td><button class="btn sm" onclick="event.stopPropagation();setView('client',{clientId:${cl.id}})"><i class="ti ti-arrow-right"></i></button></td>
     </tr>`).join('')}</tbody>
   </table></div>`;
@@ -383,8 +383,21 @@ async function renderClient(ttl,c,a){
       <div class="card">
         <div class="section-title"><i class="ti ti-user"></i>Fiche distributeur</div>
         <table style="width:100%;font-size:12px">
-          ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Ville',cl.ville],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
+          ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
+          ${(()=>{
+            const lignes=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
+            if(!lignes.length) return `<tr><td style="color:var(--text3);padding:3px 0;width:100px">Adresse</td><td style="color:var(--text3)">— <span style="font-size:11px">(à compléter)</span></td></tr>`;
+            const q=encodeURIComponent(lignes.join(', '));
+            return `<tr><td style="color:var(--text3);padding:5px 0;width:100px;vertical-align:top">Adresse</td>
+              <td style="font-weight:500;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}
+                <div style="margin-top:4px;display:flex;gap:8px;font-size:11px;font-weight:400">
+                  <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none"><i class="ti ti-map-pin" style="font-size:11px"></i> Voir sur une carte</a>
+                  <span onclick="copierAdresse(this,'${esc(lignes.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> Copier</span>
+                </div>
+              </td></tr>`;
+          })()}
           ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">💳 EDI — Prélèvement</span></td></tr>`:''}
+          ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="setView('carte')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
@@ -2591,7 +2604,11 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Contact</label><input class="form-input" id="f-contact" value="${esc(d.contact||'')}"></div>
   <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" value="${esc(d.email||'')}"></div>
   <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
+  <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse</label><input class="form-input" id="f-adresse" placeholder="12 rue des Lilas" value="${esc(d.adresse||'')}"></div>
+  <div class="form-group" style="grid-column:1/-1"><label class="form-label">Complément d'adresse</label><input class="form-input" id="f-adresse2" placeholder="Bâtiment B, ZI de la Plaine…" value="${esc(d.adresse2||'')}"></div>
+  <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
+  <div class="form-group"><label class="form-label">Pays</label><input class="form-input" id="f-pays" placeholder="France" value="${esc(d.pays||'')}"></div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} onchange="document.getElementById('f-reseau-carte').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:#22c55e">
@@ -2616,13 +2633,15 @@ async function saveClient(id){
   const surCarte = !!document.getElementById('f-sur-carte')?.checked;
   const data = {
     nom: gv('f-nom'), type: gv('f-type'), contact: gv('f-contact'),
-    email: gv('f-email'), tel: gv('f-tel'), ville: gv('f-ville'),
+    email: gv('f-email'), tel: gv('f-tel'),
+    adresse: gv('f-adresse'), adresse2: gv('f-adresse2'),
+    cp: gv('f-cp'), ville: gv('f-ville'), pays: gv('f-pays'),
     edi: !!document.getElementById('f-edi')?.checked,
     sur_carte: surCarte,
     reseau_carte: surCarte ? (gv('f-reseau-carte') || 'base') : null
   };
   if(!data.nom){ alert('Nom requis'); return; }
-  if(surCarte && !data.ville){ alert('Renseignez la ville : elle sert à positionner le point sur la carte.'); return; }
+  if(surCarte && !data.ville && !data.cp){ alert('Renseignez au moins le code postal ou la ville : ils servent à positionner le point sur la carte.'); return; }
   try{
     const r = id ? await API.updateClient(id, data) : await API.createClient(data);
     toast(id ? 'Client mis à jour' : 'Client créé');
@@ -3636,6 +3655,18 @@ async function syncPaiementCommande(id){
 window.syncPaiementCommande = syncPaiementCommande;
 
 })();
+
+function copierAdresse(el, txt) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(txt).then(function(){
+      var av = el.innerHTML;
+      el.innerHTML = '<i class="ti ti-check" style="font-size:11px"></i> Copié';
+      setTimeout(function(){ el.innerHTML = av; }, 1500);
+    }).catch(function(){});
+  }
+}
+window.copierAdresse = copierAdresse;
+
 
 // Helpers globaux (hors IIFE)
 function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
