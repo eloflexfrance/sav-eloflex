@@ -2593,6 +2593,16 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
   <div class="form-group" style="grid-column:1/-1">
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
+      <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} onchange="document.getElementById('f-reseau-carte').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:#22c55e">
+      <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#16a34a">🗺️ Afficher sur la carte distributeurs</div>
+      <div style="font-size:11px;color:var(--text2)">Le point est créé et positionné depuis la ville, et ses ventes sont rattachées automatiquement</div></div>
+      <select class="form-input" id="f-reseau-carte" onclick="event.preventDefault();event.stopPropagation()" style="width:auto;padding:5px 8px;font-size:12px;display:${d.sur_carte?'':'none'}">
+        ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
+      </select>
+    </label>
+  </div>
+  <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.edi?'rgba(46,124,246,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-edi" ${d.edi?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)">
       <div><div style="font-size:13px;font-weight:600;color:var(--accent)">💳 EDI — Prélèvement automatique</div>
@@ -2602,7 +2612,29 @@ function clientForm(d={}){return `<div class="grid-2">
 </div>`;}
 function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function saveClient(id){const data={nom:gv('f-nom'),type:gv('f-type'),contact:gv('f-contact'),email:gv('f-email'),tel:gv('f-tel'),ville:gv('f-ville'),edi:!!document.getElementById('f-edi')?.checked};if(!data.nom){alert('Nom requis');return;}try{if(id)await API.updateClient(id,data);else await API.createClient(data);toast(id?'Client mis à jour':'Client créé');closeModal();render();}catch(e){alert(e.message);}}
+async function saveClient(id){
+  const surCarte = !!document.getElementById('f-sur-carte')?.checked;
+  const data = {
+    nom: gv('f-nom'), type: gv('f-type'), contact: gv('f-contact'),
+    email: gv('f-email'), tel: gv('f-tel'), ville: gv('f-ville'),
+    edi: !!document.getElementById('f-edi')?.checked,
+    sur_carte: surCarte,
+    reseau_carte: surCarte ? (gv('f-reseau-carte') || 'base') : null
+  };
+  if(!data.nom){ alert('Nom requis'); return; }
+  if(surCarte && !data.ville){ alert('Renseignez la ville : elle sert à positionner le point sur la carte.'); return; }
+  try{
+    const r = id ? await API.updateClient(id, data) : await API.createClient(data);
+    toast(id ? 'Client mis à jour' : 'Client créé');
+    // Retour du positionnement sur la carte
+    if (surCarte && r && r.carte && !r.carte.ok) {
+      setTimeout(function(){ alert('Client enregistré, mais non placé sur la carte :\n' + (r.carte.reason || 'raison inconnue') + '\n\nVous pouvez le positionner manuellement depuis la carte.'); }, 400);
+    } else if (surCarte && r && r.carte && r.carte.action === 'cree') {
+      setTimeout(function(){ toast('Placé sur la carte', 'ti-map-pin', 'var(--success)'); }, 600);
+    }
+    closeModal(); render();
+  }catch(e){ alert(e.message); }
+}
 async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;await API.deleteClient(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
 
 async function modalPortail(id,token){
@@ -3809,9 +3841,16 @@ function popupCarte(p) {
       (p.tel ? '<i class="ti ti-phone" style="font-size:11px"></i> ' + _esc(p.tel) + '<br>' : '') +
       (p.email ? '<i class="ti ti-mail" style="font-size:11px"></i> ' + _esc(p.email) : '') +
     '</div>' +
-    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
       '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:11px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
       statutTxt +
+    '</div>' +
+    '<div style="font-size:11px;color:#999;margin-bottom:10px">' +
+      (p.lien_type === 'client'
+        ? '<span style="color:#16a34a">🔗 Lié au client</span>'
+        : p.lien_type === 'nom'
+          ? 'Rapproché par nom : ' + _esc((p.noms_rattaches||[]).join(', '))
+          : '<span style="color:#d97706">⚠ Aucune commande rattachée — liez ce point à un client pour fiabiliser</span>') +
     '</div>' +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
     '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px">Note interne</label>' +
@@ -3971,6 +4010,9 @@ function modalPointCarte(id) {
       '<div style="display:flex;flex-direction:column;gap:10px">' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Réseau</label><select id="pc-reseau" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + reseauOpts + '</select></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Nom du distributeur *</label><input id="pc-nom" value="' + (p?_esc(p.nom):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Client rattaché <span style="color:#999">(recommandé)</span></label>' +
+          '<select id="pc-client" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"><option value="">— Rattachement par nom —</option></select>' +
+          '<div style="font-size:11px;color:#999;margin-top:3px">Lier au client garantit que ses ventes s\'affichent, même si l\'orthographe diffère.</div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Adresse</label><input id="pc-adresse" value="' + (p&&p.adresse?_esc(p.adresse):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="display:flex;gap:8px"><div style="width:110px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Code postal</label><input id="pc-cp" value="' + (p&&p.cp?_esc(p.cp):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
@@ -3996,6 +4038,22 @@ function modalPointCarte(id) {
   div.innerHTML = html;
   document.body.appendChild(div);
   if (_carteMap) _carteMap.closePopup();
+
+  // Remplir la liste des clients
+  fetch('/api/carte/clients-liste')
+    .then(function(r){ return r.json(); })
+    .then(function(clients){
+      var sel = document.getElementById('pc-client');
+      if (!sel || !Array.isArray(clients)) return;
+      clients.forEach(function(cl){
+        var o = document.createElement('option');
+        o.value = cl.id;
+        o.textContent = cl.nom + (cl.ville ? ' — ' + cl.ville : '');
+        if (p && p.client_id === cl.id) o.selected = true;
+        sel.appendChild(o);
+      });
+    })
+    .catch(function(){});
 }
 window.modalPointCarte = modalPointCarte;
 
@@ -4031,7 +4089,8 @@ function sauverPointCarte(id) {
     tel: document.getElementById('pc-tel').value.trim(),
     email: document.getElementById('pc-email').value.trim(),
     lat: parseFloat(document.getElementById('pc-lat').value),
-    lng: parseFloat(document.getElementById('pc-lng').value)
+    lng: parseFloat(document.getElementById('pc-lng').value),
+    client_id: (document.getElementById('pc-client') || {}).value || null
   };
   if (!data.nom || isNaN(data.lat) || isNaN(data.lng)) {
     alert('Nom, latitude et longitude sont obligatoires.');

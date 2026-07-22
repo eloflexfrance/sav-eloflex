@@ -295,25 +295,36 @@ router.get('/clients/:id', async (req, res) => {
 
 router.post('/clients', async (req, res) => {
   try {
-    const { nom, contact, email, tel, ville, type } = req.body;
+    const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
-      'INSERT INTO clients (nom,contact,email,tel,ville,type,token_portail) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
-      [nom, contact||null, email||null, tel||null, ville||null, type||'Distributeur', token]
+      `INSERT INTO clients (nom,contact,email,tel,ville,type,token_portail,edi,sur_carte,reseau_carte)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [nom, contact||null, email||null, tel||null, ville||null, type||'Distributeur', token,
+       !!edi, !!sur_carte, reseau_carte||null]
     );
-    res.status(201).json(cl);
+    let carte = null;
+    if (sur_carte) carte = await syncClientCarte(cl.id);
+    res.status(201).json({ ...cl, carte });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/clients/:id', async (req, res) => {
   try {
-    const { nom, contact, email, tel, ville, type } = req.body;
+    const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte } = req.body;
+    const avant = await db.get('SELECT ville, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
-      'UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,ville=$5,type=$6,updated_at=NOW() WHERE id=$7 RETURNING *',
-      [nom, contact, email, tel, ville, type, req.params.id]
+      `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,ville=$5,type=$6,
+       edi=$7,sur_carte=$8,reseau_carte=$9,updated_at=NOW() WHERE id=$10 RETURNING *`,
+      [nom, contact, email, tel, ville, type, !!edi, !!sur_carte, reseau_carte||null, req.params.id]
     );
-    res.json(cl);
+    // Ville modifiée : les anciennes coordonnées ne valent plus rien
+    if (avant && avant.ville !== ville) {
+      await db.run('UPDATE clients SET lat=NULL, lng=NULL WHERE id=$1', [req.params.id]);
+    }
+    const carte = await syncClientCarte(req.params.id);
+    res.json({ ...cl, carte });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -3736,43 +3747,91 @@ router.post('/carte/import-kml', adminOnly, async (req, res) => {
 });
 
 // Route: données carte (points + correspondance commandes)
+// Normalisation robuste : accents convertis (é->e), ponctuation -> espaces
+function normNom(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+const MOTS_VIDES = new Set(['sarl','sas','sasu','eurl','sa','snc','sarlu','ets','etablissement',
+  'etablissements','ste','societe','scop','sci','scm','selarl','et','de','du','des','la','le','les']);
+function motsNom(s) {
+  return normNom(s).split(' ').filter(w => w.length > 1 && !MOTS_VIDES.has(w));
+}
+// true si les deux noms désignent vraisemblablement la même entité
+function memeEntite(a, b) {
+  const na = normNom(a), nb = normNom(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const ta = motsNom(a), tb = motsNom(b);
+  if (!ta.length || !tb.length) return false;
+  const [petit, grand] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
+  return petit.every(w => grand.includes(w)) && petit.some(w => w.length >= 4);
+}
+
+// Route: données carte (points + rattachement aux commandes)
 router.get('/carte/points', requireAuth, async (req, res) => {
   try {
     const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
     const points = await db.all('SELECT * FROM distributeurs_carte ORDER BY reseau, nom');
-    // Correspondance avec les commandes par nom de distributeur
     const stats = await db.all(`
-      SELECT distributeur_nom,
+      SELECT distributeur_nom, client_id,
         COUNT(*) AS nb_commandes,
         SUM(CASE WHEN facture_paiement_statut IN ('impaye','impayé') THEN 1 ELSE 0 END) AS impayes,
         SUM(CASE WHEN statut IS NULL OR statut='Auto' OR statut='En préparation' THEN 1 ELSE 0 END) AS en_cours
       FROM commandes
       WHERE EXTRACT(YEAR FROM date_commande::date) = $1
-      GROUP BY distributeur_nom
+      GROUP BY distributeur_nom, client_id
     `, [annee]);
-    // Map par nom normalisé — match exact PUIS partiel (contains)
-    const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-    const statList = stats.map(s => ({ ...s, n: norm(s.distributeur_nom) })).filter(s => s.n.length >= 3);
+
+    const cumul = (liste) => liste.reduce((a, s) => ({
+      nb_commandes: a.nb_commandes + (parseInt(s.nb_commandes) || 0),
+      impayes:      a.impayes      + (parseInt(s.impayes) || 0),
+      en_cours:     a.en_cours     + (parseInt(s.en_cours) || 0)
+    }), { nb_commandes: 0, impayes: 0, en_cours: 0 });
+
     const enriched = points.map(p => {
-      const pn = norm(p.nom);
-      // 1. Match exact
-      let matches = statList.filter(s => s.n === pn);
-      // 2. Sinon match partiel : le nom carte contient le nom commande, ou l'inverse (min 4 car pour éviter faux positifs)
-      if (!matches.length && pn.length >= 4) {
-        matches = statList.filter(s => (s.n.length >= 4) && (s.n.includes(pn) || pn.includes(s.n)));
+      let trouves = [];
+      let lien = 'aucun';
+      // 1) Lien explicite via client_id : prioritaire et sans ambiguïté
+      if (p.client_id) {
+        trouves = stats.filter(s => s.client_id === p.client_id);
+        if (trouves.length) lien = 'client';
       }
-      // Agréger tous les matches trouvés
-      const agg = matches.reduce((a, s) => ({
-        nb_commandes: a.nb_commandes + (parseInt(s.nb_commandes)||0),
-        impayes: a.impayes + (parseInt(s.impayes)||0),
-        en_cours: a.en_cours + (parseInt(s.en_cours)||0)
-      }), { nb_commandes: 0, impayes: 0, en_cours: 0 });
-      return { ...p, ...agg, matched_names: matches.map(m => m.distributeur_nom) };
+      // 2) Sinon rapprochement par nom (accents et mots gérés)
+      if (!trouves.length) {
+        trouves = stats.filter(s => memeEntite(p.nom, s.distributeur_nom));
+        if (trouves.length) lien = 'nom';
+      }
+      return {
+        ...p,
+        ...cumul(trouves),
+        lien_type: lien,
+        noms_rattaches: [...new Set(trouves.map(t => t.distributeur_nom).filter(Boolean))]
+      };
     });
     res.json(enriched);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Route: sauvegarder note interne d'un point
+router.put('/carte/points/:id/note', requireAuth, async (req, res) => {
+  try {
+    const { note } = req.body;
+    await db.run('UPDATE distributeurs_carte SET note_interne=$1, updated_at=NOW() WHERE id=$2', [note||null, req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Route: liste des clients pour rattachement manuel
+router.get('/carte/clients-liste', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(
+      "SELECT id, nom, ville, sur_carte FROM clients WHERE type <> 'Particulier' ORDER BY nom"
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
 // Route debug: lister tous les noms de distributeurs des commandes
 router.get('/carte/debug-noms', requireAuth, async (req, res) => {
@@ -3783,15 +3842,6 @@ router.get('/carte/debug-noms', requireAuth, async (req, res) => {
     const cmdNoms = commandes.map(c => c.distributeur_nom).filter(n => !q || n.toLowerCase().includes(q));
     const carteNoms = carte.filter(c => !q || c.nom.toLowerCase().includes(q));
     res.json({ commandes: cmdNoms, carte: carteNoms });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
-// Route: sauvegarder note interne d'un point
-router.put('/carte/points/:id/note', requireAuth, async (req, res) => {
-  try {
-    const { note } = req.body;
-    await db.run('UPDATE distributeurs_carte SET note_interne=$1, updated_at=NOW() WHERE id=$2', [note||null, req.params.id]);
-    res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -3808,13 +3858,14 @@ router.get('/carte/reseaux', requireAuth, async (req, res) => {
 // ── CRUD point carte (ajout/modif/suppression manuelle) ──────────
 router.post('/carte/points', adminOnly, async (req, res) => {
   try {
-    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng } = req.body;
+    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id } = req.body;
     if (!reseau || !nom || lat == null || lng == null)
       return res.status(400).json({ error: 'reseau, nom, lat, lng requis' });
     const row = await db.get(
-      `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [reseau, nom, adresse||null, cp||null, ville||null, tel||null, email||null, parseFloat(lat), parseFloat(lng)]
+      `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [reseau, nom, adresse||null, cp||null, ville||null, tel||null, email||null,
+       parseFloat(lat), parseFloat(lng), client_id || null]
     );
     res.json({ ok: true, point: row });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -3822,14 +3873,16 @@ router.post('/carte/points', adminOnly, async (req, res) => {
 
 router.put('/carte/points/:id', adminOnly, async (req, res) => {
   try {
-    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng } = req.body;
+    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id } = req.body;
     const row = await db.get(
       `UPDATE distributeurs_carte SET
         reseau=COALESCE($1,reseau), nom=COALESCE($2,nom), adresse=$3, cp=$4, ville=$5,
-        tel=$6, email=$7, lat=COALESCE($8,lat), lng=COALESCE($9,lng), updated_at=NOW()
-       WHERE id=$10 RETURNING *`,
+        tel=$6, email=$7, lat=COALESCE($8,lat), lng=COALESCE($9,lng),
+        client_id=$10, updated_at=NOW()
+       WHERE id=$11 RETURNING *`,
       [reseau||null, nom||null, adresse||null, cp||null, ville||null, tel||null, email||null,
-       lat!=null?parseFloat(lat):null, lng!=null?parseFloat(lng):null, req.params.id]
+       lat!=null?parseFloat(lat):null, lng!=null?parseFloat(lng):null,
+       client_id ? parseInt(client_id) : null, req.params.id]
     );
     if (!row) return res.status(404).json({ error: 'Point introuvable' });
     res.json({ ok: true, point: row });
@@ -3856,6 +3909,70 @@ router.get('/carte/geocode-adresse', adminOnly, async (req, res) => {
     });
     if (data && data.length) res.json({ found: true, lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name });
     else res.json({ found: false });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// ── Synchronisation client -> point sur la carte ─────────────────
+// Crée, met à jour ou retire le point carte d'un client selon son flag sur_carte.
+async function syncClientCarte(clientId) {
+  const cl = await db.get('SELECT * FROM clients WHERE id=$1', [clientId]);
+  if (!cl) return { ok: false, reason: 'client introuvable' };
+
+  const existant = await db.get('SELECT * FROM distributeurs_carte WHERE client_id=$1', [clientId]);
+
+  // Décoché : on retire le point créé depuis la fiche client
+  if (!cl.sur_carte) {
+    if (existant) await db.run('DELETE FROM distributeurs_carte WHERE id=$1', [existant.id]);
+    return { ok: true, action: existant ? 'retire' : 'rien' };
+  }
+
+  const reseau = cl.reseau_carte || 'base';
+
+  // Coordonnées : celles du client, sinon géocodage de la ville
+  let lat = cl.lat, lng = cl.lng;
+  if (lat == null || lng == null) {
+    if (!cl.ville) return { ok: false, reason: 'ville manquante — impossible de localiser ce client' };
+    try {
+      const axios = require('axios');
+      const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
+        params: { q: cl.ville + ', France', format: 'json', limit: 1, countrycodes: 'fr' },
+        headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
+        timeout: 8000
+      });
+      if (!data || !data.length) return { ok: false, reason: 'ville "' + cl.ville + '" introuvable' };
+      lat = parseFloat(data[0].lat); lng = parseFloat(data[0].lon);
+      await db.run('UPDATE clients SET lat=$1, lng=$2, geocoded_at=NOW() WHERE id=$3', [lat, lng, clientId]);
+    } catch(e) { return { ok: false, reason: 'géocodage indisponible' }; }
+  }
+
+  if (existant) {
+    await db.run(
+      `UPDATE distributeurs_carte SET reseau=$1, nom=$2, ville=$3, tel=$4, email=$5,
+       lat=$6, lng=$7, updated_at=NOW() WHERE id=$8`,
+      [reseau, cl.nom, cl.ville||null, cl.tel||null, cl.email||null, lat, lng, existant.id]
+    );
+    return { ok: true, action: 'maj', lat, lng };
+  }
+  await db.run(
+    `INSERT INTO distributeurs_carte (reseau, nom, ville, tel, email, lat, lng, client_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [reseau, cl.nom, cl.ville||null, cl.tel||null, cl.email||null, lat, lng, clientId]
+  );
+  return { ok: true, action: 'cree', lat, lng };
+}
+
+// Resynchronise tous les clients marqués « sur la carte »
+router.post('/carte/sync-clients', adminOnly, async (req, res) => {
+  try {
+    const clients = await db.all('SELECT id FROM clients WHERE sur_carte = TRUE');
+    let ok = 0; const echecs = [];
+    for (const c of clients) {
+      const r = await syncClientCarte(c.id);
+      if (r.ok) ok++; else echecs.push({ id: c.id, raison: r.reason });
+      await new Promise(r => setTimeout(r, 1100)); // limite Nominatim
+    }
+    res.json({ ok: true, synchronises: ok, echecs });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

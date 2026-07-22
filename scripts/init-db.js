@@ -231,6 +231,10 @@ async function initDB() {
       )`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_reseau ON distributeurs_carte(reseau)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_nom ON distributeurs_carte(nom)`);
+      // Affichage d'un client sur la carte distributeurs
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS sur_carte BOOLEAN DEFAULT FALSE`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS reseau_carte TEXT`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_client ON distributeurs_carte(client_id)`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_nom TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_prenom TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS cf_adresse TEXT`);
