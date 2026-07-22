@@ -3732,7 +3732,11 @@ function renderCarte(ttl, c, a) {
       legende +
       '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
         '<label style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em;font-weight:700;display:block;margin-bottom:6px">Recherche</label>' +
-        '<input id="carte-search" placeholder="Nom de distributeur…" oninput="afficherMarkers()" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px;margin-bottom:8px">' +
+        '<div style="position:relative;margin-bottom:4px">' +
+          '<input id="carte-search" placeholder="Nom de distributeur…" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 26px 6px 9px;font-size:13px">' +
+          '<span onclick="document.getElementById(\'carte-search\').value=\'\';afficherMarkers(true)" title="Effacer" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:#bbb;font-size:13px">✕</span>' +
+        '</div>' +
+        '<div id="carte-nom-result" style="font-size:11px;color:#888;margin-bottom:8px;min-height:14px"></div>' +
         '<div style="display:flex;gap:6px">' +
           '<input id="carte-geo" placeholder="Ville ou code postal" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px">' +
           '<button onclick="rechercheGeo()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-search"></i></button>' +
@@ -3781,6 +3785,8 @@ function chargerPoints() {
       var container = document.getElementById('carte-leaflet');
       if (!container) return;
       if (_carteMap) { _carteMap.remove(); _carteMap = null; }
+      // Les calques de la carte précédente n'existent plus
+      _carteRayonCircle = null; _carteGeoMarker = null; _carteMarkers = [];
       _carteMap = L.map('carte-leaflet', { preferCanvas: false });
       _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -3832,7 +3838,7 @@ function pinIconCarte(reseau, point) {
   return L.divIcon({ html: html, className: '', iconSize: [30,42], iconAnchor: [15,42], popupAnchor: [0,-38] });
 }
 
-function afficherMarkers() {
+function afficherMarkers(recadrer) {
   if (!_carteMap) return;
   var q = (document.getElementById('carte-search') || {}).value || '';
   q = q.trim().toLowerCase();
@@ -3853,8 +3859,35 @@ function afficherMarkers() {
     bounds.push([parseFloat(p.lat), parseFloat(p.lng)]);
   });
 
+  if (!recadrer) return;
+
+  var info = document.getElementById('carte-nom-result');
+  if (!q) {
+    // Recherche vidée : on revient sur la France entière
+    if (info) info.innerHTML = '';
+    cadrerFrance();
+  } else if (bounds.length === 1) {
+    // Un seul résultat : on zoome dessus et on ouvre sa fiche
+    _carteMap.setView(bounds[0], 13, { animate: true });
+    if (_carteMarkers[0]) _carteMarkers[0].openPopup();
+    if (info) info.innerHTML = '<span style="color:#16a34a">1 distributeur trouvé</span>';
+  } else if (bounds.length > 1) {
+    // Plusieurs résultats : on cadre sur l'ensemble
+    _carteMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 12, animate: true });
+    if (info) info.innerHTML = bounds.length + ' distributeurs trouvés';
+  } else {
+    if (info) info.innerHTML = '<span style="color:#dc2626">Aucun résultat</span>';
+  }
 }
 window.afficherMarkers = afficherMarkers;
+
+// Recherche par nom, avec un léger délai pour ne pas recadrer à chaque frappe
+var _tmrRechercheNom = null;
+function rechercheNom() {
+  clearTimeout(_tmrRechercheNom);
+  _tmrRechercheNom = setTimeout(function(){ afficherMarkers(true); }, 300);
+}
+window.rechercheNom = rechercheNom;
 
 function popupCarte(p) {
   var cfg = RESEAUX_CONFIG[p.reseau] || { label:'?', color:'#888' };
@@ -3917,6 +3950,21 @@ window.sauverNoteCarte = sauverNoteCarte;
 
 var _carteRayonCircle = null;
 var _carteGeoCenter = null;
+var _carteGeoMarker = null;
+
+// Styles du repère de recherche (injectés une seule fois)
+function stylesRepereGeo() {
+  if (document.getElementById('carte-geo-styles')) return;
+  var st = document.createElement('style');
+  st.id = 'carte-geo-styles';
+  st.textContent =
+    '@keyframes geoPulse{0%{transform:scale(.5);opacity:.6}70%{transform:scale(1.8);opacity:0}100%{transform:scale(1.8);opacity:0}}' +
+    '.geo-onde{position:absolute;inset:0;border-radius:50%;background:#2e7cf6;animation:geoPulse 1.9s ease-out infinite}' +
+    '.leaflet-tooltip.geo-label{background:#2e7cf6;color:#fff;border:none;box-shadow:0 2px 7px rgba(0,0,0,.3);' +
+      'font-weight:700;font-size:11px;padding:3px 10px;border-radius:99px;white-space:nowrap}' +
+    '.leaflet-tooltip.geo-label:before{border-top-color:#2e7cf6}';
+  document.head.appendChild(st);
+}
 
 // Distance entre deux points (formule Haversine, en km)
 function distanceKm(lat1, lng1, lat2, lng2) {
@@ -3936,9 +3984,11 @@ function rechercheGeo() {
   if (!q) {
     // Réinitialiser
     if (_carteRayonCircle && _carteMap) { _carteMap.removeLayer(_carteRayonCircle); _carteRayonCircle = null; }
+    if (_carteGeoMarker && _carteMap) { _carteMap.removeLayer(_carteGeoMarker); _carteGeoMarker = null; }
     _carteGeoCenter = null;
     if (resultEl) resultEl.innerHTML = '';
     afficherMarkers();
+    cadrerFrance();
     return;
   }
   if (resultEl) resultEl.innerHTML = '<span style="color:#999">Recherche…</span>';
@@ -3973,6 +4023,26 @@ function centrerSurGeo(lat, lng, label) {
   _carteGeoCenter = { lat: lat, lng: lng };
   var rayonActif = (document.getElementById('carte-rayon-actif') || {}).checked;
   var rayonKm = parseInt((document.getElementById('carte-rayon') || {}).value || '50');
+
+  stylesRepereGeo();
+
+  // Repère sur le lieu recherché
+  if (_carteGeoMarker) { _carteMap.removeLayer(_carteGeoMarker); _carteGeoMarker = null; }
+  _carteGeoMarker = L.marker([lat, lng], {
+    zIndexOffset: 2000,
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="position:relative;width:28px;height:28px">' +
+              '<div class="geo-onde"></div>' +
+              '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;' +
+                'border-radius:50%;background:#2e7cf6;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>' +
+            '</div>',
+      iconSize: [28, 28], iconAnchor: [14, 14]
+    })
+  }).addTo(_carteMap);
+  _carteGeoMarker.bindTooltip(_esc(label), {
+    permanent: true, direction: 'top', offset: [0, -14], className: 'geo-label'
+  });
 
   // Cercle de rayon
   if (_carteRayonCircle) { _carteMap.removeLayer(_carteRayonCircle); _carteRayonCircle = null; }
