@@ -3655,6 +3655,91 @@ window.syncPaiementCommande = syncPaiementCommande;
 
 })();
 
+// Lien de suivi transporteur pour les interventions (envoi et retour).
+// Renvoie toujours une URL exploitable : 17track sert de repli universel.
+function lienhSuiviInter(transporteur, numero) {
+  if (!numero) return '#';
+  var n = encodeURIComponent(String(numero).trim());
+  var t = String(transporteur || '').toLowerCase();
+  if (t.indexOf('chronopost') >= 0) return 'https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=' + n + '&langue=fr';
+  if (t.indexOf('colissimo') >= 0 || t.indexOf('poste') >= 0) return 'https://www.laposte.fr/outils/suivre-vos-envois?code=' + n;
+  if (t.indexOf('dpd') >= 0) return 'https://www.dpd.fr/trace/' + n;
+  if (t.indexOf('ups') >= 0) return 'https://www.ups.com/track?loc=fr_FR&tracknum=' + n;
+  if (t.indexOf('dhl') >= 0) return 'https://www.dhl.com/fr-fr/home/tracking/tracking-express.html?tracking-id=' + n;
+  if (t.indexOf('schenker') >= 0) return 'https://www.dbschenker.com/app/tracking-public/?refNumber=' + n + '&language_region=fr-FR_FR';
+  if (t.indexOf('gls') >= 0) return 'https://gls-group.eu/FR/fr/suivi-colis?match=' + n;
+  if (t.indexOf('tnt') >= 0) return 'https://www.tnt.com/express/fr_fr/site/outils-expedition/suivi.html?searchType=CON&cons=' + n;
+  return 'https://t.17track.net/fr#nums=' + n;
+}
+window.lienhSuiviInter = lienhSuiviInter;
+
+
+// ═══════════════════════════════════════════════════════════════════
+// VUE DISCUSSIONS — fil des notes internes, toutes commandes
+// ═══════════════════════════════════════════════════════════════════
+function renderDiscussions(ttl, c, a) {
+  ttl.textContent = 'Discussions';
+  a.innerHTML = '<button onclick="renderDiscussionsRecharger()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-refresh"></i> Actualiser</button>';
+  c.innerHTML = '<div id="disc-body" style="color:var(--text2);font-size:13px;padding:20px 0">Chargement…</div>';
+  chargerDiscussions();
+}
+window.renderDiscussions = renderDiscussions;
+
+function renderDiscussionsRecharger() { chargerDiscussions(); }
+window.renderDiscussionsRecharger = renderDiscussionsRecharger;
+
+function chargerDiscussions() {
+  var el = document.getElementById('disc-body');
+  if (!el) return;
+  fetch('/api/notes/recent?limit=80')
+    .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(notes){
+      var el = document.getElementById('disc-body');
+      if (!el) return;
+      if (!Array.isArray(notes) || !notes.length) {
+        el.innerHTML = '<div class="empty"><i class="ti ti-messages"></i>Aucune note pour le moment.<br><span style="font-size:12px;color:var(--text3)">Les notes ajoutées depuis l\'onglet Notes d\'une commande apparaîtront ici.</span></div>';
+        return;
+      }
+      // Regroupement par commande, en conservant l'ordre d'arrivée
+      var groupes = [], index = {};
+      notes.forEach(function(n){
+        var cle = n.commande_id;
+        if (index[cle] === undefined) { index[cle] = groupes.length; groupes.push({ cmd: n, notes: [] }); }
+        groupes[index[cle]].notes.push(n);
+      });
+
+      el.innerHTML = groupes.map(function(g){
+        var cmd = g.cmd;
+        var titre = cmd.bdc ? 'BDC ' + _esc(cmd.bdc) : 'Commande #' + cmd.commande_id;
+        return '<div class="card" style="margin-bottom:10px;padding:12px 14px">' +
+          '<div onclick="_ouvrirCmd(' + cmd.commande_id + ')" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">' +
+            '<i class="ti ti-package" style="font-size:14px;color:var(--accent)"></i>' +
+            '<span style="font-weight:700;font-size:13px">' + titre + '</span>' +
+            (cmd.distributeur_nom ? '<span style="font-size:12px;color:var(--text3)">— ' + _esc(cmd.distributeur_nom) + '</span>' : '') +
+            (cmd.num_serie ? '<span class="mono" style="font-size:11px;color:var(--text3)">' + _esc(cmd.num_serie) + '</span>' : '') +
+            '<span style="margin-left:auto;font-size:11px;color:var(--text3)">' + g.notes.length + ' note' + (g.notes.length > 1 ? 's' : '') + '</span>' +
+            '<i class="ti ti-arrow-right" style="font-size:13px;color:var(--text3)"></i>' +
+          '</div>' +
+          g.notes.map(function(n){
+            return '<div style="border-left:2px solid var(--border);padding:5px 0 5px 10px;margin-bottom:4px">' +
+              '<div style="display:flex;align-items:baseline;gap:8px">' +
+                '<span style="font-size:12px;font-weight:600">' + _esc(n.user_nom || 'Utilisateur') + '</span>' +
+                '<span style="font-size:11px;color:var(--text3)">' + _fd(n.created_at) + '</span>' +
+              '</div>' +
+              '<div style="font-size:13px;white-space:pre-wrap;margin-top:2px">' + _esc(n.texte || '') + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      }).join('');
+    })
+    .catch(function(e){
+      var el = document.getElementById('disc-body');
+      if (el) el.innerHTML = '<div style="color:var(--danger);padding:20px 0;font-size:13px">Erreur de chargement : ' + _esc(e.message) + '</div>';
+    });
+}
+window.chargerDiscussions = chargerDiscussions;
+
+
 // Rapprochement automatique Catalogue <-> produits VosFactures
 async function importerVFIds() {
   if (!confirm('Lancer la correspondance automatique VosFactures ↔ Catalogue ?\nCela peut prendre une à deux minutes.')) return;
