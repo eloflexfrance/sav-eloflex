@@ -3745,9 +3745,9 @@ router.post('/carte/import-kml', adminOnly, async (req, res) => {
     let inserted = 0;
     for (const p of points) {
       await db.run(
-        `INSERT INTO distributeurs_carte (reseau, nom, description, adresse, cp, ville, tel, email, lat, lng)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [p.reseau, p.nom, p.description, p.adresse||null, p.cp||null, p.ville||null, p.tel||null, p.email||null, p.lat, p.lng]
+        `INSERT INTO distributeurs_carte (reseau, nom, description, adresse, cp, ville, tel, email, lat, lng, pays)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [p.reseau, p.nom, p.description, p.adresse||null, p.cp||null, p.ville||null, p.tel||null, p.email||null, p.lat, p.lng, 'France']
       );
       inserted++;
     }
@@ -3867,14 +3867,14 @@ router.get('/carte/reseaux', requireAuth, async (req, res) => {
 // ── CRUD point carte (ajout/modif/suppression manuelle) ──────────
 router.post('/carte/points', adminOnly, async (req, res) => {
   try {
-    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id } = req.body;
+    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id, pays } = req.body;
     if (!reseau || !nom || lat == null || lng == null)
       return res.status(400).json({ error: 'reseau, nom, lat, lng requis' });
     const row = await db.get(
-      `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id, pays)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [reseau, nom, adresse||null, cp||null, ville||null, tel||null, email||null,
-       parseFloat(lat), parseFloat(lng), client_id || null]
+       parseFloat(lat), parseFloat(lng), client_id || null, pays || 'France']
     );
     res.json({ ok: true, point: row });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -3882,16 +3882,16 @@ router.post('/carte/points', adminOnly, async (req, res) => {
 
 router.put('/carte/points/:id', adminOnly, async (req, res) => {
   try {
-    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id } = req.body;
+    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id, pays } = req.body;
     const row = await db.get(
       `UPDATE distributeurs_carte SET
         reseau=COALESCE($1,reseau), nom=COALESCE($2,nom), adresse=$3, cp=$4, ville=$5,
         tel=$6, email=$7, lat=COALESCE($8,lat), lng=COALESCE($9,lng),
-        client_id=$10, updated_at=NOW()
-       WHERE id=$11 RETURNING *`,
+        client_id=$10, pays=COALESCE($11,pays), updated_at=NOW()
+       WHERE id=$12 RETURNING *`,
       [reseau||null, nom||null, adresse||null, cp||null, ville||null, tel||null, email||null,
        lat!=null?parseFloat(lat):null, lng!=null?parseFloat(lng):null,
-       client_id ? parseInt(client_id) : null, req.params.id]
+       client_id ? parseInt(client_id) : null, pays||null, req.params.id]
     );
     if (!row) return res.status(404).json({ error: 'Point introuvable' });
     res.json({ ok: true, point: row });
@@ -3910,17 +3910,51 @@ router.get('/carte/geocode-adresse', adminOnly, async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
     if (!q) return res.json({ found: false });
-    const axios = require('axios');
-    const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
-      params: { q: q + ', France', format: 'json', limit: 1, countrycodes: 'fr' },
-      headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
-      timeout: 8000
-    });
-    if (data && data.length) res.json({ found: true, lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name });
+    const pays = (req.query.pays || '').trim() || null;
+    const trouve = await geocoderLibre(q, pays);
+    if (trouve) res.json({ found: true, ...trouve });
     else res.json({ found: false });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+
+// ── Géocodage multi-pays ──────────────────────────────────────────
+const PAYS_ISO = {
+  'France':'fr', 'Sweden':'se', 'UK':'gb', 'Germany':'de', 'Spain':'es', 'Italy':'it',
+  'Belgium':'be', 'Switzerland':'ch', 'Netherlands':'nl', 'Luxembourg':'lu',
+  'Portugal':'pt', 'Denmark':'dk', 'Norway':'no', 'Finland':'fi', 'Austria':'at', 'Ireland':'ie'
+};
+
+// Interroge Nominatim en ciblant le pays, puis sans restriction si rien n'est trouvé
+async function geocoderLibre(requete, pays) {
+  const axios = require('axios');
+  const iso = PAYS_ISO[pays] || null;
+  // Pays explicite : on cible ce pays, puis on élargit.
+  // Pays non précisé : on privilégie la France, puis le monde entier.
+  const essais = pays
+    ? [ { q: requete + ', ' + pays, iso: iso },
+        { q: requete + ', ' + pays, iso: null },
+        { q: requete, iso: null } ]
+    : [ { q: requete + ', France', iso: 'fr' },
+        { q: requete, iso: null } ];
+  for (const essai of essais) {
+    try {
+      const params = { q: essai.q, format: 'json', limit: 1 };
+      if (essai.iso) params.countrycodes = essai.iso;
+      const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
+        params,
+        headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
+        timeout: 8000
+      });
+      if (data && data.length) {
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name };
+      }
+    } catch(e) { /* on passe à l'essai suivant */ }
+    await new Promise(r => setTimeout(r, 1100)); // limite Nominatim : 1 requête/seconde
+  }
+  return null;
+}
 
 // ── Synchronisation client -> point sur la carte ─────────────────
 // Crée, met à jour ou retire le point carte d'un client selon son flag sur_carte.
@@ -3943,27 +3977,17 @@ async function syncClientCarte(clientId) {
   let precision = 'existante';
   if (lat == null || lng == null) {
     if (!cl.ville && !cl.cp) return { ok: false, reason: 'ville ou code postal manquant — impossible de localiser ce client' };
-    const axios = require('axios');
     // On tente d'abord l'adresse complète (précise au numéro), puis on retombe sur CP + ville
     const tentatives = [];
     if (cl.adresse) tentatives.push({ q: [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(', '), p: 'adresse' });
     if (cl.cp || cl.ville) tentatives.push({ q: [cl.cp, cl.ville].filter(Boolean).join(' '), p: 'ville' });
     for (const tent of tentatives) {
-      try {
-        const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
-          params: { q: tent.q + ', France', format: 'json', limit: 1, countrycodes: 'fr' },
-          headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
-          timeout: 8000
-        });
-        if (data && data.length) {
-          lat = parseFloat(data[0].lat); lng = parseFloat(data[0].lon);
-          precision = tent.p;
-          break;
-        }
-      } catch(e) { /* on essaie la tentative suivante */ }
-      await new Promise(r => setTimeout(r, 1100)); // limite Nominatim
+      const trouve = await geocoderLibre(tent.q, cl.pays);
+      if (trouve) { lat = trouve.lat; lng = trouve.lng; precision = tent.p; break; }
     }
-    if (lat == null || lng == null) return { ok: false, reason: 'adresse introuvable — positionnez le point manuellement depuis la carte' };
+    if (lat == null || lng == null) {
+      return { ok: false, reason: 'adresse introuvable' + (cl.pays && cl.pays !== 'France' ? ' en ' + cl.pays : '') + ' — positionnez le point manuellement depuis la carte' };
+    }
     await db.run('UPDATE clients SET lat=$1, lng=$2, geocoded_at=NOW() WHERE id=$3', [lat, lng, clientId]);
   }
 
@@ -3972,15 +3996,17 @@ async function syncClientCarte(clientId) {
   if (existant) {
     await db.run(
       `UPDATE distributeurs_carte SET reseau=$1, nom=$2, adresse=$3, cp=$4, ville=$5,
-       tel=$6, email=$7, lat=$8, lng=$9, updated_at=NOW() WHERE id=$10`,
-      [reseau, cl.nom, adrCarte, cl.cp||null, cl.ville||null, cl.tel||null, cl.email||null, lat, lng, existant.id]
+       tel=$6, email=$7, lat=$8, lng=$9, pays=$10, updated_at=NOW() WHERE id=$11`,
+      [reseau, cl.nom, adrCarte, cl.cp||null, cl.ville||null, cl.tel||null, cl.email||null,
+       lat, lng, cl.pays||'France', existant.id]
     );
     return { ok: true, action: 'maj', lat, lng, precision };
   }
   await db.run(
-    `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [reseau, cl.nom, adrCarte, cl.cp||null, cl.ville||null, cl.tel||null, cl.email||null, lat, lng, clientId]
+    `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng, pays, client_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [reseau, cl.nom, adrCarte, cl.cp||null, cl.ville||null, cl.tel||null, cl.email||null,
+     lat, lng, cl.pays||'France', clientId]
   );
   return { ok: true, action: 'cree', lat, lng, precision };
 }

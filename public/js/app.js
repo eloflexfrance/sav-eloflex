@@ -2607,7 +2607,7 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Complément d'adresse</label><input class="form-input" id="f-adresse2" placeholder="Bâtiment B, ZI de la Plaine…" value="${esc(d.adresse2||'')}"></div>
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
-  <div class="form-group"><label class="form-label">Pays</label><input class="form-input" id="f-pays" placeholder="France" value="${esc(d.pays||'')}"></div>
+  <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays">${optionsPays(d.pays||'France')}</select></div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} onchange="document.getElementById('f-reseau-carte').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:#22c55e">
@@ -3800,13 +3800,48 @@ var _cartePoints = [];
 
 // Limites de la France métropolitaine (Corse incluse)
 var FRANCE_BOUNDS = [[41.30, -5.20], [51.15, 9.60]];
+
+// Pays proposés sur la carte (mêmes clés que le champ Pays des commandes)
+var PAYS_CARTE = [
+  ['France','🇫🇷 France'], ['Belgium','🇧🇪 Belgique'], ['Switzerland','🇨🇭 Suisse'],
+  ['Luxembourg','🇱🇺 Luxembourg'], ['Spain','🇪🇸 Espagne'], ['Italy','🇮🇹 Italie'],
+  ['Portugal','🇵🇹 Portugal'], ['Germany','🇩🇪 Allemagne'], ['Netherlands','🇳🇱 Pays-Bas'],
+  ['Austria','🇦🇹 Autriche'], ['UK','🇬🇧 Royaume-Uni'], ['Ireland','🇮🇪 Irlande'],
+  ['Sweden','🇸🇪 Suède'], ['Norway','🇳🇴 Norvège'], ['Denmark','🇩🇰 Danemark'], ['Finland','🇫🇮 Finlande']
+];
+function optionsPays(selection) {
+  return PAYS_CARTE.map(function(p){
+    return '<option value="' + p[0] + '"' + ((selection||'France') === p[0] ? ' selected' : '') + '>' + p[1] + '</option>';
+  }).join('');
+}
+function libellePays(code) {
+  for (var i = 0; i < PAYS_CARTE.length; i++) if (PAYS_CARTE[i][0] === code) return PAYS_CARTE[i][1];
+  return code || '';
+}
+window.optionsPays = optionsPays; window.libellePays = libellePays;
 var _carteResizeBound = false;
 
-// Cadre la carte sur la France, au zoom maximal permis par la fenêtre
+// Cadre la carte : France seule si tous les points y sont, sinon sur l'ensemble des points
 function cadrerFrance() {
   if (!_carteMap) return;
   _carteMap.invalidateSize();
-  _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
+
+  var hors = (_cartePoints || []).filter(function(p){
+    if (!_carteReseaux[p.reseau]) return false;
+    var la = parseFloat(p.lat), ln = parseFloat(p.lng);
+    return la < FRANCE_BOUNDS[0][0] || la > FRANCE_BOUNDS[1][0]
+        || ln < FRANCE_BOUNDS[0][1] || ln > FRANCE_BOUNDS[1][1];
+  });
+
+  if (!hors.length) {
+    _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
+    return;
+  }
+  // Des distributeurs sont hors de France : on englobe tout le monde
+  var tous = (_cartePoints || []).filter(function(p){ return _carteReseaux[p.reseau]; })
+    .map(function(p){ return [parseFloat(p.lat), parseFloat(p.lng)]; });
+  tous.push(FRANCE_BOUNDS[0], FRANCE_BOUNDS[1]);
+  _carteMap.fitBounds(tous, { padding: [25, 25], animate: false });
 }
 window.cadrerFrance = cadrerFrance;
 
@@ -4017,6 +4052,7 @@ function popupCarte(p) {
     '<div style="color:#666;line-height:1.5;margin-bottom:8px">' +
       (p.adresse ? _esc(p.adresse) + '<br>' : '') +
       (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
+      (p.pays && p.pays !== 'France' ? '<span style="font-weight:600">' + libellePays(p.pays) + '</span><br>' : '') +
       (p.tel ? '<i class="ti ti-phone" style="font-size:11px"></i> ' + _esc(p.tel) + '<br>' : '') +
       (p.email ? '<i class="ti ti-mail" style="font-size:11px"></i> ' + _esc(p.email) : '') +
     '</div>' +
@@ -4232,6 +4268,7 @@ function modalPointCarte(id) {
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Adresse</label><input id="pc-adresse" value="' + (p&&p.adresse?_esc(p.adresse):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="display:flex;gap:8px"><div style="width:110px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Code postal</label><input id="pc-cp" value="' + (p&&p.cp?_esc(p.cp):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Pays</label><select id="pc-pays" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + optionsPays(p ? p.pays : 'France') + '</select></div>' +
         '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Téléphone</label><input id="pc-tel" value="' + (p&&p.tel?_esc(p.tel):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
         '<div style="background:#f8f9fa;border-radius:8px;padding:10px 12px">' +
@@ -4282,7 +4319,8 @@ window.fermerModalPoint = fermerModalPoint;
 function geocoderAdresse() {
   var adresse = [document.getElementById('pc-adresse').value, document.getElementById('pc-cp').value, document.getElementById('pc-ville').value].filter(Boolean).join(', ');
   if (!adresse) { alert('Renseignez au moins la ville.'); return; }
-  fetch('/api/carte/geocode-adresse?q=' + encodeURIComponent(adresse))
+  var pays = (document.getElementById('pc-pays') || {}).value || 'France';
+  fetch('/api/carte/geocode-adresse?pays=' + encodeURIComponent(pays) + '&q=' + encodeURIComponent(adresse))
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d.found) {
@@ -4306,7 +4344,8 @@ function sauverPointCarte(id) {
     email: document.getElementById('pc-email').value.trim(),
     lat: parseFloat(document.getElementById('pc-lat').value),
     lng: parseFloat(document.getElementById('pc-lng').value),
-    client_id: (document.getElementById('pc-client') || {}).value || null
+    client_id: (document.getElementById('pc-client') || {}).value || null,
+    pays: (document.getElementById('pc-pays') || {}).value || 'France'
   };
   if (!data.nom || isNaN(data.lat) || isNaN(data.lng)) {
     alert('Nom, latitude et longitude sont obligatoires.');
