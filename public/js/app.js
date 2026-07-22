@@ -1058,21 +1058,20 @@ async function modalCommande(id){
         </div>
         <div id="cf-form" style="${cm.client_final_type?'':'display:none'}">
           <div style="background:rgba(255,255,255,.5);border:0.5px solid var(--border);border-radius:10px;padding:14px 16px;margin-top:4px">
-            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+            <div id="cf-titre" style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
               Adresse de livraison — ${cm.client_final_type==='particulier'?'🏠 Particulier':'🏢 Entreprise / Structure'}
             </div>
             <div class="grid-2">
               <div class="form-group" style="position:relative">
-                <label class="form-label">${cm.client_final_type==='particulier'?'Nom':'Raison sociale / Nom'}</label>
+                <label class="form-label" id="cf-nom-label">${cm.client_final_type==='particulier'?'Nom':'Raison sociale / Nom'}</label>
                 <input class="form-input" id="cf-nom" value="${esc(cm.cf_nom||'')}" placeholder="Nom / Raison sociale"
                   oninput="cfAutocomplete(this,'nom')">
                 <div id="cf-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:999;max-height:180px;overflow-y:auto"></div>
               </div>
-              ${cm.client_final_type==='particulier'?`
-              <div class="form-group">
+              <div class="form-group" id="cf-prenom-group" style="${cm.client_final_type==='particulier'?'':'display:none'}">
                 <label class="form-label">Prénom</label>
                 <input class="form-input" id="cf-prenom" value="${esc(cm.cf_prenom||'')}" placeholder="Prénom">
-              </div>`:'<div></div>'}
+              </div>
               <div class="form-group" style="grid-column:1/-1">
                 <label class="form-label">Adresse</label>
                 <input class="form-input" id="cf-adresse" value="${esc(cm.cf_adresse||'')}" placeholder="Numéro et nom de rue">
@@ -3655,6 +3654,122 @@ async function syncPaiementCommande(id){
 window.syncPaiementCommande = syncPaiementCommande;
 
 })();
+
+// Rapprochement automatique Catalogue <-> produits VosFactures
+async function importerVFIds() {
+  if (!confirm('Lancer la correspondance automatique VosFactures ↔ Catalogue ?\nCela peut prendre une à deux minutes.')) return;
+  if (typeof toast === 'function') toast('Correspondance en cours…', 'ti-loader-2');
+  try {
+    const r = await API.post('/catalogue/import-vf-ids', {});
+    if (r && r.ok) {
+      toast(r.matched + ' article(s) lié(s) sur ' + r.catalogue + ' (' + r.vf_products + ' produits VF analysés)', 'ti-check', 'var(--success)');
+      if (typeof render === 'function') render();
+    } else {
+      toast((r && r.reason) || 'Aucune correspondance trouvée', 'ti-alert-circle', 'var(--danger)');
+    }
+  } catch (e) {
+    toast(e.message, 'ti-alert-circle', 'var(--danger)');
+  }
+}
+window.importerVFIds = importerVFIds;
+
+
+// ═══════════════════════════════════════════════════════════════════
+// CLIENT FINAL (Expédition) — bascule Particulier / Entreprise
+// ═══════════════════════════════════════════════════════════════════
+
+// Affiche ou masque le bloc adresse et adapte ses libellés au type choisi
+function toggleClientFinalForm(type) {
+  var box = document.getElementById('cf-form');
+  if (!box) return;
+  var estParticulier = (type === 'particulier');
+  box.style.display = type ? '' : 'none';
+
+  var titre = document.getElementById('cf-titre');
+  if (titre) titre.textContent = 'Adresse de livraison — ' + (estParticulier ? '🏠 Particulier' : '🏢 Entreprise / Structure');
+
+  var lbl = document.getElementById('cf-nom-label');
+  if (lbl) lbl.textContent = estParticulier ? 'Nom' : 'Raison sociale / Nom';
+
+  var grpPrenom = document.getElementById('cf-prenom-group');
+  if (grpPrenom) grpPrenom.style.display = estParticulier ? '' : 'none';
+
+  // Passage en entreprise : le prénom n'a plus de sens
+  if (!estParticulier) {
+    var pr = document.getElementById('cf-prenom');
+    if (pr) pr.value = '';
+  }
+  var sug = document.getElementById('cf-suggest');
+  if (sug) sug.style.display = 'none';
+}
+window.toggleClientFinalForm = toggleClientFinalForm;
+
+// Suggestions issues des destinataires déjà saisis
+var _cfTimer = null;
+var _cfResultats = [];
+
+function cfAutocomplete(input, champ) {
+  var q = (input.value || '').trim();
+  var boite = document.getElementById('cf-suggest');
+  if (!boite) return;
+  if (q.length < 2) { boite.style.display = 'none'; return; }
+
+  clearTimeout(_cfTimer);
+  _cfTimer = setTimeout(function() {
+    var type = (document.getElementById('cmd-clientfinal-type') || {}).value || '';
+    fetch('/api/clients-finaux/suggest?q=' + encodeURIComponent(q) + '&type=' + encodeURIComponent(type))
+      .then(function(r){ return r.json(); })
+      .then(function(rows){
+        if (!Array.isArray(rows) || !rows.length) { boite.style.display = 'none'; return; }
+        _cfResultats = rows;
+        boite.innerHTML = rows.map(function(c, i){
+          var ligne2 = [c.cp, c.ville].filter(Boolean).join(' ');
+          return '<div onclick="cfSelect(' + i + ')" style="padding:7px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,.06)"' +
+            ' onmouseover="this.style.background=\'rgba(46,124,246,.08)\'" onmouseout="this.style.background=\'\'">' +
+            '<div style="font-size:12px;font-weight:600">' + _esc([c.nom, c.prenom].filter(Boolean).join(' ')) + '</div>' +
+            '<div style="font-size:11px;color:var(--text3)">' + _esc(ligne2 || c.email || '') +
+              (c.nb_commandes > 1 ? ' · ' + c.nb_commandes + ' commandes' : '') + '</div>' +
+            '</div>';
+        }).join('');
+        boite.style.display = '';
+      })
+      .catch(function(){ boite.style.display = 'none'; });
+  }, 250);
+}
+window.cfAutocomplete = cfAutocomplete;
+
+// Remplit le formulaire depuis une suggestion
+function cfSelect(index) {
+  var c = _cfResultats[index];
+  if (!c) return;
+  var mettre = function(id, val){ var el = document.getElementById(id); if (el) el.value = val || ''; };
+  mettre('cf-nom', c.nom);
+  mettre('cf-prenom', c.prenom);
+  mettre('cf-adresse', c.adresse);
+  mettre('cf-cp', c.cp);
+  mettre('cf-ville', c.ville);
+  mettre('cf-tel', c.tel);
+  mettre('cf-email', c.email);
+
+  // Aligner le type sur celui du destinataire retenu
+  var sel = document.getElementById('cmd-clientfinal-type');
+  if (sel && c.type && sel.value !== c.type) {
+    sel.value = c.type;
+    toggleClientFinalForm(c.type);
+  }
+  var boite = document.getElementById('cf-suggest');
+  if (boite) boite.style.display = 'none';
+}
+window.cfSelect = cfSelect;
+
+// Fermer les suggestions en cliquant ailleurs
+document.addEventListener('click', function(e) {
+  var boite = document.getElementById('cf-suggest');
+  if (!boite || boite.style.display === 'none') return;
+  if (e.target.id === 'cf-nom' || boite.contains(e.target)) return;
+  boite.style.display = 'none';
+});
+
 
 function copierAdresse(el, txt) {
   if (navigator.clipboard) {
