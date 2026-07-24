@@ -2526,6 +2526,8 @@ router.put('/commandes/:id', async (req, res) => {
     const d = req.body;
     const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'quantite', 'accessoire',
       'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_livraison', 'num_serie',
+      'client_final_type', 'cf_nom', 'cf_prenom', 'cf_adresse', 'cf_cp', 'cf_ville', 'cf_tel', 'cf_email',
+      'demo_origine_nom', 'demo_localisation_actuelle',
       'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description', 'modele_demo',
       'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib',
       'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
