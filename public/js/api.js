@@ -134,7 +134,7 @@ const API = {
   // ── Tracking ──
   tracking:(numero)=>API.get(`/tracking/${encodeURIComponent(numero)}`),
   trackingSync:()=>API.post('/tracking/sync',{}),
-  syncPaiementsVF:()=>API.post('/commandes/sync-paiements-vf',{}),
+  syncPaiementsVF:()=>API.get('/paiement-vf/sync-all'),
   // Notes internes
   notes:(id)=>API.get(`/commandes/${id}/notes`),
   addNote:(id,texte)=>API.post(`/commandes/${id}/notes`,{texte}),

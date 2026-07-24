@@ -1780,7 +1780,21 @@ async function renderParametres(ttl,c,a){
   a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>`;
   const p=await API.parametres();
   CACHE.params=p;
+  setTimeout(chargerResumeSauvegarde, 50);
   c.innerHTML=`
+    <div class="param-section">
+      <h3><i class="ti ti-database-export"></i>Sauvegarde de la base</h3>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        L'ensemble des données (commandes, clients, interventions, notes, points de carte…) dans un fichier unique.
+        Une sauvegarde compressée part automatiquement vers info@eloflex.fr chaque lundi.
+        Les mots de passe n'y figurent pas.
+      </div>
+      <div id="sauvegarde-resume" style="font-size:12px;color:var(--text3);margin-bottom:12px">Chargement…</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn primary" href="/api/sauvegarde/export" download><i class="ti ti-download"></i>Télécharger la sauvegarde</a>
+        <button class="btn" onclick="envoyerSauvegardeMaintenant(this)"><i class="ti ti-mail-forward"></i>Envoyer par courriel</button>
+      </div>
+    </div>
     <div class="param-section">
       <h3><i class="ti ti-bell"></i>${t('param_alertes')}</h3>
       <div class="grid-2">
@@ -3655,6 +3669,214 @@ window.syncPaiementCommande = syncPaiementCommande;
 
 })();
 
+// ═══════════════════════════════════════════════════════════════════
+// RATTACHEMENT EN MASSE DES POINTS DE CARTE AUX FICHES CLIENTS
+// ═══════════════════════════════════════════════════════════════════
+var _ratDonnees = null;
+var _ratChoix = {};      // id du point -> id du client retenu (ou null)
+
+function ouvrirRattachements() {
+  var div = document.createElement('div');
+  div.id = 'modal-rattachements';
+  div.innerHTML =
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9998;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)fermerRattachements()">' +
+      '<div style="background:#fff;border-radius:12px;width:820px;max-width:94vw;height:86vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">' +
+        '<div style="padding:18px 22px 12px;border-bottom:0.5px solid var(--border)">' +
+          '<h3 style="margin:0 0 4px;font-size:16px">Rattacher les points aux fiches clients</h3>' +
+          '<div style="font-size:12px;color:var(--text2)">Un point relié à une fiche affiche les ventes de ce client, quelle que soit l\u2019orthographe employée dans les commandes.</div>' +
+          '<div id="rat-stats" style="font-size:12px;color:var(--text3);margin-top:8px">Chargement…</div>' +
+        '</div>' +
+        '<div id="rat-liste" style="flex:1;overflow:auto;padding:14px 22px"></div>' +
+        '<div style="padding:14px 22px;border-top:0.5px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center">' +
+          '<span id="rat-compteur" style="font-size:12px;color:var(--text3);margin-right:auto"></span>' +
+          '<button class="btn" onclick="fermerRattachements()">Fermer</button>' +
+          '<button class="btn primary" onclick="enregistrerRattachements(this)"><i class="ti ti-check"></i>Enregistrer</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(div);
+  _ratChoix = {};
+  chargerRattachements();
+}
+window.ouvrirRattachements = ouvrirRattachements;
+
+function fermerRattachements() {
+  var m = document.getElementById('modal-rattachements');
+  if (m) m.remove();
+}
+window.fermerRattachements = fermerRattachements;
+
+function chargerRattachements() {
+  fetch('/api/carte/rattachements')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) throw new Error(d.error || 'chargement impossible');
+      _ratDonnees = d;
+      var stats = document.getElementById('rat-stats');
+      if (stats) stats.innerHTML =
+        '<strong>' + d.total + '</strong> points — ' +
+        '<span style="color:#16a34a">' + d.lies + ' déjà reliés</span> · ' +
+        '<span style="color:#2e7cf6">' + d.avec_suggestion + ' avec une correspondance probable</span> · ' +
+        '<span style="color:var(--text3)">' + d.sans_suggestion + ' sans correspondance</span>';
+      dessinerRattachements();
+    })
+    .catch(function(e){
+      var l = document.getElementById('rat-liste');
+      if (l) l.innerHTML = '<div style="color:var(--danger);padding:20px">Erreur : ' + _esc(e.message) + '</div>';
+    });
+}
+
+function dessinerRattachements() {
+  var l = document.getElementById('rat-liste');
+  if (!l || !_ratDonnees) return;
+
+  var aTraiter = _ratDonnees.points.filter(function(p){ return p.etat === 'suggestion'; });
+  var sansRien = _ratDonnees.points.filter(function(p){ return p.etat === 'aucune'; });
+
+  if (!aTraiter.length && !sansRien.length) {
+    l.innerHTML = '<div style="padding:30px;text-align:center;color:#16a34a"><i class="ti ti-check" style="font-size:26px"></i><br>Tous les points sont reliés à une fiche client.</div>';
+    majCompteurRat();
+    return;
+  }
+
+  var html = '';
+  if (aTraiter.length) {
+    html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin-bottom:8px">Correspondances proposées</div>';
+    html += aTraiter.map(function(p){
+      var cfg = RESEAUX_CONFIG[p.reseau] || { color: '#888', label: p.reseau };
+      var choix = _ratChoix[p.id];
+      var options = p.suggestions.map(function(s){
+        var actif = (choix === s.id);
+        return '<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer;' +
+               (actif ? 'background:rgba(46,124,246,.1)' : '') + '">' +
+          '<input type="radio" name="rat-' + p.id + '" ' + (actif ? 'checked' : '') +
+            ' onchange="choisirRattachement(' + p.id + ',' + s.id + ')">' +
+          '<span style="flex:1;font-size:13px">' + _esc(s.nom) +
+            (s.ville ? ' <span style="color:var(--text3)">— ' + _esc(s.ville) + '</span>' : '') + '</span>' +
+          (s.commandes ? '<span style="font-size:11px;background:rgba(46,124,246,.1);color:#2e7cf6;padding:1px 6px;border-radius:99px">' + s.commandes + ' cmd</span>' : '') +
+          (s.deja_lie ? '<span style="font-size:11px;color:#d97706" title="Déjà relié à un autre point">déjà relié</span>' : '') +
+          '<span style="font-size:11px;color:var(--text3);width:34px;text-align:right">' + s.score + '%</span>' +
+        '</label>';
+      }).join('');
+
+      return '<div style="border:0.5px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+          '<span style="width:11px;height:11px;border-radius:50%;background:' + cfg.color + ';flex-shrink:0"></span>' +
+          '<strong style="font-size:13px">' + _esc(p.nom) + '</strong>' +
+          '<span style="font-size:11px;color:var(--text3)">' + _esc([p.cp, p.ville].filter(Boolean).join(' ')) + '</span>' +
+        '</div>' + options +
+        '<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer">' +
+          '<input type="radio" name="rat-' + p.id + '" ' + (choix === null ? 'checked' : '') +
+            ' onchange="choisirRattachement(' + p.id + ',null)">' +
+          '<span style="font-size:12px;color:var(--text3)">Aucune de ces fiches</span>' +
+        '</label>' +
+      '</div>';
+    }).join('');
+  }
+
+  if (sansRien.length) {
+    html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin:18px 0 8px">' +
+            'Sans correspondance (' + sansRien.length + ')</div>' +
+            '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Ces points n\u2019ont pas d\u2019équivalent parmi les fiches clients. Leurs ventes restent rapprochées par le nom.</div>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+            sansRien.map(function(p){
+              var cfg = RESEAUX_CONFIG[p.reseau] || { color: '#888' };
+              return '<span style="font-size:12px;border:0.5px solid var(--border);border-radius:99px;padding:3px 10px;display:inline-flex;align-items:center;gap:6px">' +
+                '<span style="width:8px;height:8px;border-radius:50%;background:' + cfg.color + '"></span>' + _esc(p.nom) + '</span>';
+            }).join('') + '</div>';
+  }
+
+  l.innerHTML = html;
+  majCompteurRat();
+}
+
+function choisirRattachement(pointId, clientId) {
+  _ratChoix[pointId] = clientId;
+  majCompteurRat();
+}
+window.choisirRattachement = choisirRattachement;
+
+function majCompteurRat() {
+  var n = Object.keys(_ratChoix).filter(function(k){ return _ratChoix[k] != null; }).length;
+  var el = document.getElementById('rat-compteur');
+  if (el) el.textContent = n ? n + ' rattachement(s) à enregistrer' : 'Aucun rattachement sélectionné';
+}
+
+function enregistrerRattachements(btn) {
+  var liens = Object.keys(_ratChoix)
+    .filter(function(k){ return _ratChoix[k] != null; })
+    .map(function(k){ return { point_id: parseInt(k), client_id: _ratChoix[k] }; });
+  if (!liens.length) { toast('Aucun rattachement sélectionné', 'ti-info-circle'); return; }
+
+  var libelle = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>Enregistrement…'; }
+  fetch('/api/carte/rattachements', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ liens: liens })
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.ok) throw new Error(d.error || 'échec');
+      toast(d.appliques + ' point(s) rattaché(s)', 'ti-check', 'var(--success)');
+      _ratChoix = {};
+      chargerRattachements();
+      if (typeof chargerPoints === 'function') chargerPoints();
+    })
+    .catch(function(e){ toast(e.message, 'ti-alert-circle', 'var(--danger)'); })
+    .finally(function(){ if (btn) { btn.disabled = false; btn.innerHTML = libelle; } });
+}
+window.enregistrerRattachements = enregistrerRattachements;
+
+
+// ═══════════════════════════════════════════════════════════════════
+// SAUVEGARDE DE LA BASE
+// ═══════════════════════════════════════════════════════════════════
+function chargerResumeSauvegarde() {
+  var el = document.getElementById('sauvegarde-resume');
+  if (!el) return;
+  fetch('/api/sauvegarde/resume')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var el = document.getElementById('sauvegarde-resume');
+      if (!el || !d.ok) return;
+      var principales = ['commandes','clients','interventions','fauteuils','distributeurs_carte','catalogue'];
+      var detail = principales
+        .filter(function(t){ return d.tables[t] != null; })
+        .map(function(t){ return '<strong>' + d.tables[t] + '</strong> ' + t.replace('distributeurs_carte','points de carte'); })
+        .join(' · ');
+      var derniere = d.derniere_sauvegarde
+        ? 'Dernier envoi automatique : ' + _fd(d.derniere_sauvegarde)
+        : 'Aucun envoi automatique enregistré pour le moment.';
+      el.innerHTML = detail + '<br><span style="color:var(--text3)">' +
+        d.total_lignes + ' lignes au total — ' + derniere + '</span>';
+    })
+    .catch(function(){
+      var el = document.getElementById('sauvegarde-resume');
+      if (el) el.textContent = '';
+    });
+}
+window.chargerResumeSauvegarde = chargerResumeSauvegarde;
+
+function envoyerSauvegardeMaintenant(btn) {
+  if (!confirm('Envoyer la sauvegarde complète à info@eloflex.fr maintenant ?')) return;
+  var libelle = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>Envoi en cours…'; }
+  fetch('/api/sauvegarde/envoyer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (d.ok) {
+        toast('Sauvegarde envoyée (' + d.poids_mo + ' Mo)' + (d.joint ? '' : ' — trop volumineuse pour être jointe'),
+              'ti-check', 'var(--success)');
+      } else {
+        toast(d.erreur || d.ignore || 'Envoi impossible', 'ti-alert-circle', 'var(--danger)');
+      }
+      chargerResumeSauvegarde();
+    })
+    .catch(function(e){ toast(e.message, 'ti-alert-circle', 'var(--danger)'); })
+    .finally(function(){ if (btn) { btn.disabled = false; btn.innerHTML = libelle; } });
+}
+window.envoyerSauvegardeMaintenant = envoyerSauvegardeMaintenant;
+
+
 // Lien de suivi transporteur pour les interventions (envoi et retour).
 // Renvoie toujours une URL exploitable : 17track sert de repli universel.
 function lienhSuiviInter(transporteur, numero) {
@@ -3933,6 +4155,7 @@ function renderCarte(ttl, c, a) {
     }).join('') + '</select>' +
     '<button onclick="cadrerFrance()" title="Recentrer sur la France" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-focus-centered"></i> Recentrer</button>' +
     (typeof isAdmin==='function' && isAdmin() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-plus"></i> Ajouter</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="ouvrirRattachements()" title="Relier les points aux fiches clients" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-link"></i> Rattacher</button>' : '') +
     (typeof isAdmin==='function' && isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
 

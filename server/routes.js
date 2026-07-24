@@ -2365,7 +2365,7 @@ router.post('/tracking/sync', adminOnly, async (req, res) => {
 
 
 // ── Helper Brevo pour emails SAV ─────────────────────────────────
-async function sendBrevoMail({ from, fromName, to, cc, subject, html }) {
+async function sendBrevoMail({ from, fromName, to, cc, subject, html, attachments }) {
   const axios = require('axios');
   const key = process.env.BREVO_API_KEY;
   if (!key) throw new Error('BREVO_API_KEY manquante');
@@ -2373,8 +2373,9 @@ async function sendBrevoMail({ from, fromName, to, cc, subject, html }) {
     sender: { name: fromName||'Eloflex France', email: from||'sav@eloflex.fr' },
     to: [{ email: to }],
     ...(cc ? { cc: [{ email: cc }] } : {}),
+    ...(attachments && attachments.length ? { attachment: attachments } : {}),
     subject, htmlContent: html
-  }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 15000 });
+  }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
 }
 
 // ── Fin Tracking ──────────────────────────────────────────────────
@@ -4025,4 +4026,284 @@ router.post('/carte/sync-clients', adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ══════════════════════════════════════════════════════════════════
+// ── SAUVEGARDE DE LA BASE ────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+
+// Toutes les tables métier. Les empreintes de mots de passe sont exclues :
+// recréer quelques comptes est trivial, diffuser leurs empreintes ne l'est pas.
+const TABLES_SAUVEGARDE = [
+  'clients', 'commandes', 'commandes_lignes', 'commandes_retour_lignes',
+  'fauteuils', 'interventions', 'intervention_produits', 'intervention_photos',
+  'intervention_commentaires', 'intervention_historique',
+  'catalogue', 'commande_notes', 'clients_finaux', 'distributeurs_carte',
+  'devis', 'devis_relances', 'transferts_fauteuils', 'retours_suede',
+  'alertes', 'parametres'
+];
+
+async function construireSauvegarde() {
+  const donnees = {}, resume = {};
+  for (const table of TABLES_SAUVEGARDE) {
+    try {
+      const lignes = await db.all(`SELECT * FROM ${table}`);
+      donnees[table] = lignes; resume[table] = lignes.length;
+    } catch (e) {
+      donnees[table] = []; resume[table] = `erreur : ${e.message}`;
+    }
+  }
+  try {
+    const users = await db.all('SELECT id, email, nom, role, pays, permissions, created_at FROM users');
+    donnees.users = users; resume.users = users.length;
+  } catch (_) { donnees.users = []; resume.users = 'erreur'; }
+
+  return {
+    meta: {
+      application: 'sav-eloflex',
+      genere_le: new Date().toISOString(),
+      mots_de_passe_exclus: true,
+      resume
+    },
+    donnees
+  };
+}
+
+router.get('/sauvegarde/export', adminOnly, async (req, res) => {
+  try {
+    const sauvegarde = await construireSauvegarde();
+    const nom = `sauvegarde-sav-eloflex-${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nom}"`);
+    res.send(JSON.stringify(sauvegarde, null, 2));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/sauvegarde/resume', adminOnly, async (req, res) => {
+  try {
+    const tables = {}; let total = 0;
+    for (const table of [...TABLES_SAUVEGARDE, 'users']) {
+      try {
+        const r = await db.get(`SELECT COUNT(*)::int AS nb FROM ${table}`);
+        tables[table] = r.nb; total += r.nb;
+      } catch (_) { tables[table] = null; }
+    }
+    const dernier = await db.get(
+      "SELECT created_at FROM sync_log WHERE type='sauvegarde' AND status='ok' ORDER BY created_at DESC LIMIT 1"
+    );
+    res.json({ ok: true, tables, total_lignes: total, derniere_sauvegarde: dernier ? dernier.created_at : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+async function envoyerSauvegardeHebdo(forcer) {
+  try {
+    if (!forcer && new Date().getDay() !== 1) return { ignore: 'pas un lundi' };
+    if (!process.env.BREVO_API_KEY) return { ignore: 'BREVO_API_KEY absente' };
+
+    const sauvegarde = await construireSauvegarde();
+    const zlib = require('zlib');
+    const compresse = zlib.gzipSync(Buffer.from(JSON.stringify(sauvegarde), 'utf8'), { level: 9 });
+    const base64 = compresse.toString('base64');
+    const date = new Date().toISOString().slice(0, 10);
+    const poids = (compresse.length / 1024 / 1024).toFixed(2);
+    const tropLourd = base64.length > 6 * 1024 * 1024;
+
+    const lignes = Object.entries(sauvegarde.meta.resume)
+      .filter(([, v]) => typeof v === 'number' && v > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([t, n]) => `<tr><td style="padding:3px 10px;border:1px solid #e5e7eb">${t}</td>` +
+                       `<td style="padding:3px 10px;border:1px solid #e5e7eb;text-align:right">${n}</td></tr>`).join('');
+
+    await sendBrevoMail({
+      from: 'sav@eloflex.fr', fromName: 'Eloflex SAV', to: 'info@eloflex.fr',
+      subject: `[Eloflex] Sauvegarde de la base — ${date}`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:560px">
+        <div style="background:#1F3A5F;padding:18px 22px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0;font-size:17px">Sauvegarde hebdomadaire</h2>
+          <div style="color:#A8C4E0;font-size:13px">${date}</div>
+        </div>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:20px">
+          ${tropLourd
+            ? `<p style="color:#b45309"><strong>Sauvegarde trop volumineuse pour être jointe (${poids} Mo compressés).</strong><br>
+                 Téléchargez-la depuis l'application : Paramètres → Sauvegarde.</p>`
+            : `<p style="font-size:14px;margin-top:0">Sauvegarde complète en pièce jointe
+                 (<strong>${poids} Mo</strong> compressés). Conservez-la hors de l'application.</p>`}
+          <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
+            <tr style="background:#f8f9fa"><th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:left">Table</th>
+            <th style="padding:5px 10px;border:1px solid #e5e7eb;text-align:right">Lignes</th></tr>${lignes}
+          </table>
+          <p style="font-size:11px;color:#999;margin-top:16px">Les empreintes de mots de passe ne sont pas incluses.</p>
+        </div></div>`,
+      attachments: tropLourd ? [] : [{ content: base64, name: `sauvegarde-sav-eloflex-${date}.json.gz` }]
+    });
+    return { ok: true, poids_mo: poids, joint: !tropLourd };
+  } catch (e) {
+    console.error('[SAUVEGARDE ERR]', e.message);
+    return { ok: false, erreur: e.message };
+  }
+}
+
+router.post('/sauvegarde/envoyer', adminOnly, async (req, res) => {
+  res.json(await envoyerSauvegardeHebdo(true));
+});
+
+// ══════════════════════════════════════════════════════════════════
+// ── TÂCHES PLANIFIÉES ────────────────────────────────────────────
+// Le service redémarre souvent : on journalise chaque exécution pour
+// qu'une tâche ne parte pas deux fois le même jour.
+// ══════════════════════════════════════════════════════════════════
+
+async function dejaFaitAujourdhui(tache) {
+  try {
+    const r = await db.get(
+      "SELECT 1 AS ok FROM sync_log WHERE type=$1 AND status='ok' AND created_at::date = CURRENT_DATE LIMIT 1",
+      [tache]
+    );
+    return !!r;
+  } catch (_) { return false; }
+}
+
+async function journaliser(tache, statut, message) {
+  try {
+    await db.run('INSERT INTO sync_log (type, status, message) VALUES ($1,$2,$3)',
+      [tache, statut, String(message || '').slice(0, 500)]);
+  } catch (_) { /* la journalisation ne doit jamais bloquer */ }
+}
+
+async function executerTachesQuotidiennes(forcer) {
+  const bilan = {};
+  const taches = [
+    ['alerte-impayes',   alerterImpayes],
+    ['rapport-mensuel',  envoyerRapportMensuel],
+    ['sauvegarde',       envoyerSauvegardeHebdo]
+  ];
+  for (const [nom, fn] of taches) {
+    if (!forcer && await dejaFaitAujourdhui(nom)) { bilan[nom] = 'déjà exécutée aujourd\u2019hui'; continue; }
+    try {
+      const r = await fn();
+      bilan[nom] = (r && r.ignore) ? r.ignore : 'exécutée';
+      await journaliser(nom, 'ok', bilan[nom]);
+    } catch (e) {
+      bilan[nom] = 'erreur : ' + e.message;
+      await journaliser(nom, 'erreur', e.message);
+    }
+  }
+  return bilan;
+}
+
+router.post('/taches/quotidiennes', adminOnly, async (req, res) => {
+  res.json({ ok: true, bilan: await executerTachesQuotidiennes(req.query.forcer === '1') });
+});
+
+// Déclenchement automatique : au démarrage puis toutes les six heures.
+// Le garde-fou par journal évite les doublons lors des redémarrages.
+if (!global.__tachesEloflexDemarrees) {
+  global.__tachesEloflexDemarrees = true;
+  setTimeout(() => executerTachesQuotidiennes().catch(() => {}), 3 * 60 * 1000);
+  setInterval(() => executerTachesQuotidiennes().catch(() => {}), 6 * 60 * 60 * 1000);
+}
+
+// ── Fin Sauvegarde et tâches ──────────────────────────────────────
+
+
+// ── Rattachement en masse des points de carte aux clients ─────────
+
+// Termes de métier trop répandus pour prouver à eux seuls une identité :
+// « Pharmacie Durand » et « Pharmacie Martin » sont deux maisons différentes.
+const MOTS_GENERIQUES = new Set([
+  'pharmacie', 'medical', 'medicale', 'medicaux', 'medic', 'sante', 'orthopedie', 'orthopedique',
+  'ortho', 'materiel', 'materiels', 'service', 'services', 'confort', 'domicile', 'assistance',
+  'sud', 'nord', 'est', 'ouest', 'centre', 'grand', 'petit', 'nouveau', 'nouvelle',
+  'france', 'europe', 'group', 'groupe', 'distribution', 'distrib', 'diffusion', 'equipement',
+  'equipements', 'mobilite', 'autonomie', 'handicap', 'pharma', 'clinic', 'clinique', 'sarl'
+]);
+
+// Score de ressemblance entre deux noms : 100 identique, 0 sans rapport
+function scoreRessemblance(a, b) {
+  const na = normNom(a), nb = normNom(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 100;
+  const ta = motsNom(a), tb = motsNom(b);
+  if (!ta.length || !tb.length) return 0;
+  const communs = ta.filter(m => tb.includes(m));
+  if (!communs.length) return 0;
+  // Il faut au moins un mot distinctif en commun, pas seulement un terme de métier
+  const solide = communs.some(m => m.length >= 4 && !MOTS_GENERIQUES.has(m));
+  if (!solide) return 0;
+  // Proportion de mots partagés, pondérée par le plus court des deux noms
+  const base = Math.min(ta.length, tb.length);
+  let score = Math.round((communs.length / base) * 90);
+  if (na.includes(nb) || nb.includes(na)) score = Math.max(score, 85);
+  return Math.min(score, 99);
+}
+
+// Liste les points non rattachés, avec les clients les plus ressemblants
+router.get('/carte/rattachements', adminOnly, async (req, res) => {
+  try {
+    const points = await db.all(
+      'SELECT id, nom, reseau, ville, cp, client_id FROM distributeurs_carte ORDER BY nom'
+    );
+    const clients = await db.all(
+      "SELECT id, nom, ville, cp FROM clients WHERE type <> 'Particulier' ORDER BY nom"
+    );
+    const annee = new Date().getFullYear();
+    const ventes = await db.all(`
+      SELECT client_id, distributeur_nom, COUNT(*)::int AS nb
+      FROM commandes
+      WHERE EXTRACT(YEAR FROM date_commande::date) = $1
+      GROUP BY client_id, distributeur_nom
+    `, [annee]);
+
+    const ventesParClient = {};
+    ventes.forEach(v => {
+      if (v.client_id) ventesParClient[v.client_id] = (ventesParClient[v.client_id] || 0) + v.nb;
+    });
+
+    const dejaPris = new Set(points.filter(p => p.client_id).map(p => p.client_id));
+
+    const resultat = points.map(p => {
+      if (p.client_id) {
+        const cl = clients.find(c => c.id === p.client_id);
+        return { ...p, etat: 'lie', client_nom: cl ? cl.nom : '(client supprimé)', suggestions: [] };
+      }
+      const suggestions = clients
+        .map(c => ({
+          id: c.id, nom: c.nom, ville: c.ville, cp: c.cp,
+          score: scoreRessemblance(p.nom, c.nom),
+          commandes: ventesParClient[c.id] || 0,
+          deja_lie: dejaPris.has(c.id)
+        }))
+        .filter(c => c.score >= 40)
+        .sort((a, b) => b.score - a.score || b.commandes - a.commandes)
+        .slice(0, 4);
+      return { ...p, etat: suggestions.length ? 'suggestion' : 'aucune', suggestions };
+    });
+
+    res.json({
+      ok: true,
+      total: points.length,
+      lies: resultat.filter(p => p.etat === 'lie').length,
+      avec_suggestion: resultat.filter(p => p.etat === 'suggestion').length,
+      sans_suggestion: resultat.filter(p => p.etat === 'aucune').length,
+      points: resultat
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Applique plusieurs rattachements d'un coup
+router.post('/carte/rattachements', adminOnly, async (req, res) => {
+  try {
+    const liens = Array.isArray(req.body.liens) ? req.body.liens : [];
+    let appliques = 0;
+    for (const l of liens) {
+      if (!l || !l.point_id) continue;
+      await db.run('UPDATE distributeurs_carte SET client_id=$1, updated_at=NOW() WHERE id=$2',
+        [l.client_id || null, l.point_id]);
+      appliques++;
+    }
+    res.json({ ok: true, appliques });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
+module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
+module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;
