@@ -398,6 +398,7 @@ async function renderClient(ttl,c,a){
               </td></tr>`;
           })()}
           ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">💳 EDI — Prélèvement</span></td></tr>`:''}
+          ${cl.entite_facturation_nom?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Facturation</td><td><span class="badge" style="background:rgba(234,179,8,.12);color:#b45309" title="Les factures VosFactures de ce distributeur sont émises au nom de cette entité"><i class="ti ti-arrow-right" style="font-size:11px"></i> Facturé via ${esc(cl.entite_facturation_nom)}</span></td></tr>`:''}
           ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="setView('carte')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
@@ -2612,7 +2613,7 @@ function lbKey(e){if(e.key==='ArrowRight')lbNav(1);if(e.key==='ArrowLeft')lbNav(
 
 // ── MODALES CLIENTS ───────────────────────────────────────────────
 
-function clientForm(d={}){return `<div class="grid-2">
+function clientForm(d={}, clientsListe=[]){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Nom *</label><input class="form-input" id="f-nom" value="${esc(d.nom||'')}"></div>
   <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Distributeur','Revendeur','Particulier'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
   <div class="form-group"><label class="form-label">Contact</label><input class="form-input" id="f-contact" value="${esc(d.contact||'')}"></div>
@@ -2623,6 +2624,14 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
   <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays">${optionsPays(d.pays||'France')}</select></div>
+  <div class="form-group" style="grid-column:1/-1">
+    <label class="form-label">Facturer via <span style="font-weight:400;color:var(--text3)">(optionnel)</span></label>
+    <select class="form-input" id="f-entite-facturation">
+      <option value="">— Ce distributeur est facturé directement —</option>
+      ${clientsListe.filter(cx=>cx.id!==d.id).map(cx=>`<option value="${cx.id}" ${d.entite_facturation_id===cx.id?'selected':''}>${esc(cx.nom)}</option>`).join('')}
+    </select>
+    <div style="font-size:11px;color:var(--text2);margin-top:4px">Si une entité est sélectionnée, c'est elle qui sera facturée dans VosFactures (au lieu de ce distributeur) lors de la génération de facture. Le bon de livraison reste au nom de ce distributeur.</div>
+  </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} onchange="document.getElementById('f-reseau-carte').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:#22c55e">
@@ -2641,8 +2650,14 @@ function clientForm(d={}){return `<div class="grid-2">
     </label>
   </div>
 </div>`;}
-function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalNewClient(){
+  const liste = await API.clients();
+  showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm({}, liste)}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);
+}
+async function modalEditClient(id){
+  const [cl, liste] = await Promise.all([API.client(id), API.clients()]);
+  showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl, liste)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);
+}
 async function saveClient(id){
   const surCarte = !!document.getElementById('f-sur-carte')?.checked;
   const data = {
@@ -2652,7 +2667,8 @@ async function saveClient(id){
     cp: gv('f-cp'), ville: gv('f-ville'), pays: gv('f-pays'),
     edi: !!document.getElementById('f-edi')?.checked,
     sur_carte: surCarte,
-    reseau_carte: surCarte ? (gv('f-reseau-carte') || 'base') : null
+    reseau_carte: surCarte ? (gv('f-reseau-carte') || 'base') : null,
+    entite_facturation_id: gv('f-entite-facturation') || null
   };
   if(!data.nom){ alert('Nom requis'); return; }
   if(surCarte && !data.ville && !data.cp){ alert('Renseignez au moins le code postal ou la ville : ils servent à positionner le point sur la carte.'); return; }
