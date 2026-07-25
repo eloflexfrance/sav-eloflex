@@ -276,6 +276,10 @@ router.get('/clients/:id', async (req, res) => {
   try {
     const cl = await db.get('SELECT * FROM clients WHERE id=$1', [req.params.id]);
     if (!cl) return res.status(404).json({ error: 'Introuvable' });
+    if (cl.entite_facturation_id) {
+      const ef = await db.get('SELECT id, nom FROM clients WHERE id=$1', [cl.entite_facturation_id]);
+      cl.entite_facturation_nom = ef ? ef.nom : null;
+    }
     const fauts = await db.all(
       `SELECT f.*,
         (SELECT COUNT(*)::int FROM interventions i WHERE i.fauteuil_id=f.id) AS nb_interventions,
@@ -299,16 +303,16 @@ router.get('/clients/:id', async (req, res) => {
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
       `INSERT INTO clients (nom,contact,email,tel,ville,type,token_portail,edi,sur_carte,reseau_carte,
-                            adresse,adresse2,cp,pays)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+                            adresse,adresse2,cp,pays,entite_facturation_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [nom, contact||null, email||null, tel||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null]
+       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null]
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
@@ -319,14 +323,16 @@ router.post('/clients', async (req, res) => {
 router.put('/clients/:id', async (req, res) => {
   try {
     const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id } = req.body;
     const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
       `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,ville=$5,type=$6,
        edi=$7,sur_carte=$8,reseau_carte=$9,
-       adresse=$10,adresse2=$11,cp=$12,pays=$13,updated_at=NOW() WHERE id=$14 RETURNING *`,
+       adresse=$10,adresse2=$11,cp=$12,pays=$13,entite_facturation_id=$14,updated_at=NOW() WHERE id=$15 RETURNING *`,
       [nom, contact, email, tel, ville, type, !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null, req.params.id]
+       adresse||null, adresse2||null, cp||null, pays||null,
+       (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
+       req.params.id]
     );
     // Adresse modifiée : les anciennes coordonnées ne valent plus rien
     if (avant && (avant.ville !== ville || avant.adresse !== (adresse||null) || avant.cp !== (cp||null))) {
@@ -3067,25 +3073,46 @@ router.post('/commandes/:id/generer-facture', adminOrOp, async (req, res) => {
   try {
     if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT)
       return res.json({ ok: false, reason: 'VosFactures non configuré' });
-    const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom FROM commandes cmd
-      JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
+    const cmd = await db.get(`
+      SELECT cmd.*, c.nom AS client_nom, c.vf_id AS client_vf_id,
+             cf.id AS facturation_local_id, cf.nom AS facturation_nom, cf.vf_id AS facturation_vf_id
+      FROM commandes cmd
+      JOIN clients c ON c.id = cmd.client_id
+      LEFT JOIN clients cf ON cf.id = c.entite_facturation_id
+      WHERE cmd.id=$1`, [req.params.id]);
     if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
     const lignes = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
     const axios = require('axios');
     const vfApi = axios.create({ baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
       headers: { 'Accept': 'application/json' }, params: { api_token: process.env.VOSFACTURES_API_TOKEN } });
-    // Chercher le client dans VF
-    const { data: buyers } = await vfApi.get('/clients.json', { params: { name: cmd.distributeur_nom, per_page: 5 } });
-    const buyer = Array.isArray(buyers) ? buyers.find(b => b.name?.toLowerCase().includes(cmd.distributeur_nom.toLowerCase().slice(0, 8))) : null;
+
+    // Si une entité de facturation est définie sur la fiche du distributeur,
+    // c'est elle qui doit être facturée (acheteur légal) — pas le distributeur.
+    const facturerEntite = !!cmd.facturation_local_id;
+    const buyerVfId = facturerEntite ? cmd.facturation_vf_id : cmd.client_vf_id;
+    const buyerName = facturerEntite ? cmd.facturation_nom : cmd.client_nom;
+
+    let buyer = null;
+    if (!buyerVfId) {
+      // Pas de vf_id connu localement : on retombe sur la recherche par nom (comportement d'origine)
+      const { data: buyers } = await vfApi.get('/clients.json', { params: { name: buyerName, per_page: 5 } });
+      buyer = Array.isArray(buyers) ? buyers.find(b => b.name?.toLowerCase().includes(buyerName.toLowerCase().slice(0, 8))) : null;
+    }
+
     const positions = (lignes.length ? lignes : [{ designation: cmd.modele || 'Commande', quantite: cmd.quantite || 1, reference: cmd.bdc }])
       .map(l => ({ name: l.designation, quantity: String(l.quantite || 1), price_net: '0.00', tax: '20' }));
     const today = new Date().toISOString().slice(0, 10);
+
+    const descriptionParts = [];
+    if (cmd.bdc) descriptionParts.push(`Commande ${cmd.bdc}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}`);
+    if (facturerEntite) descriptionParts.push(`Distributeur (livraison) : ${cmd.distributeur_nom}`);
+
     const payload = {
       invoice: {
         kind: 'vat', sell_date: cmd.date_livraison || today, issue_date: today,
-        buyer_name: cmd.distributeur_nom,
+        ...(buyerVfId ? { client_id: buyerVfId } : (buyer?.id ? { client_id: buyer.id } : { buyer_name: buyerName })),
         positions,
-        ...(cmd.bdc ? { description: `Commande ${cmd.bdc}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}` } : {})
+        ...(descriptionParts.length ? { description: descriptionParts.join(' — ') } : {})
       }
     };
     let invData;
@@ -3101,7 +3128,8 @@ router.post('/commandes/:id/generer-facture', adminOrOp, async (req, res) => {
     if (!invData?.id) return res.json({ ok: false, reason: 'VosFactures n\'a pas retourné d\'identifiant' });
     await db.run('UPDATE commandes SET vf_invoice_id=$1, num_facture=$2, statut=\'Facturé\', updated_at=NOW() WHERE id=$3',
       [invData.id, invData.number || String(invData.id), req.params.id]);
-    res.json({ ok: true, invoice_id: invData.id, numero: invData.number, url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${invData.id}` });
+    res.json({ ok: true, invoice_id: invData.id, numero: invData.number, facture_a: buyerName,
+      url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${invData.id}` });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
