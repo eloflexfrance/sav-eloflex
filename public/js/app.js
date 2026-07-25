@@ -161,6 +161,7 @@ async function render(){
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
     else if(STATE.view==='carte')         { renderCarte(ttl,c,a); return; }
+    else if(STATE.view==='doublons-vf')   { renderDoublonsVF(ttl,c,a); return; }
   else if(STATE.view==='discussions')   {
     localStorage.setItem('sav_discussions_seen', Date.now());
     const badge = document.getElementById('discussions-badge');
