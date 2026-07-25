@@ -14,17 +14,17 @@
 
 let _doublonsVfData = null;
 
-async function renderDoublonsVF() {
-  const conteneur = document.getElementById('view-content'); // ADAPTER si l'id diffère
-  if (!conteneur) return;
-
-  conteneur.innerHTML = `
-    <h2>Doublons VosFactures</h2>
-    <p>Détecte les fiches distributeurs en double (même nom) et les adresses incomplètes.</p>
-    <button id="btn-detecter-doublons" class="btn btn-primary">Analyser VosFactures</button>
-    <div id="doublons-vf-resultats" style="margin-top:20px;"></div>
+function renderDoublonsVF(ttl, c, a) {
+  ttl.textContent = 'Doublons VosFactures';
+  a.innerHTML = '';
+  c.innerHTML = `
+    <div class="card">
+      <div class="section-title"><i class="ti ti-copy"></i>Doublons VosFactures</div>
+      <p style="color:var(--text2);margin:6px 0 12px">Détecte les fiches distributeurs en double (même nom) et les adresses incomplètes, directement sur ton compte VosFactures.</p>
+      <button id="btn-detecter-doublons" class="btn"><i class="ti ti-search"></i> Analyser VosFactures</button>
+      <div id="doublons-vf-resultats" style="margin-top:16px;"></div>
+    </div>
   `;
-
   document.getElementById('btn-detecter-doublons').addEventListener('click', chargerDoublonsVF);
 }
 

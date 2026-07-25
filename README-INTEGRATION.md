@@ -1,77 +1,83 @@
-# Module "Doublons VosFactures" — intégration dans sav-eloflex
+# Module "Doublons VosFactures" — intégration (version exacte)
 
-Ce module ajoute une nouvelle vue qui, en un clic :
-1. Récupère TOUS les contacts VosFactures (pagination automatique)
-2. Regroupe ceux qui portent le même nom (accents/casse ignorés) → doublons
-3. Propose une fiche "principale" (la plus complète) par groupe, avec possibilité de changer le choix
-4. Fusionne le groupe via l'API VosFactures officielle (`/clients/:id/merge.json`) en un clic — les commandes/factures des fiches fusionnées sont automatiquement rattachées à la fiche conservée par VosFactures lui-même
-5. Liste toutes les fiches dont l'adresse (rue + CP + ville) est incomplète, avec un formulaire d'édition en ligne qui met à jour directement VosFactures
+D'après ton `routes.js` et `app.js`, voici les 3 fichiers à modifier — copier-coller direct, rien à deviner.
 
-## Fichiers du patch
+## 1. `server/routes.js`
 
-```
-server/routes-doublons-vf.js   → nouvelles routes API
-public/js/doublons-vf.js       → nouvelle vue frontend
-```
+Ouvre le fichier `SNIPPET-routes.js.txt` de ce patch.
+Colle tout son contenu **juste après** ce bloc existant (fin de la section VosFactures) :
 
-## Étapes d'intégration
-
-### 1. Ajouter le fichier de routes
-Copier `server/routes-doublons-vf.js` dans ton dossier `server/`.
-
-Dans `server/routes.js` (ou ton fichier qui monte les routeurs), ajouter :
 ```js
-const doublonsVfRouter = require('./routes-doublons-vf');
-app.use('/api/doublons-vf', doublonsVfRouter);
+router.get('/vosfactures/status', async (req, res) => {
+  try {
+    const configured = !!(process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT);
+    const lastSync = await db.get("SELECT * FROM sync_log WHERE status='ok' ORDER BY created_at DESC LIMIT 1");
+    res.json({ configured, account: process.env.VOSFACTURES_ACCOUNT||null, last_sync: lastSync||null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 ```
 
-**⚠️ Deux points à adapter dans `routes-doublons-vf.js` :**
-- `const pool = require('../db');` → remplace par le chemin réel de ton module PostgreSQL
-- Les noms de table/colonnes dans la section "Réattribution locale" de `/fusionner`
-  (actuellement `commandes.client_id` et `clients.vf_id`) → adapte à ton schéma réel.
-  **Si tu ne les adaptes pas, aucun risque** : la fusion VosFactures se fait quand même,
-  seule la réattribution locale est ignorée (avec un simple avertissement en log).
+Aucune nouvelle dépendance, aucun nouvel `app.use` : ce sont juste 3 nouvelles routes
+(`GET /doublons-vf/detecter`, `POST /doublons-vf/fusionner`, `PUT /doublons-vf/adresse/:id`)
+ajoutées au routeur existant, avec les mêmes conventions que le reste du fichier
+(`db.get/all/run`, `axios` en require local, `requireAuth`/`adminOnly`).
 
-Si tes routes protégées passent par un middleware (ex: `requireRole('admin')`),
-ajoute-le sur les routes `POST /fusionner` et `PUT /adresse/:id`.
+## 2. `public/index.html`
 
-### 2. Ajouter le fichier frontend
-Copier `public/js/doublons-vf.js` dans `public/js/`.
-
-Dans `public/index.html`, ajouter le script (après `api.js`/`i18n.js`) :
+Remplacer la ligne :
 ```html
-<script src="js/doublons-vf.js"></script>
+<div class="nav-item" data-view="carte"><i class="ti ti-map-2"></i><span>Carte</span></div>
 ```
-
-Ajouter un lien de navigation, par exemple à côté de "Devis VosFactures" :
+par :
 ```html
-<a href="#" data-view="doublons-vf">Doublons VosFactures</a>
+<div class="nav-item" data-view="carte"><i class="ti ti-map-2"></i><span>Carte</span></div>
+<div class="nav-item" data-view="doublons-vf"><i class="ti ti-copy"></i><span>Doublons VosFactures</span></div>
 ```
 
-### 3. Brancher la vue dans le routeur
-Dans `app.js`, dans la fonction qui dispatch les vues (`render()` ou équivalent),
-ajouter un cas :
+Et ajouter le script, à côté des autres, juste avant `</body>` :
+```html
+<script src="/js/doublons-vf.js"></script>
+```
+(après `app.js`, comme `devis.js`)
+
+➡️ Rien d'autre à faire côté clic : ton code attache déjà automatiquement un `onclick`
+à tout élément `.nav-item[data-view]` via
+`document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setView(n.dataset.view)))`.
+
+## 3. `public/js/app.js`
+
+Dans la fonction `render()`, ajouter une ligne dans la chaîne de `if/else if`,
+juste après le cas `carte` :
+
 ```js
-case 'doublons-vf':
-  renderDoublonsVF();
-  break;
+else if(STATE.view==='carte')         { renderCarte(ttl,c,a); return; }
+else if(STATE.view==='doublons-vf')   { renderDoublonsVF(ttl,c,a); return; }
 ```
 
-**Point de vigilance** (déjà rencontré sur le module Discussions) : vérifier que
-ce cas est bien atteint depuis TOUS les points d'entrée du routeur (menu, lien direct,
-etc.), pas seulement le clic de nav.
+C'est tout — `renderDoublonsVF` est définie dans le nouveau fichier `public/js/doublons-vf.js`.
 
-### 4. Vérifier avant déploiement
-Lancer `node verifier.js` comme d'habitude pour détecter tout appel/route manquant
-après intégration.
+## 4. `public/js/doublons-vf.js`
 
-## Variables d'environnement nécessaires
-Déjà présentes pour le module Devis : `VOSFACTURES_API_TOKEN`, `VOSFACTURES_ACCOUNT`.
-Aucune nouvelle variable requise.
+Copier ce fichier tel quel dans `public/js/`. Il est déjà adapté à ton conteneur `#content`,
+`#topbar-title`, `#topbar-actions` et au style `.card` / `.section-title` de ton app.
 
-## Ce que fait la fusion (rappel du fonctionnement VosFactures)
-La fusion appelle `POST /clients/{principal_id}/merge.json` avec les IDs à fusionner.
-VosFactures réattribue lui-même tous les documents de facturation (bons de commande,
-factures, devis...) des fiches fusionnées vers la fiche conservée, puis supprime
-définitivement les fiches fusionnées. **Cette action est irréversible côté VosFactures**
-— une confirmation est demandée dans l'interface avant chaque fusion.
+## Accès (rôles)
+
+Le module n'étant pas listé dans `NAV_ROLES` / permissions, il n'est visible et
+utilisable que par les comptes **admin** (comme la carte des distributeurs, les
+utilisateurs, etc.) — cohérent vu que la fusion est une action irréversible.
+Si tu veux l'ouvrir à d'autres rôles, ajoute `'doublons-vf'` dans le tableau
+`NAV_ROLES.operateur` de `app.js` et adapte `requireAuth`/`adminOnly` dans les routes.
+
+## Après une fusion
+
+La fusion VosFactures est immédiate et irréversible (documents automatiquement
+réattribués par VosFactures lui-même). Les fiches locales `clients` (liées via
+`vf_id`) et les `commandes` liées sont réattribuées automatiquement quand c'est
+possible ; pense ensuite à cliquer sur **Sync VosFactures** (bouton déjà présent
+dans la barre latérale) pour nettoyer les éventuelles fiches locales désormais
+obsolètes.
+
+## Vérification
+
+Comme d'habitude, lance `node verifier.js` avant de déployer.

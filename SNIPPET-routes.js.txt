@@ -1,0 +1,149 @@
+// =====================================================================
+// SNIPPET À COLLER dans server/routes.js
+// Emplacement : juste après le bloc existant qui se termine par
+//
+//   router.get('/vosfactures/status', async (req, res) => {
+//     ...
+//   });
+//
+// (donc juste avant les deux lignes vides qui suivent, à la fin de la
+// section "// ── VOSFACTURES ──" — utilise ce bloc comme ancre pour
+// coller le code ci-dessous juste après sa fermeture)
+// =====================================================================
+
+// ── DOUBLONS VOSFACTURES ────────────────────────────────────────────
+
+function _normaliserNomVF(nom) {
+  return (nom || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+function _adresseCompleteVF(cl) { return !!(cl.street && cl.post_code && cl.city); }
+function _scoreCompletudeVF(cl) {
+  let s = 0;
+  if (cl.street) s++; if (cl.post_code) s++; if (cl.city) s++;
+  if (cl.email) s++; if (cl.phone) s++; if (cl.tax_no) s++;
+  return s;
+}
+async function _fetchTousContactsVF() {
+  const axios = require('axios');
+  const vfApi = axios.create({
+    baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+    headers: { 'Accept': 'application/json' },
+    params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+  });
+  let page = 1, tous = [];
+  while (true) {
+    const { data } = await vfApi.get('/clients.json', { params: { per_page: 100, page } });
+    if (!Array.isArray(data) || data.length === 0) break;
+    tous = tous.concat(data);
+    if (data.length < 100) break;
+    page++;
+  }
+  return tous;
+}
+
+// Détecte les groupes de contacts en doublon (même nom) + adresses incomplètes
+router.get('/doublons-vf/detecter', requireAuth, async (req, res) => {
+  if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
+    return res.status(503).json({ error: 'VosFactures non configuré' });
+  }
+  try {
+    const contacts = await _fetchTousContactsVF();
+
+    const groupes = {};
+    for (const c of contacts) {
+      const cle = _normaliserNomVF(c.name);
+      if (!cle) continue;
+      (groupes[cle] = groupes[cle] || []).push(c);
+    }
+
+    const doublons = Object.values(groupes)
+      .filter(g => g.length > 1)
+      .map(g => {
+        const trie = [...g].sort((a, b) => _scoreCompletudeVF(b) - _scoreCompletudeVF(a));
+        return {
+          nom: trie[0].name,
+          principal_suggere: trie[0].id,
+          contacts: trie.map(c => ({
+            id: c.id, name: c.name, street: c.street, post_code: c.post_code,
+            city: c.city, email: c.email, phone: c.phone, tax_no: c.tax_no,
+            complet: _adresseCompleteVF(c)
+          }))
+        };
+      })
+      .sort((a, b) => b.contacts.length - a.contacts.length);
+
+    const adressesIncompletes = contacts
+      .filter(c => !_adresseCompleteVF(c))
+      .map(c => ({
+        id: c.id, name: c.name,
+        street: c.street || '', post_code: c.post_code || '', city: c.city || '',
+        email: c.email || '', phone: c.phone || ''
+      }));
+
+    res.json({
+      total_contacts: contacts.length,
+      nb_groupes_doublons: doublons.length,
+      doublons,
+      nb_adresses_incompletes: adressesIncompletes.length,
+      adresses_incompletes: adressesIncompletes
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Fusionne un groupe de doublons dans VosFactures + réattribue les commandes locales
+router.post('/doublons-vf/fusionner', adminOnly, async (req, res) => {
+  const { principal_id, merge_ids } = req.body;
+  if (!principal_id || !Array.isArray(merge_ids) || merge_ids.length === 0) {
+    return res.status(400).json({ error: 'principal_id et merge_ids (tableau) requis' });
+  }
+  try {
+    const axios = require('axios');
+    const { data: vfData } = await axios.post(
+      `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/clients/${principal_id}/merge.json`,
+      { api_token: process.env.VOSFACTURES_API_TOKEN, merge_ids }
+    );
+
+    // Réattribution locale : les fiches "clients" locales sont liées à VosFactures
+    // via la colonne vf_id ; les commandes pointent vers clients.id (pas vf_id).
+    let reattribution = { commandes_reattribuees: 0 };
+    try {
+      const principalLocal = await db.get('SELECT id FROM clients WHERE vf_id=$1', [principal_id]);
+      const dupLocaux = await db.all('SELECT id FROM clients WHERE vf_id = ANY($1::int[])', [merge_ids]);
+      if (principalLocal && dupLocaux.length) {
+        const idsLocaux = dupLocaux.map(r => r.id);
+        const r = await db.run(
+          'UPDATE commandes SET client_id=$1 WHERE client_id = ANY($2::int[])',
+          [principalLocal.id, idsLocaux]
+        );
+        reattribution.commandes_reattribuees = r?.rowCount || 0;
+      }
+      reattribution.note = 'Pense à relancer une Sync VosFactures pour nettoyer les fiches locales en double.';
+    } catch (dbErr) {
+      console.warn('Réattribution locale doublons VF ignorée :', dbErr.message);
+      reattribution.erreur = dbErr.message;
+    }
+
+    res.json({ ok: true, principal_id, fusionnes: merge_ids, vosfactures: vfData, reattribution });
+  } catch (e) {
+    res.status(500).json({ error: e.response?.data || e.message });
+  }
+});
+
+// Complète/corrige l'adresse d'un contact VosFactures
+router.put('/doublons-vf/adresse/:id', adminOnly, async (req, res) => {
+  const { street, post_code, city, country } = req.body;
+  try {
+    const axios = require('axios');
+    const { data } = await axios.put(
+      `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/clients/${req.params.id}.json`,
+      { api_token: process.env.VOSFACTURES_API_TOKEN, client: { street, post_code, city, country: country || 'FR' } }
+    );
+    res.json({ ok: true, client: data });
+  } catch (e) {
+    res.status(500).json({ error: e.response?.data || e.message });
+  }
+});
