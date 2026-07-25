@@ -255,6 +255,20 @@ async function getInterventions(f = {}) {
 }
 
 // ── CLIENTS ───────────────────────────────────────────────────────
+// ── Migration ponctuelle : colonne entite_facturation_id sur clients ──
+// À ouvrir UNE FOIS dans le navigateur (connecté en admin) après déploiement :
+//   https://TON-APP.onrender.com/api/admin/migrer-entite-facturation
+// Sans risque de la relancer plusieurs fois (IF NOT EXISTS) — tu peux laisser
+// cette route en place, ou la retirer une fois la migration confirmée faite.
+router.get('/admin/migrer-entite-facturation', adminOnly, async (req, res) => {
+  try {
+    await db.run('ALTER TABLE clients ADD COLUMN IF NOT EXISTS entite_facturation_id INTEGER REFERENCES clients(id)');
+    res.send('<h2>✅ Migration effectuée</h2><p>La colonne entite_facturation_id existe désormais sur la table clients.</p>');
+  } catch (e) {
+    res.status(500).send(`<h2>❌ Erreur</h2><pre>${e.message}</pre>`);
+  }
+});
+
 router.get('/clients', async (req, res) => {
   try {
     const q = `%${req.query.q || ''}%`;
