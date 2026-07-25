@@ -1,216 +1,173 @@
-// Module "Doublons VosFactures" — détection, fusion et complétion d'adresse
-// ---------------------------------------------------------------------------
-// À MONTER dans server/routes.js (ou index.js), près des autres montages de routeur :
-//
-//   const doublonsVfRouter = require('./routes-doublons-vf');
-//   app.use('/api/doublons-vf', doublonsVfRouter);
-//
-// PRÉREQUIS (déjà présents pour le module Devis VosFactures) :
-//   - process.env.VOSFACTURES_API_TOKEN
-//   - process.env.VOSFACTURES_ACCOUNT
-//
-// À ADAPTER SELON TON CODE EXISTANT (marqué ADAPTER ci-dessous) :
-//   - le chemin d'import du pool PostgreSQL (ligne `const pool = require('../db')`)
-//   - si tes routes utilisent un middleware d'auth/rôle (ex: requireRole('admin')),
-//     ajoute-le sur les routes POST/PUT ci-dessous
-//   - les noms de table/colonnes de réattribution locale dans /fusionner
-//     (la route fonctionne même si cette section échoue : elle log un avertissement
-//     et continue, donc aucun risque si le schéma ne correspond pas encore)
-// ---------------------------------------------------------------------------
+// Vue "Doublons VosFactures" — public/js/doublons-vf.js
+// -----------------------------------------------------------------------------
+// À INTÉGRER :
+// 1. Ajouter dans index.html : <script src="js/doublons-vf.js"></script>
+//    (après api.js / i18n.js, avant app.js si app.js appelle renderDoublonsVF)
+// 2. Ajouter un lien de nav (ex dans index.html ou généré par app.js) :
+//    <a href="#" data-view="doublons-vf">Doublons VosFactures</a>
+// 3. Dans le routeur de vues de app.js (la fonction render/dispatch de vues),
+//    ajouter un cas :
+//    case 'doublons-vf': renderDoublonsVF(); break;
+//    (adapter au nom réel de ta fonction routeur, voir bug connu "Routing manquait
+//    dans render()" déjà rencontré sur le module Discussions)
+// -----------------------------------------------------------------------------
 
-const express = require('express');
-const router = express.Router();
-const pool = require('../db'); // ADAPTER si le chemin diffère
+let _doublonsVfData = null;
 
-const VF_BASE = `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`;
-const VF_TOKEN = process.env.VOSFACTURES_API_TOKEN;
-
-// --- Utilitaires ---
-
-function normaliserNom(nom) {
-  return (nom || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // retire les accents
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, ' ')
-    .trim();
+function renderDoublonsVF(ttl, c, a) {
+  ttl.textContent = 'Doublons VosFactures';
+  a.innerHTML = '';
+  c.innerHTML = `
+    <div class="card">
+      <div class="section-title"><i class="ti ti-copy"></i>Doublons VosFactures</div>
+      <p style="color:var(--text2);margin:6px 0 12px">Détecte les fiches distributeurs en double (même nom) et les adresses incomplètes, directement sur ton compte VosFactures.</p>
+      <button id="btn-detecter-doublons" class="btn"><i class="ti ti-search"></i> Analyser VosFactures</button>
+      <div id="doublons-vf-resultats" style="margin-top:16px;"></div>
+    </div>
+  `;
+  document.getElementById('btn-detecter-doublons').addEventListener('click', chargerDoublonsVF);
 }
 
-function adresseComplete(client) {
-  return !!(client.street && client.post_code && client.city);
-}
-
-function scoreCompletude(client) {
-  let score = 0;
-  if (client.street) score++;
-  if (client.post_code) score++;
-  if (client.city) score++;
-  if (client.email) score++;
-  if (client.phone) score++;
-  if (client.tax_no) score++;
-  return score;
-}
-
-// Récupère TOUS les contacts VosFactures (pagination automatique, 100/page)
-async function fetchTousLesContacts() {
-  let page = 1;
-  let tous = [];
-  while (true) {
-    const url = `${VF_BASE}/clients.json?api_token=${VF_TOKEN}&per_page=100&page=${page}`;
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`VosFactures clients.json (page ${page}) : HTTP ${r.status}`);
-    const data = await r.json();
-    if (!Array.isArray(data) || data.length === 0) break;
-    tous = tous.concat(data);
-    if (data.length < 100) break;
-    page++;
-  }
-  return tous;
-}
-
-// ============================================================================
-// GET /api/doublons-vf/detecter
-// Détecte les groupes de contacts en doublon (même nom normalisé) ainsi que
-// les fiches dont l'adresse (rue + CP + ville) est incomplète.
-// ============================================================================
-router.get('/detecter', async (req, res) => {
+async function chargerDoublonsVF() {
+  const zone = document.getElementById('doublons-vf-resultats');
+  zone.innerHTML = '<p>Analyse en cours (peut prendre quelques secondes selon le nombre de contacts)…</p>';
   try {
-    const contacts = await fetchTousLesContacts();
-
-    // Regroupement par nom normalisé (accents/casse/espaces ignorés)
-    const groupes = {};
-    for (const c of contacts) {
-      const cle = normaliserNom(c.name);
-      if (!cle) continue;
-      if (!groupes[cle]) groupes[cle] = [];
-      groupes[cle].push(c);
-    }
-
-    const doublons = Object.values(groupes)
-      .filter(g => g.length > 1)
-      .map(g => {
-        // Fiche suggérée comme principale = la plus complète (score le plus haut)
-        const trie = [...g].sort((a, b) => scoreCompletude(b) - scoreCompletude(a));
-        return {
-          nom: trie[0].name,
-          principal_suggere: trie[0].id,
-          contacts: trie.map(c => ({
-            id: c.id,
-            name: c.name,
-            street: c.street,
-            post_code: c.post_code,
-            city: c.city,
-            email: c.email,
-            phone: c.phone,
-            tax_no: c.tax_no,
-            complet: adresseComplete(c),
-            score: scoreCompletude(c)
-          }))
-        };
-      })
-      .sort((a, b) => b.contacts.length - a.contacts.length);
-
-    // Fiches à l'adresse incomplète (hors doublons, ou en plus des doublons)
-    const adressesIncompletes = contacts
-      .filter(c => !adresseComplete(c))
-      .map(c => ({
-        id: c.id,
-        name: c.name,
-        street: c.street || '',
-        post_code: c.post_code || '',
-        city: c.city || '',
-        email: c.email || '',
-        phone: c.phone || ''
-      }));
-
-    res.json({
-      total_contacts: contacts.length,
-      nb_groupes_doublons: doublons.length,
-      doublons,
-      nb_adresses_incompletes: adressesIncompletes.length,
-      adresses_incompletes: adressesIncompletes
-    });
+    const res = await fetch('/api/doublons-vf/detecter');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur inconnue');
+    _doublonsVfData = data;
+    afficherResultatsDoublonsVF(data);
   } catch (err) {
-    console.error('Erreur détection doublons VosFactures:', err);
-    res.status(500).json({ error: err.message });
+    zone.innerHTML = `<p class="erreur">Erreur : ${_escVf(err.message)}</p>`;
   }
-});
+}
 
-// ============================================================================
-// POST /api/doublons-vf/fusionner
-// body: { principal_id: 123, merge_ids: [456, 789] }
-// Fusionne dans VosFactures, puis tente de réattribuer les données locales
-// (commandes / clients) si l'app garde une référence à l'ID VosFactures.
-// ============================================================================
-router.post('/fusionner', async (req, res) => {
-  const { principal_id, merge_ids } = req.body;
-  if (!principal_id || !Array.isArray(merge_ids) || merge_ids.length === 0) {
-    return res.status(400).json({ error: 'principal_id et merge_ids (tableau) sont requis' });
+function afficherResultatsDoublonsVF(data) {
+  const zone = document.getElementById('doublons-vf-resultats');
+
+  let html = `<p><strong>${data.total_contacts}</strong> contacts analysés — 
+    <strong>${data.nb_groupes_doublons}</strong> groupe(s) de doublons — 
+    <strong>${data.nb_adresses_incompletes}</strong> adresse(s) incomplète(s).</p>`;
+
+  // --- Section Doublons ---
+  html += `<h3>Doublons (${data.nb_groupes_doublons})</h3>`;
+  if (data.doublons.length === 0) {
+    html += '<p>Aucun doublon détecté.</p>';
+  } else {
+    data.doublons.forEach((groupe, gi) => {
+      html += `<div class="carte-doublon" style="border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:12px;">
+        <strong>${_escVf(groupe.nom)}</strong> (${groupe.contacts.length} fiches)
+        <table class="t" style="width:100%;margin-top:8px;">
+          <thead><tr><th>Conserver</th><th>ID</th><th>Adresse</th><th>Email</th><th>Tél.</th></tr></thead>
+          <tbody>`;
+      groupe.contacts.forEach((c, ci) => {
+        const coche = c.id === groupe.principal_suggere ? 'checked' : '';
+        const adresseTxt = c.complet
+          ? `${c.street}, ${c.post_code} ${c.city}`
+          : `<span style="color:#c00;">incomplète</span>`;
+        html += `<tr>
+          <td><input type="radio" name="principal-${gi}" value="${c.id}" ${coche}></td>
+          <td>${c.id}</td>
+          <td>${adresseTxt}</td>
+          <td>${_escVf(c.email || '')}</td>
+          <td>${_escVf(c.phone || '')}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>
+        <button class="btn btn-fusionner" data-groupe="${gi}" style="margin-top:8px;">Fusionner ce groupe</button>
+      </div>`;
+    });
+  }
+
+  // --- Section Adresses incomplètes ---
+  html += `<h3>Adresses incomplètes (${data.nb_adresses_incompletes})</h3>`;
+  if (data.adresses_incompletes.length === 0) {
+    html += '<p>Toutes les fiches ont une adresse complète.</p>';
+  } else {
+    html += `<table class="t" style="width:100%;">
+      <thead><tr><th>Nom</th><th>Rue</th><th>Code postal</th><th>Ville</th><th></th></tr></thead>
+      <tbody>`;
+    data.adresses_incompletes.forEach(c => {
+      html += `<tr data-id-adresse="${c.id}">
+        <td>${_escVf(c.name)}</td>
+        <td><input type="text" class="champ-rue" value="${_escVf(c.street)}" placeholder="N° et rue"></td>
+        <td><input type="text" class="champ-cp" value="${_escVf(c.post_code)}" placeholder="CP" style="width:70px;"></td>
+        <td><input type="text" class="champ-ville" value="${_escVf(c.city)}" placeholder="Ville"></td>
+        <td><button class="btn btn-sauver-adresse" data-id="${c.id}">Enregistrer</button></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  }
+
+  zone.innerHTML = html;
+
+  // Boutons fusion
+  zone.querySelectorAll('.btn-fusionner').forEach(btn => {
+    btn.addEventListener('click', () => fusionnerGroupeVF(parseInt(btn.dataset.groupe, 10)));
+  });
+  // Boutons sauvegarde adresse
+  zone.querySelectorAll('.btn-sauver-adresse').forEach(btn => {
+    btn.addEventListener('click', () => sauverAdresseVF(btn));
+  });
+}
+
+async function fusionnerGroupeVF(gi) {
+  const groupe = _doublonsVfData.doublons[gi];
+  const carte = document.querySelectorAll('.carte-doublon')[gi];
+  const principalId = parseInt(carte.querySelector(`input[name="principal-${gi}"]:checked`).value, 10);
+  const mergeIds = groupe.contacts.map(c => c.id).filter(id => id !== principalId);
+
+  if (!confirm(`Fusionner ${mergeIds.length} fiche(s) dans la fiche ID ${principalId} ?\nCette action est IRRÉVERSIBLE côté VosFactures.`)) {
+    return;
   }
 
   try {
-    const url = `${VF_BASE}/clients/${principal_id}/merge.json`;
-    const vfRes = await fetch(url, {
+    const res = await fetch('/api/doublons-vf/fusionner', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_token: VF_TOKEN, merge_ids })
+      body: JSON.stringify({ principal_id: principalId, merge_ids: mergeIds })
     });
-    const vfData = await vfRes.json().catch(() => ({}));
-    if (!vfRes.ok) {
-      return res.status(vfRes.status).json({ error: 'Erreur VosFactures', details: vfData });
-    }
-
-    // Réattribution locale — ADAPTER les noms de table/colonnes à ton schéma réel.
-    // N'échoue jamais la requête globale : la fusion VosFactures est déjà faite.
-    let reattribution_locale = 'non tentée (schéma à adapter)';
-    try {
-      const r1 = await pool.query(
-        `UPDATE commandes SET client_id = $1 WHERE client_id = ANY($2::int[])`,
-        [principal_id, merge_ids]
-      );
-      const r2 = await pool.query(
-        `UPDATE clients SET vf_id = $1 WHERE vf_id = ANY($2::int[])`,
-        [principal_id, merge_ids]
-      );
-      reattribution_locale = `${r1.rowCount || 0} commande(s), ${r2.rowCount || 0} fiche(s) client locale(s)`;
-    } catch (dbErr) {
-      console.warn('Réattribution locale ignorée (adapter le schéma dans routes-doublons-vf.js) :', dbErr.message);
-      reattribution_locale = `ignorée : ${dbErr.message}`;
-    }
-
-    res.json({ ok: true, principal_id, fusionnes: merge_ids, vosfactures: vfData, reattribution_locale });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur inconnue');
+    alert(`Fusion effectuée. ${data.reattribution_locale ? 'Réattribution locale : ' + data.reattribution_locale : ''}`);
+    chargerDoublonsVF(); // rafraîchir
   } catch (err) {
-    console.error('Erreur fusion doublons VosFactures:', err);
-    res.status(500).json({ error: err.message });
+    alert('Erreur lors de la fusion : ' + err.message);
   }
-});
+}
 
-// ============================================================================
-// PUT /api/doublons-vf/adresse/:id
-// Complète/corrige l'adresse d'un contact VosFactures existant.
-// body: { street, post_code, city, country }
-// ============================================================================
-router.put('/adresse/:id', async (req, res) => {
-  const { id } = req.params;
-  const { street, post_code, city, country } = req.body;
+async function sauverAdresseVF(btn) {
+  const ligne = btn.closest('tr');
+  const id = btn.dataset.id;
+  const street = ligne.querySelector('.champ-rue').value.trim();
+  const post_code = ligne.querySelector('.champ-cp').value.trim();
+  const city = ligne.querySelector('.champ-ville').value.trim();
+
+  btn.disabled = true;
+  btn.textContent = '...';
   try {
-    const url = `${VF_BASE}/clients/${id}.json`;
-    const vfRes = await fetch(url, {
+    const res = await fetch(`/api/doublons-vf/adresse/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_token: VF_TOKEN,
-        client: { street, post_code, city, country: country || 'FR' }
-      })
+      body: JSON.stringify({ street, post_code, city, country: 'FR' })
     });
-    const vfData = await vfRes.json().catch(() => ({}));
-    if (!vfRes.ok) {
-      return res.status(vfRes.status).json({ error: 'Erreur VosFactures', details: vfData });
-    }
-    res.json({ ok: true, client: vfData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Erreur inconnue');
+    ligne.style.background = '#e6ffe6';
+    btn.textContent = 'Enregistré ✓';
   } catch (err) {
-    console.error('Erreur mise à jour adresse VosFactures:', err);
-    res.status(500).json({ error: err.message });
+    alert('Erreur : ' + err.message);
+    btn.textContent = 'Enregistrer';
+  } finally {
+    btn.disabled = false;
   }
-});
+}
 
-module.exports = router;
+function _escVf(s) {
+  return String(s || '').replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[m]));
+}
+
+// Exposition globale (cohérent avec le style vanilla JS SPA de l'app)
+window.renderDoublonsVF = renderDoublonsVF;
