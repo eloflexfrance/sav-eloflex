@@ -403,6 +403,7 @@ async function renderClient(ttl,c,a){
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
+          <button class="btn sm" onclick="modalFusionnerClient(${cl.id})" title="Regrouper un distributeur en doublon dans cette fiche (local uniquement, sans toucher VosFactures)"><i class="ti ti-git-merge"></i>Fusionner un doublon</button>
         </div>
       </div>
       <div class="card">
@@ -3610,7 +3611,7 @@ async function modalFusionnerClient(idCible){
         <input type="checkbox" id="fusion-vf-ignore" checked>
         <span>Empêcher la sync VosFactures de recréer ce doublon</span>
       </label></div>
-      <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger)"><i class="ti ti-alert-triangle"></i> Les fauteuils et interventions du doublon seront transférés vers <b>${esc(cible.nom)}</b>, puis le doublon sera supprimé.</div>
+      <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger)"><i class="ti ti-alert-triangle"></i> Les fauteuils, interventions, commandes et point de carte éventuel du doublon seront transférés vers <b>${esc(cible.nom)}</b>, puis le doublon sera supprimé. <b>Ceci est local à l'application</b> — VosFactures n'est pas modifié (les deux fiches y restent séparées, voir "Doublons VosFactures" pour ça).</div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
@@ -3639,7 +3640,7 @@ async function confirmerFusion(idCible){
   if(!confirm('Confirmer la fusion ? Le doublon sera supprimé définitivement.'))return;
   try{
     const r=await API.fusionnerClients(idCible,idSource,vfIgnore);
-    toast(`Fusion réussie — ${r.fauteuils_transferes} fauteuil(s) transférés`,'ti-git-merge');
+    toast(`Fusion réussie — ${r.fauteuils_transferes} fauteuil(s), ${r.commandes_transferees||0} commande(s) transférées`,'ti-git-merge');
     closeModal();render();
   }catch(e){alert('Erreur : '+e.message);}
 }
