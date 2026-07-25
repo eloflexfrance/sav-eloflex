@@ -1182,6 +1182,24 @@ router.post('/clients/:id/fusionner', async (req, res) => {
       [clientCibleId, clientSourceId]
     );
 
+    // Rattacher toutes les commandes du client source vers le client cible
+    const { rowCount: commandes } = await pgClient.query(
+      'UPDATE commandes SET client_id=$1, updated_at=NOW() WHERE client_id=$2',
+      [clientCibleId, clientSourceId]
+    );
+
+    // Rattacher le(s) point(s) de la carte distributeurs, s'il y en a
+    const { rowCount: pointsCarte } = await pgClient.query(
+      'UPDATE distributeurs_carte SET client_id=$1, updated_at=NOW() WHERE client_id=$2',
+      [clientCibleId, clientSourceId]
+    );
+
+    // Si d'autres fiches pointaient le doublon comme "entité de facturation", les rebrancher sur la cible
+    await pgClient.query(
+      'UPDATE clients SET entite_facturation_id=$1 WHERE entite_facturation_id=$2',
+      [clientCibleId, clientSourceId]
+    );
+
     // Marquer le client source comme ignoré par la sync VF (si demandé)
     if (vf_ignore_source) {
       await pgClient.query(
@@ -1194,7 +1212,8 @@ router.post('/clients/:id/fusionner', async (req, res) => {
     await pgClient.query('DELETE FROM clients WHERE id=$1', [clientSourceId]);
 
     await pgClient.query('COMMIT');
-    res.json({ ok: true, fauteuils_transferes: fauteuils, interventions_transferees: interventions });
+    res.json({ ok: true, fauteuils_transferes: fauteuils, interventions_transferees: interventions,
+      commandes_transferees: commandes, points_carte_transferes: pointsCarte });
   } catch(e) {
     await pgClient.query('ROLLBACK');
     res.status(500).json({ error: e.message });
