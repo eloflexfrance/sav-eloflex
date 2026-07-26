@@ -9,8 +9,6 @@ const CMD_COLS_DEFAULT = { num_annuel: false, paiement: false, facture: false, d
 let CMD_COLS = { ...CMD_COLS_DEFAULT, ...JSON.parse(localStorage.getItem('sav_cmd_cols') || '{}') };
 let CACHE = { catalogue:[], params:{} };
 let TMP_PRODUITS = [];
-let TMP_SUEDE_LIGNES = [];
-let TMP_SUEDE_MODE = 'edition'; // 'edition' | 'reception'
 let CURRENT_USER = null; // Chargé au démarrage via /api/auth/me
 
 const fd  = d => { if(!d)return'—'; const[y,m,day]=d.split('-'); return`${day}/${m}/${y}`; };
@@ -160,11 +158,9 @@ async function render(){
     else if(STATE.view==='expeditions')   await renderExpeditions(ttl,c,a);
     else if(STATE.view==='commandes')     await renderCommandes(ttl,c,a);
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
-    else if(STATE.view==='commande-suede') await renderCommandeSuede(ttl,c,a);
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
     else if(STATE.view==='carte')         { renderCarte(ttl,c,a); return; }
-    else if(STATE.view==='doublons-vf')   { renderDoublonsVF(ttl,c,a); return; }
   else if(STATE.view==='discussions')   {
     localStorage.setItem('sav_discussions_seen', Date.now());
     const badge = document.getElementById('discussions-badge');
@@ -401,12 +397,10 @@ async function renderClient(ttl,c,a){
               </td></tr>`;
           })()}
           ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">💳 EDI — Prélèvement</span></td></tr>`:''}
-          ${cl.entite_facturation_nom?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Facturation</td><td><span class="badge" style="background:rgba(234,179,8,.12);color:#b45309" title="Les factures VosFactures de ce distributeur sont émises au nom de cette entité"><i class="ti ti-arrow-right" style="font-size:11px"></i> Facturé via ${esc(cl.entite_facturation_nom)}</span></td></tr>`:''}
           ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="setView('carte')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
-          <button class="btn sm" onclick="modalFusionnerClient(${cl.id})" title="Regrouper un distributeur en doublon dans cette fiche (local uniquement, sans toucher VosFactures)"><i class="ti ti-git-merge"></i>Fusionner un doublon</button>
         </div>
       </div>
       <div class="card">
@@ -2617,7 +2611,7 @@ function lbKey(e){if(e.key==='ArrowRight')lbNav(1);if(e.key==='ArrowLeft')lbNav(
 
 // ── MODALES CLIENTS ───────────────────────────────────────────────
 
-function clientForm(d={}, clientsListe=[]){return `<div class="grid-2">
+function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Nom *</label><input class="form-input" id="f-nom" value="${esc(d.nom||'')}"></div>
   <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Distributeur','Revendeur','Particulier'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
   <div class="form-group"><label class="form-label">Contact</label><input class="form-input" id="f-contact" value="${esc(d.contact||'')}"></div>
@@ -2628,14 +2622,6 @@ function clientForm(d={}, clientsListe=[]){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
   <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays">${optionsPays(d.pays||'France')}</select></div>
-  <div class="form-group" style="grid-column:1/-1">
-    <label class="form-label">Facturer via <span style="font-weight:400;color:var(--text3)">(optionnel)</span></label>
-    <select class="form-input" id="f-entite-facturation">
-      <option value="">— Ce distributeur est facturé directement —</option>
-      ${clientsListe.filter(cx=>cx.id!==d.id).map(cx=>`<option value="${cx.id}" ${d.entite_facturation_id===cx.id?'selected':''}>${esc(cx.nom)}</option>`).join('')}
-    </select>
-    <div style="font-size:11px;color:var(--text2);margin-top:4px">Si une entité est sélectionnée, c'est elle qui sera facturée dans VosFactures (au lieu de ce distributeur) lors de la génération de facture. Le bon de livraison reste au nom de ce distributeur.</div>
-  </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} onchange="document.getElementById('f-reseau-carte').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:#22c55e">
@@ -2654,14 +2640,8 @@ function clientForm(d={}, clientsListe=[]){return `<div class="grid-2">
     </label>
   </div>
 </div>`;}
-async function modalNewClient(){
-  const liste = await API.clients();
-  showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm({}, liste)}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);
-}
-async function modalEditClient(id){
-  const [cl, liste] = await Promise.all([API.client(id), API.clients()]);
-  showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl, liste)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);
-}
+function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveClient(id){
   const surCarte = !!document.getElementById('f-sur-carte')?.checked;
   const data = {
@@ -2671,8 +2651,7 @@ async function saveClient(id){
     cp: gv('f-cp'), ville: gv('f-ville'), pays: gv('f-pays'),
     edi: !!document.getElementById('f-edi')?.checked,
     sur_carte: surCarte,
-    reseau_carte: surCarte ? (gv('f-reseau-carte') || 'base') : null,
-    entite_facturation_id: gv('f-entite-facturation') || null
+    reseau_carte: surCarte ? (gv('f-reseau-carte') || 'base') : null
   };
   if(!data.nom){ alert('Nom requis'); return; }
   if(surCarte && !data.ville && !data.cp){ alert('Renseignez au moins le code postal ou la ville : ils servent à positionner le point sur la carte.'); return; }
@@ -2960,247 +2939,6 @@ async function modalPiece(id){
 async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2,vf_product_id:parseInt(gv('f-vfid'))||null};if(!data.ref||!data.designation){alert('Référence et désignation requises');return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
 async function deletePiece(id){if(!confirm('Supprimer ?'))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 
-// ── COMMANDE SUÈDE (réapprovisionnement stock pièces détachées) ────
-
-async function renderCommandeSuede(ttl,c,a){
-  ttl.textContent='Commande Suède';
-  a.innerHTML=`<button class="btn primary" onclick="modalCommandeSuede()"><i class="ti ti-plus"></i>Nouvelle commande</button>`;
-  const list=await API.commandesSuede();
-  c.innerHTML=`<div style="font-size:12px;color:var(--text2);margin-bottom:12px">Suivi des commandes de réapprovisionnement passées à Eloflex AB (Suède).</div>`;
-  if(!list.length){c.innerHTML+=`<div class="empty"><i class="ti ti-package-import"></i><p>Aucune commande Suède pour le moment.</p></div>`;return;}
-  const scS={'En cours':'attente','En transit':'ouvert','Livrée':'g','Intégrée':'g','Intégrée (reliquat)':'urgent'};
-  c.innerHTML+=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>N° BC</th><th>Fournisseur</th><th>Date commande</th><th>Transporteur</th><th>N° Suivi</th><th>Date livraison</th><th>Lignes</th><th>Statut</th><th></th></tr></thead>
-    <tbody>${list.map(cs=>`<tr onclick="modalCommandeSuede(${cs.id})" style="cursor:pointer">
-      <td class="mono" style="font-weight:600">${esc(cs.numero_bc)}</td>
-      <td>${esc(cs.fournisseur||'—')}</td>
-      <td>${cs.date_commande?fd(cs.date_commande):'—'}</td>
-      <td>${esc(cs.transporteur||'—')}</td>
-      <td class="mono" style="font-size:11px">${cs.num_suivi?`<a href="${lienSuiviColis(cs.transporteur,cs.num_suivi)||'#'}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(cs.num_suivi)}</a>`:'—'}</td>
-      <td>${cs.date_livraison?fd(cs.date_livraison):'—'}</td>
-      <td>${cs.nb_lignes||0}${cs.total_reliquat?` <span style="color:var(--warning)" title="Reliquat en attente">(${cs.total_reliquat} en reliquat)</span>`:''}</td>
-      <td><span class="badge ${scS[cs.statut]||''}">${esc(cs.statut)}</span></td>
-      <td><button class="btn sm danger" onclick="event.stopPropagation();supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i></button></td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
-}
-
-async function supprimerCommandeSuede(id){
-  if(!confirm('Supprimer cette commande Suède ?'))return;
-  try{ await API.deleteCommandeSuede(id); toast(t('msg_supprime'),'ti-trash'); render(); }
-  catch(e){ alert('Erreur : '+e.message); }
-}
-
-async function modalCommandeSuede(id){
-  TMP_SUEDE_MODE='edition';
-  const d = id ? await API.commandeSuede(id) : {};
-  TMP_SUEDE_LIGNES = (d.lignes||[]).map(l=>({...l}));
-  if(!CACHE.catalogue.length) CACHE.catalogue=await API.catalogue();
-  showModal(suedeModalHTML(id,d));
-  if(id) majLienSuiviSuede();
-}
-
-function suedeModalHTML(id,d){
-  const enReception = TMP_SUEDE_MODE==='reception';
-  return `<div class="modal-header"><i class="ti ti-package-import" style="font-size:18px;color:var(--accent)"></i><h2>${id?('Commande '+esc(d.numero_bc)):'Nouvelle commande Suède'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-    <div class="modal-body">
-      ${!id?`
-      <div class="form-group">
-        <label class="form-label">N° du bon de commande (document de stock)</label>
-        <div style="display:flex;gap:6px">
-          <input class="form-input mono" id="sd-numero-bc" placeholder="Ex : PW-2026-..." value="${esc(d.numero_bc||'')}">
-          <button class="btn" type="button" onclick="rechercherBcSuede()"><i class="ti ti-search"></i> Rechercher</button>
-        </div>
-        <div id="sd-recherche-msg" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
-      </div>
-      <div class="divider"></div>`:''}
-      <div id="sd-lignes-wrap">${suedeLignesHTML()}</div>
-      <div class="divider"></div>
-      <div class="grid-2">
-        <div class="form-group"><label class="form-label">Fournisseur</label><input class="form-input" id="sd-fournisseur" value="${esc(d.fournisseur||'Eloflex AB')}"></div>
-        <div class="form-group"><label class="form-label">Date de commande</label><input class="form-input" id="sd-date-commande" type="date" value="${d.date_commande||''}"></div>
-        <div class="form-group">
-          <label class="form-label">Transporteur</label>
-          <select class="form-input" id="sd-transporteur" onchange="majLienSuiviSuede()">
-            <option value="">— Choisir —</option>
-            <option value="UPS" ${d.transporteur==='UPS'?'selected':''}>UPS</option>
-            <option value="DB Schenker" ${d.transporteur==='DB Schenker'?'selected':''}>DB Schenker</option>
-          </select>
-        </div>
-        <div class="form-group"><label class="form-label">N° Suivi</label><input class="form-input mono" id="sd-num-suivi" value="${esc(d.num_suivi||'')}" oninput="majLienSuiviSuede()"></div>
-        <div id="sd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-8px"></div>
-        <div class="form-group" style="grid-column:1/-1">
-          <label class="form-label">Date de livraison</label>
-          <input class="form-input" id="sd-date-livraison" type="date" value="${d.date_livraison||''}" ${d.stock_integre?'disabled':''}>
-          ${d.stock_integre?`<div style="font-size:11px;color:var(--text3);margin-top:4px">Stock déjà intégré le ${fd(d.integre_le)} — la date n'est plus modifiable.</div>`:`<div style="font-size:11px;color:var(--text2);margin-top:4px">Une fois la date de livraison enregistrée, le bouton « Intégrer dans le stock » apparaîtra ci-dessous.</div>`}
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      ${id&&!d.stock_integre?`<button class="btn danger" onclick="supprimerCommandeSuede(${id})"><i class="ti ti-trash"></i></button>`:''}
-      <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
-      ${enReception
-        ? `<button class="btn" onclick="TMP_SUEDE_MODE='edition';modalCommandeSuede(${id})"><i class="ti ti-arrow-left"></i>Retour</button>
-           <button class="btn primary" onclick="confirmerIntegrationSuede(${id})"><i class="ti ti-check"></i>Confirmer l'intégration</button>`
-        : `${id&&d.date_livraison&&!d.stock_integre?`<button class="btn success" onclick="passerEnReceptionSuede(${id})"><i class="ti ti-package"></i>Intégrer dans le stock</button>`:''}
-           <button class="btn primary" onclick="saveCommandeSuede(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>`
-      }
-    </div>`;
-}
-
-function suedeLignesHTML(){
-  if(!TMP_SUEDE_LIGNES.length) return `<div style="font-size:12px;color:var(--text3)">Aucune ligne pour l'instant — recherche un n° de BC ci-dessus, ou ajoute une ligne manuellement.</div>
-    <button class="btn sm" type="button" style="margin-top:6px" onclick="ajouterLigneSuede()"><i class="ti ti-plus"></i>Ajouter une ligne</button>`;
-  const reception = TMP_SUEDE_MODE==='reception';
-  return `<table class="t" style="width:100%">
-    <thead><tr><th>Réf.</th><th>Désignation (VosFactures)</th><th>Pièce catalogue</th><th style="width:70px">Commandé</th>${reception?'<th style="width:80px">Reçu</th>':''}${!reception?'<th></th>':''}</tr></thead>
-    <tbody>${TMP_SUEDE_LIGNES.map((l,i)=>`<tr>
-      <td class="mono" style="font-size:11px">${esc(l.reference||'—')}</td>
-      <td style="font-size:12px">${esc(l.designation||'—')}</td>
-      <td style="position:relative;min-width:180px">
-        ${reception
-          ? `<span style="font-size:12px">${l.catalogue_id?esc((CACHE.catalogue.find(x=>x.id===l.catalogue_id)||{}).ref||''):'<span style=\"color:var(--warning)\">Non rapproché — ignoré</span>'}</span>`
-          : `<input class="form-input" style="font-size:12px" placeholder="Chercher une pièce du catalogue…"
-              value="${l.catalogue_id?esc((CACHE.catalogue.find(x=>x.id===l.catalogue_id)||{}).ref+' — '+(CACHE.catalogue.find(x=>x.id===l.catalogue_id)||{}).designation):''}"
-              oninput="searchPieceSuede(${i},this.value)" onfocus="searchPieceSuede(${i},this.value)"
-              onblur="setTimeout(()=>{const dd=document.getElementById('sd-piece-drop-${i}');if(dd)dd.style.display='none'},150)">
-            <div id="sd-piece-drop-${i}" class="piece-dropdown" style="display:none"></div>`
-        }
-      </td>
-      <td>${reception
-        ? `<span style="font-size:12px">${l.quantite_commandee||l.quantite||1}</span>`
-        : `<input class="form-input" type="number" min="1" style="font-size:12px" value="${l.quantite_commandee||l.quantite||1}" oninput="TMP_SUEDE_LIGNES[${i}].quantite_commandee=parseInt(this.value)||1">`}
-      </td>
-      ${reception?`<td><input class="form-input" type="number" min="0" style="font-size:12px" value="${l.quantite_commandee||l.quantite||1}" oninput="TMP_SUEDE_LIGNES[${i}].quantite_recue=parseInt(this.value)||0"></td>`:''}
-      ${!reception?`<td><button class="btn sm danger" type="button" onclick="TMP_SUEDE_LIGNES.splice(${i},1);document.getElementById('sd-lignes-wrap').innerHTML=suedeLignesHTML()"><i class="ti ti-x"></i></button></td>`:''}
-    </tr>`).join('')}</tbody>
-  </table>
-  ${!reception?`<button class="btn sm" type="button" style="margin-top:8px" onclick="ajouterLigneSuede()"><i class="ti ti-plus"></i>Ajouter une ligne</button>`:''}`;
-}
-
-function ajouterLigneSuede(){
-  TMP_SUEDE_LIGNES.push({catalogue_id:null,reference:'',designation:'',quantite_commandee:1});
-  document.getElementById('sd-lignes-wrap').innerHTML=suedeLignesHTML();
-}
-
-function searchPieceSuede(idx,q){
-  const drop=document.getElementById('sd-piece-drop-'+idx);if(!drop)return;
-  const query=q.toLowerCase().trim();
-  if(!query){drop.style.display='none';return;}
-  const results=CACHE.catalogue.filter(p=>
-    p.designation.toLowerCase().includes(query)||
-    (p.ref&&p.ref.toLowerCase().includes(query))||
-    (p.ref_fournisseur&&p.ref_fournisseur.toLowerCase().includes(query))
-  ).slice(0,12);
-  if(!results.length){drop.style.display='none';return;}
-  window._SUEDE_PIECE_RESULTS = window._SUEDE_PIECE_RESULTS || {};
-  window._SUEDE_PIECE_RESULTS[idx] = results;
-  drop.innerHTML=results.map((p,ri)=>`<div class="piece-option" onmousedown="event.preventDefault();selectPieceSuede(${idx},${ri})">
-    <div style="font-size:12px;font-weight:600">${esc(p.designation)}</div>
-    <div style="font-size:11px;color:var(--text3)" class="mono">${esc(p.ref)}</div>
-  </div>`).join('');
-  drop.style.display='block';
-}
-function selectPieceSuede(idx,resultIdx){
-  const p=(window._SUEDE_PIECE_RESULTS&&window._SUEDE_PIECE_RESULTS[idx])?window._SUEDE_PIECE_RESULTS[idx][resultIdx]:null;
-  if(!p)return;
-  TMP_SUEDE_LIGNES[idx]={...TMP_SUEDE_LIGNES[idx],catalogue_id:p.id};
-  document.getElementById('sd-lignes-wrap').innerHTML=suedeLignesHTML();
-}
-
-async function rechercherBcSuede(){
-  const numero=gv('sd-numero-bc');
-  const msg=document.getElementById('sd-recherche-msg');
-  if(!numero){alert('Indique un numéro de bon de commande.');return;}
-  msg.textContent='Recherche en cours…';
-  try{
-    const r=await API.vfStockLookup(numero);
-    if(r.configured===false){msg.innerHTML='<span style="color:var(--warning)">VosFactures non configuré.</span>';return;}
-    if(!r.found){
-      msg.innerHTML='<span style="color:var(--warning)">Aucun document de stock trouvé pour ce numéro — tu peux quand même ajouter les lignes manuellement.</span>'
-        + (r.debug&&r.debug.length?`<div class="mono" style="margin-top:6px;font-size:10px;color:var(--text3);white-space:pre-wrap">${r.debug.map(l=>esc(l)).join('\n')}</div>`:'');
-      return;
-    }
-    TMP_SUEDE_LIGNES = r.lignes.map(l=>({catalogue_id:l.catalogue_id,reference:l.reference,designation:l.designation,quantite_commandee:l.quantite}));
-    document.getElementById('sd-lignes-wrap').innerHTML=suedeLignesHTML();
-    if(r.date && !gv('sd-date-commande')) document.getElementById('sd-date-commande').value=r.date;
-    if(r.fournisseur) document.getElementById('sd-fournisseur').value=r.fournisseur;
-    window._SUEDE_VF_ID = r.vf_id;
-    const nbNonRapproches = TMP_SUEDE_LIGNES.filter(l=>!l.catalogue_id).length;
-    msg.innerHTML = `<span style="color:var(--success)"><i class="ti ti-check"></i> ${TMP_SUEDE_LIGNES.length} ligne(s) trouvée(s)${nbNonRapproches?`, dont ${nbNonRapproches} à rapprocher manuellement du catalogue`:''}.</span>`;
-  }catch(e){ msg.innerHTML=`<span style="color:var(--danger)">Erreur : ${esc(e.message)}</span>`; }
-}
-
-function majLienSuiviSuede(){
-  const wrap=document.getElementById('sd-lien-suivi-wrap');if(!wrap)return;
-  const numero=gv('sd-num-suivi'), transporteur=gv('sd-transporteur');
-  const lien=lienSuiviColis(transporteur,numero);
-  wrap.innerHTML = lien
-    ? `<a href="${lien}" target="_blank" rel="noopener" class="btn sm" style="display:inline-flex"><i class="ti ti-external-link"></i>${t('cmd_suivre_colis')||'Suivre le colis'}</a>`
-    : '';
-}
-
-async function saveCommandeSuede(id){
-  const data={
-    numero_bc: gv('sd-numero-bc')||undefined,
-    fournisseur: gv('sd-fournisseur'),
-    date_commande: gv('sd-date-commande')||null,
-    transporteur: gv('sd-transporteur')||null,
-    num_suivi: gv('sd-num-suivi')||null,
-    date_livraison: gv('sd-date-livraison')||null,
-  };
-  try{
-    if(id){
-      await API.updateCommandeSuede(id,data);
-      await API.saveCommandeSuedeLignes(id,TMP_SUEDE_LIGNES);
-      toast('Commande mise à jour');
-      const fresh = await API.commandeSuede(id);
-      TMP_SUEDE_LIGNES = (fresh.lignes||[]).map(l=>({...l}));
-      showModal(suedeModalHTML(id,fresh));
-      majLienSuiviSuede();
-      return;
-    }else{
-      if(!data.numero_bc){alert('Indique le numéro du bon de commande.');return;}
-      data.vf_id = window._SUEDE_VF_ID||null;
-      data.lignes = TMP_SUEDE_LIGNES;
-      await API.createCommandeSuede(data);
-      toast('Commande créée');
-    }
-    closeModal(); render();
-  }catch(e){ alert('Erreur : '+e.message); }
-}
-
-async function passerEnReceptionSuede(id){
-  if(!gv('sd-date-livraison')){alert('Renseigne et enregistre la date de livraison avant d\'intégrer le stock.');return;}
-  // On enregistre d'abord les éventuelles modifications en cours, pour repartir d'un état à jour
-  await saveCommandeSuedeSilencieux(id);
-  const d = await API.commandeSuede(id);
-  TMP_SUEDE_LIGNES = (d.lignes||[]).map(l=>({...l}));
-  TMP_SUEDE_MODE='reception';
-  showModal(suedeModalHTML(id,d));
-}
-async function saveCommandeSuedeSilencieux(id){
-  try{
-    await API.updateCommandeSuede(id,{
-      numero_bc: gv('sd-numero-bc'), fournisseur: gv('sd-fournisseur'),
-      date_commande: gv('sd-date-commande')||null, transporteur: gv('sd-transporteur')||null,
-      num_suivi: gv('sd-num-suivi')||null, date_livraison: gv('sd-date-livraison')||null
-    });
-    await API.saveCommandeSuedeLignes(id,TMP_SUEDE_LIGNES);
-  }catch(e){}
-}
-
-async function confirmerIntegrationSuede(id){
-  if(!confirm('Confirmer la réception ? Le stock du catalogue sera mis à jour immédiatement. Cette action est définitive.'))return;
-  const lignes = TMP_SUEDE_LIGNES.map(l=>({id:l.id,quantite_recue:l.quantite_recue!=null?l.quantite_recue:(l.quantite_commandee||l.quantite||0)}));
-  try{
-    const r=await API.integrerStockSuede(id,lignes);
-    toast(`Stock intégré — ${r.pieces_maj} référence(s) mise(s) à jour${r.total_reliquat?`, ${r.total_reliquat} en reliquat`:''}`,'ti-check');
-    CACHE.catalogue=[];
-    closeModal(); render();
-  }catch(e){ alert('Erreur : '+e.message); }
-}
-
 // ── EXPORTS PDF ───────────────────────────────────────────────────
 
 async function exportInterventionPDF(id){const i=await API.intervention(id);PDF.intervention(i);toast(t('msg_pdf_genere'),'ti-file-type-pdf');}
@@ -3369,7 +3107,7 @@ async function renderTransferts(ttl,c,a){
       <td>${esc(tr.client_arrivee_nom||'—')}</td>
       <td>${tr.date_arrivee?fd(tr.date_arrivee):'—'}</td>
       <td>${esc(tr.transporteur||'—')}</td>
-      <td class="mono" style="font-size:11px">${tr.num_suivi?`<a href="${lienhSuiviInter(tr.transporteur,tr.num_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(tr.num_suivi)}</a>`:'—'}</td>
+      <td class="mono" style="font-size:11px">${esc(tr.num_suivi||'—')}</td>
       <td><span class="badge ${scT[tr.statut]||''}">${stTr[tr.statut]||esc(tr.statut)}</span></td>
       <td><button class="btn sm danger" onclick="event.stopPropagation();if(confirm(t('transferts_confirm_suppr')))API.deleteTransfert(${tr.id}).then(()=>{render();toast(t('msg_supprime'),'ti-trash')})"><i class="ti ti-trash"></i></button></td>
     </tr>`).join('')}</tbody>
@@ -3432,7 +3170,7 @@ async function modalTransfert(id){
         </div>
         <div class="form-group">
           <label class="form-label">${t('transferts_transporteur')}</label>
-          <select class="form-input" id="tr-transporteur" onchange="majLienSuiviTransfert()">
+          <select class="form-input" id="tr-transporteur">
             <option value="">${t('select_aucun')}</option>
             <option value="DSV" ${d.transporteur==='DSV'?'selected':''}>${t('transferts_dsv')}</option>
             <option value="Autre" ${d.transporteur==='Autre'?'selected':''}>${t('transferts_autre')}</option>
@@ -3440,9 +3178,8 @@ async function modalTransfert(id){
         </div>
         <div class="form-group">
           <label class="form-label">${t('transferts_num_suivi')}</label>
-          <input class="form-input mono" id="tr-num-suivi" value="${esc(d.num_suivi||'')}" oninput="majLienSuiviTransfert()">
+          <input class="form-input mono" id="tr-num-suivi" value="${esc(d.num_suivi||'')}">
         </div>
-        <div id="tr-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-8px"></div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label">${t('col_statut')}</label>
           <select class="form-input" id="tr-statut" onchange="document.getElementById('tr-arrive-hint').style.display=this.value==='Arrivé'?'block':'none'">
@@ -3461,15 +3198,6 @@ async function modalTransfert(id){
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn primary" onclick="saveTransfert(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);
-  majLienSuiviTransfert();
-}
-
-function majLienSuiviTransfert(){
-  const wrap = $('tr-lien-suivi-wrap'); if(!wrap) return;
-  const numero = gv('tr-num-suivi'), transporteur = gv('tr-transporteur');
-  wrap.innerHTML = numero
-    ? `<a href="${lienhSuiviInter(transporteur,numero)}" target="_blank" rel="noopener" class="btn sm" style="display:inline-flex"><i class="ti ti-external-link"></i>${t('cmd_suivre_colis')||'Suivre le colis'}</a>`
-    : '';
 }
 
 async function searchFauteuilTransfert(q){
@@ -3865,7 +3593,7 @@ async function modalFusionnerClient(idCible){
         <input type="checkbox" id="fusion-vf-ignore" checked>
         <span>Empêcher la sync VosFactures de recréer ce doublon</span>
       </label></div>
-      <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger)"><i class="ti ti-alert-triangle"></i> Les fauteuils, interventions, commandes et point de carte éventuel du doublon seront transférés vers <b>${esc(cible.nom)}</b>, puis le doublon sera supprimé. <b>Ceci est local à l'application</b> — VosFactures n'est pas modifié (les deux fiches y restent séparées, voir "Doublons VosFactures" pour ça).</div>
+      <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger)"><i class="ti ti-alert-triangle"></i> Les fauteuils et interventions du doublon seront transférés vers <b>${esc(cible.nom)}</b>, puis le doublon sera supprimé.</div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
@@ -3894,7 +3622,7 @@ async function confirmerFusion(idCible){
   if(!confirm('Confirmer la fusion ? Le doublon sera supprimé définitivement.'))return;
   try{
     const r=await API.fusionnerClients(idCible,idSource,vfIgnore);
-    toast(`Fusion réussie — ${r.fauteuils_transferes} fauteuil(s), ${r.commandes_transferees||0} commande(s) transférées`,'ti-git-merge');
+    toast(`Fusion réussie — ${r.fauteuils_transferes} fauteuil(s) transférés`,'ti-git-merge');
     closeModal();render();
   }catch(e){alert('Erreur : '+e.message);}
 }

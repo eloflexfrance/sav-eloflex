@@ -41,7 +41,6 @@ const API = {
   updateClient:(id,d)=>API.put(`/clients/${id}`,d),
   deleteClient:(id)=>API.del(`/clients/${id}`),
   regenererToken:(id)=>API.post(`/clients/${id}/regenerer-token`,{}),
-  fusionnerClients:(idCible,idSource,vfIgnore)=>API.post(`/clients/${idCible}/fusionner`,{client_source_id:idSource,vf_ignore_source:vfIgnore}),
   fauteuils:(cid)=>API.get('/fauteuils'+(cid?`?client_id=${cid}`:'')),
   fauteuil:(id)=>API.get(`/fauteuils/${id}`),
   createFauteuil:(d)=>API.post('/fauteuils',d),
@@ -143,13 +142,4 @@ const API = {
   notesRecent:(limit=50)=>API.get(`/notes/recent?limit=${limit}`),
   notesCounts:()=>API.get('/notes/counts'),
   syncPaiementCommande:(id)=>API.post(`/commandes/${id}/sync-paiement`,{}),
-  // ── Commande Suède (réappro stock) ──
-  vfStockLookup:(numero)=>API.get(`/vosfactures/stock-lookup?numero=${encodeURIComponent(numero)}`),
-  commandesSuede:()=>API.get('/commandes-suede'),
-  commandeSuede:(id)=>API.get(`/commandes-suede/${id}`),
-  createCommandeSuede:(d)=>API.post('/commandes-suede',d),
-  updateCommandeSuede:(id,d)=>API.put(`/commandes-suede/${id}`,d),
-  saveCommandeSuedeLignes:(id,lignes)=>API.put(`/commandes-suede/${id}/lignes`,{lignes}),
-  integrerStockSuede:(id,lignes)=>API.post(`/commandes-suede/${id}/integrer-stock`,{lignes}),
-  deleteCommandeSuede:(id)=>API.del(`/commandes-suede/${id}`),
 };

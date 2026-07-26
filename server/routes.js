@@ -255,20 +255,6 @@ async function getInterventions(f = {}) {
 }
 
 // ── CLIENTS ───────────────────────────────────────────────────────
-// ── Migration ponctuelle : colonne entite_facturation_id sur clients ──
-// À ouvrir UNE FOIS dans le navigateur (connecté en admin) après déploiement :
-//   https://TON-APP.onrender.com/api/admin/migrer-entite-facturation
-// Sans risque de la relancer plusieurs fois (IF NOT EXISTS) — tu peux laisser
-// cette route en place, ou la retirer une fois la migration confirmée faite.
-router.get('/admin/migrer-entite-facturation', adminOnly, async (req, res) => {
-  try {
-    await db.run('ALTER TABLE clients ADD COLUMN IF NOT EXISTS entite_facturation_id INTEGER REFERENCES clients(id)');
-    res.send('<h2>✅ Migration effectuée</h2><p>La colonne entite_facturation_id existe désormais sur la table clients.</p>');
-  } catch (e) {
-    res.status(500).send(`<h2>❌ Erreur</h2><pre>${e.message}</pre>`);
-  }
-});
-
 router.get('/clients', async (req, res) => {
   try {
     const q = `%${req.query.q || ''}%`;
@@ -290,10 +276,6 @@ router.get('/clients/:id', async (req, res) => {
   try {
     const cl = await db.get('SELECT * FROM clients WHERE id=$1', [req.params.id]);
     if (!cl) return res.status(404).json({ error: 'Introuvable' });
-    if (cl.entite_facturation_id) {
-      const ef = await db.get('SELECT id, nom FROM clients WHERE id=$1', [cl.entite_facturation_id]);
-      cl.entite_facturation_nom = ef ? ef.nom : null;
-    }
     const fauts = await db.all(
       `SELECT f.*,
         (SELECT COUNT(*)::int FROM interventions i WHERE i.fauteuil_id=f.id) AS nb_interventions,
@@ -317,16 +299,16 @@ router.get('/clients/:id', async (req, res) => {
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id } = req.body;
+            adresse, adresse2, cp, pays } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
       `INSERT INTO clients (nom,contact,email,tel,ville,type,token_portail,edi,sur_carte,reseau_carte,
-                            adresse,adresse2,cp,pays,entite_facturation_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+                            adresse,adresse2,cp,pays)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [nom, contact||null, email||null, tel||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null]
+       adresse||null, adresse2||null, cp||null, pays||null]
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
@@ -337,16 +319,14 @@ router.post('/clients', async (req, res) => {
 router.put('/clients/:id', async (req, res) => {
   try {
     const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id } = req.body;
+            adresse, adresse2, cp, pays } = req.body;
     const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
       `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,ville=$5,type=$6,
        edi=$7,sur_carte=$8,reseau_carte=$9,
-       adresse=$10,adresse2=$11,cp=$12,pays=$13,entite_facturation_id=$14,updated_at=NOW() WHERE id=$15 RETURNING *`,
+       adresse=$10,adresse2=$11,cp=$12,pays=$13,updated_at=NOW() WHERE id=$14 RETURNING *`,
       [nom, contact, email, tel, ville, type, !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null,
-       (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
-       req.params.id]
+       adresse||null, adresse2||null, cp||null, pays||null, req.params.id]
     );
     // Adresse modifiée : les anciennes coordonnées ne valent plus rien
     if (avant && (avant.ville !== ville || avant.adresse !== (adresse||null) || avant.cp !== (cp||null))) {
@@ -673,318 +653,6 @@ router.put('/catalogue/:id', async (req, res) => {
 router.delete('/catalogue/:id', async (req, res) => {
   try { await db.run('DELETE FROM catalogue WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── COMMANDES SUÈDE (réapprovisionnement stock pièces détachées) ───
-
-// Migration ponctuelle — à ouvrir UNE FOIS dans le navigateur (admin) après déploiement :
-//   https://sav-eloflex.onrender.com/api/admin/migrer-commande-suede
-router.get('/admin/migrer-commande-suede', adminOnly, async (req, res) => {
-  try {
-    await db.run(`CREATE TABLE IF NOT EXISTS commandes_suede (
-      id SERIAL PRIMARY KEY,
-      numero_bc TEXT NOT NULL,
-      vf_id INTEGER,
-      fournisseur TEXT DEFAULT 'Eloflex AB',
-      date_commande DATE,
-      transporteur TEXT,
-      num_suivi TEXT,
-      date_livraison DATE,
-      statut TEXT DEFAULT 'En cours',
-      stock_integre BOOLEAN DEFAULT FALSE,
-      integre_le TIMESTAMP,
-      created_at TIMESTAMP DEFAULT NOW(),
-      updated_at TIMESTAMP DEFAULT NOW()
-    )`);
-    await db.run(`CREATE TABLE IF NOT EXISTS commandes_suede_lignes (
-      id SERIAL PRIMARY KEY,
-      commande_id INTEGER REFERENCES commandes_suede(id) ON DELETE CASCADE,
-      catalogue_id INTEGER REFERENCES catalogue(id),
-      reference TEXT,
-      designation TEXT,
-      quantite_commandee INTEGER DEFAULT 1,
-      quantite_recue INTEGER,
-      reliquat INTEGER DEFAULT 0,
-      ordre INTEGER DEFAULT 0
-    )`);
-    res.send('<h2>✅ Migration effectuée</h2><p>Tables commandes_suede et commandes_suede_lignes créées.</p>');
-  } catch (e) {
-    res.status(500).send(`<h2>❌ Erreur</h2><pre>${e.message}</pre>`);
-  }
-});
-
-// Recherche un document de stock VosFactures par numéro et renvoie son contenu (aperçu, sans écriture en base)
-router.get('/vosfactures/stock-lookup', async (req, res) => {
-  try {
-    const numero = (req.query.numero || '').trim();
-    if (!numero) return res.status(400).json({ error: 'Paramètre numero requis' });
-    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
-      return res.json({ configured: false });
-    }
-    const axios = require('axios');
-    const vfApi = axios.create({
-      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
-      headers: { 'Accept': 'application/json' },
-      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
-    });
-    const normalise = s => String(s || '').toLowerCase().replace(/[\s\-\/\.]+/g, '');
-    const numNorm = normalise(numero);
-    let doc = null;
-    let source = null; // 'warehouse' ou 'invoice'
-    const debug = []; // journal des tentatives, retourné si rien n'est trouvé
-
-    // 1. Documents d'entrepôt (PZ = réception externe fournisseur = notre cas d'usage), sans le paramètre "order" fautif
-    for (const kind of ['pz', 'pw', 'mm', 'wz', 'rw', 'bt']) {
-      if (doc) break;
-      for (let page = 1; page <= 5; page++) {
-        try {
-          const { data } = await vfApi.get('/warehouse_documents.json', { params: { kind, per_page: 100, page } });
-          if (!Array.isArray(data) || !data.length) break;
-          if (page === 1) debug.push(`warehouse kind=${kind} page1 → ${data.length} doc(s), ex: ${data.slice(0, 3).map(d => d.number).join(', ')}`);
-          doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
-          if (doc) { source = 'warehouse'; break; }
-          if (data.length < 100) break;
-        } catch (e) { debug.push(`warehouse kind=${kind} page${page} → ERREUR ${e.response?.status || ''} ${e.message}`); break; }
-      }
-    }
-
-    // 1bis. Toujours pas trouvé : peut-être un autre entrepôt que celui par défaut — on les liste et on les interroge chacun
-    if (!doc) {
-      try {
-        const { data: entrepots } = await vfApi.get('/warehouses.json');
-        if (Array.isArray(entrepots) && entrepots.length) {
-          debug.push(`entrepôts trouvés : ${entrepots.map(w => `${w.name}(#${w.id})`).join(', ')}`);
-          for (const w of entrepots) {
-            if (doc) break;
-            try {
-              const { data } = await vfApi.get('/warehouse_documents.json', { params: { warehouse_id: w.id, per_page: 100, page: 1 } });
-              if (Array.isArray(data) && data.length) {
-                debug.push(`warehouse_id=${w.id} (${w.name}) → ${data.length} doc(s), ex: ${data.slice(0, 5).map(d => `${d.number}[${d.kind}]`).join(', ')}`);
-                doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
-                if (doc) source = 'warehouse';
-              } else {
-                debug.push(`warehouse_id=${w.id} (${w.name}) → aucun document`);
-              }
-            } catch (e) { debug.push(`warehouse_id=${w.id} → ERREUR ${e.response?.status || ''} ${e.message}`); }
-          }
-        } else {
-          debug.push('GET /warehouses.json → aucun entrepôt distinct (compte à entrepôt unique)');
-        }
-      } catch (e) { debug.push(`GET /warehouses.json → ERREUR ${e.response?.status || ''} ${e.message}`); }
-    }
-
-    // 2. Repli : recherche large sur les factures classiques
-    if (!doc) {
-      try {
-        const { data } = await vfApi.get('/invoices.json', { params: { search_text: numero, per_page: 25 } });
-        debug.push(`search_text=${numero} → ${Array.isArray(data) ? data.length : -1} résultat(s)`);
-        if (Array.isArray(data) && data.length) {
-          doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
-          if (doc) source = 'invoice';
-        }
-      } catch (e) { debug.push(`search_text=${numero} → ERREUR ${e.response?.status || ''} ${e.message}`); }
-    }
-    if (!doc) {
-      for (let page = 1; page <= 10 && !doc; page++) {
-        try {
-          const { data } = await vfApi.get('/invoices.json', { params: { per_page: 100, page, order: 'issue_date.desc' } });
-          if (!Array.isArray(data) || !data.length) break;
-          doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
-          if (doc) source = 'invoice';
-          if (data.length < 100) break;
-        } catch (e) { debug.push(`invoices page${page} → ERREUR ${e.response?.status || ''} ${e.message}`); break; }
-      }
-    }
-
-    if (!doc) return res.json({ configured: true, found: false, debug });
-
-    // Rapprochement avec le catalogue local : priorité au vf_product_id, sinon à la désignation
-    const catalogue = await db.all('SELECT id, ref, designation, vf_product_id FROM catalogue');
-    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    function rapprocher(productId, texte) {
-      let cat = null;
-      if (productId) cat = catalogue.find(c => c.vf_product_id === productId);
-      if (!cat) {
-        const pn = norm(texte);
-        cat = catalogue.find(c => norm(c.ref) === pn)
-           || catalogue.find(c => pn.length > 3 && (norm(c.designation).includes(pn) || pn.includes(norm(c.ref))));
-      }
-      return cat;
-    }
-
-    let lignes, dateDoc, fournisseur;
-    if (source === 'warehouse') {
-      const { data: detail } = await vfApi.get(`/warehouse_documents/${doc.id}.json`);
-      const actions = detail.warehouse_actions || [];
-      lignes = actions.map(a => {
-        const cat = rapprocher(a.product_id, a.product_name || a.name);
-        return {
-          reference: cat ? cat.ref : '',
-          designation: a.product_name || a.name || '',
-          quantite: parseInt(a.quantity) || 1,
-          catalogue_id: cat ? cat.id : null,
-          catalogue_ref: cat ? cat.ref : null,
-          catalogue_designation: cat ? cat.designation : null
-        };
-      });
-      dateDoc = detail.issue_date;
-      fournisseur = detail.client_name || 'Eloflex AB';
-    } else {
-      const { data: detail } = await vfApi.get(`/invoices/${doc.id}.json`);
-      const positions = detail.positions || detail.invoice_items || [];
-      lignes = positions.map(p => {
-        const cat = rapprocher(p.product_id, p.code || p.name);
-        return {
-          reference: p.code || (cat ? cat.ref : ''),
-          designation: p.name || '',
-          quantite: parseInt(p.quantity) || 1,
-          catalogue_id: cat ? cat.id : null,
-          catalogue_ref: cat ? cat.ref : null,
-          catalogue_designation: cat ? cat.designation : null
-        };
-      });
-      dateDoc = detail.issue_date || detail.sell_date;
-      fournisseur = detail.seller_name || 'Eloflex AB';
-    }
-
-    res.json({
-      configured: true, found: true, vf_id: doc.id, numero: doc.number,
-      date: dateDoc, fournisseur, lignes
-    });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/commandes-suede', async (req, res) => {
-  try {
-    const list = await db.all(`
-      SELECT cs.*,
-        (SELECT COUNT(*)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS nb_lignes,
-        (SELECT COALESCE(SUM(reliquat),0)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS total_reliquat
-      FROM commandes_suede cs ORDER BY cs.created_at DESC`);
-    res.json(list);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/commandes-suede/:id', async (req, res) => {
-  try {
-    const cs = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
-    if (!cs) return res.status(404).json({ error: 'Introuvable' });
-    cs.lignes = await db.all(`
-      SELECT l.*, c.ref AS catalogue_ref_actuelle, c.designation AS catalogue_designation_actuelle, c.stock AS catalogue_stock_actuel
-      FROM commandes_suede_lignes l LEFT JOIN catalogue c ON c.id=l.catalogue_id
-      WHERE l.commande_id=$1 ORDER BY l.ordre, l.id`, [req.params.id]);
-    res.json(cs);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.post('/commandes-suede', adminOrOp, async (req, res) => {
-  const { numero_bc, vf_id, fournisseur, date_commande, transporteur, num_suivi, date_livraison, lignes } = req.body;
-  if (!numero_bc) return res.status(400).json({ error: 'Numéro de bon de commande requis' });
-  const pgClient = await db.pool.connect();
-  try {
-    await pgClient.query('BEGIN');
-    const { rows: [cs] } = await pgClient.query(
-      `INSERT INTO commandes_suede (numero_bc, vf_id, fournisseur, date_commande, transporteur, num_suivi, date_livraison, statut)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [numero_bc, vf_id || null, fournisseur || 'Eloflex AB', date_commande || null, transporteur || null, num_suivi || null,
-       date_livraison || null, date_livraison ? 'Livrée' : (num_suivi ? 'En transit' : 'En cours')]
-    );
-    let ordre = 0;
-    for (const l of (lignes || [])) {
-      await pgClient.query(
-        `INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, designation, quantite_commandee, ordre)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [cs.id, l.catalogue_id || null, l.reference || null, l.designation || null, parseInt(l.quantite) || 1, ordre++]
-      );
-    }
-    await pgClient.query('COMMIT');
-    res.status(201).json({ ok: true, id: cs.id });
-  } catch (e) {
-    await pgClient.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
-  } finally { pgClient.release(); }
-});
-
-router.put('/commandes-suede/:id', adminOrOp, async (req, res) => {
-  try {
-    const { numero_bc, fournisseur, date_commande, transporteur, num_suivi, date_livraison } = req.body;
-    const existant = await db.get('SELECT stock_integre, statut FROM commandes_suede WHERE id=$1', [req.params.id]);
-    if (!existant) return res.status(404).json({ error: 'Introuvable' });
-    let statut = existant.statut;
-    if (!existant.stock_integre) {
-      statut = date_livraison ? 'Livrée' : (num_suivi ? 'En transit' : 'En cours');
-    }
-    const cs = await db.run(
-      `UPDATE commandes_suede SET numero_bc=$1, fournisseur=$2, date_commande=$3, transporteur=$4, num_suivi=$5, date_livraison=$6, statut=$7, updated_at=NOW()
-       WHERE id=$8 RETURNING *`,
-      [numero_bc, fournisseur || null, date_commande || null, transporteur || null, num_suivi || null, date_livraison || null, statut, req.params.id]
-    );
-    res.json(cs);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.put('/commandes-suede/:id/lignes', adminOrOp, async (req, res) => {
-  const lignes = Array.isArray(req.body) ? req.body : (req.body.lignes || []);
-  const pgClient = await db.pool.connect();
-  try {
-    await pgClient.query('BEGIN');
-    for (const l of lignes) {
-      if (!l.id) continue;
-      await pgClient.query(
-        'UPDATE commandes_suede_lignes SET catalogue_id=$1, reference=$2, designation=$3, quantite_commandee=$4 WHERE id=$5 AND commande_id=$6',
-        [l.catalogue_id || null, l.reference || null, l.designation || null, parseInt(l.quantite_commandee) || 1, l.id, req.params.id]
-      );
-    }
-    await pgClient.query('COMMIT');
-    res.json({ ok: true });
-  } catch (e) {
-    await pgClient.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
-  } finally { pgClient.release(); }
-});
-
-router.post('/commandes-suede/:id/integrer-stock', adminOrOp, async (req, res) => {
-  const receptions = Array.isArray(req.body.lignes) ? req.body.lignes : [];
-  const pgClient = await db.pool.connect();
-  try {
-    await pgClient.query('BEGIN');
-    const { rows: [cs] } = await pgClient.query('SELECT * FROM commandes_suede WHERE id=$1 FOR UPDATE', [req.params.id]);
-    if (!cs) { await pgClient.query('ROLLBACK'); return res.status(404).json({ error: 'Introuvable' }); }
-    if (cs.stock_integre) { await pgClient.query('ROLLBACK'); return res.status(409).json({ error: 'Cette commande a déjà été intégrée au stock.' }); }
-    if (!cs.date_livraison) { await pgClient.query('ROLLBACK'); return res.status(400).json({ error: "Renseigne d'abord la date de livraison." }); }
-
-    const { rows: lignesDb } = await pgClient.query('SELECT * FROM commandes_suede_lignes WHERE commande_id=$1', [req.params.id]);
-    let piecesMaj = 0, totalReliquat = 0;
-    for (const ligne of lignesDb) {
-      const saisie = receptions.find(r => r.id === ligne.id);
-      const qteRecue = saisie ? Math.max(0, parseInt(saisie.quantite_recue) || 0) : ligne.quantite_commandee;
-      const reliquat = Math.max(0, ligne.quantite_commandee - qteRecue);
-      await pgClient.query('UPDATE commandes_suede_lignes SET quantite_recue=$1, reliquat=$2 WHERE id=$3', [qteRecue, reliquat, ligne.id]);
-      if (ligne.catalogue_id && qteRecue > 0) {
-        await pgClient.query('UPDATE catalogue SET stock = stock + $1 WHERE id=$2', [qteRecue, ligne.catalogue_id]);
-        piecesMaj++;
-      }
-      totalReliquat += reliquat;
-    }
-    await pgClient.query(
-      `UPDATE commandes_suede SET stock_integre=TRUE, statut=$1, integre_le=NOW(), updated_at=NOW() WHERE id=$2`,
-      [totalReliquat > 0 ? 'Intégrée (reliquat)' : 'Intégrée', req.params.id]
-    );
-    await pgClient.query('COMMIT');
-    res.json({ ok: true, pieces_maj: piecesMaj, total_reliquat: totalReliquat });
-  } catch (e) {
-    await pgClient.query('ROLLBACK');
-    res.status(500).json({ error: e.message });
-  } finally { pgClient.release(); }
-});
-
-router.delete('/commandes-suede/:id', adminOnly, async (req, res) => {
-  try {
-    const cs = await db.get('SELECT stock_integre FROM commandes_suede WHERE id=$1', [req.params.id]);
-    if (cs && cs.stock_integre) return res.status(409).json({ error: 'Impossible de supprimer : le stock a déjà été intégré pour cette commande.' });
-    await db.run('DELETE FROM commandes_suede WHERE id=$1', [req.params.id]);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── ALERTES ───────────────────────────────────────────────────────
@@ -1328,143 +996,6 @@ router.get('/vosfactures/status', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── DOUBLONS VOSFACTURES ────────────────────────────────────────────
-
-function _normaliserNomVF(nom) {
-  return (nom || '')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, ' ')
-    .trim();
-}
-function _adresseCompleteVF(cl) { return !!(cl.street && cl.post_code && cl.city); }
-function _scoreCompletudeVF(cl) {
-  let s = 0;
-  if (cl.street) s++; if (cl.post_code) s++; if (cl.city) s++;
-  if (cl.email) s++; if (cl.phone) s++; if (cl.tax_no) s++;
-  return s;
-}
-async function _fetchTousContactsVF() {
-  const axios = require('axios');
-  const vfApi = axios.create({
-    baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
-    headers: { 'Accept': 'application/json' },
-    params: { api_token: process.env.VOSFACTURES_API_TOKEN }
-  });
-  let page = 1, tous = [];
-  while (true) {
-    const { data } = await vfApi.get('/clients.json', { params: { per_page: 100, page } });
-    if (!Array.isArray(data) || data.length === 0) break;
-    tous = tous.concat(data);
-    if (data.length < 100) break;
-    page++;
-  }
-  return tous;
-}
-
-// Détecte les groupes de contacts en doublon (même nom) + adresses incomplètes
-router.get('/doublons-vf/detecter', requireAuth, async (req, res) => {
-  if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
-    return res.status(503).json({ error: 'VosFactures non configuré' });
-  }
-  try {
-    const contacts = await _fetchTousContactsVF();
-
-    const groupes = {};
-    for (const c of contacts) {
-      const cle = _normaliserNomVF(c.name);
-      if (!cle) continue;
-      (groupes[cle] = groupes[cle] || []).push(c);
-    }
-
-    const doublons = Object.values(groupes)
-      .filter(g => g.length > 1)
-      .map(g => {
-        const trie = [...g].sort((a, b) => _scoreCompletudeVF(b) - _scoreCompletudeVF(a));
-        return {
-          nom: trie[0].name,
-          principal_suggere: trie[0].id,
-          contacts: trie.map(c => ({
-            id: c.id, name: c.name, street: c.street, post_code: c.post_code,
-            city: c.city, email: c.email, phone: c.phone, tax_no: c.tax_no,
-            complet: _adresseCompleteVF(c)
-          }))
-        };
-      })
-      .sort((a, b) => b.contacts.length - a.contacts.length);
-
-    const adressesIncompletes = contacts
-      .filter(c => !_adresseCompleteVF(c))
-      .map(c => ({
-        id: c.id, name: c.name,
-        street: c.street || '', post_code: c.post_code || '', city: c.city || '',
-        email: c.email || '', phone: c.phone || ''
-      }));
-
-    res.json({
-      total_contacts: contacts.length,
-      nb_groupes_doublons: doublons.length,
-      doublons,
-      nb_adresses_incompletes: adressesIncompletes.length,
-      adresses_incompletes: adressesIncompletes
-    });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Fusionne un groupe de doublons dans VosFactures + réattribue les commandes locales
-router.post('/doublons-vf/fusionner', adminOnly, async (req, res) => {
-  const { principal_id, merge_ids } = req.body;
-  if (!principal_id || !Array.isArray(merge_ids) || merge_ids.length === 0) {
-    return res.status(400).json({ error: 'principal_id et merge_ids (tableau) requis' });
-  }
-  try {
-    const axios = require('axios');
-    const { data: vfData } = await axios.post(
-      `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/clients/${principal_id}/merge.json`,
-      { api_token: process.env.VOSFACTURES_API_TOKEN, merge_ids }
-    );
-
-    // Réattribution locale : les fiches "clients" locales sont liées à VosFactures
-    // via la colonne vf_id ; les commandes pointent vers clients.id (pas vf_id).
-    let reattribution = { commandes_reattribuees: 0 };
-    try {
-      const principalLocal = await db.get('SELECT id FROM clients WHERE vf_id=$1', [principal_id]);
-      const dupLocaux = await db.all('SELECT id FROM clients WHERE vf_id = ANY($1::int[])', [merge_ids]);
-      if (principalLocal && dupLocaux.length) {
-        const idsLocaux = dupLocaux.map(r => r.id);
-        const r = await db.run(
-          'UPDATE commandes SET client_id=$1 WHERE client_id = ANY($2::int[])',
-          [principalLocal.id, idsLocaux]
-        );
-        reattribution.commandes_reattribuees = r?.rowCount || 0;
-      }
-      reattribution.note = 'Pense à relancer une Sync VosFactures pour nettoyer les fiches locales en double.';
-    } catch (dbErr) {
-      console.warn('Réattribution locale doublons VF ignorée :', dbErr.message);
-      reattribution.erreur = dbErr.message;
-    }
-
-    res.json({ ok: true, principal_id, fusionnes: merge_ids, vosfactures: vfData, reattribution });
-  } catch (e) {
-    res.status(500).json({ error: e.response?.data || e.message });
-  }
-});
-
-// Complète/corrige l'adresse d'un contact VosFactures
-router.put('/doublons-vf/adresse/:id', adminOnly, async (req, res) => {
-  const { street, post_code, city, country } = req.body;
-  try {
-    const axios = require('axios');
-    const { data } = await axios.put(
-      `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/clients/${req.params.id}.json`,
-      { api_token: process.env.VOSFACTURES_API_TOKEN, client: { street, post_code, city, country: country || 'FR' } }
-    );
-    res.json({ ok: true, client: data });
-  } catch (e) {
-    res.status(500).json({ error: e.response?.data || e.message });
-  }
-});
-
 
 
 
@@ -1494,24 +1025,6 @@ router.post('/clients/:id/fusionner', async (req, res) => {
       [clientCibleId, clientSourceId]
     );
 
-    // Rattacher toutes les commandes du client source vers le client cible
-    const { rowCount: commandes } = await pgClient.query(
-      'UPDATE commandes SET client_id=$1, updated_at=NOW() WHERE client_id=$2',
-      [clientCibleId, clientSourceId]
-    );
-
-    // Rattacher le(s) point(s) de la carte distributeurs, s'il y en a
-    const { rowCount: pointsCarte } = await pgClient.query(
-      'UPDATE distributeurs_carte SET client_id=$1, updated_at=NOW() WHERE client_id=$2',
-      [clientCibleId, clientSourceId]
-    );
-
-    // Si d'autres fiches pointaient le doublon comme "entité de facturation", les rebrancher sur la cible
-    await pgClient.query(
-      'UPDATE clients SET entite_facturation_id=$1 WHERE entite_facturation_id=$2',
-      [clientCibleId, clientSourceId]
-    );
-
     // Marquer le client source comme ignoré par la sync VF (si demandé)
     if (vf_ignore_source) {
       await pgClient.query(
@@ -1524,8 +1037,7 @@ router.post('/clients/:id/fusionner', async (req, res) => {
     await pgClient.query('DELETE FROM clients WHERE id=$1', [clientSourceId]);
 
     await pgClient.query('COMMIT');
-    res.json({ ok: true, fauteuils_transferes: fauteuils, interventions_transferees: interventions,
-      commandes_transferees: commandes, points_carte_transferes: pointsCarte });
+    res.json({ ok: true, fauteuils_transferes: fauteuils, interventions_transferees: interventions });
   } catch(e) {
     await pgClient.query('ROLLBACK');
     res.status(500).json({ error: e.message });
@@ -3418,46 +2930,25 @@ router.post('/commandes/:id/generer-facture', adminOrOp, async (req, res) => {
   try {
     if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT)
       return res.json({ ok: false, reason: 'VosFactures non configuré' });
-    const cmd = await db.get(`
-      SELECT cmd.*, c.nom AS client_nom, c.vf_id AS client_vf_id,
-             cf.id AS facturation_local_id, cf.nom AS facturation_nom, cf.vf_id AS facturation_vf_id
-      FROM commandes cmd
-      JOIN clients c ON c.id = cmd.client_id
-      LEFT JOIN clients cf ON cf.id = c.entite_facturation_id
-      WHERE cmd.id=$1`, [req.params.id]);
+    const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom FROM commandes cmd
+      JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
     if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
     const lignes = await db.all('SELECT * FROM commandes_lignes WHERE commande_id=$1 ORDER BY ordre, id', [req.params.id]);
     const axios = require('axios');
     const vfApi = axios.create({ baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
       headers: { 'Accept': 'application/json' }, params: { api_token: process.env.VOSFACTURES_API_TOKEN } });
-
-    // Si une entité de facturation est définie sur la fiche du distributeur,
-    // c'est elle qui doit être facturée (acheteur légal) — pas le distributeur.
-    const facturerEntite = !!cmd.facturation_local_id;
-    const buyerVfId = facturerEntite ? cmd.facturation_vf_id : cmd.client_vf_id;
-    const buyerName = facturerEntite ? cmd.facturation_nom : cmd.client_nom;
-
-    let buyer = null;
-    if (!buyerVfId) {
-      // Pas de vf_id connu localement : on retombe sur la recherche par nom (comportement d'origine)
-      const { data: buyers } = await vfApi.get('/clients.json', { params: { name: buyerName, per_page: 5 } });
-      buyer = Array.isArray(buyers) ? buyers.find(b => b.name?.toLowerCase().includes(buyerName.toLowerCase().slice(0, 8))) : null;
-    }
-
+    // Chercher le client dans VF
+    const { data: buyers } = await vfApi.get('/clients.json', { params: { name: cmd.distributeur_nom, per_page: 5 } });
+    const buyer = Array.isArray(buyers) ? buyers.find(b => b.name?.toLowerCase().includes(cmd.distributeur_nom.toLowerCase().slice(0, 8))) : null;
     const positions = (lignes.length ? lignes : [{ designation: cmd.modele || 'Commande', quantite: cmd.quantite || 1, reference: cmd.bdc }])
       .map(l => ({ name: l.designation, quantity: String(l.quantite || 1), price_net: '0.00', tax: '20' }));
     const today = new Date().toISOString().slice(0, 10);
-
-    const descriptionParts = [];
-    if (cmd.bdc) descriptionParts.push(`Commande ${cmd.bdc}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}`);
-    if (facturerEntite) descriptionParts.push(`Distributeur (livraison) : ${cmd.distributeur_nom}`);
-
     const payload = {
       invoice: {
         kind: 'vat', sell_date: cmd.date_livraison || today, issue_date: today,
-        ...(buyerVfId ? { client_id: buyerVfId } : (buyer?.id ? { client_id: buyer.id } : { buyer_name: buyerName })),
+        buyer_name: cmd.distributeur_nom,
         positions,
-        ...(descriptionParts.length ? { description: descriptionParts.join(' — ') } : {})
+        ...(cmd.bdc ? { description: `Commande ${cmd.bdc}${cmd.num_commande_distrib ? ' / ' + cmd.num_commande_distrib : ''}` } : {})
       }
     };
     let invData;
@@ -3473,8 +2964,7 @@ router.post('/commandes/:id/generer-facture', adminOrOp, async (req, res) => {
     if (!invData?.id) return res.json({ ok: false, reason: 'VosFactures n\'a pas retourné d\'identifiant' });
     await db.run('UPDATE commandes SET vf_invoice_id=$1, num_facture=$2, statut=\'Facturé\', updated_at=NOW() WHERE id=$3',
       [invData.id, invData.number || String(invData.id), req.params.id]);
-    res.json({ ok: true, invoice_id: invData.id, numero: invData.number, facture_a: buyerName,
-      url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${invData.id}` });
+    res.json({ ok: true, invoice_id: invData.id, numero: invData.number, url: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${invData.id}` });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
