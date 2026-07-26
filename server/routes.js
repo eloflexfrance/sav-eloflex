@@ -4317,9 +4317,57 @@ function _fmtDateSuede(v) {
   try { return new Date(v).toISOString().slice(0, 10); } catch (_) { return null; }
 }
 
+// Aligne la structure des tables sur ce qu'attend le code, une seule fois par
+// démarrage du service. Corrige les bases où une ancienne version des tables
+// (colonne de liaison nommée autrement, colonnes manquantes) existait déjà.
+let _suedeReparee = false;
+async function assurerSchemaSuede() {
+  if (_suedeReparee) return;
+  await db.query(`CREATE TABLE IF NOT EXISTS commandes_suede (
+    id SERIAL PRIMARY KEY, numero_bc TEXT, date_commande DATE DEFAULT CURRENT_DATE,
+    transporteur TEXT, num_suivi TEXT, date_livraison DATE,
+    stock_integre BOOLEAN DEFAULT FALSE, stock_integre_at TIMESTAMPTZ, note TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await db.query(`CREATE TABLE IF NOT EXISTS commandes_suede_lignes (
+    id SERIAL PRIMARY KEY, designation TEXT, ref TEXT,
+    quantite_commandee INTEGER DEFAULT 0, quantite_recue INTEGER DEFAULT 0, reliquat INTEGER DEFAULT 0
+  )`);
+  const cols = await db.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_name='commandes_suede_lignes'`
+  );
+  const noms = cols.rows.map(r => r.column_name);
+  if (!noms.includes('commande_suede_id')) {
+    if (noms.includes('commande_id')) {
+      await db.query(`ALTER TABLE commandes_suede_lignes RENAME COLUMN commande_id TO commande_suede_id`);
+    } else {
+      await db.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN commande_suede_id INTEGER REFERENCES commandes_suede(id) ON DELETE CASCADE`);
+    }
+  }
+  for (const [col, ddl] of [
+    ['catalogue_id', 'INTEGER REFERENCES catalogue(id) ON DELETE SET NULL'],
+    ['designation', 'TEXT'], ['ref', 'TEXT'],
+    ['quantite_commandee', 'INTEGER DEFAULT 0'],
+    ['quantite_recue', 'INTEGER DEFAULT 0'], ['reliquat', 'INTEGER DEFAULT 0']
+  ]) {
+    if (!noms.includes(col)) await db.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
+  }
+  for (const [col, ddl] of [
+    ['numero_bc', 'TEXT'], ['date_commande', 'DATE DEFAULT CURRENT_DATE'],
+    ['transporteur', 'TEXT'], ['num_suivi', 'TEXT'], ['date_livraison', 'DATE'],
+    ['stock_integre', 'BOOLEAN DEFAULT FALSE'], ['stock_integre_at', 'TIMESTAMPTZ'],
+    ['note', 'TEXT'], ['created_at', 'TIMESTAMPTZ DEFAULT NOW()'], ['updated_at', 'TIMESTAMPTZ DEFAULT NOW()']
+  ]) {
+    await db.query(`ALTER TABLE commandes_suede ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
+  }
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_cs_lignes ON commandes_suede_lignes(commande_suede_id)`);
+  _suedeReparee = true;
+}
+
 // Liste des commandes Suède
 router.get('/commandes-suede', requireAuth, async (req, res) => {
   try {
+    await assurerSchemaSuede();
     const rows = await db.all(`
       SELECT cs.*,
         (SELECT COUNT(*)::int FROM commandes_suede_lignes l WHERE l.commande_suede_id = cs.id) AS nb_lignes,
@@ -4338,6 +4386,7 @@ router.get('/commandes-suede', requireAuth, async (req, res) => {
 // Détail d'une commande Suède avec ses lignes
 router.get('/commandes-suede/:id', requireAuth, async (req, res) => {
   try {
+    await assurerSchemaSuede();
     const cs = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
     if (!cs) return res.status(404).json({ error: 'Introuvable' });
     cs.date_commande = _fmtDateSuede(cs.date_commande);
@@ -4461,6 +4510,7 @@ router.get('/vosfactures/stock-lookup', adminOnly, async (req, res) => {
 // Créer une commande Suède
 router.post('/commandes-suede', adminOnly, async (req, res) => {
   try {
+    await assurerSchemaSuede();
     const { numero_bc, transporteur, num_suivi, date_livraison, note, lignes } = req.body;
     if (!numero_bc) return res.status(400).json({ error: 'Numéro de BC requis' });
     const cs = await db.run(
@@ -4501,24 +4551,45 @@ router.put('/commandes-suede/:id', adminOnly, async (req, res) => {
 // Intégrer dans le stock : incrémente catalogue.stock, calcule les reliquats
 router.post('/commandes-suede/:id/integrer', adminOnly, async (req, res) => {
   try {
+    await assurerSchemaSuede();
     const cs = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
     if (!cs) return res.status(404).json({ error: 'Introuvable' });
     if (cs.stock_integre) return res.status(400).json({ error: 'Déjà intégrée au stock' });
 
-    const recues = req.body.recues || {}; // { ligne_id: quantite_recue }
+    // Format attendu : { lignes: [{ id, ref, designation, catalogue_id, quantite_recue }] }
+    // Repli sur l'ancien format { recues: { id: qte } } par sécurité.
+    const corrections = Array.isArray(req.body.lignes) ? req.body.lignes : null;
+    const recuesLegacy = req.body.recues || {};
     const lignes = await db.all('SELECT * FROM commandes_suede_lignes WHERE commande_suede_id=$1', [req.params.id]);
 
     for (const ligne of lignes) {
-      const recue = parseInt(recues[ligne.id]);
-      const qteRecue = isNaN(recue) ? ligne.quantite_commandee : recue;
+      const corr = corrections ? corrections.find(c => c.id === ligne.id) : null;
+
+      // Corrections éventuelles de la ligne (réf., désignation, rattachement catalogue)
+      const ref = corr && corr.ref !== undefined ? (corr.ref || null) : ligne.ref;
+      const designation = corr && corr.designation ? corr.designation : ligne.designation;
+      const catalogueId = corr && corr.catalogue_id !== undefined ? (corr.catalogue_id || null) : ligne.catalogue_id;
+
+      // Quantité reçue : depuis les corrections, sinon l'ancien format, sinon = commandé
+      let qteRecue;
+      if (corr && corr.quantite_recue !== undefined) qteRecue = parseInt(corr.quantite_recue);
+      else if (recuesLegacy[ligne.id] !== undefined) qteRecue = parseInt(recuesLegacy[ligne.id]);
+      if (isNaN(qteRecue)) qteRecue = ligne.quantite_commandee;
+      qteRecue = Math.max(0, qteRecue);
+
       const reliquat = Math.max(0, ligne.quantite_commandee - qteRecue);
+
       await db.run(
-        'UPDATE commandes_suede_lignes SET quantite_recue=$1, reliquat=$2 WHERE id=$3',
-        [qteRecue, reliquat, ligne.id]
+        `UPDATE commandes_suede_lignes
+         SET ref=$1, designation=$2, catalogue_id=$3, quantite_recue=$4, reliquat=$5
+         WHERE id=$6`,
+        [ref, designation, catalogueId, qteRecue, reliquat, ligne.id]
       );
-      if (ligne.catalogue_id && qteRecue > 0) {
+
+      // Le stock ne bouge que pour une ligne reliée au catalogue avec réception > 0
+      if (catalogueId && qteRecue > 0) {
         await db.run('UPDATE catalogue SET stock = stock + $1, updated_at=NOW() WHERE id=$2',
-          [qteRecue, ligne.catalogue_id]);
+          [qteRecue, catalogueId]);
       }
     }
     await db.run('UPDATE commandes_suede SET stock_integre=TRUE, stock_integre_at=NOW(), updated_at=NOW() WHERE id=$1',
@@ -4649,4 +4720,5 @@ router.get('/vosfactures/stock-doc/:id', adminOnly, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
