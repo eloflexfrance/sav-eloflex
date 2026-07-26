@@ -3689,7 +3689,7 @@ async function chargerCommandesSuede() {
       return;
     }
     el.innerHTML = `<div class="table-wrap"><table class="t">
-      <thead><tr><th>N° BC</th><th>Date</th><th>Transporteur</th><th>Suivi</th><th>Livraison</th><th>Lignes</th><th>Stock</th><th></th></tr></thead>
+      <thead><tr><th>Référence</th><th>Date</th><th>Transporteur</th><th>Suivi</th><th>Livraison</th><th>Lignes</th><th>Stock</th><th></th></tr></thead>
       <tbody>${list.map(cs => {
         const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
         const badgeStock = cs.stock_integre
@@ -3713,8 +3713,10 @@ async function chargerCommandesSuede() {
   }
 }
 
-// Lignes temporaires pendant la création
+// Lignes en cours de saisie (création). Format aligné sur le serveur :
+// { catalogue_id, reference, designation, quantite }
 let _csLignes = [];
+let _csCatalogue = null;
 
 function modalNouvelleCommandeSuede() {
   _csLignes = [];
@@ -3724,30 +3726,27 @@ function modalNouvelleCommandeSuede() {
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Référence de la commande</label>
         <input class="form-input mono" id="cs-bc" placeholder="STOCK0241" style="max-width:220px">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Votre référence interne, comme vous voulez (ex. STOCK + numéro).</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Votre référence interne (ex. STOCK + numéro).</div>
       </div>
-
-      <div class="section-title" style="margin-top:6px"><i class="ti ti-list"></i>Pièces commandées</div>
-      <div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">
-        <div style="flex:1;position:relative">
-          <label class="form-label">Ajouter une pièce du catalogue</label>
-          <input class="form-input" id="cs-piece-recherche" placeholder="Réf. ou désignation…" oninput="rechercherPieceSuede(this.value)" autocomplete="off">
-          <div id="cs-piece-suggest" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:200px;overflow:auto;display:none"></div>
-        </div>
-      </div>
-      <div id="cs-lignes-liste"></div>
 
       <details open style="margin:10px 0;border:0.5px solid var(--border);border-radius:8px;padding:8px 12px">
         <summary style="cursor:pointer;font-size:12px;color:var(--text2)">Importer depuis un bon de commande VosFactures</summary>
         <div style="display:flex;gap:6px;margin-top:8px">
-          <input class="form-input" id="cs-vf-numero" placeholder="Collez l'URL ou l'ID du document VosFactures" style="flex:1">
-          <button class="btn primary" type="button" onclick="importerDocVF()"><i class="ti ti-download"></i>Importer les lignes</button>
+          <input class="form-input" id="cs-vf-url" placeholder="Collez l'URL ou l'ID du document VosFactures" style="flex:1">
+          <button class="btn primary" type="button" onclick="importerDocVF()"><i class="ti ti-download"></i>Importer</button>
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Ex. https://eloflex.vosfactures.fr/warehouse_documents/73745036 — ou juste le numéro.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Ex. https://eloflex.vosfactures.fr/warehouse_documents/73745036 — ou le numéro du document.</div>
         <div id="cs-lookup" style="margin-top:8px"></div>
       </details>
 
-      <div class="grid-2">
+      <div class="section-title" style="margin-top:6px"><i class="ti ti-list"></i>Pièces commandées</div>
+      <div style="position:relative;margin-bottom:8px">
+        <input class="form-input" id="cs-piece-recherche" placeholder="Ajouter une pièce du catalogue (réf. ou désignation)…" oninput="rechercherPieceSuede(this.value)" autocomplete="off">
+        <div id="cs-piece-suggest" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:200px;overflow:auto;display:none"></div>
+      </div>
+      <div id="cs-lignes-liste"></div>
+
+      <div class="grid-2" style="margin-top:10px">
         <div class="form-group"><label class="form-label">Transporteur</label>
           <select class="form-input" id="cs-transporteur">
             <option value="">—</option>
@@ -3759,8 +3758,6 @@ function modalNouvelleCommandeSuede() {
       </div>
       <div class="form-group"><label class="form-label">Date de livraison prévue</label>
         <input class="form-input" id="cs-livraison" type="date"></div>
-      <div class="form-group"><label class="form-label">Note</label>
-        <textarea class="form-input" id="cs-note" rows="2"></textarea></div>
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
@@ -3769,8 +3766,6 @@ function modalNouvelleCommandeSuede() {
   dessinerLignesSuede();
 }
 
-// Catalogue chargé à la demande pour l'autocomplétion des pièces
-let _csCatalogue = null;
 async function rechercherPieceSuede(q) {
   const boite = document.getElementById('cs-piece-suggest');
   if (!boite) return;
@@ -3779,10 +3774,8 @@ async function rechercherPieceSuede(q) {
   if (!_csCatalogue) {
     try { _csCatalogue = await API.catalogue(); } catch (_) { _csCatalogue = []; }
   }
-  const norm = s => String(s || '').toLowerCase();
-  const trouves = _csCatalogue.filter(c =>
-    norm(c.ref).includes(q) || norm(c.designation).includes(q)
-  ).slice(0, 8);
+  const n = s => String(s || '').toLowerCase();
+  const trouves = _csCatalogue.filter(c => n(c.ref).includes(q) || n(c.designation).includes(q)).slice(0, 8);
   if (!trouves.length) { boite.style.display = 'none'; return; }
   boite.innerHTML = trouves.map(c =>
     `<div onclick="ajouterLigneSuede(${c.id})" style="padding:7px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,.05);font-size:12px" onmouseover="this.style.background='rgba(46,124,246,.08)'" onmouseout="this.style.background=''">
@@ -3796,14 +3789,8 @@ function ajouterLigneSuede(catalogueId) {
   const art = (_csCatalogue || []).find(c => c.id === catalogueId);
   if (!art) return;
   const existante = _csLignes.find(l => l.catalogue_id === catalogueId);
-  if (existante) {
-    existante.quantite_commandee += 1;
-  } else {
-    _csLignes.push({
-      catalogue_id: art.id, ref: art.ref, designation: art.designation,
-      quantite_commandee: 1, rapproche: true
-    });
-  }
+  if (existante) existante.quantite += 1;
+  else _csLignes.push({ catalogue_id: art.id, reference: art.ref, designation: art.designation, quantite: 1, rapproche: true });
   const champ = document.getElementById('cs-piece-recherche');
   if (champ) champ.value = '';
   const boite = document.getElementById('cs-piece-suggest');
@@ -3821,16 +3808,16 @@ function dessinerLignesSuede() {
   }
   zone.innerHTML = `<div class="table-wrap"><table class="t"><thead><tr><th>Réf.</th><th>Désignation</th><th style="width:90px">Qté</th><th></th></tr></thead>
     <tbody>${_csLignes.map((l, i) => `<tr>
-      <td class="mono">${esc(l.ref || '—')}${l.rapproche === false ? ' <span class="badge hg" title="Hors catalogue">?</span>' : ''}</td>
+      <td class="mono">${esc(l.reference || '—')}${l.rapproche === false ? ' <span class="badge hg" title="Hors catalogue">?</span>' : ''}</td>
       <td>${esc(l.designation)}</td>
-      <td><input class="form-input" type="number" min="1" value="${l.quantite_commandee}" onchange="majQteLigneSuede(${i}, this.value)" style="width:70px;padding:3px 6px"></td>
+      <td><input class="form-input" type="number" min="1" value="${l.quantite}" onchange="majQteLigneSuede(${i}, this.value)" style="width:70px;padding:3px 6px"></td>
       <td><button class="btn sm" onclick="retirerLigneSuede(${i})" title="Retirer"><i class="ti ti-x"></i></button></td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 
 function majQteLigneSuede(index, valeur) {
   const q = parseInt(valeur);
-  if (_csLignes[index] && q > 0) _csLignes[index].quantite_commandee = q;
+  if (_csLignes[index] && q > 0) _csLignes[index].quantite = q;
 }
 window.majQteLigneSuede = majQteLigneSuede;
 
@@ -3840,24 +3827,22 @@ function retirerLigneSuede(index) {
 }
 window.retirerLigneSuede = retirerLigneSuede;
 
-// Import direct par URL ou ID de document warehouse VosFactures
+// Import direct par URL ou ID du document VosFactures
 async function importerDocVF() {
-  const saisie = document.getElementById('cs-vf-numero')?.value.trim();
+  const saisie = document.getElementById('cs-vf-url')?.value.trim();
   const zone = document.getElementById('cs-lookup');
   if (!saisie) { toast('Collez l\'URL ou l\'ID du document', 'ti-alert-circle'); return; }
-  // Extraire un ID numérique d'une URL warehouse_documents/xxxx, sinon prendre les chiffres
   let id = null;
-  const m = saisie.match(/warehouse_documents\/(\d+)/) || saisie.match(/\/(\d{5,})/);
+  const m = saisie.match(/warehouse_documents\/(\d+)/) || saisie.match(/\/(\d{4,})/);
   if (m) id = m[1];
   else if (/^\d+$/.test(saisie)) id = saisie;
 
   if (id) {
-    // On a un ID de document warehouse : chargement direct
     if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">Chargement du document…</div>';
     try {
       const r = await API.stockDoc(id, '', '1'); // warehouse=1
       if (!r.found || !Array.isArray(r.lignes) || !r.lignes.length) {
-        if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">Document trouvé mais sans lignes exploitables. Vous pouvez saisir les pièces manuellement.</div>';
+        if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">Document trouvé mais sans lignes exploitables. Ajoutez les pièces manuellement.</div>';
         return;
       }
       fusionnerLignesImportees(r.lignes);
@@ -3867,51 +3852,34 @@ async function importerDocVF() {
     }
     return;
   }
-  // Pas d'ID reconnaissable : on retombe sur la recherche par numéro
-  chercherContenuBC();
-}
-window.importerDocVF = importerDocVF;
-
-async function chercherContenuBC() {
-  const numero = document.getElementById('cs-vf-numero')?.value.trim();
-  const zone = document.getElementById('cs-lookup');
-  if (!numero) { toast('Saisissez un numéro de document VosFactures', 'ti-alert-circle'); return; }
-  if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">Recherche…</div>';
+  // Pas d'ID reconnaissable : recherche par numéro via stock-lookup
+  if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">Recherche par numéro…</div>';
   try {
-    const r = await API.stockLookup(numero);
-    if (!r.found) {
-      let html = `<div style="font-size:12px;color:var(--warning);background:rgba(0,0,0,.03);border-radius:8px;padding:10px">${esc(r.message || 'Document introuvable.')}</div>`;
-      if (Array.isArray(r.candidats) && r.candidats.length) {
-        html += `<div style="margin-top:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3)">Documents trouvés dans VosFactures</div>
-          <div style="max-height:180px;overflow:auto;margin-top:4px">
-          ${r.candidats.map(c => `<div onclick="chercherContenuBCId(${c.id}, '${esc(String(c.kind||''))}', '${esc(String(c.number||''))}')" style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;border-radius:6px;font-size:12px" onmouseover="this.style.background='rgba(46,124,246,.08)'" onmouseout="this.style.background=''">
-            <span class="mono" style="flex:1">${esc(c.number||'(sans numéro)')}</span>
-            <span style="font-size:11px;color:var(--text3)">${esc(c.src||'')}</span>
-            <i class="ti ti-arrow-right" style="font-size:13px;color:var(--text3)"></i>
-          </div>`).join('')}
-          </div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">Cliquez sur le bon document pour importer ses lignes.</div>`;
-      }
-      if (zone) zone.innerHTML = html;
+    const r = await API.stockLookup(saisie);
+    if (!r.found || !Array.isArray(r.lignes) || !r.lignes.length) {
+      if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">Document introuvable. Ajoutez les pièces manuellement.</div>';
       return;
     }
-    fusionnerLignesImportees(r.lignes || []);
-    if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--success);padding:6px 0"><i class="ti ti-check"></i> ${(r.lignes||[]).length} ligne(s) importée(s) du ${esc(r.numero||numero)}.</div>`;
+    fusionnerLignesImportees(r.lignes);
+    if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--success);padding:6px 0"><i class="ti ti-check"></i> ${r.lignes.length} ligne(s) importée(s)${r.numero ? ' du ' + esc(r.numero) : ''}.</div>`;
   } catch (e) {
     if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
   }
 }
+window.importerDocVF = importerDocVF;
 
-// Ajoute les lignes importées de VosFactures à celles déjà saisies
+// Ajoute les lignes importées (format serveur : reference/designation/quantite/catalogue_id)
 function fusionnerLignesImportees(lignes) {
   for (const l of lignes) {
     const existante = l.catalogue_id
       ? _csLignes.find(x => x.catalogue_id === l.catalogue_id)
       : _csLignes.find(x => x.designation === l.designation && !x.catalogue_id);
-    if (existante) existante.quantite_commandee += (l.quantite_commandee || 0);
+    if (existante) existante.quantite += (l.quantite || 0);
     else _csLignes.push({
-      catalogue_id: l.catalogue_id || null, ref: l.ref || null,
-      designation: l.designation, quantite_commandee: l.quantite_commandee || 0,
+      catalogue_id: l.catalogue_id || null,
+      reference: l.reference || null,
+      designation: l.designation,
+      quantite: l.quantite || 0,
       rapproche: !!l.catalogue_id
     });
   }
@@ -3920,15 +3888,19 @@ function fusionnerLignesImportees(lignes) {
 
 async function enregistrerCommandeSuede() {
   const numero_bc = document.getElementById('cs-bc')?.value.trim();
-  if (!numero_bc) { toast('N° de BC requis', 'ti-alert-circle'); return; }
+  if (!numero_bc) { toast('Référence requise', 'ti-alert-circle'); return; }
   try {
     await API.createCommandeSuede({
       numero_bc,
       transporteur: document.getElementById('cs-transporteur')?.value || null,
       num_suivi: document.getElementById('cs-suivi')?.value || null,
       date_livraison: document.getElementById('cs-livraison')?.value || null,
-      note: document.getElementById('cs-note')?.value || null,
-      lignes: _csLignes
+      lignes: _csLignes.map(l => ({
+        catalogue_id: l.catalogue_id || null,
+        reference: l.reference || null,
+        designation: l.designation,
+        quantite: l.quantite || 1
+      }))
     });
     closeModal();
     toast('Commande Suède créée', 'ti-check');
@@ -3942,11 +3914,11 @@ async function ouvrirCommandeSuede(id) {
     const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
     const peutIntegrer = cs.date_livraison && !cs.stock_integre;
     showModal(`
-      <div class="modal-head"><h3><i class="ti ti-truck-delivery"></i>BC ${esc(cs.numero_bc)}</h3>
+      <div class="modal-head"><h3><i class="ti ti-truck-delivery"></i>${esc(cs.numero_bc)}</h3>
         <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">N° de BC</label>
+          <div class="form-group"><label class="form-label">Référence</label>
             <input class="form-input mono" value="${esc(cs.numero_bc)}" readonly style="background:rgba(0,0,0,.03)"></div>
           <div class="form-group"><label class="form-label">Date de commande</label>
             <input class="form-input" value="${cs.date_commande ? fd(cs.date_commande) : '—'}" readonly style="background:rgba(0,0,0,.03)"></div>
@@ -3967,11 +3939,11 @@ async function ouvrirCommandeSuede(id) {
         <div class="table-wrap"><table class="t"><thead><tr><th>Désignation</th><th>Réf.</th><th>Cmdé</th>${cs.stock_integre?'<th>Reçu</th><th>Reliquat</th>':''}</tr></thead>
           <tbody>${cs.lignes.map(l => `<tr>
             <td>${esc(l.designation)}${l.catalogue_id?'':' <span class="badge hg" title="Non rattaché au catalogue">?</span>'}</td>
-            <td class="mono">${esc(l.ref||'—')}</td>
+            <td class="mono">${esc(l.reference||'—')}</td>
             <td>${l.quantite_commandee}</td>
-            ${cs.stock_integre?`<td>${l.quantite_recue}</td><td>${l.reliquat>0?`<span class="badge hg">${l.reliquat}</span>`:'0'}</td>`:''}
+            ${cs.stock_integre?`<td>${l.quantite_recue==null?'—':l.quantite_recue}</td><td>${l.reliquat>0?`<span class="badge hg">${l.reliquat}</span>`:'0'}</td>`:''}
           </tr>`).join('')}</tbody></table></div>
-        ${cs.stock_integre ? `<div style="font-size:12px;color:var(--success);margin-top:8px"><i class="ti ti-check"></i> Stock intégré le ${cs.stock_integre_at?fd(cs.stock_integre_at):''}</div>` : ''}
+        ${cs.stock_integre ? `<div style="font-size:12px;color:var(--success);margin-top:8px"><i class="ti ti-check"></i> Stock intégré${cs.integre_le?' le '+fd(String(cs.integre_le).slice(0,10)):''}</div>` : ''}
       </div>
       <div class="modal-foot" style="justify-content:space-between">
         <div>${cs.stock_integre ? '' : `<button class="btn sm danger" onclick="supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i>Supprimer</button>`}</div>
@@ -3996,13 +3968,17 @@ async function sauverCommandeSuede(id) {
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
 
+// Réception : corriger réf, désignation, quantité reçue, relier au catalogue
 async function modalIntegrerStock(id) {
   try {
     const cs = await API.commandeSuede(id);
     if (!_csCatalogue) { try { _csCatalogue = await API.catalogue(); } catch (_) { _csCatalogue = []; } }
-    window._csIntLignes = cs.lignes.map(l => ({ ...l }));
+    window._csIntLignes = cs.lignes.map(l => ({
+      id: l.id, reference: l.reference, designation: l.designation,
+      catalogue_id: l.catalogue_id, quantite_commandee: l.quantite_commandee
+    }));
     showModal(`
-      <div class="modal-head"><h3><i class="ti ti-package-import"></i>Réception BC ${esc(cs.numero_bc)}</h3>
+      <div class="modal-head"><h3><i class="ti ti-package-import"></i>Réception ${esc(cs.numero_bc)}</h3>
         <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
         <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Vérifiez la livraison. Ajustez la quantité reçue (un reliquat est calculé si elle est inférieure à la commande) et, au besoin, corrigez la référence ou reliez une ligne au catalogue pour que le stock soit mis à jour.</div>
@@ -4028,7 +4004,7 @@ function dessinerLignesIntegration() {
       const rattache = !!l.catalogue_id;
       return `<tr>
         <td>
-          <input class="form-input mono" value="${esc(l.ref || '')}" onchange="majIntLigne(${i},'ref',this.value)" style="width:90px;padding:3px 6px;font-size:12px" placeholder="réf.">
+          <input class="form-input mono" value="${esc(l.reference || '')}" onchange="majIntLigne(${i},'reference',this.value)" style="width:90px;padding:3px 6px;font-size:12px" placeholder="réf.">
           ${rattache
             ? '<div style="font-size:10px;color:var(--success)"><i class="ti ti-link"></i> catalogue</div>'
             : `<div style="font-size:10px"><span onclick="relierLigneCatalogue(${i})" style="color:var(--accent);cursor:pointer"><i class="ti ti-link"></i> relier au stock</span></div>`}
@@ -4039,7 +4015,7 @@ function dessinerLignesIntegration() {
         <td>${reliquat > 0 ? `<span class="badge hg">${reliquat}</span>` : '<span style="color:var(--text3)">0</span>'}</td>
       </tr>`;
     }).join('')}</tbody></table></div>
-    <div style="font-size:11px;color:var(--text3);margin-top:6px">Une ligne « relier au stock » non reliée n'incrémente aucun stock, mais la réception est tout de même enregistrée.</div>`;
+    <div style="font-size:11px;color:var(--text3);margin-top:6px">Une ligne « relier au stock » non reliée n'incrémente aucun stock, mais la réception est enregistrée.</div>`;
 }
 
 function majIntLigne(index, champ, valeur) {
@@ -4050,16 +4026,15 @@ function majIntLigne(index, champ, valeur) {
 }
 window.majIntLigne = majIntLigne;
 
-// Relier une ligne importée à une pièce du catalogue (pour que le stock bouge)
 function relierLigneCatalogue(index) {
   const l = (window._csIntLignes || [])[index];
   if (!l) return;
-  const choix = prompt('Référence de la pièce du catalogue à relier :', l.ref || '');
+  const choix = prompt('Référence de la pièce du catalogue à relier :', l.reference || '');
   if (!choix) return;
   const art = (_csCatalogue || []).find(c => String(c.ref).toLowerCase() === choix.trim().toLowerCase());
   if (!art) { toast('Référence introuvable dans le catalogue', 'ti-alert-circle', 'var(--danger)'); return; }
   l.catalogue_id = art.id;
-  l.ref = art.ref;
+  l.reference = art.ref;
   if (!l.designation) l.designation = art.designation;
   dessinerLignesIntegration();
 }
@@ -4068,7 +4043,7 @@ window.relierLigneCatalogue = relierLigneCatalogue;
 async function confirmerIntegrationStock(id) {
   const lignes = (window._csIntLignes || []).map(l => ({
     id: l.id,
-    ref: l.ref || null,
+    reference: l.reference || null,
     designation: l.designation || null,
     catalogue_id: l.catalogue_id || null,
     quantite_recue: (l._recu !== undefined) ? l._recu : l.quantite_commandee
@@ -4093,40 +4068,6 @@ async function supprimerCommandeSuede(id) {
 
 window.renderCommandeSuede = renderCommandeSuede;
 window.modalNouvelleCommandeSuede = modalNouvelleCommandeSuede;
-window.chercherContenuBC = chercherContenuBC;
-
-// Charger le contenu d'un document VF précis, choisi parmi les candidats
-async function chercherContenuBCId(id, kind, numero) {
-  const zone = document.getElementById('cs-lookup');
-  if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">Chargement du document…</div>';
-  // Recopier le numéro choisi dans le champ BC
-  const champBC = document.getElementById('cs-bc');
-  if (champBC && numero) champBC.value = numero;
-  try {
-    const warehouse = kind && kind !== 'undefined' && kind !== '' ? '1' : '';
-    const r = await API.stockDoc(id, kind, warehouse);
-    if (!r.found || !r.lignes) {
-      if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--danger)">Contenu indisponible pour ce document.</div>';
-      _csLignes = [];
-      return;
-    }
-    _csLignes = r.lignes;
-    if (zone) {
-      zone.innerHTML = `<div style="border:0.5px solid var(--border);border-radius:8px;padding:10px 12px;background:rgba(255,255,255,.5)">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Contenu du ${esc(r.numero||numero||'')} — ${_csLignes.length} ligne(s)</div>
-        ${_csLignes.map(l => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
-          <span style="flex:1">${esc(l.designation)}</span>
-          ${l.rapproche ? '<span class="badge g" title="Reconnu au catalogue">✓</span>' : '<span class="badge hg" title="Pas au catalogue">?</span>'}
-          <span class="mono" style="color:var(--text3)">×${l.quantite_commandee}</span>
-        </div>`).join('')}
-      </div>`;
-    }
-    dessinerLignesSuede();
-  } catch (e) {
-    if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
-  }
-}
-window.chercherContenuBCId = chercherContenuBCId;
 window.enregistrerCommandeSuede = enregistrerCommandeSuede;
 window.ouvrirCommandeSuede = ouvrirCommandeSuede;
 window.sauverCommandeSuede = sauverCommandeSuede;
