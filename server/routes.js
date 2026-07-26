@@ -748,6 +748,31 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
       }
     }
 
+    // 1bis. Toujours pas trouvé : peut-être un autre entrepôt que celui par défaut — on les liste et on les interroge chacun
+    if (!doc) {
+      try {
+        const { data: entrepots } = await vfApi.get('/warehouses.json');
+        if (Array.isArray(entrepots) && entrepots.length) {
+          debug.push(`entrepôts trouvés : ${entrepots.map(w => `${w.name}(#${w.id})`).join(', ')}`);
+          for (const w of entrepots) {
+            if (doc) break;
+            try {
+              const { data } = await vfApi.get('/warehouse_documents.json', { params: { warehouse_id: w.id, per_page: 100, page: 1 } });
+              if (Array.isArray(data) && data.length) {
+                debug.push(`warehouse_id=${w.id} (${w.name}) → ${data.length} doc(s), ex: ${data.slice(0, 5).map(d => `${d.number}[${d.kind}]`).join(', ')}`);
+                doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+                if (doc) source = 'warehouse';
+              } else {
+                debug.push(`warehouse_id=${w.id} (${w.name}) → aucun document`);
+              }
+            } catch (e) { debug.push(`warehouse_id=${w.id} → ERREUR ${e.response?.status || ''} ${e.message}`); }
+          }
+        } else {
+          debug.push('GET /warehouses.json → aucun entrepôt distinct (compte à entrepôt unique)');
+        }
+      } catch (e) { debug.push(`GET /warehouses.json → ERREUR ${e.response?.status || ''} ${e.message}`); }
+    }
+
     // 2. Repli : recherche large sur les factures classiques
     if (!doc) {
       try {
