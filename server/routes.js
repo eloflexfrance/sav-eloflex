@@ -730,29 +730,49 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
     const normalise = s => String(s || '').toLowerCase().replace(/[\s\-\/\.]+/g, '');
     const numNorm = normalise(numero);
     let doc = null;
+    const debug = []; // journal des tentatives, retourné si rien n'est trouvé
 
     // Étape 1 : recherche directe par numéro, tous types de documents de stock confondus
     try {
       const { data } = await vfApi.get('/warehouse_documents.json', { params: { number: numero, per_page: 10 } });
+      const nb = Array.isArray(data) ? data.length : -1;
+      debug.push(`number=${numero} → ${nb} résultat(s)${Array.isArray(data)&&data.length?' : '+data.map(d=>d.number).join(', '):''}`);
       if (Array.isArray(data) && data.length) {
         doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
       }
-    } catch (_) {}
+    } catch (e) { debug.push(`number=${numero} → ERREUR ${e.response?.status||''} ${e.response?.data?JSON.stringify(e.response.data).slice(0,200):e.message}`); }
 
-    // Étape 2 : repli — parcourir les documents récents par type (pz = entrée externe = réception fournisseur)
+    // Étape 2 : repli — parcourir les documents récents par type (jusqu'à 300, sur 3 pages)
     if (!doc) {
-      for (const kind of ['pz', 'pw', 'mm', 'wz']) {
-        try {
-          const { data } = await vfApi.get('/warehouse_documents.json', { params: { kind, per_page: 100, order: 'id desc' } });
-          if (Array.isArray(data) && data.length) {
-            doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
-            if (doc) break;
-          }
-        } catch (_) {}
+      for (const kind of ['pz', 'pw', 'mm', 'wz', 'bt']) {
+        for (const page of [1, 2, 3]) {
+          try {
+            const { data } = await vfApi.get('/warehouse_documents.json', { params: { kind, per_page: 100, page, order: 'id desc' } });
+            const nb = Array.isArray(data) ? data.length : -1;
+            if (page === 1) debug.push(`kind=${kind} page1 → ${nb} résultat(s)`);
+            if (Array.isArray(data) && data.length) {
+              doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+              if (doc || data.length < 100) break;
+            } else break;
+          } catch (e) { debug.push(`kind=${kind} page${page} → ERREUR ${e.response?.status||''} ${e.message}`); break; }
+        }
+        if (doc) break;
       }
     }
 
-    if (!doc) return res.json({ configured: true, found: false });
+    // Étape 3 : repli générique — tous types de documents de stock confondus, sans filtre kind
+    if (!doc) {
+      try {
+        const { data } = await vfApi.get('/warehouse_documents.json', { params: { per_page: 100, page: 1, order: 'id desc' } });
+        const nb = Array.isArray(data) ? data.length : -1;
+        debug.push(`sans filtre kind, page1 → ${nb} résultat(s)${Array.isArray(data)&&data.length?' (derniers numéros : '+data.slice(0,5).map(d=>d.number+'['+d.kind+']').join(', ')+')':''}`);
+        if (Array.isArray(data) && data.length) {
+          doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+        }
+      } catch (e) { debug.push(`sans filtre kind → ERREUR ${e.response?.status||''} ${e.message}`); }
+    }
+
+    if (!doc) return res.json({ configured: true, found: false, debug });
 
     const { data: detail } = await vfApi.get(`/warehouse_documents/${doc.id}.json`);
     const actions = detail.warehouse_actions || [];
