@@ -3116,7 +3116,11 @@ async function rechercherBcSuede(){
   try{
     const r=await API.vfStockLookup(numero);
     if(r.configured===false){msg.innerHTML='<span style="color:var(--warning)">VosFactures non configuré.</span>';return;}
-    if(!r.found){msg.innerHTML='<span style="color:var(--warning)">Aucun document de stock trouvé pour ce numéro — tu peux quand même ajouter les lignes manuellement.</span>';return;}
+    if(!r.found){
+      msg.innerHTML='<span style="color:var(--warning)">Aucun document de stock trouvé pour ce numéro — tu peux quand même ajouter les lignes manuellement.</span>'
+        + (r.debug&&r.debug.length?`<div class="mono" style="margin-top:6px;font-size:10px;color:var(--text3);white-space:pre-wrap">${r.debug.map(l=>esc(l)).join('\n')}</div>`:'');
+      return;
+    }
     TMP_SUEDE_LIGNES = r.lignes.map(l=>({catalogue_id:l.catalogue_id,reference:l.reference,designation:l.designation,quantite_commandee:l.quantite}));
     document.getElementById('sd-lignes-wrap').innerHTML=suedeLignesHTML();
     if(r.date && !gv('sd-date-commande')) document.getElementById('sd-date-commande').value=r.date;
