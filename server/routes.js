@@ -755,20 +755,16 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
       } catch (e) { debug.push(`number=${numero} → ERREUR ${e.response?.status || ''} ${e.message}`); }
     }
 
-    // Repli : balayage des types de documents pas encore vus, pour repérer celui qui utilise le préfixe recherché
+    // Repli : défilement de pages sans AUCUN filtre (kind et number se sont révélés peu fiables sur ce compte)
     if (!doc) {
-      for (const kind of ['invoice_other', 'receipt', 'maintenance_request', 'advance', 'final', 'correction', 'payment_receipt', 'kp', 'kw']) {
+      for (let page = 1; page <= 15 && !doc; page++) {
         try {
-          const { data } = await vfApi.get('/invoices.json', { params: { kind, number: numero, per_page: 5 } });
-          if (Array.isArray(data) && data.length) {
-            debug.push(`kind=${kind}&number=${numero} → ${data.length} résultat(s) : ${data.map(d => d.number).join(', ')}`);
-            doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
-            if (doc) break;
-          } else {
-            const { data: recents } = await vfApi.get('/invoices.json', { params: { kind, per_page: 3, order: 'id desc' } });
-            debug.push(`kind=${kind} (sans number, aperçu) → ${Array.isArray(recents) ? recents.map(d => d.number).join(', ') || 'aucun document' : 'erreur'}`);
-          }
-        } catch (e) { debug.push(`kind=${kind} → ERREUR ${e.response?.status || ''} ${e.message}`); }
+          const { data } = await vfApi.get('/invoices.json', { params: { per_page: 100, page, order: 'id desc' } });
+          if (!Array.isArray(data) || !data.length) { debug.push(`page ${page} (sans filtre) → vide, arrêt`); break; }
+          if (page <= 3) debug.push(`page ${page} (sans filtre) → ${data.length} doc(s), ex: ${data.slice(0, 3).map(d => `${d.number}[${d.kind}]`).join(', ')}`);
+          doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+          if (data.length < 100) { if (!doc) debug.push(`page ${page} → dernière page atteinte, ${data.length} doc(s), aucune correspondance`); break; }
+        } catch (e) { debug.push(`page ${page} (sans filtre) → ERREUR ${e.response?.status || ''} ${e.message}`); break; }
       }
     }
 
