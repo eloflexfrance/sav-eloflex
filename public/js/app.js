@@ -3053,7 +3053,7 @@ function suedeLignesHTML(){
     <button class="btn sm" type="button" style="margin-top:6px" onclick="ajouterLigneSuede()"><i class="ti ti-plus"></i>Ajouter une ligne</button>`;
   const reception = TMP_SUEDE_MODE==='reception';
   return `<table class="t" style="width:100%">
-    <thead><tr><th>Référence VF</th><th>Désignation</th><th>Pièce catalogue</th><th style="width:70px">Commandé</th>${reception?'<th style="width:80px">Reçu</th>':''}${!reception?'<th></th>':''}</tr></thead>
+    <thead><tr><th>Réf.</th><th>Désignation (VosFactures)</th><th>Pièce catalogue</th><th style="width:70px">Commandé</th>${reception?'<th style="width:80px">Reçu</th>':''}${!reception?'<th></th>':''}</tr></thead>
     <tbody>${TMP_SUEDE_LIGNES.map((l,i)=>`<tr>
       <td class="mono" style="font-size:11px">${esc(l.reference||'—')}</td>
       <td style="font-size:12px">${esc(l.designation||'—')}</td>
