@@ -337,68 +337,91 @@ async function initDB() {
     await client.query(`CREATE TABLE IF NOT EXISTS commandes_suede (
       id SERIAL PRIMARY KEY,
       numero_bc TEXT NOT NULL,
-      date_commande DATE DEFAULT CURRENT_DATE,
+      vf_id INTEGER,
+      fournisseur TEXT DEFAULT 'Eloflex AB',
+      date_commande DATE,
       transporteur TEXT,
       num_suivi TEXT,
       date_livraison DATE,
+      statut TEXT DEFAULT 'En cours',
       stock_integre BOOLEAN DEFAULT FALSE,
-      stock_integre_at TIMESTAMPTZ,
-      note TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
+      integre_le TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
     )`);
     await client.query(`CREATE TABLE IF NOT EXISTS commandes_suede_lignes (
       id SERIAL PRIMARY KEY,
-      commande_suede_id INTEGER NOT NULL REFERENCES commandes_suede(id) ON DELETE CASCADE,
-      catalogue_id INTEGER REFERENCES catalogue(id) ON DELETE SET NULL,
-      designation TEXT NOT NULL,
-      ref TEXT,
-      quantite_commandee INTEGER NOT NULL DEFAULT 0,
-      quantite_recue INTEGER DEFAULT 0,
-      reliquat INTEGER DEFAULT 0
+      commande_id INTEGER REFERENCES commandes_suede(id) ON DELETE CASCADE,
+      catalogue_id INTEGER REFERENCES catalogue(id),
+      reference TEXT,
+      designation TEXT,
+      quantite_commandee INTEGER DEFAULT 1,
+      quantite_recue INTEGER,
+      reliquat INTEGER DEFAULT 0,
+      ordre INTEGER DEFAULT 0
     )`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_cs_lignes ON commandes_suede_lignes(commande_suede_id)`);
 
-    // Réparation d'anciennes versions de ces tables (structure différente selon
-    // le moment où elles ont été créées) : on aligne les colonnes attendues.
+    // Réparation d'anciennes versions de ces tables (une reconstruction antérieure
+    // utilisait d'autres noms de colonnes). On aligne sur la convention actuelle :
+    // commande_id, reference, integre_le, ordre.
     try {
-      // commandes_suede_lignes : la colonne de liaison a pu s'appeler autrement
       const colsLignes = await client.query(
         `SELECT column_name FROM information_schema.columns WHERE table_name='commandes_suede_lignes'`
       );
       const nomsLignes = colsLignes.rows.map(r => r.column_name);
-      if (!nomsLignes.includes('commande_suede_id')) {
-        // Un ancien nom probable est renommé, sinon la colonne est créée
-        if (nomsLignes.includes('commande_id')) {
-          await client.query(`ALTER TABLE commandes_suede_lignes RENAME COLUMN commande_id TO commande_suede_id`);
+      // Colonne de liaison : doit s'appeler commande_id
+      if (!nomsLignes.includes('commande_id')) {
+        if (nomsLignes.includes('commande_suede_id')) {
+          await client.query(`ALTER TABLE commandes_suede_lignes RENAME COLUMN commande_suede_id TO commande_id`);
         } else {
-          await client.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN commande_suede_id INTEGER REFERENCES commandes_suede(id) ON DELETE CASCADE`);
+          await client.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN commande_id INTEGER REFERENCES commandes_suede(id) ON DELETE CASCADE`);
+        }
+      }
+      // Ancienne colonne "ref" → "reference"
+      if (!nomsLignes.includes('reference')) {
+        if (nomsLignes.includes('ref')) {
+          await client.query(`ALTER TABLE commandes_suede_lignes RENAME COLUMN ref TO reference`);
+        } else {
+          await client.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN reference TEXT`);
         }
       }
       for (const [col, ddl] of [
-        ['catalogue_id', 'INTEGER REFERENCES catalogue(id) ON DELETE SET NULL'],
+        ['catalogue_id', 'INTEGER REFERENCES catalogue(id)'],
         ['designation', 'TEXT'],
-        ['ref', 'TEXT'],
-        ['quantite_commandee', 'INTEGER DEFAULT 0'],
-        ['quantite_recue', 'INTEGER DEFAULT 0'],
-        ['reliquat', 'INTEGER DEFAULT 0']
+        ['quantite_commandee', 'INTEGER DEFAULT 1'],
+        ['quantite_recue', 'INTEGER'],
+        ['reliquat', 'INTEGER DEFAULT 0'],
+        ['ordre', 'INTEGER DEFAULT 0']
       ]) {
         if (!nomsLignes.includes(col)) {
           await client.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
         }
       }
+      // Index sur la bonne colonne
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_cs_lignes ON commandes_suede_lignes(commande_id)`);
+
       // commandes_suede : colonnes attendues par le code actuel
+      const colsCmd = await client.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name='commandes_suede'`
+      );
+      const nomsCmd = colsCmd.rows.map(r => r.column_name);
+      // Ancienne colonne "stock_integre_at" → "integre_le"
+      if (!nomsCmd.includes('integre_le') && nomsCmd.includes('stock_integre_at')) {
+        await client.query(`ALTER TABLE commandes_suede RENAME COLUMN stock_integre_at TO integre_le`);
+      }
       for (const [col, ddl] of [
         ['numero_bc', 'TEXT'],
-        ['date_commande', 'DATE DEFAULT CURRENT_DATE'],
+        ['vf_id', 'INTEGER'],
+        ['fournisseur', "TEXT DEFAULT 'Eloflex AB'"],
+        ['date_commande', 'DATE'],
         ['transporteur', 'TEXT'],
         ['num_suivi', 'TEXT'],
         ['date_livraison', 'DATE'],
+        ['statut', "TEXT DEFAULT 'En cours'"],
         ['stock_integre', 'BOOLEAN DEFAULT FALSE'],
-        ['stock_integre_at', 'TIMESTAMPTZ'],
-        ['note', 'TEXT'],
-        ['created_at', 'TIMESTAMPTZ DEFAULT NOW()'],
-        ['updated_at', 'TIMESTAMPTZ DEFAULT NOW()']
+        ['integre_le', 'TIMESTAMP'],
+        ['created_at', 'TIMESTAMP DEFAULT NOW()'],
+        ['updated_at', 'TIMESTAMP DEFAULT NOW()']
       ]) {
         await client.query(`ALTER TABLE commandes_suede ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
       }
