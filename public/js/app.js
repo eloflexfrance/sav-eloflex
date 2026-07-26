@@ -3756,8 +3756,12 @@ function modalNouvelleCommandeSuede() {
         <div class="form-group"><label class="form-label">N° de suivi</label>
           <input class="form-input mono" id="cs-suivi" placeholder="1Z…"></div>
       </div>
-      <div class="form-group"><label class="form-label">Date de livraison prévue</label>
-        <input class="form-input" id="cs-livraison" type="date"></div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Date de commande</label>
+          <input class="form-input" id="cs-date" type="date"></div>
+        <div class="form-group"><label class="form-label">Date de livraison prévue</label>
+          <input class="form-input" id="cs-livraison" type="date"></div>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
@@ -3845,7 +3849,7 @@ async function importerDocVF() {
         if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">Document trouvé mais sans lignes exploitables. Ajoutez les pièces manuellement.</div>';
         return;
       }
-      fusionnerLignesImportees(r.lignes);
+      fusionnerLignesImportees(r.lignes, r.date);
       if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--success);padding:6px 0"><i class="ti ti-check"></i> ${r.lignes.length} ligne(s) importée(s)${r.numero ? ' du ' + esc(r.numero) : ''}.</div>`;
     } catch (e) {
       if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
@@ -3860,7 +3864,7 @@ async function importerDocVF() {
       if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">Document introuvable. Ajoutez les pièces manuellement.</div>';
       return;
     }
-    fusionnerLignesImportees(r.lignes);
+    fusionnerLignesImportees(r.lignes, r.date);
     if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--success);padding:6px 0"><i class="ti ti-check"></i> ${r.lignes.length} ligne(s) importée(s)${r.numero ? ' du ' + esc(r.numero) : ''}.</div>`;
   } catch (e) {
     if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
@@ -3869,7 +3873,7 @@ async function importerDocVF() {
 window.importerDocVF = importerDocVF;
 
 // Ajoute les lignes importées (format serveur : reference/designation/quantite/catalogue_id)
-function fusionnerLignesImportees(lignes) {
+function fusionnerLignesImportees(lignes, dateDoc) {
   for (const l of lignes) {
     const existante = l.catalogue_id
       ? _csLignes.find(x => x.catalogue_id === l.catalogue_id)
@@ -3883,6 +3887,9 @@ function fusionnerLignesImportees(lignes) {
       rapproche: !!l.catalogue_id
     });
   }
+  // Pré-remplir la date de commande depuis le document importé, si le champ est vide
+  const champDate = document.getElementById('cs-date');
+  if (champDate && !champDate.value && dateDoc) champDate.value = String(dateDoc).slice(0, 10);
   dessinerLignesSuede();
 }
 
@@ -3892,6 +3899,7 @@ async function enregistrerCommandeSuede() {
   try {
     await API.createCommandeSuede({
       numero_bc,
+      date_commande: document.getElementById('cs-date')?.value || null,
       transporteur: document.getElementById('cs-transporteur')?.value || null,
       num_suivi: document.getElementById('cs-suivi')?.value || null,
       date_livraison: document.getElementById('cs-livraison')?.value || null,
@@ -3911,6 +3919,7 @@ async function enregistrerCommandeSuede() {
 async function ouvrirCommandeSuede(id) {
   try {
     const cs = await API.commandeSuede(id);
+    window._csNumeroBc = cs.numero_bc;
     const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
     const peutIntegrer = cs.date_livraison && !cs.stock_integre;
     showModal(`
@@ -3921,7 +3930,7 @@ async function ouvrirCommandeSuede(id) {
           <div class="form-group"><label class="form-label">Référence</label>
             <input class="form-input mono" value="${esc(cs.numero_bc)}" readonly style="background:rgba(0,0,0,.03)"></div>
           <div class="form-group"><label class="form-label">Date de commande</label>
-            <input class="form-input" value="${cs.date_commande ? fd(cs.date_commande) : '—'}" readonly style="background:rgba(0,0,0,.03)"></div>
+            <input class="form-input" id="cs-e-date" type="date" value="${cs.date_commande||''}"></div>
           <div class="form-group"><label class="form-label">Transporteur</label>
             <select class="form-input" id="cs-e-transporteur">
               <option value="" ${!cs.transporteur?'selected':''}>—</option>
@@ -3958,6 +3967,8 @@ async function ouvrirCommandeSuede(id) {
 async function sauverCommandeSuede(id) {
   try {
     await API.updateCommandeSuede(id, {
+      numero_bc: window._csNumeroBc,
+      date_commande: document.getElementById('cs-e-date')?.value || null,
       transporteur: document.getElementById('cs-e-transporteur')?.value || null,
       num_suivi: document.getElementById('cs-e-suivi')?.value || null,
       date_livraison: document.getElementById('cs-e-livraison')?.value || null

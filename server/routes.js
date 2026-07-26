@@ -854,6 +854,95 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Import direct d'un document entrepôt VosFactures par son ID (collé depuis l'URL)
+// Même format de sortie que stock-lookup, pour rester cohérent côté front.
+router.get('/vosfactures/stock-doc/:id', async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
+      return res.json({ configured: false });
+    }
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    // On tente d'abord le document d'entrepôt (cas de l'URL warehouse_documents/xxxx),
+    // puis la facture classique si le premier échoue.
+    let detail = null, source = null;
+    const estEntrepot = req.query.warehouse === '1';
+    const essais = estEntrepot
+      ? [['warehouse', `/warehouse_documents/${req.params.id}.json`], ['invoice', `/invoices/${req.params.id}.json`]]
+      : [['invoice', `/invoices/${req.params.id}.json`], ['warehouse', `/warehouse_documents/${req.params.id}.json`]];
+    for (const [src, url] of essais) {
+      try {
+        const { data } = await vfApi.get(url);
+        if (data && data.id) { detail = data; source = src; break; }
+      } catch (_) { /* on tente l'autre ressource */ }
+    }
+    if (!detail) return res.json({ configured: true, found: false });
+
+    // Rapprochement catalogue — même logique que stock-lookup
+    const catalogue = await db.all('SELECT id, ref, designation, vf_product_id FROM catalogue');
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    function rapprocher(productId, texte) {
+      let cat = null;
+      if (productId) cat = catalogue.find(c => c.vf_product_id === productId);
+      if (!cat) {
+        const pn = norm(texte);
+        cat = catalogue.find(c => norm(c.ref) === pn)
+           || catalogue.find(c => pn.length > 3 && (norm(c.designation).includes(pn) || pn.includes(norm(c.ref))));
+      }
+      return cat;
+    }
+
+    let lignes, dateDoc, fournisseur;
+    if (source === 'warehouse') {
+      const actions = detail.warehouse_actions || [];
+      lignes = actions.map(a => {
+        const cat = rapprocher(a.product_id, a.product_name || a.name);
+        return {
+          reference: cat ? cat.ref : '',
+          designation: a.product_name || a.name || '',
+          quantite: parseInt(a.quantity) || 1,
+          catalogue_id: cat ? cat.id : null,
+          catalogue_ref: cat ? cat.ref : null,
+          catalogue_designation: cat ? cat.designation : null
+        };
+      });
+      dateDoc = detail.issue_date;
+      fournisseur = detail.client_name || 'Eloflex AB';
+    } else {
+      const positions = detail.positions || detail.invoice_items || [];
+      lignes = positions.map(p => {
+        const cat = rapprocher(p.product_id, p.code || p.name);
+        return {
+          reference: p.code || (cat ? cat.ref : ''),
+          designation: p.name || '',
+          quantite: parseInt(p.quantity) || 1,
+          catalogue_id: cat ? cat.id : null,
+          catalogue_ref: cat ? cat.ref : null,
+          catalogue_designation: cat ? cat.designation : null
+        };
+      });
+      dateDoc = detail.issue_date || detail.sell_date;
+      fournisseur = detail.seller_name || 'Eloflex AB';
+    }
+
+    res.json({
+      configured: true, found: true, vf_id: detail.id, numero: detail.number,
+      date: dateDoc, fournisseur, lignes
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Formate les colonnes DATE (pg les renvoie comme objets Date) en 'YYYY-MM-DD'
+function _fmtDateSuede(v) {
+  if (!v) return null;
+  if (typeof v === 'string') return v.slice(0, 10);
+  try { return new Date(v).toISOString().slice(0, 10); } catch (_) { return null; }
+}
+
 router.get('/commandes-suede', async (req, res) => {
   try {
     const list = await db.all(`
@@ -861,6 +950,10 @@ router.get('/commandes-suede', async (req, res) => {
         (SELECT COUNT(*)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS nb_lignes,
         (SELECT COALESCE(SUM(reliquat),0)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS total_reliquat
       FROM commandes_suede cs ORDER BY cs.created_at DESC`);
+    list.forEach(cs => {
+      cs.date_commande  = _fmtDateSuede(cs.date_commande);
+      cs.date_livraison = _fmtDateSuede(cs.date_livraison);
+    });
     res.json(list);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -869,6 +962,8 @@ router.get('/commandes-suede/:id', async (req, res) => {
   try {
     const cs = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
     if (!cs) return res.status(404).json({ error: 'Introuvable' });
+    cs.date_commande  = _fmtDateSuede(cs.date_commande);
+    cs.date_livraison = _fmtDateSuede(cs.date_livraison);
     cs.lignes = await db.all(`
       SELECT l.*, c.ref AS catalogue_ref_actuelle, c.designation AS catalogue_designation_actuelle, c.stock AS catalogue_stock_actuel
       FROM commandes_suede_lignes l LEFT JOIN catalogue c ON c.id=l.catalogue_id
@@ -959,9 +1054,17 @@ router.post('/commandes-suede/:id/integrer-stock', adminOrOp, async (req, res) =
       const saisie = receptions.find(r => r.id === ligne.id);
       const qteRecue = saisie ? Math.max(0, parseInt(saisie.quantite_recue) || 0) : ligne.quantite_commandee;
       const reliquat = Math.max(0, ligne.quantite_commandee - qteRecue);
-      await pgClient.query('UPDATE commandes_suede_lignes SET quantite_recue=$1, reliquat=$2 WHERE id=$3', [qteRecue, reliquat, ligne.id]);
-      if (ligne.catalogue_id && qteRecue > 0) {
-        await pgClient.query('UPDATE catalogue SET stock = stock + $1 WHERE id=$2', [qteRecue, ligne.catalogue_id]);
+      // Corrections éventuelles de la ligne au moment de la réception
+      // (référence, désignation, rattachement catalogue). Absentes → valeurs d'origine.
+      const ref = saisie && saisie.reference !== undefined ? (saisie.reference || null) : ligne.reference;
+      const designation = saisie && saisie.designation ? saisie.designation : ligne.designation;
+      const catalogueId = saisie && saisie.catalogue_id !== undefined ? (saisie.catalogue_id || null) : ligne.catalogue_id;
+      await pgClient.query(
+        'UPDATE commandes_suede_lignes SET reference=$1, designation=$2, catalogue_id=$3, quantite_recue=$4, reliquat=$5 WHERE id=$6',
+        [ref, designation, catalogueId, qteRecue, reliquat, ligne.id]
+      );
+      if (catalogueId && qteRecue > 0) {
+        await pgClient.query('UPDATE catalogue SET stock = stock + $1 WHERE id=$2', [qteRecue, catalogueId]);
         piecesMaj++;
       }
       totalReliquat += reliquat;
