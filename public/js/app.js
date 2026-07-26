@@ -3759,8 +3759,23 @@ async function chercherContenuBC() {
   try {
     const r = await API.stockLookup(numero);
     if (!r.found) {
-      if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--warning);background:rgba(0,0,0,.03);border-radius:8px;padding:10px">${esc(r.message || 'Document introuvable.')} Vous pouvez saisir les lignes manuellement après création.</div>`;
       _csLignes = [];
+      let html = `<div style="font-size:12px;color:var(--warning);background:rgba(0,0,0,.03);border-radius:8px;padding:10px">${esc(r.message || 'Document introuvable.')}</div>`;
+      // Si VosFactures connaît des documents approchants, on les propose
+      if (Array.isArray(r.candidats) && r.candidats.length) {
+        html += `<div style="margin-top:8px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3)">Documents trouvés dans VosFactures</div>
+          <div style="max-height:180px;overflow:auto;margin-top:4px">
+          ${r.candidats.map(c => `<div onclick="chercherContenuBCId(${c.id}, '${esc(String(c.kind||''))}', '${esc(String(c.number||''))}')" style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;border-radius:6px;font-size:12px" onmouseover="this.style.background='rgba(46,124,246,.08)'" onmouseout="this.style.background=''">
+            <span class="mono" style="flex:1">${esc(c.number||'(sans numéro)')}</span>
+            <span style="font-size:11px;color:var(--text3)">${esc(c.src||'')}</span>
+            <i class="ti ti-arrow-right" style="font-size:13px;color:var(--text3)"></i>
+          </div>`).join('')}
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Cliquez sur le bon document pour charger son contenu.</div>`;
+      } else {
+        html += `<div style="font-size:11px;color:var(--text3);margin-top:6px">Vous pouvez saisir les lignes manuellement après création.</div>`;
+      }
+      if (zone) zone.innerHTML = html;
       return;
     }
     _csLignes = r.lignes || [];
@@ -3907,6 +3922,38 @@ async function supprimerCommandeSuede(id) {
 window.renderCommandeSuede = renderCommandeSuede;
 window.modalNouvelleCommandeSuede = modalNouvelleCommandeSuede;
 window.chercherContenuBC = chercherContenuBC;
+
+// Charger le contenu d'un document VF précis, choisi parmi les candidats
+async function chercherContenuBCId(id, kind, numero) {
+  const zone = document.getElementById('cs-lookup');
+  if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">Chargement du document…</div>';
+  // Recopier le numéro choisi dans le champ BC
+  const champBC = document.getElementById('cs-bc');
+  if (champBC && numero) champBC.value = numero;
+  try {
+    const warehouse = kind && kind !== 'undefined' && kind !== '' ? '1' : '';
+    const r = await API.stockDoc(id, kind, warehouse);
+    if (!r.found || !r.lignes) {
+      if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--danger)">Contenu indisponible pour ce document.</div>';
+      _csLignes = [];
+      return;
+    }
+    _csLignes = r.lignes;
+    if (zone) {
+      zone.innerHTML = `<div style="border:0.5px solid var(--border);border-radius:8px;padding:10px 12px;background:rgba(255,255,255,.5)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Contenu du ${esc(r.numero||numero||'')} — ${_csLignes.length} ligne(s)</div>
+        ${_csLignes.map(l => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
+          <span style="flex:1">${esc(l.designation)}</span>
+          ${l.rapproche ? '<span class="badge g" title="Reconnu au catalogue">✓</span>' : '<span class="badge hg" title="Pas au catalogue">?</span>'}
+          <span class="mono" style="color:var(--text3)">×${l.quantite_commandee}</span>
+        </div>`).join('')}
+      </div>`;
+    }
+  } catch (e) {
+    if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
+  }
+}
+window.chercherContenuBCId = chercherContenuBCId;
 window.enregistrerCommandeSuede = enregistrerCommandeSuede;
 window.ouvrirCommandeSuede = ouvrirCommandeSuede;
 window.sauverCommandeSuede = sauverCommandeSuede;

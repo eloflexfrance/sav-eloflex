@@ -4364,22 +4364,28 @@ router.get('/vosfactures/stock-lookup', adminOnly, async (req, res) => {
       params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
     });
 
-    // Documents d'entrepôt (BC/BL), plusieurs types possibles selon le compte
+    // Documents d'entrepôt (BC/BL), plusieurs types possibles selon le compte.
+    // On n'accepte QUE les documents dont le numéro correspond vraiment :
+    // sinon on récupérait un document sans rapport (ex. des frais d'envoi).
     let doc = null;
+    const candidats = [];
     const kinds = ['pz', 'pw', 'mm', 'wz', 'rw', 'bt'];
     for (const kind of kinds) {
-      if (doc) break;
       try {
         const { data } = await vfApi.get('/warehouse_documents.json', {
           params: { 'search[query]': numero, kind, per_page: 25 }
         });
-        journal.push(`kind=${kind} → ${Array.isArray(data) ? data.length : 'non-liste'}`);
-        if (Array.isArray(data) && data.length) {
-          doc = data.find(d => String(d.number || '').includes(numero)) || data[0];
+        const n = Array.isArray(data) ? data.length : 0;
+        journal.push(`warehouse kind=${kind} → ${n}`);
+        if (Array.isArray(data)) {
+          data.forEach(d => candidats.push({ src: `wh:${kind}`, id: d.id, number: d.number, kind: d.kind || kind }));
+          if (!doc) doc = data.find(d => String(d.number || '').replace(/\s/g, '') === numero.replace(/\s/g, ''))
+                        || data.find(d => String(d.number || '').includes(numero));
         }
       } catch (e) {
-        journal.push(`kind=${kind} → erreur ${e.response ? e.response.status : e.message}`);
+        journal.push(`warehouse kind=${kind} → erreur ${e.response ? e.response.status : e.message}`);
       }
+      if (doc) break;
     }
 
     // Repli : recherche dans les factures classiques
@@ -4388,17 +4394,28 @@ router.get('/vosfactures/stock-lookup', adminOnly, async (req, res) => {
         const { data } = await vfApi.get('/invoices.json', {
           params: { search_text: numero, per_page: 25 }
         });
-        journal.push(`invoices search_text → ${Array.isArray(data) ? data.length : 'non-liste'}`);
-        if (Array.isArray(data) && data.length) {
-          doc = data.find(d => String(d.number || '').includes(numero)) || null;
+        const n = Array.isArray(data) ? data.length : 0;
+        journal.push(`invoices search_text → ${n}`);
+        if (Array.isArray(data)) {
+          data.forEach(d => candidats.push({ src: 'invoice', id: d.id, number: d.number, kind: d.kind }));
+          doc = data.find(d => String(d.number || '').replace(/\s/g, '') === numero.replace(/\s/g, ''))
+             || data.find(d => String(d.number || '').includes(numero));
         }
       } catch (e) {
         journal.push(`invoices → erreur ${e.response ? e.response.status : e.message}`);
       }
     }
 
+    // Toujours rien de strictement correspondant : on renvoie les candidats
+    // trouvés (numéros approchants) pour que Brice voie ce que VF connaît.
     if (!doc) {
-      return res.json({ found: false, journal, message: 'Document introuvable dans VosFactures pour ce numéro.' });
+      return res.json({
+        found: false, journal,
+        candidats: candidats.slice(0, 30),
+        message: candidats.length
+          ? `Aucun document nommé exactement « ${numero} ». ${candidats.length} document(s) approchant(s) trouvé(s) — voir la liste.`
+          : `Aucun document trouvé pour « ${numero} » dans VosFactures.`
+      });
     }
 
     // Récupérer le détail (lignes) du document
@@ -4522,6 +4539,114 @@ router.delete('/commandes-suede/:id', adminOnly, async (req, res) => {
 });
 
 
+// Réparation des tables Commande Suède (déclenchable depuis le navigateur)
+// À appeler une fois si l'erreur "column l.commande_suede_id does not exist"
+// apparaît : une ancienne version des tables existe avec une autre structure.
+router.get('/admin/reparer-commande-suede', adminOnly, async (req, res) => {
+  const actions = [];
+  try {
+    // Les tables existent-elles ?
+    await db.query(`CREATE TABLE IF NOT EXISTS commandes_suede (
+      id SERIAL PRIMARY KEY, numero_bc TEXT, date_commande DATE DEFAULT CURRENT_DATE,
+      transporteur TEXT, num_suivi TEXT, date_livraison DATE,
+      stock_integre BOOLEAN DEFAULT FALSE, stock_integre_at TIMESTAMPTZ, note TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await db.query(`CREATE TABLE IF NOT EXISTS commandes_suede_lignes (
+      id SERIAL PRIMARY KEY, designation TEXT, ref TEXT,
+      quantite_commandee INTEGER DEFAULT 0, quantite_recue INTEGER DEFAULT 0, reliquat INTEGER DEFAULT 0
+    )`);
+
+    // Colonne de liaison sur les lignes
+    const cols = await db.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name='commandes_suede_lignes'`
+    );
+    const noms = cols.rows.map(r => r.column_name);
+    if (!noms.includes('commande_suede_id')) {
+      if (noms.includes('commande_id')) {
+        await db.query(`ALTER TABLE commandes_suede_lignes RENAME COLUMN commande_id TO commande_suede_id`);
+        actions.push('colonne commande_id renommée en commande_suede_id');
+      } else {
+        await db.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN commande_suede_id INTEGER REFERENCES commandes_suede(id) ON DELETE CASCADE`);
+        actions.push('colonne commande_suede_id créée');
+      }
+    } else {
+      actions.push('commande_suede_id déjà présente');
+    }
+
+    // Colonnes attendues sur les lignes
+    for (const [col, ddl] of [
+      ['catalogue_id', 'INTEGER REFERENCES catalogue(id) ON DELETE SET NULL'],
+      ['designation', 'TEXT'], ['ref', 'TEXT'],
+      ['quantite_commandee', 'INTEGER DEFAULT 0'],
+      ['quantite_recue', 'INTEGER DEFAULT 0'], ['reliquat', 'INTEGER DEFAULT 0']
+    ]) {
+      if (!noms.includes(col)) {
+        await db.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
+        actions.push(`ligne.${col} ajoutée`);
+      }
+    }
+
+    // Colonnes attendues sur l'en-tête
+    for (const [col, ddl] of [
+      ['numero_bc', 'TEXT'], ['date_commande', 'DATE DEFAULT CURRENT_DATE'],
+      ['transporteur', 'TEXT'], ['num_suivi', 'TEXT'], ['date_livraison', 'DATE'],
+      ['stock_integre', 'BOOLEAN DEFAULT FALSE'], ['stock_integre_at', 'TIMESTAMPTZ'],
+      ['note', 'TEXT'], ['created_at', 'TIMESTAMPTZ DEFAULT NOW()'], ['updated_at', 'TIMESTAMPTZ DEFAULT NOW()']
+    ]) {
+      await db.query(`ALTER TABLE commandes_suede ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
+    }
+    actions.push('en-tête aligné');
+
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_cs_lignes ON commandes_suede_lignes(commande_suede_id)`);
+
+    res.json({ ok: true, message: 'Tables Commande Suède réparées', actions });
+  } catch (e) {
+    res.status(500).json({ error: e.message, actions });
+  }
+});
+
+// Charger le contenu d'un document VosFactures précis (choisi par l'utilisateur
+// parmi les candidats), quand la recherche par numéro est ambiguë
+router.get('/vosfactures/stock-doc/:id', adminOnly, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN) return res.status(400).json({ error: 'VosFactures non configuré' });
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    const estEntrepot = req.query.warehouse === '1' || (req.query.kind && req.query.kind !== 'undefined');
+    const url = estEntrepot ? `/warehouse_documents/${req.params.id}.json` : `/invoices/${req.params.id}.json`;
+    let detail;
+    try {
+      ({ data: detail } = await vfApi.get(url));
+    } catch (e) {
+      // On tente l'autre ressource si la première échoue
+      const autre = estEntrepot ? `/invoices/${req.params.id}.json` : `/warehouse_documents/${req.params.id}.json`;
+      ({ data: detail } = await vfApi.get(autre));
+    }
+    const lignesVF = detail.warehouse_actions || detail.positions || detail.warehouse_document_lines || [];
+    const catalogue = await db.all('SELECT id, ref, designation, vf_product_id FROM catalogue');
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const lignes = lignesVF.map(l => {
+      const vfProductId = l.product_id || l.warehouse_product_id || null;
+      const nom = l.name || l.product_name || l.description || '';
+      const qte = parseInt(l.quantity || l.count || 0) || 0;
+      let art = vfProductId ? catalogue.find(c => String(c.vf_product_id) === String(vfProductId)) : null;
+      if (!art && nom) art = catalogue.find(c => norm(c.designation) === norm(nom));
+      return {
+        catalogue_id: art ? art.id : null,
+        ref: art ? art.ref : (l.code || null),
+        designation: nom || (art ? art.designation : 'Article inconnu'),
+        quantite_commandee: qte,
+        rapproche: !!art
+      };
+    });
+    res.json({ found: true, numero: detail.number, date: _fmtDateSuede(detail.issue_date || detail.sell_date || detail.created_at), lignes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
-module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;

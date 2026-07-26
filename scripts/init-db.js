@@ -359,6 +359,51 @@ async function initDB() {
     )`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_cs_lignes ON commandes_suede_lignes(commande_suede_id)`);
 
+    // Réparation d'anciennes versions de ces tables (structure différente selon
+    // le moment où elles ont été créées) : on aligne les colonnes attendues.
+    try {
+      // commandes_suede_lignes : la colonne de liaison a pu s'appeler autrement
+      const colsLignes = await client.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name='commandes_suede_lignes'`
+      );
+      const nomsLignes = colsLignes.rows.map(r => r.column_name);
+      if (!nomsLignes.includes('commande_suede_id')) {
+        // Un ancien nom probable est renommé, sinon la colonne est créée
+        if (nomsLignes.includes('commande_id')) {
+          await client.query(`ALTER TABLE commandes_suede_lignes RENAME COLUMN commande_id TO commande_suede_id`);
+        } else {
+          await client.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN commande_suede_id INTEGER REFERENCES commandes_suede(id) ON DELETE CASCADE`);
+        }
+      }
+      for (const [col, ddl] of [
+        ['catalogue_id', 'INTEGER REFERENCES catalogue(id) ON DELETE SET NULL'],
+        ['designation', 'TEXT'],
+        ['ref', 'TEXT'],
+        ['quantite_commandee', 'INTEGER DEFAULT 0'],
+        ['quantite_recue', 'INTEGER DEFAULT 0'],
+        ['reliquat', 'INTEGER DEFAULT 0']
+      ]) {
+        if (!nomsLignes.includes(col)) {
+          await client.query(`ALTER TABLE commandes_suede_lignes ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
+        }
+      }
+      // commandes_suede : colonnes attendues par le code actuel
+      for (const [col, ddl] of [
+        ['numero_bc', 'TEXT'],
+        ['date_commande', 'DATE DEFAULT CURRENT_DATE'],
+        ['transporteur', 'TEXT'],
+        ['num_suivi', 'TEXT'],
+        ['date_livraison', 'DATE'],
+        ['stock_integre', 'BOOLEAN DEFAULT FALSE'],
+        ['stock_integre_at', 'TIMESTAMPTZ'],
+        ['note', 'TEXT'],
+        ['created_at', 'TIMESTAMPTZ DEFAULT NOW()'],
+        ['updated_at', 'TIMESTAMPTZ DEFAULT NOW()']
+      ]) {
+        await client.query(`ALTER TABLE commandes_suede ADD COLUMN IF NOT EXISTS ${col} ${ddl}`);
+      }
+    } catch(e) { console.error('[MIGRATION SUEDE]', e.message); }
+
     // Table de sessions PostgreSQL (connect-pg-simple)
     await client.query(`CREATE TABLE IF NOT EXISTS "user_sessions" (
       "sid" varchar NOT NULL COLLATE "default",

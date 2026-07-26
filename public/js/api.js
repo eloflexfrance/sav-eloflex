@@ -135,6 +135,7 @@ const API = {
   commandesSuede:()=>API.get('/commandes-suede'),
   commandeSuede:(id)=>API.get(`/commandes-suede/${id}`),
   stockLookup:(numero)=>API.get(`/vosfactures/stock-lookup?numero=${encodeURIComponent(numero)}`),
+  stockDoc:(id,kind,warehouse)=>API.get(`/vosfactures/stock-doc/${id}?kind=${encodeURIComponent(kind||'')}&warehouse=${warehouse||''}`),
   createCommandeSuede:(data)=>API.post('/commandes-suede',data),
   updateCommandeSuede:(id,data)=>API.put(`/commandes-suede/${id}`,data),
   integrerStockSuede:(id,recues)=>API.post(`/commandes-suede/${id}/integrer`,{recues}),
