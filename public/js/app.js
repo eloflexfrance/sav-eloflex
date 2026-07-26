@@ -3125,7 +3125,7 @@ async function renderTransferts(ttl,c,a){
       <td>${esc(tr.client_arrivee_nom||'—')}</td>
       <td>${tr.date_arrivee?fd(tr.date_arrivee):'—'}</td>
       <td>${esc(tr.transporteur||'—')}</td>
-      <td class="mono" style="font-size:11px">${esc(tr.num_suivi||'—')}</td>
+      <td class="mono" style="font-size:11px">${tr.num_suivi?`<a href="${lienhSuiviInter(tr.transporteur,tr.num_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(tr.num_suivi)}</a>`:'—'}</td>
       <td><span class="badge ${scT[tr.statut]||''}">${stTr[tr.statut]||esc(tr.statut)}</span></td>
       <td><button class="btn sm danger" onclick="event.stopPropagation();if(confirm(t('transferts_confirm_suppr')))API.deleteTransfert(${tr.id}).then(()=>{render();toast(t('msg_supprime'),'ti-trash')})"><i class="ti ti-trash"></i></button></td>
     </tr>`).join('')}</tbody>
@@ -3188,7 +3188,7 @@ async function modalTransfert(id){
         </div>
         <div class="form-group">
           <label class="form-label">${t('transferts_transporteur')}</label>
-          <select class="form-input" id="tr-transporteur">
+          <select class="form-input" id="tr-transporteur" onchange="majLienSuiviTransfert()">
             <option value="">${t('select_aucun')}</option>
             <option value="DSV" ${d.transporteur==='DSV'?'selected':''}>${t('transferts_dsv')}</option>
             <option value="Autre" ${d.transporteur==='Autre'?'selected':''}>${t('transferts_autre')}</option>
@@ -3196,8 +3196,9 @@ async function modalTransfert(id){
         </div>
         <div class="form-group">
           <label class="form-label">${t('transferts_num_suivi')}</label>
-          <input class="form-input mono" id="tr-num-suivi" value="${esc(d.num_suivi||'')}">
+          <input class="form-input mono" id="tr-num-suivi" value="${esc(d.num_suivi||'')}" oninput="majLienSuiviTransfert()">
         </div>
+        <div id="tr-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-8px"></div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label">${t('col_statut')}</label>
           <select class="form-input" id="tr-statut" onchange="document.getElementById('tr-arrive-hint').style.display=this.value==='Arrivé'?'block':'none'">
@@ -3216,6 +3217,15 @@ async function modalTransfert(id){
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn primary" onclick="saveTransfert(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);
+  majLienSuiviTransfert();
+}
+
+function majLienSuiviTransfert(){
+  const wrap = $('tr-lien-suivi-wrap'); if(!wrap) return;
+  const numero = gv('tr-num-suivi'), transporteur = gv('tr-transporteur');
+  wrap.innerHTML = numero
+    ? `<a href="${lienhSuiviInter(transporteur,numero)}" target="_blank" rel="noopener" class="btn sm" style="display:inline-flex"><i class="ti ti-external-link"></i>${t('cmd_suivre_colis')||'Suivre le colis'}</a>`
+    : '';
 }
 
 async function searchFauteuilTransfert(q){
