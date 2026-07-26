@@ -2748,7 +2748,7 @@ function clientForm(d={}){return `<div class="grid-2">
       <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#16a34a">🗺️ Afficher sur la carte distributeurs</div>
       <div style="font-size:11px;color:var(--text2)">Le point est créé et positionné depuis la ville, et ses ventes sont rattachées automatiquement</div></div>
       <select class="form-input" id="f-reseau-carte" onclick="event.preventDefault();event.stopPropagation()" style="width:auto;padding:5px 8px;font-size:12px;display:${d.sur_carte?'':'none'}">
-        ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
+        ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
       </select>
     </label>
   </div>
@@ -4692,7 +4692,12 @@ window._esc = _esc; window._fd = _fd;
 // ═══════════════════════════════════════════════════════════════════
 var _carteMap = null;
 var _carteAnnee = new Date().getFullYear();
-var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true };
+var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true, negocies:true };
+// Filtre par année de dernière commande : par défaut, année en cours cochée seule.
+// _carteAnnees = ensemble des années cochées ; _carteToutesAnnees = ignore le filtre.
+var _carteAnneesFiltre = {};
+var _carteToutesAnnees = false;
+(function(){ _carteAnneesFiltre[new Date().getFullYear()] = true; })();
 var _carteMarkers = [];
 var _cartePoints = [];
 
@@ -4733,8 +4738,41 @@ var RESEAUX_CONFIG = {
   base:       { label: 'De base',            color: '#e24b4a', letter: 'B' },
   bastide:    { label: 'Bastide',            color: '#378add', letter: 'A' },
   providom:   { label: 'Providom',           color: '#ef9f27', letter: 'P' },
-  districlub: { label: 'DistriClub Medical', color: '#7f77dd', letter: 'D' }
+  districlub: { label: 'DistriClub Medical', color: '#7f77dd', letter: 'D' },
+  negocies:   { label: 'Négociés',           color: '#16a34a', letter: 'N' }
 };
+
+// Génère le panneau de filtre par année de dernière commande (2019 → année en cours)
+function legendeAnnees(){
+  var actuelle = new Date().getFullYear();
+  var html = '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
+    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#888;font-weight:700;margin-bottom:6px">Dernière commande</div>' +
+    '<label style="display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;font-size:12px;font-weight:600">' +
+      '<input type="checkbox" ' + (_carteToutesAnnees?'checked':'') + ' onchange="basculerToutesAnnees(this.checked)"> Toutes les années' +
+    '</label>' +
+    '<div id="carte-annees-liste" style="' + (_carteToutesAnnees?'opacity:.4;pointer-events:none':'') + '">';
+  for (var y = actuelle; y >= 2019; y--) {
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:12px">' +
+      '<input type="checkbox" ' + (_carteAnneesFiltre[y]?'checked':'') + ' onchange="basculerAnnee(' + y + ',this.checked)"> ' + y +
+      '<span id="cnt-annee-' + y + '" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
+      '</label>';
+  }
+  html += '</div></div>';
+  return html;
+}
+function basculerToutesAnnees(actif){
+  _carteToutesAnnees = !!actif;
+  var liste = document.getElementById('carte-annees-liste');
+  if (liste) { liste.style.opacity = actif?'.4':''; liste.style.pointerEvents = actif?'none':''; }
+  afficherMarkers();
+}
+window.basculerToutesAnnees = basculerToutesAnnees;
+function basculerAnnee(annee, actif){
+  if (actif) _carteAnneesFiltre[annee] = true;
+  else delete _carteAnneesFiltre[annee];
+  afficherMarkers();
+}
+window.basculerAnnee = basculerAnnee;
 
 function renderCarte(ttl, c, a) {
   ttl.textContent = 'Carte distributeurs';
@@ -4765,6 +4803,7 @@ function renderCarte(ttl, c, a) {
     '<div style="width:240px;border-right:0.5px solid #e3e3e0;padding:14px;overflow:auto;flex-shrink:0;background:#fafafa">' +
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">Réseaux</div>' +
       legende +
+      legendeAnnees() +
       '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
         '<label style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em;font-weight:700;display:block;margin-bottom:6px">Recherche</label>' +
         '<div style="position:relative;margin-bottom:4px">' +
@@ -4791,6 +4830,8 @@ window.renderCarte = renderCarte;
 // Ouvre la carte de l'interface centrée sur un distributeur donné (par client_id).
 // Affiche un message si ce distributeur n'a pas encore de point sur la carte.
 function voirDistributeurSurCarte(clientId, nom){
+  // Afficher toutes les années pour être sûr que le point ciblé n'est pas masqué par le filtre
+  _carteToutesAnnees = true;
   setView('carte');
   var essais = 0;
   var minuteur = setInterval(function(){
@@ -4886,11 +4927,7 @@ function chargerPoints() {
       _cartePoints = data;
       console.log('[CARTE]', data.length, 'points chargés');
 
-      // Compteurs par réseau
-      Object.keys(RESEAUX_CONFIG).forEach(function(k){
-        var el = document.getElementById('cnt-' + k);
-        if (el) el.textContent = data.filter(function(p){ return p.reseau === k; }).length;
-      });
+      majCompteursCarte();
 
       // Init carte
       var container = document.getElementById('carte-leaflet');
@@ -4949,8 +4986,32 @@ function pinIconCarte(reseau, point) {
   return L.divIcon({ html: html, className: '', iconSize: [30,42], iconAnchor: [15,42], popupAnchor: [0,-38] });
 }
 
+// Met à jour les compteurs (par réseau selon le filtre année actif, par année en absolu)
+function majCompteursCarte(){
+  var pts = _cartePoints || [];
+  // Compteur par réseau : combien de points visibles selon le filtre année
+  Object.keys(RESEAUX_CONFIG).forEach(function(k){
+    var el = document.getElementById('cnt-' + k);
+    if (!el) return;
+    var n = pts.filter(function(p){
+      if (p.reseau !== k) return false;
+      if (_carteToutesAnnees) return true;
+      return p.derniere_annee && _carteAnneesFiltre[p.derniere_annee];
+    }).length;
+    el.textContent = n;
+  });
+  // Compteur par année : combien de points ont leur dernière commande cette année
+  var actuelle = new Date().getFullYear();
+  for (var y = actuelle; y >= 2019; y--) {
+    var el2 = document.getElementById('cnt-annee-' + y);
+    if (el2) el2.textContent = pts.filter(function(p){ return p.derniere_annee === y; }).length;
+  }
+}
+window.majCompteursCarte = majCompteursCarte;
+
 function afficherMarkers(recadrer) {
   if (!_carteMap) return;
+  majCompteursCarte();
   var q = (document.getElementById('carte-search') || {}).value || '';
   q = q.trim().toLowerCase();
 
@@ -4961,6 +5022,11 @@ function afficherMarkers(recadrer) {
   var bounds = [];
   _cartePoints.forEach(function(p){
     if (!_carteReseaux[p.reseau]) return;
+    // Filtre par année de dernière commande (sauf si "toutes les années")
+    if (!_carteToutesAnnees) {
+      var da = p.derniere_annee;
+      if (!da || !_carteAnneesFiltre[da]) return;
+    }
     if (q && (p.nom + ' ' + (p.ville||'') + ' ' + (p.description||'')).toLowerCase().indexOf(q) < 0) return;
     var marker = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon: pinIconCarte(p.reseau, p) });
     marker.bindPopup(function(){ return popupCarte(p); }, { maxWidth: 280 });
@@ -5350,6 +5416,7 @@ function importerKML(files) {
     if (fname.indexOf('bastide') >= 0) return 'bastide';
     if (fname.indexOf('providom') >= 0) return 'providom';
     if (fname.indexOf('districlub') >= 0 || fname.indexOf('distri') >= 0 || fname.indexOf('dcm') >= 0) return 'districlub';
+    if (fname.indexOf('negoci') >= 0 || fname.indexOf('négoci') >= 0) return 'negocies';
     if (fname.indexOf('base') >= 0) return 'base';
     return null;
   }
