@@ -42,6 +42,8 @@ const API = {
   deleteClient:(id)=>API.del(`/clients/${id}`),
   regenererToken:(id)=>API.post(`/clients/${id}/regenerer-token`,{}),
   fusionnerClients:(idCible,idSource,vfIgnore)=>API.post(`/clients/${idCible}/fusionner`,{client_source_id:idSource,vf_ignore_source:vfIgnore}),
+  adressesIncompletes:()=>API.get('/clients/adresses-incompletes'),
+  completerAdresses:(lignes)=>API.post('/clients/adresses-completer',{lignes}),
   fauteuils:(cid)=>API.get('/fauteuils'+(cid?`?client_id=${cid}`:'')),
   fauteuil:(id)=>API.get(`/fauteuils/${id}`),
   createFauteuil:(d)=>API.post('/fauteuils',d),

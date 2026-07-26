@@ -337,11 +337,128 @@ async function chargerTransfertsDashboard(){  const el=document.getElementById('
 
 // ── CLIENTS ───────────────────────────────────────────────────────
 
+// ── COMPLÉTER LES ADRESSES DES DISTRIBUTEURS ──────────────────────
+// Récupère les distributeurs à adresse incomplète, propose les adresses
+// VosFactures, laisse corriger à la main, puis enregistre en masse.
+async function modalCompleterAdresses(){
+  showModal(`<div class="modal-header"><i class="ti ti-map-pin-cog" style="font-size:18px;color:var(--accent)"></i><h2>Compléter les adresses</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="max-width:900px">
+      <div id="adr-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">Analyse des distributeurs et récupération des adresses VosFactures…</div></div>
+    </div>`);
+  try {
+    const r = await API.adressesIncompletes();
+    window._ADR_LIGNES = r.lignes || [];
+    dessinerAdresses(r);
+  } catch(e) {
+    const b = document.getElementById('adr-body');
+    if (b) b.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur : '+esc(e.message)+'</div>';
+  }
+}
+
+function dessinerAdresses(r){
+  const b = document.getElementById('adr-body');
+  if (!b) return;
+  const lignes = window._ADR_LIGNES || [];
+  if (!lignes.length) {
+    b.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--text2)"><i class="ti ti-circle-check" style="font-size:32px;color:#16a34a;display:block;margin-bottom:8px"></i>Tous les distributeurs ont déjà une adresse renseignée.</div>';
+    return;
+  }
+  const infoVF = r.configured
+    ? `<span style="color:#16a34a">${r.avec_suggestion}</span> adresse(s) trouvée(s) dans VosFactures sur ${r.total} distributeur(s) à compléter.`
+    : `VosFactures non configuré — saisie manuelle uniquement (${r.total} distributeur(s)).`;
+  b.innerHTML = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px">${infoVF} Vérifiez et corrigez avant d'enregistrer. Les lignes vides seront ignorées.</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn sm" onclick="appliquerSuggestionsVF()"><i class="ti ti-download"></i>Reprendre toutes les adresses VosFactures</button>
+      <button class="btn sm" onclick="viderAdressesSaisies()"><i class="ti ti-eraser"></i>Tout vider</button>
+    </div>
+    <div class="table-wrap" style="max-height:52vh;overflow:auto">
+      <table class="t"><thead><tr>
+        <th style="min-width:150px">Distributeur</th>
+        <th style="min-width:200px">Adresse (rue)</th>
+        <th style="width:90px">CP</th>
+        <th style="min-width:130px">Ville</th>
+        <th style="width:120px">VosFactures</th>
+      </tr></thead>
+      <tbody>${lignes.map((l,i)=>{
+        const sugg = l.suggestion_dispo
+          ? `<button class="btn sm" title="Reprendre : ${esc(l.vf_street)} ${esc(l.vf_post_code)} ${esc(l.vf_city)}" onclick="reprendreLigneVF(${i})"><i class="ti ti-arrow-left"></i>Reprendre</button>`
+          : '<span style="font-size:11px;color:var(--text3)">—</span>';
+        return `<tr>
+          <td style="font-weight:600;font-size:12px">${esc(l.nom)}</td>
+          <td><input class="form-input" id="adr-rue-${i}" value="${esc(l._adresse||'')}" placeholder="${l.suggestion_dispo?esc(l.vf_street):'N° et rue'}" style="padding:4px 7px;font-size:12px;width:100%"></td>
+          <td><input class="form-input" id="adr-cp-${i}" value="${esc(l._cp!==undefined?l._cp:(l.cp||''))}" placeholder="${l.vf_post_code?esc(l.vf_post_code):''}" style="padding:4px 7px;font-size:12px;width:80px"></td>
+          <td><input class="form-input" id="adr-ville-${i}" value="${esc(l._ville!==undefined?l._ville:(l.ville||''))}" placeholder="${l.vf_city?esc(l.vf_city):''}" style="padding:4px 7px;font-size:12px;width:100%"></td>
+          <td>${sugg}</td>
+        </tr>`;
+      }).join('')}</tbody></table>
+    </div>
+    <div class="modal-footer" style="margin-top:12px">
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
+      <button class="btn primary" onclick="enregistrerAdresses()"><i class="ti ti-check"></i>Enregistrer les adresses</button>
+    </div>`;
+}
+
+// Reprend l'adresse VosFactures d'une seule ligne
+function reprendreLigneVF(i){
+  const l = (window._ADR_LIGNES||[])[i];
+  if (!l) return;
+  const rue = document.getElementById('adr-rue-'+i);
+  const cp = document.getElementById('adr-cp-'+i);
+  const ville = document.getElementById('adr-ville-'+i);
+  if (rue && l.vf_street) rue.value = l.vf_street;
+  if (cp && l.vf_post_code) cp.value = l.vf_post_code;
+  if (ville && l.vf_city) ville.value = l.vf_city;
+}
+window.reprendreLigneVF = reprendreLigneVF;
+
+// Reprend toutes les adresses VosFactures disponibles
+function appliquerSuggestionsVF(){
+  (window._ADR_LIGNES||[]).forEach((l,i)=>{ if (l.suggestion_dispo) reprendreLigneVF(i); });
+}
+window.appliquerSuggestionsVF = appliquerSuggestionsVF;
+
+function viderAdressesSaisies(){
+  (window._ADR_LIGNES||[]).forEach((l,i)=>{
+    const rue = document.getElementById('adr-rue-'+i);
+    if (rue) rue.value = '';
+  });
+}
+window.viderAdressesSaisies = viderAdressesSaisies;
+
+// Collecte les lignes où une rue a été saisie et enregistre
+async function enregistrerAdresses(){
+  const lignes = window._ADR_LIGNES || [];
+  const aEnvoyer = [];
+  lignes.forEach((l,i)=>{
+    const rue = document.getElementById('adr-rue-'+i)?.value.trim();
+    const cp = document.getElementById('adr-cp-'+i)?.value.trim();
+    const ville = document.getElementById('adr-ville-'+i)?.value.trim();
+    // On n'envoie que si une rue a été renseignée (le but de l'écran)
+    if (rue) aEnvoyer.push({ id: l.id, adresse: rue, cp: cp||l.cp||null, ville: ville||l.ville||null });
+  });
+  if (!aEnvoyer.length) { toast('Aucune adresse à enregistrer', 'ti-alert-circle'); return; }
+  if (!confirm(`Enregistrer ${aEnvoyer.length} adresse(s) ? Les points carte concernés seront repositionnés.`)) return;
+  try {
+    const r = await API.completerAdresses(aEnvoyer);
+    closeModal();
+    toast(`${r.maj} adresse(s) enregistrée(s)`, 'ti-check', 'var(--success)');
+    if (r.echecs && r.echecs.length) {
+      setTimeout(()=>alert(r.echecs.length+' échec(s) : '+r.echecs.map(e=>e.raison).join(', ')), 400);
+    }
+    render();
+  } catch(e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+window.enregistrerAdresses = enregistrerAdresses;
+window.modalCompleterAdresses = modalCompleterAdresses;
+window.dessinerAdresses = dessinerAdresses;
+
 async function renderClients(ttl,c,a){
   ttl.textContent=t('nav_clients');
   if(!window._clientsQ) window._clientsQ = '';
   a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
     <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(window._clientsQ)}" style="max-width:260px">
+    ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalCompleterAdresses()"><i class="ti ti-map-pin-cog"></i>Compléter les adresses</button>' : ''}
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
   </div>`;
   document.getElementById('clients-search')?.addEventListener('input', e => {
@@ -4704,13 +4821,48 @@ function voirDistributeurSurCarte(clientId, nom){
       if (m) m.openPopup();
       if (info) info.innerHTML = '<span style="color:#16a34a">' + esc(nom || pt.nom) + ' — centré sur la carte</span>';
     } else {
-      // Pas de point pour ce distributeur
-      toast("Ce distributeur n'est pas encore sur la carte — cochez « afficher sur une carte » dans sa fiche puis géocodez-le.", 'ti-map-off', 'var(--warning)');
-      if (info) info.innerHTML = '<span style="color:#b45309">' + esc(nom || '') + ' n\'a pas encore de point sur la carte</span>';
+      // Pas de point pour ce distributeur : proposer de l'ajouter directement
+      if (info) {
+        info.innerHTML = '<div style="color:#b45309;margin-bottom:6px">' + esc(nom || 'Ce distributeur') + ' n\'a pas encore de point sur la carte.</div>' +
+          '<button onclick="ajouterDistributeurCarte(' + clientId + ',\'' + String(nom||'').replace(/'/g,'&#39;') + '\')" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer"><i class="ti ti-map-pin-plus"></i> Ajouter à la carte maintenant</button>';
+      }
     }
   }, 150);
 }
 window.voirDistributeurSurCarte = voirDistributeurSurCarte;
+
+// Ajoute un distributeur à la carte (coche sur_carte + géocode), sans quitter la carte.
+async function ajouterDistributeurCarte(clientId, nom){
+  var info = document.getElementById('carte-nom-result');
+  if (info) info.innerHTML = '<span style="color:#666">Positionnement de ' + esc(nom || '') + ' en cours…</span>';
+  try {
+    // Récupérer la fiche complète pour ne pas écraser ses autres champs au PUT
+    var cl = await API.client(clientId);
+    if (!cl.ville && !cl.cp) {
+      if (info) info.innerHTML = '<span style="color:#b45309">Impossible : ce distributeur n\'a ni ville ni code postal. Complétez son adresse dans sa fiche.</span>';
+      return;
+    }
+    var data = {
+      nom: cl.nom, type: cl.type, contact: cl.contact, email: cl.email, tel: cl.tel,
+      adresse: cl.adresse, adresse2: cl.adresse2, cp: cl.cp, ville: cl.ville, pays: cl.pays,
+      edi: !!cl.edi, entite_facturation_id: cl.entite_facturation_id || null,
+      sur_carte: true, reseau_carte: cl.reseau_carte || 'base'
+    };
+    var r = await API.updateClient(clientId, data);
+    if (r && r.carte && r.carte.ok === false) {
+      if (info) info.innerHTML = '<span style="color:#b45309">Non positionné : ' + esc(r.carte.reason || 'adresse introuvable') + '. Vous pouvez le placer manuellement via « Ajouter » sur la carte.</span>';
+      return;
+    }
+    toast('Ajouté à la carte', 'ti-map-pin', 'var(--success)');
+    // Recharger les points puis centrer sur le nouveau
+    _cartePoints = [];
+    chargerPoints();
+    voirDistributeurSurCarte(clientId, nom);
+  } catch(e) {
+    if (info) info.innerHTML = '<span style="color:#dc2626">Erreur : ' + esc(e.message) + '</span>';
+  }
+}
+window.ajouterDistributeurCarte = ajouterDistributeurCarte;
 
 function chargerPoints() {
   if (typeof L === 'undefined') {
