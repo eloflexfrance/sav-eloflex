@@ -732,66 +732,49 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
     let doc = null;
     const debug = []; // journal des tentatives, retourné si rien n'est trouvé
 
-    // Étape 1 : recherche directe par numéro, tous types de documents de stock confondus
+    // Recherche large par texte, tous types de documents confondus (search_text est fiable sur /invoices.json,
+    // contrairement au filtre "kind" sur /warehouse_documents.json qui échoue sur ce compte)
     try {
-      const { data } = await vfApi.get('/warehouse_documents.json', { params: { number: numero, per_page: 10 } });
+      const { data } = await vfApi.get('/invoices.json', { params: { search_text: numero, per_page: 25 } });
       const nb = Array.isArray(data) ? data.length : -1;
-      debug.push(`number=${numero} → ${nb} résultat(s)${Array.isArray(data)&&data.length?' : '+data.map(d=>d.number).join(', '):''}`);
+      debug.push(`search_text=${numero} → ${nb} résultat(s)${Array.isArray(data) && data.length ? ' : ' + data.map(d => `${d.number}[${d.kind}]`).join(', ') : ''}`);
       if (Array.isArray(data) && data.length) {
         doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
       }
-    } catch (e) { debug.push(`number=${numero} → ERREUR ${e.response?.status||''} ${e.response?.data?JSON.stringify(e.response.data).slice(0,200):e.message}`); }
+    } catch (e) { debug.push(`search_text=${numero} → ERREUR ${e.response?.status || ''} ${e.response?.data ? JSON.stringify(e.response.data).slice(0, 200) : e.message}`); }
 
-    // Étape 2 : repli — parcourir les documents récents par type (jusqu'à 300, sur 3 pages)
-    if (!doc) {
-      for (const kind of ['pz', 'pw', 'mm', 'wz', 'bt']) {
-        for (const page of [1, 2, 3]) {
-          try {
-            const { data } = await vfApi.get('/warehouse_documents.json', { params: { kind, per_page: 100, page, order: 'id desc' } });
-            const nb = Array.isArray(data) ? data.length : -1;
-            if (page === 1) debug.push(`kind=${kind} page1 → ${nb} résultat(s)`);
-            if (Array.isArray(data) && data.length) {
-              doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
-              if (doc || data.length < 100) break;
-            } else break;
-          } catch (e) { debug.push(`kind=${kind} page${page} → ERREUR ${e.response?.status||''} ${e.message}`); break; }
-        }
-        if (doc) break;
-      }
-    }
-
-    // Étape 3 : repli générique — tous types de documents de stock confondus, sans filtre kind
+    // Repli : recherche stricte par numéro exact, sans filtre de type
     if (!doc) {
       try {
-        const { data } = await vfApi.get('/warehouse_documents.json', { params: { per_page: 100, page: 1, order: 'id desc' } });
+        const { data } = await vfApi.get('/invoices.json', { params: { number: numero, per_page: 10 } });
         const nb = Array.isArray(data) ? data.length : -1;
-        debug.push(`sans filtre kind, page1 → ${nb} résultat(s)${Array.isArray(data)&&data.length?' (derniers numéros : '+data.slice(0,5).map(d=>d.number+'['+d.kind+']').join(', ')+')':''}`);
+        debug.push(`number=${numero} → ${nb} résultat(s)${Array.isArray(data) && data.length ? ' : ' + data.map(d => `${d.number}[${d.kind}]`).join(', ') : ''}`);
         if (Array.isArray(data) && data.length) {
           doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
         }
-      } catch (e) { debug.push(`sans filtre kind → ERREUR ${e.response?.status||''} ${e.message}`); }
+      } catch (e) { debug.push(`number=${numero} → ERREUR ${e.response?.status || ''} ${e.message}`); }
     }
 
     if (!doc) return res.json({ configured: true, found: false, debug });
 
-    const { data: detail } = await vfApi.get(`/warehouse_documents/${doc.id}.json`);
-    const actions = detail.warehouse_actions || [];
+    const { data: detail } = await vfApi.get(`/invoices/${doc.id}.json`);
+    const positions = detail.positions || detail.invoice_items || [];
 
-    // Rapprochement avec le catalogue local : priorité au vf_product_id, sinon à la désignation
+    // Rapprochement avec le catalogue local : priorité au vf_product_id, sinon à la référence/désignation
     const catalogue = await db.all('SELECT id, ref, designation, vf_product_id FROM catalogue');
     const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const lignes = actions.map(a => {
+    const lignes = positions.map(p => {
       let cat = null;
-      if (a.product_id) cat = catalogue.find(c => c.vf_product_id === a.product_id);
+      if (p.product_id) cat = catalogue.find(c => c.vf_product_id === p.product_id);
       if (!cat) {
-        const pn = norm(a.product_name || a.name);
+        const pn = norm(p.code || p.name);
         cat = catalogue.find(c => norm(c.ref) === pn)
            || catalogue.find(c => pn.length > 3 && (norm(c.designation).includes(pn) || pn.includes(norm(c.ref))));
       }
       return {
-        reference: cat ? cat.ref : '',
-        designation: a.product_name || a.name || '',
-        quantite: parseInt(a.quantity) || 1,
+        reference: p.code || (cat ? cat.ref : ''),
+        designation: p.name || '',
+        quantite: parseInt(p.quantity) || 1,
         catalogue_id: cat ? cat.id : null,
         catalogue_ref: cat ? cat.ref : null,
         catalogue_designation: cat ? cat.designation : null
@@ -800,7 +783,7 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
 
     res.json({
       configured: true, found: true, vf_id: doc.id, numero: doc.number,
-      date: doc.issue_date, fournisseur: doc.client_name || 'Eloflex AB', lignes
+      date: detail.issue_date || detail.sell_date, fournisseur: detail.seller_name || 'Eloflex AB', lignes
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
