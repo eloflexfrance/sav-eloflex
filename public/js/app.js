@@ -4022,8 +4022,8 @@ function dessinerLignesIntegration() {
         </td>
         <td><input class="form-input" value="${esc(l.designation || '')}" onchange="majIntLigne(${i},'designation',this.value)" style="min-width:160px;padding:3px 6px;font-size:12px"></td>
         <td>${l.quantite_commandee}</td>
-        <td><input class="form-input" type="number" min="0" value="${recu}" onchange="majIntLigne(${i},'_recu',this.value)" style="width:70px;padding:3px 6px"></td>
-        <td>${reliquat > 0 ? `<span class="badge hg">${reliquat}</span>` : '<span style="color:var(--text3)">0</span>'}</td>
+        <td><input class="form-input" type="number" min="0" value="${recu}" oninput="majIntLigne(${i},'_recu',this.value)" style="width:70px;padding:3px 6px"></td>
+        <td id="cs-int-reliquat-${i}">${reliquat > 0 ? `<span class="badge hg">${reliquat}</span>` : '<span style="color:var(--text3)">0</span>'}</td>
       </tr>`;
     }).join('')}</tbody></table></div>
     <div style="font-size:11px;color:var(--text3);margin-top:6px">Une ligne « relier au stock » non reliée n'incrémente aucun stock, mais la réception est enregistrée.</div>`;
@@ -4032,8 +4032,18 @@ function dessinerLignesIntegration() {
 function majIntLigne(index, champ, valeur) {
   const l = (window._csIntLignes || [])[index];
   if (!l) return;
-  if (champ === '_recu') { l._recu = Math.max(0, parseInt(valeur) || 0); dessinerLignesIntegration(); }
-  else l[champ] = valeur;
+  if (champ === '_recu') {
+    l._recu = Math.max(0, parseInt(valeur) || 0);
+    // Recalculer uniquement la cellule reliquat de cette ligne (sans redessiner tout le tableau,
+    // ce qui ferait perdre le focus du champ en cours de saisie)
+    const cell = document.getElementById('cs-int-reliquat-' + index);
+    if (cell) {
+      const reliquat = Math.max(0, l.quantite_commandee - l._recu);
+      cell.innerHTML = reliquat > 0 ? `<span class="badge hg">${reliquat}</span>` : '<span style="color:var(--text3)">0</span>';
+    }
+  } else {
+    l[champ] = valeur;
+  }
 }
 window.majIntLigne = majIntLigne;
 
