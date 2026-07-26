@@ -402,6 +402,7 @@ async function renderClient(ttl,c,a){
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
+          <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>Fusionner</button>
         </div>
       </div>
       <div class="card">
@@ -3627,6 +3628,10 @@ async function confirmerFusion(idCible){
     closeModal();render();
   }catch(e){alert('Erreur : '+e.message);}
 }
+window.modalFusionnerClient = modalFusionnerClient;
+window.searchFusionClient = searchFusionClient;
+window.selectFusionSource = selectFusionSource;
+window.confirmerFusion = confirmerFusion;
 
 // ── INIT ────────────────────────────────────────────────────────────
 document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view==='dashboard'));
