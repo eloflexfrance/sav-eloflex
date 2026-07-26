@@ -759,7 +759,7 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
     if (!doc) {
       for (let page = 1; page <= 15 && !doc; page++) {
         try {
-          const { data } = await vfApi.get('/invoices.json', { params: { per_page: 100, page, order: 'id desc' } });
+          const { data } = await vfApi.get('/invoices.json', { params: { per_page: 100, page, order: 'issue_date.desc' } });
           if (!Array.isArray(data) || !data.length) { debug.push(`page ${page} (sans filtre) → vide, arrêt`); break; }
           if (page <= 3) debug.push(`page ${page} (sans filtre) → ${data.length} doc(s), ex: ${data.slice(0, 3).map(d => `${d.number}[${d.kind}]`).join(', ')}`);
           doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
