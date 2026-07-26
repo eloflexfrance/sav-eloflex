@@ -286,6 +286,48 @@ router.get('/clients', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Liste les distributeurs dont l'adresse (rue) est absente, avec suggestion VosFactures.
+// IMPORTANT : doit être déclarée AVANT /clients/:id sinon Express la capture comme un id.
+router.get('/clients/adresses-incompletes', requireAuth, async (req, res) => {
+  try {
+    const locaux = await db.all(`
+      SELECT id, nom, vf_id, adresse, adresse2, cp, ville, pays
+      FROM clients
+      WHERE type <> 'Particulier'
+        AND (adresse IS NULL OR TRIM(adresse) = '')
+      ORDER BY nom
+    `);
+    let contactsVF = [];
+    if (process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT) {
+      try { contactsVF = await _fetchTousContactsVF(); } catch (_) { contactsVF = []; }
+    }
+    const parVfId = {};
+    for (const c of contactsVF) parVfId[c.id] = c;
+    const parNom = {};
+    for (const c of contactsVF) {
+      const k = _normaliserNomVF(c.name);
+      if (k && !parNom[k]) parNom[k] = c;
+    }
+    const lignes = locaux.map(cl => {
+      let vf = (cl.vf_id && parVfId[cl.vf_id]) ? parVfId[cl.vf_id] : (parNom[_normaliserNomVF(cl.nom)] || null);
+      return {
+        id: cl.id, nom: cl.nom,
+        ville: cl.ville || '', cp: cl.cp || '', pays: cl.pays || 'France',
+        vf_street: vf ? (vf.street || '') : '',
+        vf_post_code: vf ? (vf.post_code || '') : '',
+        vf_city: vf ? (vf.city || '') : '',
+        suggestion_dispo: !!(vf && vf.street)
+      };
+    });
+    res.json({
+      configured: contactsVF.length > 0,
+      total: lignes.length,
+      avec_suggestion: lignes.filter(l => l.suggestion_dispo).length,
+      lignes
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/clients/:id', async (req, res) => {
   try {
     const cl = await db.get('SELECT * FROM clients WHERE id=$1', [req.params.id]);
@@ -1566,6 +1608,39 @@ router.put('/doublons-vf/adresse/:id', adminOnly, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.response?.data || e.message });
   }
+});
+
+// ── COMPLÉTER LES ADRESSES DES DISTRIBUTEURS ──────────────────────
+// Enregistre en masse les adresses complétées (tableau [{id, adresse, cp, ville}])
+// Réutilise la logique de mise à jour + resync carte de chaque client.
+router.post('/clients/adresses-completer', adminOnly, async (req, res) => {
+  const lignes = Array.isArray(req.body.lignes) ? req.body.lignes : [];
+  let maj = 0;
+  const echecs = [];
+  for (const l of lignes) {
+    if (!l || !l.id) continue;
+    try {
+      // On ne touche qu'aux champs d'adresse fournis ; les autres restent inchangés
+      const cl = await db.get('SELECT * FROM clients WHERE id=$1', [l.id]);
+      if (!cl) { echecs.push({ id: l.id, raison: 'introuvable' }); continue; }
+      const nouvAdresse = (l.adresse !== undefined && l.adresse !== null && String(l.adresse).trim() !== '') ? String(l.adresse).trim() : cl.adresse;
+      const nouvCp      = (l.cp      !== undefined && String(l.cp).trim()      !== '') ? String(l.cp).trim()      : cl.cp;
+      const nouvVille   = (l.ville   !== undefined && String(l.ville).trim()   !== '') ? String(l.ville).trim()   : cl.ville;
+      // Si l'adresse change, on invalide les coordonnées (comme le PUT normal)
+      const adresseChange = (nouvAdresse !== cl.adresse) || (nouvCp !== cl.cp) || (nouvVille !== cl.ville);
+      await db.run(
+        'UPDATE clients SET adresse=$1, cp=$2, ville=$3, updated_at=NOW() WHERE id=$4',
+        [nouvAdresse || null, nouvCp || null, nouvVille || null, l.id]
+      );
+      if (adresseChange) {
+        await db.run('UPDATE clients SET lat=NULL, lng=NULL WHERE id=$1', [l.id]);
+        // Resync du point carte si ce client y figure (regéocodage avec la nouvelle adresse)
+        if (cl.sur_carte) { try { await syncClientCarte(l.id); } catch (_) {} }
+      }
+      maj++;
+    } catch (e) { echecs.push({ id: l.id, raison: e.message }); }
+  }
+  res.json({ ok: true, maj, echecs });
 });
 
 
