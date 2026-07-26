@@ -4484,11 +4484,30 @@ router.get('/carte/points', requireAuth, async (req, res) => {
       GROUP BY distributeur_nom, client_id
     `, [annee]);
 
+    // Année de la DERNIÈRE commande par distributeur (toutes années confondues),
+    // pour filtrer l'affichage des points sur la carte selon leur activité récente.
+    const dernieres = await db.all(`
+      SELECT distributeur_nom, client_id,
+        MAX(EXTRACT(YEAR FROM date_commande::date))::int AS derniere_annee
+      FROM commandes
+      WHERE date_commande IS NOT NULL
+      GROUP BY distributeur_nom, client_id
+    `);
+
     const cumul = (liste) => liste.reduce((a, s) => ({
       nb_commandes: a.nb_commandes + (parseInt(s.nb_commandes) || 0),
       impayes:      a.impayes      + (parseInt(s.impayes) || 0),
       en_cours:     a.en_cours     + (parseInt(s.en_cours) || 0)
     }), { nb_commandes: 0, impayes: 0, en_cours: 0 });
+
+    // Dernière année d'un point : max sur les lignes rapprochées (par client_id sinon par nom)
+    const derniereAnneePour = (p, trouves) => {
+      let cand = [];
+      if (p.client_id) cand = dernieres.filter(d => d.client_id === p.client_id);
+      if (!cand.length) cand = dernieres.filter(d => memeEntite(p.nom, d.distributeur_nom));
+      const annees = cand.map(d => d.derniere_annee).filter(Boolean);
+      return annees.length ? Math.max(...annees) : null;
+    };
 
     const enriched = points.map(p => {
       let trouves = [];
@@ -4507,6 +4526,7 @@ router.get('/carte/points', requireAuth, async (req, res) => {
         ...p,
         ...cumul(trouves),
         lien_type: lien,
+        derniere_annee: derniereAnneePour(p, trouves),
         noms_rattaches: [...new Set(trouves.map(t => t.distributeur_nom).filter(Boolean))]
       };
     });
