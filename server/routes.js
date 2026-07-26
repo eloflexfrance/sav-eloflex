@@ -729,41 +729,49 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
     });
     const normalise = s => String(s || '').toLowerCase().replace(/[\s\-\/\.]+/g, '');
     const numNorm = normalise(numero);
-    let inv = null;
+    let doc = null;
 
+    // Étape 1 : recherche directe par numéro, tous types de documents de stock confondus
     try {
-      const { data } = await vfApi.get('/invoices.json', { params: { kind: 'stock', number: numero, per_page: 10 } });
+      const { data } = await vfApi.get('/warehouse_documents.json', { params: { number: numero, per_page: 10 } });
       if (Array.isArray(data) && data.length) {
-        inv = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+        doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
       }
     } catch (_) {}
-    if (!inv) {
-      try {
-        const { data } = await vfApi.get('/invoices.json', { params: { kind: 'stock', per_page: 100, order: 'id desc' } });
-        if (Array.isArray(data) && data.length) {
-          inv = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
-        }
-      } catch (_) {}
+
+    // Étape 2 : repli — parcourir les documents récents par type (pz = entrée externe = réception fournisseur)
+    if (!doc) {
+      for (const kind of ['pz', 'pw', 'mm', 'wz']) {
+        try {
+          const { data } = await vfApi.get('/warehouse_documents.json', { params: { kind, per_page: 100, order: 'id desc' } });
+          if (Array.isArray(data) && data.length) {
+            doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+            if (doc) break;
+          }
+        } catch (_) {}
+      }
     }
-    if (!inv) return res.json({ configured: true, found: false });
 
-    const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
-    const positions = detail.positions || detail.invoice_items || [];
+    if (!doc) return res.json({ configured: true, found: false });
 
-    // Rapprochement avec le catalogue local : priorité au vf_product_id, sinon à la référence/désignation
+    const { data: detail } = await vfApi.get(`/warehouse_documents/${doc.id}.json`);
+    const actions = detail.warehouse_actions || [];
+
+    // Rapprochement avec le catalogue local : priorité au vf_product_id, sinon à la désignation
     const catalogue = await db.all('SELECT id, ref, designation, vf_product_id FROM catalogue');
     const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const lignes = positions.map(p => {
+    const lignes = actions.map(a => {
       let cat = null;
-      if (p.product_id) cat = catalogue.find(c => c.vf_product_id === p.product_id);
+      if (a.product_id) cat = catalogue.find(c => c.vf_product_id === a.product_id);
       if (!cat) {
-        const pn = norm(p.code || p.name);
-        cat = catalogue.find(c => norm(c.ref) === pn) || catalogue.find(c => pn.length > 3 && norm(c.ref).includes(pn));
+        const pn = norm(a.product_name || a.name);
+        cat = catalogue.find(c => norm(c.ref) === pn)
+           || catalogue.find(c => pn.length > 3 && (norm(c.designation).includes(pn) || pn.includes(norm(c.ref))));
       }
       return {
-        reference: p.code || '',
-        designation: p.name || '',
-        quantite: parseInt(p.quantity) || 1,
+        reference: cat ? cat.ref : '',
+        designation: a.product_name || a.name || '',
+        quantite: parseInt(a.quantity) || 1,
         catalogue_id: cat ? cat.id : null,
         catalogue_ref: cat ? cat.ref : null,
         catalogue_designation: cat ? cat.designation : null
@@ -771,8 +779,8 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
     });
 
     res.json({
-      configured: true, found: true, vf_id: inv.id, numero: inv.number,
-      date: inv.issue_date || inv.sell_date, fournisseur: detail.seller_name || 'Eloflex AB', lignes
+      configured: true, found: true, vf_id: doc.id, numero: doc.number,
+      date: doc.issue_date, fournisseur: doc.client_name || 'Eloflex AB', lignes
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
