@@ -675,6 +675,241 @@ router.delete('/catalogue/:id', async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── COMMANDES SUÈDE (réapprovisionnement stock pièces détachées) ───
+
+// Migration ponctuelle — à ouvrir UNE FOIS dans le navigateur (admin) après déploiement :
+//   https://sav-eloflex.onrender.com/api/admin/migrer-commande-suede
+router.get('/admin/migrer-commande-suede', adminOnly, async (req, res) => {
+  try {
+    await db.run(`CREATE TABLE IF NOT EXISTS commandes_suede (
+      id SERIAL PRIMARY KEY,
+      numero_bc TEXT NOT NULL,
+      vf_id INTEGER,
+      fournisseur TEXT DEFAULT 'Eloflex AB',
+      date_commande DATE,
+      transporteur TEXT,
+      num_suivi TEXT,
+      date_livraison DATE,
+      statut TEXT DEFAULT 'En cours',
+      stock_integre BOOLEAN DEFAULT FALSE,
+      integre_le TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await db.run(`CREATE TABLE IF NOT EXISTS commandes_suede_lignes (
+      id SERIAL PRIMARY KEY,
+      commande_id INTEGER REFERENCES commandes_suede(id) ON DELETE CASCADE,
+      catalogue_id INTEGER REFERENCES catalogue(id),
+      reference TEXT,
+      designation TEXT,
+      quantite_commandee INTEGER DEFAULT 1,
+      quantite_recue INTEGER,
+      reliquat INTEGER DEFAULT 0,
+      ordre INTEGER DEFAULT 0
+    )`);
+    res.send('<h2>✅ Migration effectuée</h2><p>Tables commandes_suede et commandes_suede_lignes créées.</p>');
+  } catch (e) {
+    res.status(500).send(`<h2>❌ Erreur</h2><pre>${e.message}</pre>`);
+  }
+});
+
+// Recherche un document de stock VosFactures par numéro et renvoie son contenu (aperçu, sans écriture en base)
+router.get('/vosfactures/stock-lookup', async (req, res) => {
+  try {
+    const numero = (req.query.numero || '').trim();
+    if (!numero) return res.status(400).json({ error: 'Paramètre numero requis' });
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
+      return res.json({ configured: false });
+    }
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    const normalise = s => String(s || '').toLowerCase().replace(/[\s\-\/\.]+/g, '');
+    const numNorm = normalise(numero);
+    let inv = null;
+
+    try {
+      const { data } = await vfApi.get('/invoices.json', { params: { kind: 'stock', number: numero, per_page: 10 } });
+      if (Array.isArray(data) && data.length) {
+        inv = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+      }
+    } catch (_) {}
+    if (!inv) {
+      try {
+        const { data } = await vfApi.get('/invoices.json', { params: { kind: 'stock', per_page: 100, order: 'id desc' } });
+        if (Array.isArray(data) && data.length) {
+          inv = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+        }
+      } catch (_) {}
+    }
+    if (!inv) return res.json({ configured: true, found: false });
+
+    const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
+    const positions = detail.positions || detail.invoice_items || [];
+
+    // Rapprochement avec le catalogue local : priorité au vf_product_id, sinon à la référence/désignation
+    const catalogue = await db.all('SELECT id, ref, designation, vf_product_id FROM catalogue');
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const lignes = positions.map(p => {
+      let cat = null;
+      if (p.product_id) cat = catalogue.find(c => c.vf_product_id === p.product_id);
+      if (!cat) {
+        const pn = norm(p.code || p.name);
+        cat = catalogue.find(c => norm(c.ref) === pn) || catalogue.find(c => pn.length > 3 && norm(c.ref).includes(pn));
+      }
+      return {
+        reference: p.code || '',
+        designation: p.name || '',
+        quantite: parseInt(p.quantity) || 1,
+        catalogue_id: cat ? cat.id : null,
+        catalogue_ref: cat ? cat.ref : null,
+        catalogue_designation: cat ? cat.designation : null
+      };
+    });
+
+    res.json({
+      configured: true, found: true, vf_id: inv.id, numero: inv.number,
+      date: inv.issue_date || inv.sell_date, fournisseur: detail.seller_name || 'Eloflex AB', lignes
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/commandes-suede', async (req, res) => {
+  try {
+    const list = await db.all(`
+      SELECT cs.*,
+        (SELECT COUNT(*)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS nb_lignes,
+        (SELECT COALESCE(SUM(reliquat),0)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS total_reliquat
+      FROM commandes_suede cs ORDER BY cs.created_at DESC`);
+    res.json(list);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/commandes-suede/:id', async (req, res) => {
+  try {
+    const cs = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
+    if (!cs) return res.status(404).json({ error: 'Introuvable' });
+    cs.lignes = await db.all(`
+      SELECT l.*, c.ref AS catalogue_ref_actuelle, c.designation AS catalogue_designation_actuelle, c.stock AS catalogue_stock_actuel
+      FROM commandes_suede_lignes l LEFT JOIN catalogue c ON c.id=l.catalogue_id
+      WHERE l.commande_id=$1 ORDER BY l.ordre, l.id`, [req.params.id]);
+    res.json(cs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/commandes-suede', adminOrOp, async (req, res) => {
+  const { numero_bc, vf_id, fournisseur, date_commande, transporteur, num_suivi, date_livraison, lignes } = req.body;
+  if (!numero_bc) return res.status(400).json({ error: 'Numéro de bon de commande requis' });
+  const pgClient = await db.pool.connect();
+  try {
+    await pgClient.query('BEGIN');
+    const { rows: [cs] } = await pgClient.query(
+      `INSERT INTO commandes_suede (numero_bc, vf_id, fournisseur, date_commande, transporteur, num_suivi, date_livraison, statut)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [numero_bc, vf_id || null, fournisseur || 'Eloflex AB', date_commande || null, transporteur || null, num_suivi || null,
+       date_livraison || null, date_livraison ? 'Livrée' : (num_suivi ? 'En transit' : 'En cours')]
+    );
+    let ordre = 0;
+    for (const l of (lignes || [])) {
+      await pgClient.query(
+        `INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, designation, quantite_commandee, ordre)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [cs.id, l.catalogue_id || null, l.reference || null, l.designation || null, parseInt(l.quantite) || 1, ordre++]
+      );
+    }
+    await pgClient.query('COMMIT');
+    res.status(201).json({ ok: true, id: cs.id });
+  } catch (e) {
+    await pgClient.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { pgClient.release(); }
+});
+
+router.put('/commandes-suede/:id', adminOrOp, async (req, res) => {
+  try {
+    const { numero_bc, fournisseur, date_commande, transporteur, num_suivi, date_livraison } = req.body;
+    const existant = await db.get('SELECT stock_integre, statut FROM commandes_suede WHERE id=$1', [req.params.id]);
+    if (!existant) return res.status(404).json({ error: 'Introuvable' });
+    let statut = existant.statut;
+    if (!existant.stock_integre) {
+      statut = date_livraison ? 'Livrée' : (num_suivi ? 'En transit' : 'En cours');
+    }
+    const cs = await db.run(
+      `UPDATE commandes_suede SET numero_bc=$1, fournisseur=$2, date_commande=$3, transporteur=$4, num_suivi=$5, date_livraison=$6, statut=$7, updated_at=NOW()
+       WHERE id=$8 RETURNING *`,
+      [numero_bc, fournisseur || null, date_commande || null, transporteur || null, num_suivi || null, date_livraison || null, statut, req.params.id]
+    );
+    res.json(cs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/commandes-suede/:id/lignes', adminOrOp, async (req, res) => {
+  const lignes = Array.isArray(req.body) ? req.body : (req.body.lignes || []);
+  const pgClient = await db.pool.connect();
+  try {
+    await pgClient.query('BEGIN');
+    for (const l of lignes) {
+      if (!l.id) continue;
+      await pgClient.query(
+        'UPDATE commandes_suede_lignes SET catalogue_id=$1, reference=$2, designation=$3, quantite_commandee=$4 WHERE id=$5 AND commande_id=$6',
+        [l.catalogue_id || null, l.reference || null, l.designation || null, parseInt(l.quantite_commandee) || 1, l.id, req.params.id]
+      );
+    }
+    await pgClient.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await pgClient.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { pgClient.release(); }
+});
+
+router.post('/commandes-suede/:id/integrer-stock', adminOrOp, async (req, res) => {
+  const receptions = Array.isArray(req.body.lignes) ? req.body.lignes : [];
+  const pgClient = await db.pool.connect();
+  try {
+    await pgClient.query('BEGIN');
+    const { rows: [cs] } = await pgClient.query('SELECT * FROM commandes_suede WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!cs) { await pgClient.query('ROLLBACK'); return res.status(404).json({ error: 'Introuvable' }); }
+    if (cs.stock_integre) { await pgClient.query('ROLLBACK'); return res.status(409).json({ error: 'Cette commande a déjà été intégrée au stock.' }); }
+    if (!cs.date_livraison) { await pgClient.query('ROLLBACK'); return res.status(400).json({ error: "Renseigne d'abord la date de livraison." }); }
+
+    const { rows: lignesDb } = await pgClient.query('SELECT * FROM commandes_suede_lignes WHERE commande_id=$1', [req.params.id]);
+    let piecesMaj = 0, totalReliquat = 0;
+    for (const ligne of lignesDb) {
+      const saisie = receptions.find(r => r.id === ligne.id);
+      const qteRecue = saisie ? Math.max(0, parseInt(saisie.quantite_recue) || 0) : ligne.quantite_commandee;
+      const reliquat = Math.max(0, ligne.quantite_commandee - qteRecue);
+      await pgClient.query('UPDATE commandes_suede_lignes SET quantite_recue=$1, reliquat=$2 WHERE id=$3', [qteRecue, reliquat, ligne.id]);
+      if (ligne.catalogue_id && qteRecue > 0) {
+        await pgClient.query('UPDATE catalogue SET stock = stock + $1 WHERE id=$2', [qteRecue, ligne.catalogue_id]);
+        piecesMaj++;
+      }
+      totalReliquat += reliquat;
+    }
+    await pgClient.query(
+      `UPDATE commandes_suede SET stock_integre=TRUE, statut=$1, integre_le=NOW(), updated_at=NOW() WHERE id=$2`,
+      [totalReliquat > 0 ? 'Intégrée (reliquat)' : 'Intégrée', req.params.id]
+    );
+    await pgClient.query('COMMIT');
+    res.json({ ok: true, pieces_maj: piecesMaj, total_reliquat: totalReliquat });
+  } catch (e) {
+    await pgClient.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { pgClient.release(); }
+});
+
+router.delete('/commandes-suede/:id', adminOnly, async (req, res) => {
+  try {
+    const cs = await db.get('SELECT stock_integre FROM commandes_suede WHERE id=$1', [req.params.id]);
+    if (cs && cs.stock_integre) return res.status(409).json({ error: 'Impossible de supprimer : le stock a déjà été intégré pour cette commande.' });
+    await db.run('DELETE FROM commandes_suede WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── ALERTES ───────────────────────────────────────────────────────
 router.get('/alertes', async (req, res) => {
   try { res.json(await db.all('SELECT * FROM alertes WHERE lue=false ORDER BY created_at DESC LIMIT 50')); }
