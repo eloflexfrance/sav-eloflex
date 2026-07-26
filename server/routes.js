@@ -755,6 +755,23 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
       } catch (e) { debug.push(`number=${numero} → ERREUR ${e.response?.status || ''} ${e.message}`); }
     }
 
+    // Repli : balayage des types de documents pas encore vus, pour repérer celui qui utilise le préfixe recherché
+    if (!doc) {
+      for (const kind of ['invoice_other', 'receipt', 'maintenance_request', 'advance', 'final', 'correction', 'payment_receipt', 'kp', 'kw']) {
+        try {
+          const { data } = await vfApi.get('/invoices.json', { params: { kind, number: numero, per_page: 5 } });
+          if (Array.isArray(data) && data.length) {
+            debug.push(`kind=${kind}&number=${numero} → ${data.length} résultat(s) : ${data.map(d => d.number).join(', ')}`);
+            doc = data.find(d => normalise(d.number) === numNorm) || data.find(d => normalise(d.number).includes(numNorm)) || null;
+            if (doc) break;
+          } else {
+            const { data: recents } = await vfApi.get('/invoices.json', { params: { kind, per_page: 3, order: 'id desc' } });
+            debug.push(`kind=${kind} (sans number, aperçu) → ${Array.isArray(recents) ? recents.map(d => d.number).join(', ') || 'aucun document' : 'erreur'}`);
+          }
+        } catch (e) { debug.push(`kind=${kind} → ERREUR ${e.response?.status || ''} ${e.message}`); }
+      }
+    }
+
     if (!doc) return res.json({ configured: true, found: false, debug });
 
     const { data: detail } = await vfApi.get(`/invoices/${doc.id}.json`);
