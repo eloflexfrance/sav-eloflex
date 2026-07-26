@@ -3578,28 +3578,43 @@ async function modalFusionnerClient(idCible){
   const clients=await API.clients();
   const cible=clients.find(c=>c.id===idCible);if(!cible)return;
   window._FUSION_CLIENTS=clients.filter(c=>c.id!==idCible);
+  window._FUSION_OUVERT=cible; // fiche depuis laquelle on a ouvert la modale
+  window._FUSION_AUTRE=null;   // autre fiche (doublon) sélectionnée
   showModal(`<div class="modal-header"><i class="ti ti-git-merge" style="font-size:18px;color:var(--accent)"></i><h2>Fusionner un doublon</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <div style="background:var(--accent-bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:13px"><div style="font-weight:700;color:var(--accent);margin-bottom:2px"><i class="ti ti-shield-check"></i> Client conservé</div><div>${esc(cible.nom)}</div></div>
-      <div class="form-group"><label class="form-label">Doublon à supprimer</label>
+      <div class="form-group"><label class="form-label">Autre fiche (le doublon)</label>
         <div style="position:relative">
-          <input class="form-input" id="fusion-search" placeholder="Taper le nom du doublon…" autocomplete="off"
+          <input class="form-input" id="fusion-search" placeholder="Taper le nom de l'autre fiche…" autocomplete="off"
             oninput="searchFusionClient(this.value)" onfocus="searchFusionClient(this.value)"
             onblur="setTimeout(()=>{const d=document.getElementById('fusion-drop');if(d)d.style.display='none'},150)">
           <input type="hidden" id="fusion-source-id">
           <div id="fusion-drop" class="piece-dropdown" style="display:none"></div>
         </div>
-        <div id="fusion-source-info" style="margin-top:6px;font-size:12px;color:var(--text3)"></div>
+      </div>
+      <div class="form-group" id="fusion-choix-garder" style="display:none">
+        <label class="form-label">Quelle fiche conserver ?</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
+            <input type="radio" name="fusion-garder" value="ouvert" checked onchange="majApercuFusion()" style="margin-top:2px">
+            <div><div style="font-weight:600;font-size:13px">${esc(cible.nom)}</div>
+              <div style="font-size:11px;color:var(--text3)">Fiche actuelle — ${cible.nb_fauteuils||0} fauteuil(s)</div></div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
+            <input type="radio" name="fusion-garder" value="autre" onchange="majApercuFusion()" style="margin-top:2px">
+            <div><div style="font-weight:600;font-size:13px" id="fusion-autre-nom">—</div>
+              <div style="font-size:11px;color:var(--text3)" id="fusion-autre-info">—</div></div>
+          </label>
+        </div>
       </div>
       <div class="form-group"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
         <input type="checkbox" id="fusion-vf-ignore" checked>
         <span>Empêcher la sync VosFactures de recréer ce doublon</span>
       </label></div>
-      <div style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger)"><i class="ti ti-alert-triangle"></i> Les fauteuils et interventions du doublon seront transférés vers <b>${esc(cible.nom)}</b>, puis le doublon sera supprimé.</div>
+      <div id="fusion-apercu" style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger);display:none"></div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
-      <button class="btn danger" onclick="confirmerFusion(${idCible})"><i class="ti ti-git-merge"></i>Fusionner et supprimer</button>
+      <button class="btn danger" onclick="confirmerFusion()"><i class="ti ti-git-merge"></i>Fusionner et supprimer</button>
     </div>`);
 }
 function searchFusionClient(q){
@@ -3607,30 +3622,54 @@ function searchFusionClient(q){
   const query=q.toLowerCase().trim();
   const results=(query?(window._FUSION_CLIENTS||[]).filter(c=>c.nom.toLowerCase().includes(query)):(window._FUSION_CLIENTS||[])).slice(0,12);
   if(!results.length){drop.style.display='none';return;}
-  drop.innerHTML=results.map(c=>`<div class="piece-option" onmousedown="event.preventDefault();selectFusionSource(${c.id},'${c.nom.replace(/'/g,"\'")}',${c.nb_fauteuils||0})"><div style="font-size:12px;font-weight:600">${esc(c.nom)}</div><div style="font-size:11px;color:var(--text3)">${c.nb_fauteuils||0} fauteuil(s)</div></div>`).join('');
+  drop.innerHTML=results.map(c=>`<div class="piece-option" onmousedown="event.preventDefault();selectFusionSource(${c.id},'${c.nom.replace(/'/g,"\\'")}',${c.nb_fauteuils||0})"><div style="font-size:12px;font-weight:600">${esc(c.nom)}</div><div style="font-size:11px;color:var(--text3)">${c.nb_fauteuils||0} fauteuil(s)</div></div>`).join('');
   drop.style.display='block';
 }
 function selectFusionSource(id,nom,nbFauteuils){
   const inp=document.getElementById('fusion-search');if(inp)inp.value=nom;
   const hid=document.getElementById('fusion-source-id');if(hid)hid.value=id;
   const drop=document.getElementById('fusion-drop');if(drop)drop.style.display='none';
-  const info=document.getElementById('fusion-source-info');
-  if(info)info.innerHTML=`<span style="color:var(--warning)"><i class="ti ti-alert-triangle"></i> Ce doublon a <b>${nbFauteuils}</b> fauteuil(s) qui seront transférés.</span>`;
+  window._FUSION_AUTRE={id,nom,nb_fauteuils:nbFauteuils};
+  const bloc=document.getElementById('fusion-choix-garder');if(bloc)bloc.style.display='';
+  const an=document.getElementById('fusion-autre-nom');if(an)an.textContent=nom;
+  const ai=document.getElementById('fusion-autre-info');if(ai)ai.textContent=`Autre fiche — ${nbFauteuils} fauteuil(s)`;
+  majApercuFusion();
 }
-async function confirmerFusion(idCible){
-  const idSource=parseInt(gv('fusion-source-id'));
-  if(!idSource){alert('Veuillez sélectionner un doublon.');return;}
+function majApercuFusion(){
+  const ouvert=window._FUSION_OUVERT, autre=window._FUSION_AUTRE;
+  if(!ouvert||!autre)return;
+  const garder=document.querySelector('input[name="fusion-garder"]:checked')?.value||'ouvert';
+  const conserve = garder==='autre' ? autre : ouvert;
+  const supprime = garder==='autre' ? ouvert : autre;
+  const ap=document.getElementById('fusion-apercu');
+  if(ap){
+    ap.style.display='';
+    ap.innerHTML=`<i class="ti ti-alert-triangle"></i> Les fauteuils, interventions et commandes de <b>${esc(supprime.nom)}</b> seront transférés vers <b>${esc(conserve.nom)}</b>, puis <b>${esc(supprime.nom)}</b> sera supprimé définitivement.`;
+  }
+}
+async function confirmerFusion(){
+  const ouvert=window._FUSION_OUVERT, autre=window._FUSION_AUTRE;
+  if(!ouvert||!autre){alert('Veuillez sélectionner une autre fiche.');return;}
+  const garder=document.querySelector('input[name="fusion-garder"]:checked')?.value||'ouvert';
+  const idCible  = garder==='autre' ? autre.id : ouvert.id;
+  const idSource = garder==='autre' ? ouvert.id : autre.id;
+  const nomConserve = garder==='autre' ? autre.nom : ouvert.nom;
+  const nomSupprime = garder==='autre' ? ouvert.nom : autre.nom;
   const vfIgnore=document.getElementById('fusion-vf-ignore')?.checked!==false;
-  if(!confirm('Confirmer la fusion ? Le doublon sera supprimé définitivement.'))return;
+  if(!confirm(`Confirmer la fusion ? "${nomSupprime}" sera supprimé et son contenu transféré vers "${nomConserve}".`))return;
   try{
     const r=await API.fusionnerClients(idCible,idSource,vfIgnore);
     toast(`Fusion réussie — ${r.fauteuils_transferes} fauteuil(s) transférés`,'ti-git-merge');
-    closeModal();render();
+    closeModal();
+    // Si on était sur une fiche client : aller sur la fiche conservée (idCible)
+    if(STATE.view==='client'){ setView('client',{clientId:idCible}); }
+    else { render(); }
   }catch(e){alert('Erreur : '+e.message);}
 }
 window.modalFusionnerClient = modalFusionnerClient;
 window.searchFusionClient = searchFusionClient;
 window.selectFusionSource = selectFusionSource;
+window.majApercuFusion = majApercuFusion;
 window.confirmerFusion = confirmerFusion;
 
 // ── INIT ────────────────────────────────────────────────────────────
