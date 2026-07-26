@@ -131,6 +131,14 @@ const API = {
   devisStatut:(id,statut,notes)=>API.put(`/devis/${id}/statut`,{statut,notes}),
   devisRelances:(id)=>API.get(`/devis/${id}/relances`),
   devisRelance:(id,email,notes)=>API.post(`/devis/${id}/relance`,{email,notes}),
+  // ── Commande Suède ──
+  commandesSuede:()=>API.get('/commandes-suede'),
+  commandeSuede:(id)=>API.get(`/commandes-suede/${id}`),
+  stockLookup:(numero)=>API.get(`/vosfactures/stock-lookup?numero=${encodeURIComponent(numero)}`),
+  createCommandeSuede:(data)=>API.post('/commandes-suede',data),
+  updateCommandeSuede:(id,data)=>API.put(`/commandes-suede/${id}`,data),
+  integrerStockSuede:(id,recues)=>API.post(`/commandes-suede/${id}/integrer`,{recues}),
+  deleteCommandeSuede:(id)=>API.del(`/commandes-suede/${id}`),
   // ── Tracking ──
   tracking:(numero)=>API.get(`/tracking/${encodeURIComponent(numero)}`),
   trackingSync:()=>API.post('/tracking/sync',{}),

@@ -4306,6 +4306,222 @@ router.post('/carte/rattachements', adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ══════════════════════════════════════════════════════════════════
+// ── COMMANDE SUÈDE : réapprovisionnement pièces (Eloflex AB) ──────
+// ══════════════════════════════════════════════════════════════════
+
+function _fmtDateSuede(v) {
+  if (!v) return null;
+  if (typeof v === 'string') return v.slice(0, 10);
+  try { return new Date(v).toISOString().slice(0, 10); } catch (_) { return null; }
+}
+
+// Liste des commandes Suède
+router.get('/commandes-suede', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(`
+      SELECT cs.*,
+        (SELECT COUNT(*)::int FROM commandes_suede_lignes l WHERE l.commande_suede_id = cs.id) AS nb_lignes,
+        (SELECT COALESCE(SUM(reliquat),0)::int FROM commandes_suede_lignes l WHERE l.commande_suede_id = cs.id) AS total_reliquat
+      FROM commandes_suede cs
+      ORDER BY cs.date_commande DESC NULLS LAST, cs.id DESC
+    `);
+    rows.forEach(r => {
+      r.date_commande = _fmtDateSuede(r.date_commande);
+      r.date_livraison = _fmtDateSuede(r.date_livraison);
+    });
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Détail d'une commande Suède avec ses lignes
+router.get('/commandes-suede/:id', requireAuth, async (req, res) => {
+  try {
+    const cs = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
+    if (!cs) return res.status(404).json({ error: 'Introuvable' });
+    cs.date_commande = _fmtDateSuede(cs.date_commande);
+    cs.date_livraison = _fmtDateSuede(cs.date_livraison);
+    const lignes = await db.all(
+      'SELECT * FROM commandes_suede_lignes WHERE commande_suede_id=$1 ORDER BY id', [req.params.id]
+    );
+    res.json({ ...cs, lignes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Recherche du contenu d'un BC dans VosFactures (documents d'entrepôt)
+router.get('/vosfactures/stock-lookup', adminOnly, async (req, res) => {
+  const journal = [];
+  try {
+    const numero = (req.query.numero || '').trim();
+    if (!numero) return res.status(400).json({ error: 'Numéro de BC requis' });
+    if (!process.env.VOSFACTURES_API_TOKEN) return res.status(400).json({ error: 'VosFactures non configuré' });
+
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+
+    // Documents d'entrepôt (BC/BL), plusieurs types possibles selon le compte
+    let doc = null;
+    const kinds = ['pz', 'pw', 'mm', 'wz', 'rw', 'bt'];
+    for (const kind of kinds) {
+      if (doc) break;
+      try {
+        const { data } = await vfApi.get('/warehouse_documents.json', {
+          params: { 'search[query]': numero, kind, per_page: 25 }
+        });
+        journal.push(`kind=${kind} → ${Array.isArray(data) ? data.length : 'non-liste'}`);
+        if (Array.isArray(data) && data.length) {
+          doc = data.find(d => String(d.number || '').includes(numero)) || data[0];
+        }
+      } catch (e) {
+        journal.push(`kind=${kind} → erreur ${e.response ? e.response.status : e.message}`);
+      }
+    }
+
+    // Repli : recherche dans les factures classiques
+    if (!doc) {
+      try {
+        const { data } = await vfApi.get('/invoices.json', {
+          params: { search_text: numero, per_page: 25 }
+        });
+        journal.push(`invoices search_text → ${Array.isArray(data) ? data.length : 'non-liste'}`);
+        if (Array.isArray(data) && data.length) {
+          doc = data.find(d => String(d.number || '').includes(numero)) || null;
+        }
+      } catch (e) {
+        journal.push(`invoices → erreur ${e.response ? e.response.status : e.message}`);
+      }
+    }
+
+    if (!doc) {
+      return res.json({ found: false, journal, message: 'Document introuvable dans VosFactures pour ce numéro.' });
+    }
+
+    // Récupérer le détail (lignes) du document
+    let lignesVF = [];
+    try {
+      const url = doc.kind ? `/warehouse_documents/${doc.id}.json` : `/invoices/${doc.id}.json`;
+      const { data: detail } = await vfApi.get(url);
+      lignesVF = detail.warehouse_actions || detail.positions || detail.warehouse_document_lines || [];
+    } catch (e) {
+      journal.push(`détail doc ${doc.id} → erreur ${e.message}`);
+    }
+
+    // Rapprocher chaque ligne du catalogue local (par vf_product_id, sinon désignation)
+    const catalogue = await db.all('SELECT id, ref, designation, vf_product_id FROM catalogue');
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const lignes = lignesVF.map(l => {
+      const vfProductId = l.product_id || l.warehouse_product_id || null;
+      const nom = l.name || l.product_name || l.description || '';
+      const qte = parseInt(l.quantity || l.count || 0) || 0;
+      let art = vfProductId ? catalogue.find(c => String(c.vf_product_id) === String(vfProductId)) : null;
+      if (!art && nom) art = catalogue.find(c => norm(c.designation) === norm(nom));
+      return {
+        catalogue_id: art ? art.id : null,
+        ref: art ? art.ref : (l.code || null),
+        designation: nom || (art ? art.designation : 'Article inconnu'),
+        quantite_commandee: qte,
+        rapproche: !!art
+      };
+    });
+
+    res.json({
+      found: true,
+      numero: doc.number,
+      date: _fmtDateSuede(doc.issue_date || doc.sell_date || doc.created_at),
+      lignes,
+      journal
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message, journal });
+  }
+});
+
+// Créer une commande Suède
+router.post('/commandes-suede', adminOnly, async (req, res) => {
+  try {
+    const { numero_bc, transporteur, num_suivi, date_livraison, note, lignes } = req.body;
+    if (!numero_bc) return res.status(400).json({ error: 'Numéro de BC requis' });
+    const cs = await db.run(
+      `INSERT INTO commandes_suede (numero_bc, transporteur, num_suivi, date_livraison, note)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [numero_bc, transporteur || null, num_suivi || null, date_livraison || null, note || null]
+    );
+    if (Array.isArray(lignes)) {
+      for (const l of lignes) {
+        await db.run(
+          `INSERT INTO commandes_suede_lignes (commande_suede_id, catalogue_id, designation, ref, quantite_commandee)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [cs.id, l.catalogue_id || null, l.designation || '?', l.ref || null, parseInt(l.quantite_commandee) || 0]
+        );
+      }
+    }
+    res.status(201).json(cs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Modifier une commande Suède (transporteur, suivi, livraison)
+router.put('/commandes-suede/:id', adminOnly, async (req, res) => {
+  try {
+    const existante = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
+    if (!existante) return res.status(404).json({ error: 'Introuvable' });
+    const { transporteur, num_suivi, date_livraison, note } = req.body;
+    // numero_bc n'est pas dans le formulaire d'édition : on conserve l'existant
+    const cs = await db.run(
+      `UPDATE commandes_suede SET transporteur=$1, num_suivi=$2, date_livraison=$3, note=$4, updated_at=NOW()
+       WHERE id=$5 RETURNING *`,
+      [transporteur ?? existante.transporteur, num_suivi ?? existante.num_suivi,
+       date_livraison ?? existante.date_livraison, note ?? existante.note, req.params.id]
+    );
+    res.json(cs);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Intégrer dans le stock : incrémente catalogue.stock, calcule les reliquats
+router.post('/commandes-suede/:id/integrer', adminOnly, async (req, res) => {
+  try {
+    const cs = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
+    if (!cs) return res.status(404).json({ error: 'Introuvable' });
+    if (cs.stock_integre) return res.status(400).json({ error: 'Déjà intégrée au stock' });
+
+    const recues = req.body.recues || {}; // { ligne_id: quantite_recue }
+    const lignes = await db.all('SELECT * FROM commandes_suede_lignes WHERE commande_suede_id=$1', [req.params.id]);
+
+    for (const ligne of lignes) {
+      const recue = parseInt(recues[ligne.id]);
+      const qteRecue = isNaN(recue) ? ligne.quantite_commandee : recue;
+      const reliquat = Math.max(0, ligne.quantite_commandee - qteRecue);
+      await db.run(
+        'UPDATE commandes_suede_lignes SET quantite_recue=$1, reliquat=$2 WHERE id=$3',
+        [qteRecue, reliquat, ligne.id]
+      );
+      if (ligne.catalogue_id && qteRecue > 0) {
+        await db.run('UPDATE catalogue SET stock = stock + $1, updated_at=NOW() WHERE id=$2',
+          [qteRecue, ligne.catalogue_id]);
+      }
+    }
+    await db.run('UPDATE commandes_suede SET stock_integre=TRUE, stock_integre_at=NOW(), updated_at=NOW() WHERE id=$1',
+      [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Supprimer (bloqué si déjà intégrée)
+router.delete('/commandes-suede/:id', adminOnly, async (req, res) => {
+  try {
+    const cs = await db.get('SELECT stock_integre FROM commandes_suede WHERE id=$1', [req.params.id]);
+    if (!cs) return res.status(404).json({ error: 'Introuvable' });
+    if (cs.stock_integre) return res.status(400).json({ error: 'Impossible : commande déjà intégrée au stock' });
+    await db.run('DELETE FROM commandes_suede WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
 module.exports = router;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
 module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;

@@ -333,6 +333,32 @@ async function initDB() {
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS langue TEXT NOT NULL DEFAULT 'fr'`);
     } catch(e) { /* migration silencieuse */ }
 
+    // ── Commande Suède : réappro pièces auprès d'Eloflex AB ──
+    await client.query(`CREATE TABLE IF NOT EXISTS commandes_suede (
+      id SERIAL PRIMARY KEY,
+      numero_bc TEXT NOT NULL,
+      date_commande DATE DEFAULT CURRENT_DATE,
+      transporteur TEXT,
+      num_suivi TEXT,
+      date_livraison DATE,
+      stock_integre BOOLEAN DEFAULT FALSE,
+      stock_integre_at TIMESTAMPTZ,
+      note TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await client.query(`CREATE TABLE IF NOT EXISTS commandes_suede_lignes (
+      id SERIAL PRIMARY KEY,
+      commande_suede_id INTEGER NOT NULL REFERENCES commandes_suede(id) ON DELETE CASCADE,
+      catalogue_id INTEGER REFERENCES catalogue(id) ON DELETE SET NULL,
+      designation TEXT NOT NULL,
+      ref TEXT,
+      quantite_commandee INTEGER NOT NULL DEFAULT 0,
+      quantite_recue INTEGER DEFAULT 0,
+      reliquat INTEGER DEFAULT 0
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cs_lignes ON commandes_suede_lignes(commande_suede_id)`);
+
     // Table de sessions PostgreSQL (connect-pg-simple)
     await client.query(`CREATE TABLE IF NOT EXISTS "user_sessions" (
       "sid" varchar NOT NULL COLLATE "default",

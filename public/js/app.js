@@ -158,6 +158,7 @@ async function render(){
     else if(STATE.view==='expeditions')   await renderExpeditions(ttl,c,a);
     else if(STATE.view==='commandes')     await renderCommandes(ttl,c,a);
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
+    else if(STATE.view==='commande-suede') await renderCommandeSuede(ttl,c,a);
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);
     else if(STATE.view==='carte')         { renderCarte(ttl,c,a); return; }
@@ -3666,6 +3667,252 @@ async function syncPaiementCommande(id){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.syncPaiementCommande = syncPaiementCommande;
+
+
+// ══════════════════════════════════════════════════════════════════
+// VUE COMMANDE SUÈDE : réappro pièces auprès d'Eloflex AB
+// ══════════════════════════════════════════════════════════════════
+async function renderCommandeSuede(ttl, c, a) {
+  ttl.textContent = 'Commande Suède';
+  a.innerHTML = `<button class="btn primary" onclick="modalNouvelleCommandeSuede()"><i class="ti ti-plus"></i>Nouvelle commande</button>`;
+  c.innerHTML = `<div id="cs-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">${t('msg_chargement')||'Chargement…'}</div></div>`;
+  chargerCommandesSuede();
+}
+
+async function chargerCommandesSuede() {
+  const el = document.getElementById('cs-body');
+  if (!el) return;
+  try {
+    const list = await API.commandesSuede();
+    if (!list.length) {
+      el.innerHTML = `<div class="empty"><i class="ti ti-truck-delivery"></i>Aucune commande Suède.<br><span style="font-size:12px;color:var(--text3)">Créez-en une pour réapprovisionner le stock de pièces depuis Eloflex AB.</span></div>`;
+      return;
+    }
+    el.innerHTML = `<div class="table-wrap"><table class="t">
+      <thead><tr><th>N° BC</th><th>Date</th><th>Transporteur</th><th>Suivi</th><th>Livraison</th><th>Lignes</th><th>Stock</th><th></th></tr></thead>
+      <tbody>${list.map(cs => {
+        const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
+        const badgeStock = cs.stock_integre
+          ? '<span class="badge g">Intégré</span>'
+          : (cs.date_livraison ? '<span class="badge hg">À intégrer</span>' : '<span class="badge" style="opacity:.6">En attente</span>');
+        const reliquat = cs.total_reliquat > 0 ? ` <span class="badge hg" title="Reliquat">R:${cs.total_reliquat}</span>` : '';
+        return `<tr onclick="ouvrirCommandeSuede(${cs.id})" style="cursor:pointer">
+          <td style="font-weight:600" class="mono">${esc(cs.numero_bc)}</td>
+          <td>${cs.date_commande ? fd(cs.date_commande) : '—'}</td>
+          <td>${esc(cs.transporteur || '—')}</td>
+          <td>${lien ? `<a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="mono" style="color:var(--accent)">${esc(cs.num_suivi)}</a>` : (cs.num_suivi ? `<span class="mono">${esc(cs.num_suivi)}</span>` : '—')}</td>
+          <td>${cs.date_livraison ? fd(cs.date_livraison) : '—'}</td>
+          <td>${cs.nb_lignes || 0}${reliquat}</td>
+          <td>${badgeStock}</td>
+          <td><button class="btn sm" onclick="event.stopPropagation();ouvrirCommandeSuede(${cs.id})"><i class="ti ti-arrow-right"></i></button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--danger);padding:20px 0;font-size:13px">Erreur : ${esc(e.message)}</div>`;
+  }
+}
+
+// Lignes temporaires pendant la création
+let _csLignes = [];
+
+function modalNouvelleCommandeSuede() {
+  _csLignes = [];
+  showModal(`
+    <div class="modal-head"><h3><i class="ti ti-truck-delivery"></i>Nouvelle commande Suède</h3>
+      <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">N° de bon de commande (BC)</label>
+        <div style="display:flex;gap:6px">
+          <input class="form-input mono" id="cs-bc" placeholder="STOCK0241" style="flex:1">
+          <button class="btn" type="button" onclick="chercherContenuBC()"><i class="ti ti-search"></i>Chercher le contenu</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Le contenu est recherché dans VosFactures.</div>
+      </div>
+      <div id="cs-lookup" style="margin:10px 0"></div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Transporteur</label>
+          <select class="form-input" id="cs-transporteur">
+            <option value="">—</option>
+            <option value="UPS">UPS</option>
+            <option value="DB Schenker">DB Schenker</option>
+          </select></div>
+        <div class="form-group"><label class="form-label">N° de suivi</label>
+          <input class="form-input mono" id="cs-suivi" placeholder="1Z…"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Date de livraison prévue</label>
+        <input class="form-input" id="cs-livraison" type="date"></div>
+      <div class="form-group"><label class="form-label">Note</label>
+        <textarea class="form-input" id="cs-note" rows="2"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
+      <button class="btn primary" onclick="enregistrerCommandeSuede()"><i class="ti ti-check"></i>Créer</button>
+    </div>`);
+}
+
+async function chercherContenuBC() {
+  const numero = document.getElementById('cs-bc')?.value.trim();
+  const zone = document.getElementById('cs-lookup');
+  if (!numero) { toast('Saisissez un n° de BC', 'ti-alert-circle'); return; }
+  if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">Recherche…</div>';
+  try {
+    const r = await API.stockLookup(numero);
+    if (!r.found) {
+      if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--warning);background:rgba(0,0,0,.03);border-radius:8px;padding:10px">${esc(r.message || 'Document introuvable.')} Vous pouvez saisir les lignes manuellement après création.</div>`;
+      _csLignes = [];
+      return;
+    }
+    _csLignes = r.lignes || [];
+    if (zone) {
+      zone.innerHTML = `<div style="border:0.5px solid var(--border);border-radius:8px;padding:10px 12px;background:rgba(255,255,255,.5)">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Contenu du ${esc(r.numero)} — ${_csLignes.length} ligne(s)</div>
+        ${_csLignes.map(l => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 0">
+          <span style="flex:1">${esc(l.designation)}</span>
+          ${l.rapproche ? '<span class="badge g" title="Reconnu au catalogue">✓</span>' : '<span class="badge hg" title="Pas au catalogue">?</span>'}
+          <span class="mono" style="color:var(--text3)">×${l.quantite_commandee}</span>
+        </div>`).join('')}
+      </div>`;
+    }
+  } catch (e) {
+    if (zone) zone.innerHTML = `<div style="font-size:12px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
+  }
+}
+
+async function enregistrerCommandeSuede() {
+  const numero_bc = document.getElementById('cs-bc')?.value.trim();
+  if (!numero_bc) { toast('N° de BC requis', 'ti-alert-circle'); return; }
+  try {
+    await API.createCommandeSuede({
+      numero_bc,
+      transporteur: document.getElementById('cs-transporteur')?.value || null,
+      num_suivi: document.getElementById('cs-suivi')?.value || null,
+      date_livraison: document.getElementById('cs-livraison')?.value || null,
+      note: document.getElementById('cs-note')?.value || null,
+      lignes: _csLignes
+    });
+    closeModal();
+    toast('Commande Suède créée', 'ti-check');
+    chargerCommandesSuede();
+  } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+
+async function ouvrirCommandeSuede(id) {
+  try {
+    const cs = await API.commandeSuede(id);
+    const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
+    const peutIntegrer = cs.date_livraison && !cs.stock_integre;
+    showModal(`
+      <div class="modal-head"><h3><i class="ti ti-truck-delivery"></i>BC ${esc(cs.numero_bc)}</h3>
+        <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body">
+        <div class="grid-2">
+          <div class="form-group"><label class="form-label">N° de BC</label>
+            <input class="form-input mono" value="${esc(cs.numero_bc)}" readonly style="background:rgba(0,0,0,.03)"></div>
+          <div class="form-group"><label class="form-label">Date de commande</label>
+            <input class="form-input" value="${cs.date_commande ? fd(cs.date_commande) : '—'}" readonly style="background:rgba(0,0,0,.03)"></div>
+          <div class="form-group"><label class="form-label">Transporteur</label>
+            <select class="form-input" id="cs-e-transporteur">
+              <option value="" ${!cs.transporteur?'selected':''}>—</option>
+              <option value="UPS" ${cs.transporteur==='UPS'?'selected':''}>UPS</option>
+              <option value="DB Schenker" ${cs.transporteur==='DB Schenker'?'selected':''}>DB Schenker</option>
+            </select></div>
+          <div class="form-group"><label class="form-label">N° de suivi</label>
+            <input class="form-input mono" id="cs-e-suivi" value="${esc(cs.num_suivi||'')}"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Date de livraison</label>
+          <input class="form-input" id="cs-e-livraison" type="date" value="${cs.date_livraison||''}">
+          ${lien ? `<a href="${lien}" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);display:inline-block;margin-top:4px"><i class="ti ti-external-link"></i> Suivre le colis</a>` : ''}
+        </div>
+        <div class="section-title" style="margin-top:8px"><i class="ti ti-list"></i>Lignes (${cs.lignes.length})</div>
+        <div class="table-wrap"><table class="t"><thead><tr><th>Désignation</th><th>Réf.</th><th>Cmdé</th>${cs.stock_integre?'<th>Reçu</th><th>Reliquat</th>':''}</tr></thead>
+          <tbody>${cs.lignes.map(l => `<tr>
+            <td>${esc(l.designation)}${l.catalogue_id?'':' <span class="badge hg" title="Non rattaché au catalogue">?</span>'}</td>
+            <td class="mono">${esc(l.ref||'—')}</td>
+            <td>${l.quantite_commandee}</td>
+            ${cs.stock_integre?`<td>${l.quantite_recue}</td><td>${l.reliquat>0?`<span class="badge hg">${l.reliquat}</span>`:'0'}</td>`:''}
+          </tr>`).join('')}</tbody></table></div>
+        ${cs.stock_integre ? `<div style="font-size:12px;color:var(--success);margin-top:8px"><i class="ti ti-check"></i> Stock intégré le ${cs.stock_integre_at?fd(cs.stock_integre_at):''}</div>` : ''}
+      </div>
+      <div class="modal-foot" style="justify-content:space-between">
+        <div>${cs.stock_integre ? '' : `<button class="btn sm danger" onclick="supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i>Supprimer</button>`}</div>
+        <div style="display:flex;gap:6px">
+          ${cs.stock_integre ? '' : `<button class="btn" onclick="sauverCommandeSuede(${cs.id})"><i class="ti ti-device-floppy"></i>Enregistrer</button>`}
+          ${peutIntegrer ? `<button class="btn primary" onclick="modalIntegrerStock(${cs.id})"><i class="ti ti-package-import"></i>Intégrer dans le stock</button>` : ''}
+        </div>
+      </div>`);
+  } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+
+async function sauverCommandeSuede(id) {
+  try {
+    await API.updateCommandeSuede(id, {
+      transporteur: document.getElementById('cs-e-transporteur')?.value || null,
+      num_suivi: document.getElementById('cs-e-suivi')?.value || null,
+      date_livraison: document.getElementById('cs-e-livraison')?.value || null
+    });
+    closeModal();
+    toast('Enregistré', 'ti-check');
+    chargerCommandesSuede();
+  } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+
+async function modalIntegrerStock(id) {
+  try {
+    const cs = await API.commandeSuede(id);
+    showModal(`
+      <div class="modal-head"><h3><i class="ti ti-package-import"></i>Intégrer BC ${esc(cs.numero_bc)}</h3>
+        <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Vérifiez les quantités reçues. Le stock du catalogue sera incrémenté, un reliquat calculé si la livraison est partielle.</div>
+        <div class="table-wrap"><table class="t"><thead><tr><th>Désignation</th><th>Commandé</th><th>Reçu</th></tr></thead>
+          <tbody>${cs.lignes.map(l => `<tr>
+            <td>${esc(l.designation)}${l.catalogue_id?'':' <span class="badge hg" title="Non rattaché : le stock ne bougera pas">?</span>'}</td>
+            <td>${l.quantite_commandee}</td>
+            <td><input class="form-input" type="number" min="0" id="cs-recu-${l.id}" value="${l.quantite_commandee}" style="width:80px;padding:4px 8px"></td>
+          </tr>`).join('')}</tbody></table></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="ouvrirCommandeSuede(${id})">${t('btn_annuler')||'Annuler'}</button>
+        <button class="btn primary" onclick="confirmerIntegrationStock(${id})"><i class="ti ti-check"></i>Confirmer l'intégration</button>
+      </div>`);
+    window._csLignesIntegration = cs.lignes.map(l => l.id);
+  } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+
+async function confirmerIntegrationStock(id) {
+  const recues = {};
+  (window._csLignesIntegration || []).forEach(lid => {
+    const v = document.getElementById(`cs-recu-${lid}`)?.value;
+    if (v !== undefined && v !== '') recues[lid] = parseInt(v);
+  });
+  try {
+    await API.integrerStockSuede(id, recues);
+    closeModal();
+    toast('Stock mis à jour', 'ti-check', 'var(--success)');
+    chargerCommandesSuede();
+  } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+
+async function supprimerCommandeSuede(id) {
+  if (!confirm('Supprimer cette commande Suède ?')) return;
+  try {
+    await API.deleteCommandeSuede(id);
+    closeModal();
+    toast('Supprimé', 'ti-check');
+    chargerCommandesSuede();
+  } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+
+window.renderCommandeSuede = renderCommandeSuede;
+window.modalNouvelleCommandeSuede = modalNouvelleCommandeSuede;
+window.chercherContenuBC = chercherContenuBC;
+window.enregistrerCommandeSuede = enregistrerCommandeSuede;
+window.ouvrirCommandeSuede = ouvrirCommandeSuede;
+window.sauverCommandeSuede = sauverCommandeSuede;
+window.modalIntegrerStock = modalIntegrerStock;
+window.confirmerIntegrationStock = confirmerIntegrationStock;
+window.supprimerCommandeSuede = supprimerCommandeSuede;
 
 })();
 
