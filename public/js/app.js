@@ -392,7 +392,8 @@ async function renderClient(ttl,c,a){
             return `<tr><td style="color:var(--text3);padding:5px 0;width:100px;vertical-align:top">Adresse</td>
               <td style="font-weight:500;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}
                 <div style="margin-top:4px;display:flex;gap:8px;font-size:11px;font-weight:400">
-                  <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none"><i class="ti ti-map-pin" style="font-size:11px"></i> Voir sur une carte</a>
+                  <span onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')" style="color:var(--accent);cursor:pointer"><i class="ti ti-map-pin" style="font-size:11px"></i> Voir sur la carte</span>
+                  <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> OpenStreetMap</a>
                   <span onclick="copierAdresse(this,'${esc(lignes.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> Copier</span>
                 </div>
               </td></tr>`;
@@ -4669,6 +4670,47 @@ function renderCarte(ttl, c, a) {
   setTimeout(chargerPoints, 150);
 }
 window.renderCarte = renderCarte;
+
+// Ouvre la carte de l'interface centrée sur un distributeur donné (par client_id).
+// Affiche un message si ce distributeur n'a pas encore de point sur la carte.
+function voirDistributeurSurCarte(clientId, nom){
+  setView('carte');
+  var essais = 0;
+  var minuteur = setInterval(function(){
+    essais++;
+    // Attendre que la carte et les points soient chargés (chargerPoints est async)
+    if (!_carteMap || !Array.isArray(_cartePoints)) {
+      if (essais > 40) clearInterval(minuteur); // ~6s max
+      return;
+    }
+    if (_cartePoints.length === 0 && essais < 15) return; // laisser le temps au fetch
+    clearInterval(minuteur);
+    var pt = _cartePoints.find(function(p){ return p.client_id === clientId; });
+    var info = document.getElementById('carte-nom-result');
+    if (pt && pt.lat != null && pt.lng != null) {
+      // S'assurer que le réseau du point est bien affiché (sinon on ne verrait pas le marker)
+      if (_carteReseaux && pt.reseau && _carteReseaux[pt.reseau] === false) {
+        _carteReseaux[pt.reseau] = true;
+        var cb = document.querySelector('input[onchange*="' + pt.reseau + '"]');
+        if (cb) cb.checked = true;
+        afficherMarkers();
+      }
+      _carteMap.setView([parseFloat(pt.lat), parseFloat(pt.lng)], 13, { animate: true });
+      // Ouvrir la popup du marker correspondant
+      var m = _carteMarkers.find(function(mk){
+        var ll = mk.getLatLng();
+        return Math.abs(ll.lat - parseFloat(pt.lat)) < 1e-6 && Math.abs(ll.lng - parseFloat(pt.lng)) < 1e-6;
+      });
+      if (m) m.openPopup();
+      if (info) info.innerHTML = '<span style="color:#16a34a">' + esc(nom || pt.nom) + ' — centré sur la carte</span>';
+    } else {
+      // Pas de point pour ce distributeur
+      toast("Ce distributeur n'est pas encore sur la carte — cochez « afficher sur une carte » dans sa fiche puis géocodez-le.", 'ti-map-off', 'var(--warning)');
+      if (info) info.innerHTML = '<span style="color:#b45309">' + esc(nom || '') + ' n\'a pas encore de point sur la carte</span>';
+    }
+  }, 150);
+}
+window.voirDistributeurSurCarte = voirDistributeurSurCarte;
 
 function chargerPoints() {
   if (typeof L === 'undefined') {
