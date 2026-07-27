@@ -449,10 +449,14 @@ router.post('/fauteuils', async (req, res) => {
 
 router.put('/fauteuils/:id', async (req, res) => {
   try {
-    const { modele, serie, annee, couleur, date_achat, num_facture, duree_garantie_mois, notes } = req.body;
+    const { client_id, modele, serie, annee, couleur, date_achat, num_facture, duree_garantie_mois, notes } = req.body;
+    // Permet de changer le distributeur (client_id) uniquement s'il est fourni ;
+    // COALESCE garde la valeur existante si client_id est absent/null.
     const f = await db.run(
-      'UPDATE fauteuils SET modele=$1,serie=$2,annee=$3,couleur=$4,date_achat=$5,num_facture=$6,duree_garantie_mois=$7,notes=$8,updated_at=NOW() WHERE id=$9 RETURNING *',
-      [modele, serie, annee, couleur, date_achat, num_facture, duree_garantie_mois||24, notes, req.params.id]
+      `UPDATE fauteuils SET client_id=COALESCE($1, client_id),
+         modele=$2,serie=$3,annee=$4,couleur=$5,date_achat=$6,num_facture=$7,
+         duree_garantie_mois=$8,notes=$9,updated_at=NOW() WHERE id=$10 RETURNING *`,
+      [client_id || null, modele, serie, annee, couleur, date_achat, num_facture, duree_garantie_mois||24, notes, req.params.id]
     );
     res.json(f);
   } catch (e) { res.status(500).json({ error: e.message }); }
