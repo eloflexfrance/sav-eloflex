@@ -1018,6 +1018,30 @@ async function renderCommandesTable(page=1){
     ${nbPages > 1 ? nav : ''}`;
 }
 
+// Correspondance réseau distributeur (reseau_carte) → libellé du champ "Groupe" des commandes
+var RESEAU_VERS_GROUPE = {
+  base: 'De base', bastide: 'Bastide', providom: 'Providom',
+  districlub: 'Distri club', negocies: 'Négocié'
+};
+
+// Pré-remplit le "Groupe" d'une commande à partir du réseau du distributeur saisi,
+// seulement si le champ Groupe est encore vide (ne jamais écraser un choix manuel).
+async function prefillGroupeDepuisDistrib(){
+  var champGroupe = document.getElementById('cmd-groupe');
+  var champDistrib = document.getElementById('cmd-distrib');
+  if (!champGroupe || !champDistrib) return;
+  if (champGroupe.value) return; // déjà renseigné → on respecte le choix
+  var nom = champDistrib.value.trim();
+  if (!nom) return;
+  try {
+    var r = await API.reseauParNom(nom);
+    if (r && r.reseau && RESEAU_VERS_GROUPE[r.reseau] && !champGroupe.value) {
+      champGroupe.value = RESEAU_VERS_GROUPE[r.reseau];
+    }
+  } catch(_) { /* silencieux : le pré-remplissage est un confort, pas un blocage */ }
+}
+window.prefillGroupeDepuisDistrib = prefillGroupeDepuisDistrib;
+
 async function modalCommande(id){
   window._currentCmdId = id;
   let cm = id ? await API.commande(id) : {statut:'Auto', quantite:1};
@@ -1071,7 +1095,7 @@ async function modalCommande(id){
       <div id="cmd-tab-commande" style="${initTab!=='commande'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label>
-            <input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required placeholder="${t('col_client')||'Nom du distributeur'}">
+            <input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required placeholder="${t('col_client')||'Nom du distributeur'}" onchange="prefillGroupeDepuisDistrib()">
           </div>
           <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
             <select class="form-input" id="cmd-groupe">
@@ -1475,7 +1499,7 @@ async function lookupBdcVF(){
     if(!r.configured){ toast(t('cmd_vf_non_configure')||'VosFactures non configuré','ti-alert-circle','var(--danger)'); return; }
     if(!r.found){ toast(t('cmd_bdc_introuvable')||'Bon de commande introuvable dans VosFactures','ti-alert-circle','var(--danger)'); return; }
     let remplis = [];
-    if(r.distributeur && $('cmd-distrib') && !gv('cmd-distrib')){ $('cmd-distrib').value=r.distributeur; remplis.push('distributeur'); }
+    if(r.distributeur && $('cmd-distrib') && !gv('cmd-distrib')){ $('cmd-distrib').value=r.distributeur; remplis.push('distributeur'); prefillGroupeDepuisDistrib(); }
     if(r.modele     && $('cmd-modele')  && !gv('cmd-modele'))  { $('cmd-modele').value=r.modele;       remplis.push('modèle'); }
     if(r.quantite   && $('cmd-quantite'))                       { $('cmd-quantite').value=r.quantite;   }
     if(r.date_commande && $('cmd-date') && !gv('cmd-date'))    { $('cmd-date').value=r.date_commande;   remplis.push('date'); }

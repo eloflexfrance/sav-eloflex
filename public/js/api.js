@@ -43,6 +43,7 @@ const API = {
   regenererToken:(id)=>API.post(`/clients/${id}/regenerer-token`,{}),
   fusionnerClients:(idCible,idSource,vfIgnore)=>API.post(`/clients/${idCible}/fusionner`,{client_source_id:idSource,vf_ignore_source:vfIgnore}),
   adressesIncompletes:()=>API.get('/clients/adresses-incompletes'),
+  reseauParNom:(nom)=>API.get('/clients/reseau-par-nom?nom='+encodeURIComponent(nom||'')),
   completerAdresses:(lignes)=>API.post('/clients/adresses-completer',{lignes}),
   fauteuils:(cid)=>API.get('/fauteuils'+(cid?`?client_id=${cid}`:'')),
   fauteuil:(id)=>API.get(`/fauteuils/${id}`),
