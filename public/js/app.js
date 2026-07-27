@@ -4697,6 +4697,7 @@ var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true, n
 // _carteAnnees = ensemble des années cochées ; _carteToutesAnnees = ignore le filtre.
 var _carteAnneesFiltre = {};
 var _carteToutesAnnees = false;
+var _carteSansAnnee = false; // affiche les points sans année de dernière commande (null ou < 2019)
 (function(){ _carteAnneesFiltre[new Date().getFullYear()] = true; })();
 var _carteMarkers = [];
 var _cartePoints = [];
@@ -4757,9 +4758,18 @@ function legendeAnnees(){
       '<span id="cnt-annee-' + y + '" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
       '</label>';
   }
+  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:12px;color:#777">' +
+    '<input type="checkbox" ' + (_carteSansAnnee?'checked':'') + ' onchange="basculerSansAnnee(this.checked)"> Sans commande / avant 2019' +
+    '<span id="cnt-annee-sans" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
+    '</label>';
   html += '</div></div>';
   return html;
 }
+function basculerSansAnnee(actif){
+  _carteSansAnnee = !!actif;
+  afficherMarkers();
+}
+window.basculerSansAnnee = basculerSansAnnee;
 function basculerToutesAnnees(actif){
   _carteToutesAnnees = !!actif;
   var liste = document.getElementById('carte-annees-liste');
@@ -4989,23 +4999,29 @@ function pinIconCarte(reseau, point) {
 // Met à jour les compteurs (par réseau selon le filtre année actif, par année en absolu)
 function majCompteursCarte(){
   var pts = _cartePoints || [];
+  // Un point passe-t-il le filtre année courant ?
+  var passeAnnee = function(p){
+    if (_carteToutesAnnees) return true;
+    var da = p.derniere_annee;
+    var sansAnnee = !da || da < 2019;
+    if (sansAnnee) return _carteSansAnnee;
+    return !!_carteAnneesFiltre[da];
+  };
   // Compteur par réseau : combien de points visibles selon le filtre année
   Object.keys(RESEAUX_CONFIG).forEach(function(k){
     var el = document.getElementById('cnt-' + k);
     if (!el) return;
-    var n = pts.filter(function(p){
-      if (p.reseau !== k) return false;
-      if (_carteToutesAnnees) return true;
-      return p.derniere_annee && _carteAnneesFiltre[p.derniere_annee];
-    }).length;
-    el.textContent = n;
+    el.textContent = pts.filter(function(p){ return p.reseau === k && passeAnnee(p); }).length;
   });
-  // Compteur par année : combien de points ont leur dernière commande cette année
+  // Compteur par année : combien de points ont leur dernière commande cette année (absolu)
   var actuelle = new Date().getFullYear();
   for (var y = actuelle; y >= 2019; y--) {
     var el2 = document.getElementById('cnt-annee-' + y);
     if (el2) el2.textContent = pts.filter(function(p){ return p.derniere_annee === y; }).length;
   }
+  // Compteur "sans commande / avant 2019"
+  var elSans = document.getElementById('cnt-annee-sans');
+  if (elSans) elSans.textContent = pts.filter(function(p){ return !p.derniere_annee || p.derniere_annee < 2019; }).length;
 }
 window.majCompteursCarte = majCompteursCarte;
 
@@ -5025,7 +5041,13 @@ function afficherMarkers(recadrer) {
     // Filtre par année de dernière commande (sauf si "toutes les années")
     if (!_carteToutesAnnees) {
       var da = p.derniere_annee;
-      if (!da || !_carteAnneesFiltre[da]) return;
+      // "Sans année" = aucune commande datée, ou dernière commande avant 2019
+      var sansAnnee = !da || da < 2019;
+      if (sansAnnee) {
+        if (!_carteSansAnnee) return;
+      } else if (!_carteAnneesFiltre[da]) {
+        return;
+      }
     }
     if (q && (p.nom + ' ' + (p.ville||'') + ' ' + (p.description||'')).toLowerCase().indexOf(q) < 0) return;
     var marker = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon: pinIconCarte(p.reseau, p) });
@@ -5094,6 +5116,7 @@ function popupCarte(p) {
           ? 'Rapproché par nom : ' + _esc((p.noms_rattaches||[]).join(', '))
           : '<span style="color:#d97706">⚠ Aucune commande rattachée — liez ce point à un client pour fiabiliser</span>') +
     '</div>' +
+    (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> Voir la fiche complète →</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
     '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px">Note interne</label>' +
     '<textarea id="carte-note-' + p.id + '" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px;font-size:12px;resize:vertical;font-family:inherit">' + _esc(p.note_interne||'') + '</textarea>' +
@@ -5103,6 +5126,14 @@ function popupCarte(p) {
 }
 
 function wirePopupCarte(e, p) { /* rien de spécial */ }
+
+// Ouvre la fiche client complète depuis un point de la carte
+function ouvrirFicheDistrib(clientId){
+  if (!clientId) return;
+  if (_carteMap) _carteMap.closePopup();
+  setView('client', { clientId: clientId });
+}
+window.ouvrirFicheDistrib = ouvrirFicheDistrib;
 
 function filtrerParDistrib(nom) {
   if (typeof STATE !== 'undefined') STATE.view = 'commandes';
