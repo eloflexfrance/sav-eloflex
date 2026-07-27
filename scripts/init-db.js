@@ -238,6 +238,7 @@ async function initDB() {
       // Affichage d'un client sur la carte distributeurs
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS sur_carte BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS reseau_carte TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS portable TEXT`);
       // Adresse postale complète des clients / distributeurs
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse2 TEXT`);
