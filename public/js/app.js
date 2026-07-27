@@ -2766,14 +2766,17 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
   <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays">${optionsPays(d.pays||'France')}</select></div>
+  <div class="form-group"><label class="form-label">Réseau</label>
+    <select class="form-input" id="f-reseau">
+      <option value="">— Aucun —</option>
+      ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
+    </select>
+  </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
-      <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} onchange="document.getElementById('f-reseau-carte').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:#22c55e">
+      <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} style="width:16px;height:16px;accent-color:#22c55e">
       <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#16a34a">🗺️ Afficher sur la carte distributeurs</div>
-      <div style="font-size:11px;color:var(--text2)">Le point est créé et positionné depuis la ville, et ses ventes sont rattachées automatiquement</div></div>
-      <select class="form-input" id="f-reseau-carte" onclick="event.preventDefault();event.stopPropagation()" style="width:auto;padding:5px 8px;font-size:12px;display:${d.sur_carte?'':'none'}">
-        ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
-      </select>
+      <div style="font-size:11px;color:var(--text2)">Le point est créé et positionné depuis la ville, avec le réseau choisi ci-dessus</div></div>
     </label>
   </div>
   <div class="form-group" style="grid-column:1/-1">
@@ -2788,6 +2791,9 @@ function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-u
 async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveClient(id){
   const surCarte = !!document.getElementById('f-sur-carte')?.checked;
+  // Réseau désormais indépendant de la carte ; si affiché sur carte sans réseau choisi, défaut 'base'
+  let reseau = gv('f-reseau') || null;
+  if (surCarte && !reseau) reseau = 'base';
   const data = {
     nom: gv('f-nom'), type: gv('f-type'), contact: gv('f-contact'),
     email: gv('f-email'), tel: gv('f-tel'),
@@ -2795,7 +2801,7 @@ async function saveClient(id){
     cp: gv('f-cp'), ville: gv('f-ville'), pays: gv('f-pays'),
     edi: !!document.getElementById('f-edi')?.checked,
     sur_carte: surCarte,
-    reseau_carte: surCarte ? (gv('f-reseau-carte') || 'base') : null
+    reseau_carte: reseau
   };
   if(!data.nom){ alert('Nom requis'); return; }
   if(surCarte && !data.ville && !data.cp){ alert('Renseignez au moins le code postal ou la ville : ils servent à positionner le point sur la carte.'); return; }
@@ -3725,15 +3731,16 @@ async function modalFusionnerClient(idCible){
   window._FUSION_CLIENTS=clients.filter(c=>c.id!==idCible);
   window._FUSION_OUVERT=cible; // fiche depuis laquelle on a ouvert la modale
   window._FUSION_AUTRE=null;   // autre fiche (doublon) sélectionnée
-  showModal(`<div class="modal-header"><i class="ti ti-git-merge" style="font-size:18px;color:var(--accent)"></i><h2>Fusionner un doublon</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-    <div class="modal-body">
+  showModal(`<div style="width:min(92vw,640px)">
+    <div class="modal-header"><i class="ti ti-git-merge" style="font-size:18px;color:var(--accent)"></i><h2>Fusionner un doublon</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="min-height:340px">
       <div class="form-group"><label class="form-label">Autre fiche (le doublon)</label>
         <div style="position:relative">
           <input class="form-input" id="fusion-search" placeholder="Taper le nom de l'autre fiche…" autocomplete="off"
             oninput="searchFusionClient(this.value)" onfocus="searchFusionClient(this.value)"
             onblur="setTimeout(()=>{const d=document.getElementById('fusion-drop');if(d)d.style.display='none'},150)">
           <input type="hidden" id="fusion-source-id">
-          <div id="fusion-drop" class="piece-dropdown" style="display:none"></div>
+          <div id="fusion-drop" class="piece-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:50;max-height:300px;overflow-y:auto;background:var(--surface,#fff);border:1px solid var(--border,#ddd);border-radius:var(--radius,8px);box-shadow:0 8px 24px rgba(0,0,0,.14);margin-top:2px"></div>
         </div>
       </div>
       <div class="form-group" id="fusion-choix-garder" style="display:none">
@@ -3760,12 +3767,13 @@ async function modalFusionnerClient(idCible){
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn danger" onclick="confirmerFusion()"><i class="ti ti-git-merge"></i>Fusionner et supprimer</button>
-    </div>`);
+    </div>
+  </div>`);
 }
 function searchFusionClient(q){
   const drop=document.getElementById('fusion-drop');if(!drop)return;
   const query=q.toLowerCase().trim();
-  const results=(query?(window._FUSION_CLIENTS||[]).filter(c=>c.nom.toLowerCase().includes(query)):(window._FUSION_CLIENTS||[])).slice(0,12);
+  const results=(query?(window._FUSION_CLIENTS||[]).filter(c=>c.nom.toLowerCase().includes(query)):(window._FUSION_CLIENTS||[])).slice(0,30);
   if(!results.length){drop.style.display='none';return;}
   drop.innerHTML=results.map(c=>`<div class="piece-option" onmousedown="event.preventDefault();selectFusionSource(${c.id},'${c.nom.replace(/'/g,"\\'")}',${c.nb_fauteuils||0})"><div style="font-size:12px;font-weight:600">${esc(c.nom)}</div><div style="font-size:11px;color:var(--text3)">${c.nb_fauteuils||0} fauteuil(s)</div></div>`).join('');
   drop.style.display='block';
