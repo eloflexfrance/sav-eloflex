@@ -272,11 +272,14 @@ router.get('/admin/migrer-entite-facturation', adminOnly, async (req, res) => {
 router.get('/clients', async (req, res) => {
   try {
     const q = `%${req.query.q || ''}%`;
+    // Comptages via jointures groupées (bien plus rapide que 2 sous-requêtes corrélées par ligne)
     const rows = await db.all(
       `SELECT c.*,
-        (SELECT COUNT(*)::int FROM fauteuils f WHERE f.client_id=c.id) AS nb_fauteuils,
-        (SELECT COUNT(*)::int FROM interventions i WHERE i.client_id=c.id) AS nb_interventions
+        COALESCE(nf.n, 0) AS nb_fauteuils,
+        COALESCE(ni.n, 0) AS nb_interventions
        FROM clients c
+       LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM fauteuils GROUP BY client_id) nf ON nf.client_id = c.id
+       LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM interventions GROUP BY client_id) ni ON ni.client_id = c.id
        WHERE c.nom ILIKE $1 OR c.contact ILIKE $1 OR c.ville ILIKE $1
           OR c.adresse ILIKE $1 OR c.cp ILIKE $1 OR c.email ILIKE $1
        ORDER BY c.nom`,
@@ -288,6 +291,29 @@ router.get('/clients', async (req, res) => {
 
 // Liste les distributeurs dont l'adresse (rue) est absente, avec suggestion VosFactures.
 // IMPORTANT : doit être déclarée AVANT /clients/:id sinon Express la capture comme un id.
+// Renvoie le réseau (reseau_carte) d'un distributeur à partir de son nom, pour
+// pré-remplir le "Groupe" d'une commande. Rapprochement exact puis par memeEntite.
+// IMPORTANT : déclarée AVANT /clients/:id sinon Express la capture comme un id.
+router.get('/clients/reseau-par-nom', requireAuth, async (req, res) => {
+  try {
+    const nom = (req.query.nom || '').trim();
+    if (!nom) return res.json({ reseau: null });
+    // 1) correspondance exacte (insensible à la casse)
+    let cl = await db.get(
+      `SELECT id, nom, reseau_carte FROM clients WHERE LOWER(nom)=LOWER($1) AND reseau_carte IS NOT NULL LIMIT 1`,
+      [nom]
+    );
+    // 2) sinon rapprochement souple sur les distributeurs qui ont un réseau
+    if (!cl) {
+      const candidats = await db.all(
+        `SELECT id, nom, reseau_carte FROM clients WHERE type <> 'Particulier' AND reseau_carte IS NOT NULL`
+      );
+      cl = candidats.find(c => memeEntite(nom, c.nom)) || null;
+    }
+    res.json({ reseau: cl ? cl.reseau_carte : null, nom: cl ? cl.nom : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/clients/adresses-incompletes', requireAuth, async (req, res) => {
   try {
     const locaux = await db.all(`
