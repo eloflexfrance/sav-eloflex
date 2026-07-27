@@ -501,7 +501,7 @@ async function renderClient(ttl,c,a){
       <div class="card">
         <div class="section-title"><i class="ti ti-user"></i>Fiche distributeur</div>
         <table style="width:100%;font-size:12px">
-          ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
+          ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Portable',cl.portable],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
           ${(()=>{
             const lignes=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
             if(!lignes.length) return `<tr><td style="color:var(--text3);padding:3px 0;width:100px">Adresse</td><td style="color:var(--text3)">— <span style="font-size:11px">(à compléter)</span></td></tr>`;
@@ -2761,6 +2761,7 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Contact</label><input class="form-input" id="f-contact" value="${esc(d.contact||'')}"></div>
   <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" value="${esc(d.email||'')}"></div>
   <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
+  <div class="form-group"><label class="form-label">Portable</label><input class="form-input" id="f-portable" value="${esc(d.portable||'')}"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse</label><input class="form-input" id="f-adresse" placeholder="12 rue des Lilas" value="${esc(d.adresse||'')}"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Complément d'adresse</label><input class="form-input" id="f-adresse2" placeholder="Bâtiment B, ZI de la Plaine…" value="${esc(d.adresse2||'')}"></div>
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
@@ -2796,7 +2797,7 @@ async function saveClient(id){
   if (surCarte && !reseau) reseau = 'base';
   const data = {
     nom: gv('f-nom'), type: gv('f-type'), contact: gv('f-contact'),
-    email: gv('f-email'), tel: gv('f-tel'),
+    email: gv('f-email'), tel: gv('f-tel'), portable: gv('f-portable'),
     adresse: gv('f-adresse'), adresse2: gv('f-adresse2'),
     cp: gv('f-cp'), ville: gv('f-ville'), pays: gv('f-pays'),
     edi: !!document.getElementById('f-edi')?.checked,
@@ -4929,7 +4930,7 @@ async function ajouterDistributeurCarte(clientId, nom){
       return;
     }
     var data = {
-      nom: cl.nom, type: cl.type, contact: cl.contact, email: cl.email, tel: cl.tel,
+      nom: cl.nom, type: cl.type, contact: cl.contact, email: cl.email, tel: cl.tel, portable: cl.portable,
       adresse: cl.adresse, adresse2: cl.adresse2, cp: cl.cp, ville: cl.ville, pays: cl.pays,
       edi: !!cl.edi, entite_facturation_id: cl.entite_facturation_id || null,
       sur_carte: true, reseau_carte: cl.reseau_carte || 'base'
