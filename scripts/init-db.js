@@ -182,6 +182,10 @@ async function initDB() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_client ON commandes(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_distrib ON commandes(distributeur_nom)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_bdc ON commandes(bdc)`);
+    // Index pour accélérer les comptages par client de la liste /clients (nb_fauteuils, nb_interventions)
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_fauteuils_client ON fauteuils(client_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_interventions_client ON interventions(client_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_annee ON commandes((EXTRACT(YEAR FROM date_commande::date)))`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_serie ON commandes(num_serie)`);
     try {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_commande_id BIGINT UNIQUE`);
