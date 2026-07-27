@@ -384,15 +384,15 @@ router.get('/clients/:id', async (req, res) => {
 
 router.post('/clients', async (req, res) => {
   try {
-    const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte,
+    const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
             adresse, adresse2, cp, pays, entite_facturation_id } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
-      `INSERT INTO clients (nom,contact,email,tel,ville,type,token_portail,edi,sur_carte,reseau_carte,
+      `INSERT INTO clients (nom,contact,email,tel,portable,ville,type,token_portail,edi,sur_carte,reseau_carte,
                             adresse,adresse2,cp,pays,entite_facturation_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [nom, contact||null, email||null, tel||null, ville||null, type||'Distributeur', token,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [nom, contact||null, email||null, tel||null, portable||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null]
     );
@@ -404,14 +404,14 @@ router.post('/clients', async (req, res) => {
 
 router.put('/clients/:id', async (req, res) => {
   try {
-    const { nom, contact, email, tel, ville, type, edi, sur_carte, reseau_carte,
+    const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
             adresse, adresse2, cp, pays, entite_facturation_id } = req.body;
     const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
-      `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,ville=$5,type=$6,
-       edi=$7,sur_carte=$8,reseau_carte=$9,
-       adresse=$10,adresse2=$11,cp=$12,pays=$13,entite_facturation_id=$14,updated_at=NOW() WHERE id=$15 RETURNING *`,
-      [nom, contact, email, tel, ville, type, !!edi, !!sur_carte, reseau_carte||null,
+      `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,portable=$5,ville=$6,type=$7,
+       edi=$8,sur_carte=$9,reseau_carte=$10,
+       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,updated_at=NOW() WHERE id=$16 RETURNING *`,
+      [nom, contact, email, tel, portable||null, ville, type, !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null,
        (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
        req.params.id]
