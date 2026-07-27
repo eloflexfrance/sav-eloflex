@@ -185,7 +185,9 @@ async function initDB() {
     // Index pour accélérer les comptages par client de la liste /clients (nb_fauteuils, nb_interventions)
     await client.query(`CREATE INDEX IF NOT EXISTS idx_fauteuils_client ON fauteuils(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_interventions_client ON interventions(client_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_annee ON commandes((EXTRACT(YEAR FROM date_commande::date)))`);
+    // Index simple sur date_commande (utilisable pour les filtres par date ET par année) :
+    // un index sur EXTRACT(YEAR FROM date_commande::date) est refusé (expression non IMMUTABLE).
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_date ON commandes(date_commande)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_commandes_serie ON commandes(num_serie)`);
     try {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_commande_id BIGINT UNIQUE`);
