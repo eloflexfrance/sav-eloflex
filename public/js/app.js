@@ -1938,6 +1938,13 @@ async function renderParametres(ttl,c,a){
         <a class="btn primary" href="/api/sauvegarde/export" download><i class="ti ti-download"></i>Télécharger la sauvegarde</a>
         <button class="btn" onclick="envoyerSauvegardeMaintenant(this)"><i class="ti ti-mail-forward"></i>Envoyer par courriel</button>
       </div>
+      <div style="margin-top:16px;padding-top:14px;border-top:0.5px solid var(--border)">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px"><i class="ti ti-database-import"></i> Restaurer une sauvegarde</div>
+        <div style="font-size:12px;color:var(--danger);margin-bottom:8px">⚠ Remplace TOUTES les données actuelles par celles du fichier. À utiliser sur une base vide ou pour restaurer après incident. Accepte les fichiers .json et .json.gz.</div>
+        <input type="file" id="restore-file" accept=".json,.gz,application/json,application/gzip" style="font-size:12px">
+        <button class="btn danger" onclick="restaurerSauvegarde(this)" style="margin-left:8px"><i class="ti ti-upload"></i>Restaurer</button>
+        <div id="restore-result" style="font-size:12px;margin-top:8px"></div>
+      </div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-bell"></i>${t('param_alertes')}</h3>
@@ -4502,6 +4509,46 @@ function envoyerSauvegardeMaintenant(btn) {
     .finally(function(){ if (btn) { btn.disabled = false; btn.innerHTML = libelle; } });
 }
 window.envoyerSauvegardeMaintenant = envoyerSauvegardeMaintenant;
+
+// Restaure la base depuis un fichier de sauvegarde (.json ou .json.gz)
+async function restaurerSauvegarde(btn){
+  const input = document.getElementById('restore-file');
+  const zone = document.getElementById('restore-result');
+  const f = input && input.files && input.files[0];
+  if (!f) { toast('Choisissez d\'abord un fichier de sauvegarde', 'ti-alert-circle'); return; }
+  if (!confirm('Restaurer cette sauvegarde ?\n\nToutes les données actuelles seront REMPLACÉES par celles du fichier. Cette action n\'est pas annulable.')) return;
+
+  const libelle = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Restauration…'; }
+  if (zone) zone.innerHTML = '<span style="color:var(--text2)">Lecture du fichier…</span>';
+  try {
+    let texte;
+    const estGz = /\.gz$/i.test(f.name);
+    if (estGz) {
+      // Décompression gzip côté navigateur via DecompressionStream
+      const ds = new DecompressionStream('gzip');
+      const flux = f.stream().pipeThrough(ds);
+      texte = await new Response(flux).text();
+    } else {
+      texte = await f.text();
+    }
+    const data = JSON.parse(texte);
+    if (!data || !data.donnees) { throw new Error('Fichier invalide : structure "donnees" absente'); }
+    if (zone) zone.innerHTML = '<span style="color:var(--text2)">Restauration en cours (cela peut prendre un moment)…</span>';
+    const r = await API.restaurerSauvegarde(data);
+    const lignes = Object.entries(r.rapport || {}).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
+    const total = lignes.reduce((s,[,n])=>s+n,0);
+    if (zone) zone.innerHTML = '<span style="color:#16a34a">✓ Restauration réussie — '+total+' ligne(s) importée(s) sur '+lignes.length+' table(s).</span>';
+    toast('Sauvegarde restaurée', 'ti-check', 'var(--success)');
+    setTimeout(function(){ chargerResumeSauvegarde(); }, 500);
+  } catch(e) {
+    if (zone) zone.innerHTML = '<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>';
+    toast('Échec de la restauration', 'ti-alert-circle', 'var(--danger)');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = libelle; }
+  }
+}
+window.restaurerSauvegarde = restaurerSauvegarde;
 
 
 // Lien de suivi transporteur pour les interventions (envoi et retour).
