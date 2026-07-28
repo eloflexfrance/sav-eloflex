@@ -15,7 +15,7 @@ app.set('trust proxy', 1); // Render est derrière un reverse proxy
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // ── Sessions PostgreSQL persistantes ────────────────────────────────

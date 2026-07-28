@@ -4818,6 +4818,74 @@ router.get('/sauvegarde/export', adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Restauration depuis un fichier de sauvegarde JSON (produit par /sauvegarde/export).
+// Vide puis réinsère chaque table dans l'ordre parents→enfants, en transaction.
+// Ordre des tables important pour respecter les clés étrangères.
+const ORDRE_RESTAURATION = [
+  'parametres', 'clients', 'clients_finaux', 'catalogue', 'distributeurs_carte',
+  'fauteuils', 'commandes', 'commandes_lignes', 'commandes_retour_lignes',
+  'commande_notes', 'interventions', 'intervention_produits', 'intervention_photos',
+  'intervention_commentaires', 'intervention_historique',
+  'devis', 'devis_relances', 'transferts_fauteuils', 'retours_suede', 'alertes'
+];
+router.post('/sauvegarde/restaurer', adminOnly, async (req, res) => {
+  const sauvegarde = req.body;
+  if (!sauvegarde || !sauvegarde.donnees) {
+    return res.status(400).json({ error: 'Fichier de sauvegarde invalide (clé "donnees" absente)' });
+  }
+  const donnees = sauvegarde.donnees;
+  const pgClient = await db.pool.connect();
+  const rapport = {};
+  try {
+    await pgClient.query('BEGIN');
+    // 1) Vider les tables dans l'ordre inverse (enfants→parents) pour ne pas violer les FK
+    for (const table of [...ORDRE_RESTAURATION].reverse()) {
+      try { await pgClient.query(`DELETE FROM ${table}`); } catch (_) {}
+    }
+    // 2) Réinsérer dans l'ordre parents→enfants
+    for (const table of ORDRE_RESTAURATION) {
+      const lignes = Array.isArray(donnees[table]) ? donnees[table] : [];
+      if (!lignes.length) { rapport[table] = 0; continue; }
+      let n = 0;
+      for (const ligne of lignes) {
+        const cols = Object.keys(ligne);
+        if (!cols.length) continue;
+        const placeholders = cols.map((_, i) => `$${i + 1}`).join(',');
+        const valeurs = cols.map(c => {
+          const v = ligne[c];
+          // Réencoder les objets/tableaux (colonnes JSON) en chaîne JSON
+          if (v !== null && typeof v === 'object') return JSON.stringify(v);
+          return v;
+        });
+        try {
+          await pgClient.query(
+            `INSERT INTO ${table} (${cols.map(c => `"${c}"`).join(',')}) VALUES (${placeholders})`,
+            valeurs
+          );
+          n++;
+        } catch (e) { /* ligne ignorée si incompatible, on continue */ }
+      }
+      rapport[table] = n;
+      // 3) Réajuster la séquence d'auto-increment sur id si présente
+      if (cols_ont_id(lignes[0])) {
+        try {
+          await pgClient.query(
+            `SELECT setval(pg_get_serial_sequence('${table}','id'), COALESCE((SELECT MAX(id) FROM ${table}),1), true)`
+          );
+        } catch (_) {}
+      }
+    }
+    await pgClient.query('COMMIT');
+    res.json({ ok: true, rapport });
+  } catch (e) {
+    await pgClient.query('ROLLBACK');
+    res.status(500).json({ error: e.message, rapport });
+  } finally {
+    pgClient.release();
+  }
+});
+function cols_ont_id(ligne) { return ligne && Object.prototype.hasOwnProperty.call(ligne, 'id'); }
+
 router.get('/sauvegarde/resume', adminOnly, async (req, res) => {
   try {
     const tables = {}; let total = 0;
