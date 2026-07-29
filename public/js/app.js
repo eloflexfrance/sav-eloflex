@@ -518,6 +518,7 @@ async function renderClient(ttl,c,a){
           ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">💳 EDI — Prélèvement</span></td></tr>`:''}
           ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="setView('carte')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
           ${cl.public_site?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Site public</td><td><span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span></td></tr>`:''}
+          ${cl.priorite?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Priorité</td><td><span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${cl.priorite}</span></td></tr>`:''}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
@@ -2781,6 +2782,12 @@ function clientForm(d={}){return `<div class="grid-2">
       ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
     </select>
   </div>
+  <div class="form-group"><label class="form-label">Priorité</label>
+    <select class="form-input" id="f-priorite">
+      <option value="">— Aucune —</option>
+      ${[['T1','T1 — Priorité absolue'],['T2','T2 — Priorité moyenne'],['T3','T3 — Priorité basse']].map(p=>`<option value="${p[0]}" ${d.priorite===p[0]?'selected':''}>${p[1]}</option>`).join('')}
+    </select>
+  </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} style="width:16px;height:16px;accent-color:#22c55e">
@@ -2818,6 +2825,7 @@ async function saveClient(id){
     edi: !!document.getElementById('f-edi')?.checked,
     sur_carte: surCarte,
     public_site: !!document.getElementById('f-public-site')?.checked,
+    priorite: gv('f-priorite') || null,
     reseau_carte: reseau
   };
   if(!data.nom){ alert('Nom requis'); return; }
@@ -4790,6 +4798,9 @@ var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true, n
 var _carteAnneesFiltre = {};
 var _carteToutesAnnees = true;
 var _carteSansAnnee = false; // affiche les points sans année de dernière commande (null ou < 2019)
+// Filtre par priorité (T1/T2/T3) : toutes cochées par défaut + "sans priorité"
+var _cartePriorites = { T1:true, T2:true, T3:true };
+var _cartePrioriteSans = true; // affiche les points sans priorité assignée
 (function(){ _carteAnneesFiltre[new Date().getFullYear()] = true; })();
 var _carteMarkers = [];
 var _cartePoints = [];
@@ -4885,6 +4896,38 @@ function basculerAnnee(annee, actif){
 }
 window.basculerAnnee = basculerAnnee;
 
+// Panneau de filtre par priorité (T1/T2/T3 + sans priorité)
+function legendePriorites(){
+  var libelles = { T1:'T1 — Priorité absolue', T2:'T2 — Priorité moyenne', T3:'T3 — Priorité basse' };
+  var couleurs = { T1:'#dc2626', T2:'#d97706', T3:'#65a30d' };
+  var html = '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
+    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#888;font-weight:700;margin-bottom:6px">' + (t('carte_priorite')||'Priorité') + '</div>';
+  ['T1','T2','T3'].forEach(function(p){
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:12px">' +
+      '<input type="checkbox" ' + (_cartePriorites[p]?'checked':'') + ' onchange="basculerPriorite(\'' + p + '\',this.checked)">' +
+      '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + couleurs[p] + '"></span>' +
+      libelles[p] +
+      '<span id="cnt-prio-' + p + '" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
+      '</label>';
+  });
+  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:12px;color:#777">' +
+    '<input type="checkbox" ' + (_cartePrioriteSans?'checked':'') + ' onchange="basculerPrioriteSans(this.checked)"> ' + (t('carte_priorite_sans')||'Sans priorité') +
+    '<span id="cnt-prio-sans" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
+    '</label>';
+  html += '</div>';
+  return html;
+}
+function basculerPriorite(p, actif){
+  if (actif) _cartePriorites[p] = true; else _cartePriorites[p] = false;
+  afficherMarkers();
+}
+window.basculerPriorite = basculerPriorite;
+function basculerPrioriteSans(actif){
+  _cartePrioriteSans = !!actif;
+  afficherMarkers();
+}
+window.basculerPrioriteSans = basculerPrioriteSans;
+
 function renderCarte(ttl, c, a) {
   ttl.textContent = t('nav_carte') || 'Carte';
 
@@ -4915,6 +4958,7 @@ function renderCarte(ttl, c, a) {
       '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">' + (t('carte_reseaux')||'Réseaux') + '</div>' +
       legende +
       legendeAnnees() +
+      legendePriorites() +
       '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
         '<label style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em;font-weight:700;display:block;margin-bottom:6px">' + (t('carte_recherche')||'Recherche') + '</label>' +
         '<div style="position:relative;margin-bottom:4px">' +
@@ -4998,7 +5042,7 @@ async function ajouterDistributeurCarte(clientId, nom){
       nom: cl.nom, type: cl.type, contact: cl.contact, email: cl.email, tel: cl.tel, portable: cl.portable,
       adresse: cl.adresse, adresse2: cl.adresse2, cp: cl.cp, ville: cl.ville, pays: cl.pays,
       edi: !!cl.edi, entite_facturation_id: cl.entite_facturation_id || null,
-      public_site: !!cl.public_site,
+      public_site: !!cl.public_site, priorite: cl.priorite || null,
       sur_carte: true, reseau_carte: cl.reseau_carte || 'base'
     };
     var r = await API.updateClient(clientId, data);
@@ -5124,6 +5168,13 @@ function majCompteursCarte(){
   // Compteur "sans commande / avant 2019"
   var elSans = document.getElementById('cnt-annee-sans');
   if (elSans) elSans.textContent = pts.filter(function(p){ return !p.derniere_annee || p.derniere_annee < 2019; }).length;
+  // Compteurs par priorité (absolu)
+  ['T1','T2','T3'].forEach(function(pr){
+    var el = document.getElementById('cnt-prio-' + pr);
+    if (el) el.textContent = pts.filter(function(p){ return p.priorite === pr; }).length;
+  });
+  var elPrioSans = document.getElementById('cnt-prio-sans');
+  if (elPrioSans) elPrioSans.textContent = pts.filter(function(p){ return p.priorite !== 'T1' && p.priorite !== 'T2' && p.priorite !== 'T3'; }).length;
 }
 window.majCompteursCarte = majCompteursCarte;
 
@@ -5150,6 +5201,13 @@ function afficherMarkers(recadrer) {
       } else if (!_carteAnneesFiltre[da]) {
         return;
       }
+    }
+    // Filtre par priorité (T1/T2/T3, ou sans priorité)
+    var prio = p.priorite;
+    if (prio === 'T1' || prio === 'T2' || prio === 'T3') {
+      if (!_cartePriorites[prio]) return;
+    } else {
+      if (!_cartePrioriteSans) return;
     }
     if (q && (p.nom + ' ' + (p.ville||'') + ' ' + (p.description||'')).toLowerCase().indexOf(q) < 0) return;
     var marker = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon: pinIconCarte(p.reseau, p) });
@@ -5199,7 +5257,9 @@ function popupCarte(p) {
 
   return '<div style="width:250px;font-size:13px">' +
     '<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + labelReseauTraduit(p.reseau, cfg.label) + '</div>' +
-    '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + _esc(p.nom) + '</div>' +
+    '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + _esc(p.nom) +
+      (p.priorite ? ' <span style="font-size:10px;font-weight:700;color:#fff;background:' + ({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'}[p.priorite]||'#888') + ';padding:1px 6px;border-radius:99px;vertical-align:middle">' + p.priorite + '</span>' : '') +
+    '</div>' +
     '<div style="color:#666;line-height:1.5;margin-bottom:8px">' +
       (p.adresse ? _esc(p.adresse) + '<br>' : '') +
       (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
