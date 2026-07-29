@@ -77,6 +77,7 @@ router.use((req, res, next) => {
 // ── Helpers de permission ──────────────────────────────────────────
 // Détermine le module depuis le chemin de la route
 function moduleFromPath(p) {
+  if (p.startsWith('/carte'))                       return 'carte';
   if (p.startsWith('/clients'))                     return 'clients';
   if (p.startsWith('/fauteuils')||p.startsWith('/interventions')) return 'interventions';
   if (p.startsWith('/expeditions'))                 return 'expeditions';
@@ -96,7 +97,12 @@ router.use((req, res, next) => {
   if (user.role === 'admin') return next(); // Admin : accès total
   const module = moduleFromPath(req.path);
   if (!module) return next(); // Route système (auth, VF sync...) : déjà protégée
-  const perm = (user.permissions || {})[module] || 'none';
+  const perms = user.permissions || {};
+  // Fallback : la carte hérite de 'clients' si sa permission n'est pas définie
+  // (utilisateurs créés avant l'ajout du module carte)
+  let perm = perms[module];
+  if (perm === undefined && module === 'carte') perm = perms['clients'];
+  perm = perm || 'none';
   // Méthodes en écriture : exiger 'write'
   if (['POST','PUT','DELETE','PATCH'].includes(req.method) && perm !== 'write') {
     return res.status(403).json({ error: `Accès en écriture refusé sur le module "${module}".` });
@@ -4344,7 +4350,7 @@ async function geocoderClient(client) {
 }
 
 // Route: géocoder tous les clients sans coordonnées
-router.post('/carte/geocoder', adminOnly, async (req, res) => {
+router.post('/carte/geocoder', requireAuth, async (req, res) => {
   try {
     const clients = await db.all(
       'SELECT id, nom, adresse, cp, ville FROM clients WHERE lat IS NULL AND ville IS NOT NULL ORDER BY id LIMIT 50'
@@ -4386,7 +4392,7 @@ router.get('/carte/distributeurs', requireAuth, async (req, res) => {
 });
 
 // Route: données pour KML export (pour importer depuis Google My Maps)
-router.get('/carte/kml', adminOnly, async (req, res) => {
+router.get('/carte/kml', requireAuth, async (req, res) => {
   try {
     const rows = await db.all('SELECT nom, ville, cp, lat, lng, type FROM clients WHERE lat IS NOT NULL ORDER BY nom');
     const kml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -4455,7 +4461,7 @@ function parseKmlContent(kmlText, reseau) {
 }
 
 // Route: import KML (remplace tous les points d'un réseau)
-router.post('/carte/import-kml', adminOnly, async (req, res) => {
+router.post('/carte/import-kml', requireAuth, async (req, res) => {
   try {
     const { reseau, kml } = req.body;
     if (!reseau || !kml) return res.status(400).json({ error: 'reseau et kml requis' });
@@ -4612,7 +4618,7 @@ router.get('/carte/reseaux', requireAuth, async (req, res) => {
 // ── Fin Carte ─────────────────────────────────────────────────────
 
 // ── CRUD point carte (ajout/modif/suppression manuelle) ──────────
-router.post('/carte/points', adminOnly, async (req, res) => {
+router.post('/carte/points', requireAuth, async (req, res) => {
   try {
     const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id, pays } = req.body;
     if (!reseau || !nom || lat == null || lng == null)
@@ -4627,7 +4633,7 @@ router.post('/carte/points', adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.put('/carte/points/:id', adminOnly, async (req, res) => {
+router.put('/carte/points/:id', requireAuth, async (req, res) => {
   try {
     const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id, pays } = req.body;
     const row = await db.get(
@@ -4645,7 +4651,7 @@ router.put('/carte/points/:id', adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.delete('/carte/points/:id', adminOnly, async (req, res) => {
+router.delete('/carte/points/:id', requireAuth, async (req, res) => {
   try {
     await db.run('DELETE FROM distributeurs_carte WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
@@ -4653,7 +4659,7 @@ router.delete('/carte/points/:id', adminOnly, async (req, res) => {
 });
 
 // Géocodage d'une adresse (pour trouver lat/lng lors de l'ajout manuel)
-router.get('/carte/geocode-adresse', adminOnly, async (req, res) => {
+router.get('/carte/geocode-adresse', requireAuth, async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
     if (!q) return res.json({ found: false });
@@ -4759,7 +4765,7 @@ async function syncClientCarte(clientId) {
 }
 
 // Resynchronise tous les clients marqués « sur la carte »
-router.post('/carte/sync-clients', adminOnly, async (req, res) => {
+router.post('/carte/sync-clients', requireAuth, async (req, res) => {
   try {
     const clients = await db.all('SELECT id FROM clients WHERE sur_carte = TRUE');
     let ok = 0; const echecs = [];
@@ -5051,7 +5057,7 @@ function scoreRessemblance(a, b) {
 }
 
 // Liste les points non rattachés, avec les clients les plus ressemblants
-router.get('/carte/rattachements', adminOnly, async (req, res) => {
+router.get('/carte/rattachements', requireAuth, async (req, res) => {
   try {
     const points = await db.all(
       'SELECT id, nom, reseau, ville, cp, client_id FROM distributeurs_carte ORDER BY nom'
@@ -5104,7 +5110,7 @@ router.get('/carte/rattachements', adminOnly, async (req, res) => {
 });
 
 // Applique plusieurs rattachements d'un coup
-router.post('/carte/rattachements', adminOnly, async (req, res) => {
+router.post('/carte/rattachements', requireAuth, async (req, res) => {
   try {
     const liens = Array.isArray(req.body.liens) ? req.body.liens : [];
     let appliques = 0;
