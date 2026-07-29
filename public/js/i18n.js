@@ -20,6 +20,19 @@ const TRANSLATIONS = {
     nav_retours_suede: 'Retours Suède',
     nav_dark: 'Mode sombre',
 
+    // Carte distributeurs
+    carte_reseaux: 'Réseaux',
+    carte_derniere_commande: 'Dernière commande',
+    carte_toutes_annees: 'Toutes les années',
+    carte_sans_commande: 'Sans commande / avant 2019',
+    carte_recherche: 'Recherche',
+    carte_nom_distrib: 'Nom de distributeur…',
+    carte_ville_cp: 'Ville ou code postal',
+    carte_afficher_rayon: 'Afficher rayon',
+    carte_aide: 'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.',
+    carte_reseau_base: 'De base',
+    carte_reseau_negocies: 'Négociés',
+
     // Commandes
     cmd_title: 'Suivi des commandes',
     cmd_add: 'Nouvelle commande',
@@ -586,6 +599,19 @@ const TRANSLATIONS = {
     nav_discussions: 'Discussions',
     nav_retours_suede: 'Sweden returns',
     nav_dark: 'Dark mode',
+
+    // Distributor map
+    carte_reseaux: 'Networks',
+    carte_derniere_commande: 'Last order',
+    carte_toutes_annees: 'All years',
+    carte_sans_commande: 'No order / before 2019',
+    carte_recherche: 'Search',
+    carte_nom_distrib: 'Distributor name…',
+    carte_ville_cp: 'City or postal code',
+    carte_afficher_rayon: 'Show radius',
+    carte_aide: 'Search for a city to see nearby distributors. Click a point for details.',
+    carte_reseau_base: 'Standard',
+    carte_reseau_negocies: 'Negotiated',
 
     // Orders
     cmd_title: 'Order tracking',

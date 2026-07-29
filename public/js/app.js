@@ -4827,12 +4827,21 @@ var RESEAUX_CONFIG = {
 };
 
 // Génère le panneau de filtre par année de dernière commande (2019 → année en cours)
+// Traduit le libellé d'un réseau : seuls 'base' et 'negocies' ont un sens traduisible ;
+// les autres (Bastide, Providom, DistriClub) sont des noms propres → inchangés.
+function labelReseauTraduit(cle, labelParDefaut){
+  if (cle === 'base') return t('carte_reseau_base') || labelParDefaut;
+  if (cle === 'negocies') return t('carte_reseau_negocies') || labelParDefaut;
+  return labelParDefaut;
+}
+window.labelReseauTraduit = labelReseauTraduit;
+
 function legendeAnnees(){
   var actuelle = new Date().getFullYear();
   var html = '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
-    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#888;font-weight:700;margin-bottom:6px">Dernière commande</div>' +
+    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#888;font-weight:700;margin-bottom:6px">' + (t('carte_derniere_commande')||'Dernière commande') + '</div>' +
     '<label style="display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;font-size:12px;font-weight:600">' +
-      '<input type="checkbox" ' + (_carteToutesAnnees?'checked':'') + ' onchange="basculerToutesAnnees(this.checked)"> Toutes les années' +
+      '<input type="checkbox" ' + (_carteToutesAnnees?'checked':'') + ' onchange="basculerToutesAnnees(this.checked)"> ' + (t('carte_toutes_annees')||'Toutes les années') +
     '</label>' +
     '<div id="carte-annees-liste" style="' + (_carteToutesAnnees?'opacity:.4;pointer-events:none':'') + '">';
   for (var y = actuelle; y >= 2019; y--) {
@@ -4842,7 +4851,7 @@ function legendeAnnees(){
       '</label>';
   }
   html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:12px;color:#777">' +
-    '<input type="checkbox" ' + (_carteSansAnnee?'checked':'') + ' onchange="basculerSansAnnee(this.checked)"> Sans commande / avant 2019' +
+    '<input type="checkbox" ' + (_carteSansAnnee?'checked':'') + ' onchange="basculerSansAnnee(this.checked)"> ' + (t('carte_sans_commande')||'Sans commande / avant 2019') +
     '<span id="cnt-annee-sans" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
     '</label>';
   html += '</div></div>';
@@ -4886,7 +4895,7 @@ function renderCarte(ttl, c, a) {
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px">' +
       '<input type="checkbox" ' + (_carteReseaux[k]?'checked':'') + ' onchange="_carteReseaux[\'' + k + '\']=this.checked;afficherMarkers()">' +
       '<span style="width:14px;height:14px;border-radius:50%;background:' + r.color + ';border:2px solid #fff;box-shadow:0 0 0 1px #0002"></span>' +
-      '<span style="flex:1;font-size:13px">' + r.label + '</span>' +
+      '<span style="flex:1;font-size:13px">' + labelReseauTraduit(k, r.label) + '</span>' +
       '<span id="cnt-' + k + '" style="font-size:12px;color:#999">0</span>' +
       '</label>';
   }).join('');
@@ -4894,24 +4903,24 @@ function renderCarte(ttl, c, a) {
   // Conteneur en position absolue pour garantir une hauteur
   c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:#fff">' +
     '<div style="width:240px;border-right:0.5px solid #e3e3e0;padding:14px;overflow:auto;flex-shrink:0;background:#fafafa">' +
-      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">Réseaux</div>' +
+      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">' + (t('carte_reseaux')||'Réseaux') + '</div>' +
       legende +
       legendeAnnees() +
       '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
-        '<label style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em;font-weight:700;display:block;margin-bottom:6px">Recherche</label>' +
+        '<label style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em;font-weight:700;display:block;margin-bottom:6px">' + (t('carte_recherche')||'Recherche') + '</label>' +
         '<div style="position:relative;margin-bottom:4px">' +
-          '<input id="carte-search" placeholder="Nom de distributeur…" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 26px 6px 9px;font-size:13px">' +
+          '<input id="carte-search" placeholder="' + (t('carte_nom_distrib')||'Nom de distributeur…') + '" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 26px 6px 9px;font-size:13px">' +
           '<span onclick="document.getElementById(\'carte-search\').value=\'\';afficherMarkers(true)" title="Effacer" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:#bbb;font-size:13px">✕</span>' +
         '</div>' +
         '<div id="carte-nom-result" style="font-size:11px;color:#888;margin-bottom:8px;min-height:14px"></div>' +
         '<div style="display:flex;gap:6px">' +
-          '<input id="carte-geo" placeholder="Ville ou code postal" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px">' +
+          '<input id="carte-geo" placeholder="' + (t('carte_ville_cp')||'Ville ou code postal') + '" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px">' +
           '<button onclick="rechercheGeo()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-search"></i></button>' +
         '</div>' +
-        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666;cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> Afficher rayon <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid #cfcfca;border-radius:4px;padding:1px 4px;font-size:12px"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
+        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666;cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid #cfcfca;border-radius:4px;padding:1px 4px;font-size:12px"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
       '</div>' +
       '<div id="carte-geo-result" style="margin-top:10px;font-size:12px;color:#666"></div>' +
-      '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.</div>' +
+      '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
     '</div>' +
     '<div id="carte-leaflet" style="flex:1;height:100%;background:#dce4ec"></div>' +
     '</div>';
@@ -5179,7 +5188,7 @@ function popupCarte(p) {
     : '<span style="background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;font-size:11px">aucune commande</span>';
 
   return '<div style="width:250px;font-size:13px">' +
-    '<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + cfg.label + '</div>' +
+    '<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + labelReseauTraduit(p.reseau, cfg.label) + '</div>' +
     '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + _esc(p.nom) + '</div>' +
     '<div style="color:#666;line-height:1.5;margin-bottom:8px">' +
       (p.adresse ? _esc(p.adresse) + '<br>' : '') +
