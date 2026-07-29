@@ -4805,6 +4805,9 @@ var _cartePrioriteSans = true; // affiche les points sans priorité assignée
 (function(){ _carteAnneesFiltre[new Date().getFullYear()] = true; })();
 var _carteMarkers = [];
 var _cartePoints = [];
+// Point actuellement ciblé (via « Voir sur la carte ») : les recadrages auto
+// (après chargement / resize) doivent le respecter au lieu de revenir sur la France.
+var _carteCible = null; // { clientId, nom, lat, lng } ou null
 
 // Limites de la France métropolitaine (Corse incluse)
 var FRANCE_BOUNDS = [[41.30, -5.20], [51.15, 9.60]];
@@ -4834,10 +4837,26 @@ var _carteResizeBound = false;
 // en dézoomant, ou via la recherche par nom / par ville qui zoome dessus.
 function cadrerFrance() {
   if (!_carteMap) return;
+  _carteCible = null; // recadrage France explicite → on abandonne toute cible
   _carteMap.invalidateSize();
   _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
 }
 window.cadrerFrance = cadrerFrance;
+
+// Recadrage AUTOMATIQUE (après chargement des points ou redimensionnement).
+// Si un distributeur est ciblé (via « Voir sur la carte »), on reste centré dessus
+// au lieu de repartir sur la France entière — sinon les recadrages différés de
+// chargerPoints (+100/+400/+900 ms) annulaient le centrage sur le point.
+function cadrerAuto() {
+  if (!_carteMap) return;
+  _carteMap.invalidateSize();
+  if (_carteCible && _carteCible.lat != null && _carteCible.lng != null) {
+    _carteMap.setView([parseFloat(_carteCible.lat), parseFloat(_carteCible.lng)], 13, { animate: false });
+    return;
+  }
+  _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
+}
+window.cadrerAuto = cadrerAuto;
 
 var RESEAUX_CONFIG = {
   base:       { label: 'De base',            color: '#e24b4a', letter: 'B' },
@@ -4931,6 +4950,9 @@ window.basculerPrioriteSans = basculerPrioriteSans;
 
 function renderCarte(ttl, c, a) {
   ttl.textContent = t('nav_carte') || 'Carte';
+  // Ouverture normale de la carte : aucune cible (voirDistributeurSurCarte la
+  // réarmera juste après si on arrive depuis une fiche distributeur).
+  _carteCible = null;
 
   a.innerHTML = '<div style="display:flex;gap:8px;align-items:center">' +
     '<select id="carte-annee" onchange="_carteAnnee=parseInt(this.value);chargerPoints()" style="border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--surface)">' +
@@ -5009,6 +5031,25 @@ function voirDistributeurSurCarte(clientId, nom){
         if (cb) cb.checked = true;
         afficherMarkers();
       }
+      // S'assurer que la PRIORITÉ du point n'est pas masquée par le filtre priorité
+      // (sinon le marker n'est pas créé → pas de popup). Ajouté avec le filtre priorité du 28/07.
+      var prio = pt.priorite;
+      if (prio === 'T1' || prio === 'T2' || prio === 'T3') {
+        if (_cartePriorites[prio] === false) {
+          _cartePriorites[prio] = true;
+          var cbp = document.querySelector('input[onchange*="basculerPriorite(\'' + prio + '\'"]');
+          if (cbp) cbp.checked = true;
+          afficherMarkers();
+        }
+      } else if (_cartePrioriteSans === false) {
+        _cartePrioriteSans = true;
+        var cbs = document.querySelector('input[onchange*="basculerPrioriteSans"]');
+        if (cbs) cbs.checked = true;
+        afficherMarkers();
+      }
+      // Armer la cible : les recadrages auto différés (chargerPoints) resteront centrés
+      // sur ce distributeur au lieu de repartir sur la France entière.
+      _carteCible = { clientId: clientId, nom: nom, lat: pt.lat, lng: pt.lng };
       _carteMap.setView([parseFloat(pt.lat), parseFloat(pt.lng)], 13, { animate: true });
       // Ouvrir la popup du marker correspondant
       var m = _carteMarkers.find(function(mk){
@@ -5099,9 +5140,10 @@ function chargerPoints() {
       }).addTo(_carteMap);
       afficherMarkers();
       // Le conteneur n'a pas toujours sa taille finale à l'init : recadrer après stabilisation
-      setTimeout(cadrerFrance, 100);
-      setTimeout(cadrerFrance, 400);
-      setTimeout(cadrerFrance, 900);
+      // (cadrerAuto respecte un distributeur ciblé au lieu de forcer la France)
+      setTimeout(cadrerAuto, 100);
+      setTimeout(cadrerAuto, 400);
+      setTimeout(cadrerAuto, 900);
 
       // Recadrer automatiquement quand la fenêtre change de taille
       if (!_carteResizeBound) {
@@ -5116,7 +5158,7 @@ function chargerPoints() {
               var h = window.innerHeight - el.getBoundingClientRect().top;
               el.style.height = (h < 300 ? 500 : h) + 'px';
             }
-            cadrerFrance();
+            cadrerAuto();
           }, 150);
         });
       }
@@ -5724,4 +5766,3 @@ function _delNote(cmdId, noteId) {
     .catch(function(e) { alert('Erreur : ' + e.message); });
 }
 window._delNote = _delNote;
-
