@@ -4512,9 +4512,21 @@ router.get('/carte/points', requireAuth, async (req, res) => {
     const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
     const points = await db.all('SELECT * FROM distributeurs_carte ORDER BY reseau, nom');
     // Priorité (T1/T2/T3) par client, pour l'afficher/filtrer sur la carte
-    const prioRows = await db.all(`SELECT id, priorite FROM clients WHERE priorite IS NOT NULL`);
+    // On récupère aussi le nom pour pouvoir rattacher la priorité par NOM quand
+    // le point n'a pas de client_id (la plupart des points importés du KML).
+    const prioRows = await db.all(`SELECT id, nom, priorite FROM clients WHERE priorite IS NOT NULL`);
     const prioParClient = {};
     for (const r of prioRows) prioParClient[r.id] = r.priorite;
+    // Priorité d'un point : d'abord par client_id, sinon par nom (exact puis rapprochement)
+    const prioNorm = prioRows.map(r => ({ n: normNom(r.nom), priorite: r.priorite, nom: r.nom }));
+    const prioritePour = (p) => {
+      if (p.client_id && prioParClient[p.client_id]) return prioParClient[p.client_id];
+      const np = normNom(p.nom);
+      const exact = prioNorm.find(r => r.n === np);
+      if (exact) return exact.priorite;
+      const flou = prioNorm.find(r => memeEntite(p.nom, r.nom));
+      return flou ? flou.priorite : null;
+    };
     const stats = await db.all(`
       SELECT distributeur_nom, client_id,
         COUNT(*) AS nb_commandes,
@@ -4568,7 +4580,7 @@ router.get('/carte/points', requireAuth, async (req, res) => {
         ...cumul(trouves),
         lien_type: lien,
         derniere_annee: derniereAnneePour(p, trouves),
-        priorite: p.client_id ? (prioParClient[p.client_id] || null) : null,
+        priorite: prioritePour(p),
         noms_rattaches: [...new Set(trouves.map(t => t.distributeur_nom).filter(Boolean))]
       };
     });
