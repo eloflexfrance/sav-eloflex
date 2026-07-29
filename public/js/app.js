@@ -517,6 +517,7 @@ async function renderClient(ttl,c,a){
           })()}
           ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">💳 EDI — Prélèvement</span></td></tr>`:''}
           ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="setView('carte')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
+          ${cl.public_site?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Site public</td><td><span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span></td></tr>`:''}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
@@ -2788,6 +2789,13 @@ function clientForm(d={}){return `<div class="grid-2">
     </label>
   </div>
   <div class="form-group" style="grid-column:1/-1">
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.public_site?'rgba(217,119,6,.08)':'var(--surface)'}">
+      <input type="checkbox" id="f-public-site" ${d.public_site?'checked':''} style="width:16px;height:16px;accent-color:#d97706">
+      <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#b45309">🌐 Visible sur le site public (eloflex.fr)</div>
+      <div style="font-size:11px;color:var(--text2)">Ce distributeur apparaîtra sur la carte publique du site (nom, adresse, téléphone uniquement). Nécessite une adresse et un positionnement.</div></div>
+    </label>
+  </div>
+  <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.edi?'rgba(46,124,246,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-edi" ${d.edi?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)">
       <div><div style="font-size:13px;font-weight:600;color:var(--accent)">💳 EDI — Prélèvement automatique</div>
@@ -2809,6 +2817,7 @@ async function saveClient(id){
     cp: gv('f-cp'), ville: gv('f-ville'), pays: gv('f-pays'),
     edi: !!document.getElementById('f-edi')?.checked,
     sur_carte: surCarte,
+    public_site: !!document.getElementById('f-public-site')?.checked,
     reseau_carte: reseau
   };
   if(!data.nom){ alert('Nom requis'); return; }
@@ -4989,6 +4998,7 @@ async function ajouterDistributeurCarte(clientId, nom){
       nom: cl.nom, type: cl.type, contact: cl.contact, email: cl.email, tel: cl.tel, portable: cl.portable,
       adresse: cl.adresse, adresse2: cl.adresse2, cp: cl.cp, ville: cl.ville, pays: cl.pays,
       edi: !!cl.edi, entite_facturation_id: cl.entite_facturation_id || null,
+      public_site: !!cl.public_site,
       sur_carte: true, reseau_carte: cl.reseau_carte || 'base'
     };
     var r = await API.updateClient(clientId, data);
