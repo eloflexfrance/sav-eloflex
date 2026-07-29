@@ -4776,10 +4776,10 @@ window._esc = _esc; window._fd = _fd;
 var _carteMap = null;
 var _carteAnnee = new Date().getFullYear();
 var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true, negocies:true };
-// Filtre par année de dernière commande : par défaut, année en cours cochée seule.
-// _carteAnnees = ensemble des années cochées ; _carteToutesAnnees = ignore le filtre.
+// Filtre par année de dernière commande : par défaut, TOUTES les années affichées
+// (pour localiser tous les distributeurs). _carteToutesAnnees=true ignore le filtre.
 var _carteAnneesFiltre = {};
-var _carteToutesAnnees = false;
+var _carteToutesAnnees = true;
 var _carteSansAnnee = false; // affiche les points sans année de dernière commande (null ou < 2019)
 (function(){ _carteAnneesFiltre[new Date().getFullYear()] = true; })();
 var _carteMarkers = [];
