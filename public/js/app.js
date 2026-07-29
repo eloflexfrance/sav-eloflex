@@ -3878,7 +3878,7 @@ window.syncPaiementCommande = syncPaiementCommande;
 // VUE COMMANDE SUÈDE : réappro pièces auprès d'Eloflex AB
 // ══════════════════════════════════════════════════════════════════
 async function renderCommandeSuede(ttl, c, a) {
-  ttl.textContent = 'Commande Suède';
+  ttl.textContent = t('nav_commande_suede') || 'Commande Suède';
   a.innerHTML = `<button class="btn primary" onclick="modalNouvelleCommandeSuede()"><i class="ti ti-plus"></i>Nouvelle commande</button>`;
   c.innerHTML = `<div id="cs-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">${t('msg_chargement')||'Chargement…'}</div></div>`;
   chargerCommandesSuede();
@@ -4574,7 +4574,7 @@ window.lienhSuiviInter = lienhSuiviInter;
 // VUE DISCUSSIONS — fil des notes internes, toutes commandes
 // ═══════════════════════════════════════════════════════════════════
 function renderDiscussions(ttl, c, a) {
-  ttl.textContent = 'Discussions';
+  ttl.textContent = t('nav_discussions') || 'Discussions';
   a.innerHTML = '<button onclick="renderDiscussionsRecharger()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-refresh"></i> Actualiser</button>';
   c.innerHTML = '<div id="disc-body" style="color:var(--text2);font-size:13px;padding:20px 0">Chargement…</div>';
   chargerDiscussions();
@@ -4868,7 +4868,7 @@ function basculerAnnee(annee, actif){
 window.basculerAnnee = basculerAnnee;
 
 function renderCarte(ttl, c, a) {
-  ttl.textContent = 'Carte distributeurs';
+  ttl.textContent = t('nav_carte') || 'Carte';
 
   a.innerHTML = '<div style="display:flex;gap:8px;align-items:center">' +
     '<select id="carte-annee" onchange="_carteAnnee=parseInt(this.value);chargerPoints()" style="border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:13px;background:var(--surface)">' +

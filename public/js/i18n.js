@@ -13,6 +13,11 @@ const TRANSLATIONS = {
     nav_alertes: 'Alertes',
     nav_sync: 'Sync VosFactures',
     nav_commandes: 'Suivi commandes',
+    nav_devis: 'Devis VosFactures',
+    nav_commande_suede: 'Commande Suède',
+    nav_carte: 'Carte',
+    nav_discussions: 'Discussions',
+    nav_retours_suede: 'Retours Suède',
     nav_dark: 'Mode sombre',
 
     // Commandes
@@ -575,6 +580,11 @@ const TRANSLATIONS = {
     nav_alertes: 'Alerts',
     nav_sync: 'Sync VosFactures',
     nav_commandes: 'Order tracking',
+    nav_devis: 'VosFactures quotes',
+    nav_commande_suede: 'Sweden order',
+    nav_carte: 'Map',
+    nav_discussions: 'Discussions',
+    nav_retours_suede: 'Sweden returns',
     nav_dark: 'Dark mode',
 
     // Orders
