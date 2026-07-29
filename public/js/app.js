@@ -520,6 +520,7 @@ async function renderClient(ttl,c,a){
           ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
           ${cl.public_site?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Site public</td><td><span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span></td></tr>`:''}
           ${cl.priorite?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Priorité</td><td><span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${cl.priorite}</span></td></tr>`:''}
+          ${cl.entite_facturation_id?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Facturation</td><td><span class="badge ouvert">🧾 Facturé à ${esc(cl.entite_facturation_nom||'—')}</span></td></tr>`:''}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
@@ -1100,6 +1101,7 @@ async function modalCommande(id){
           <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label>
             <input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required placeholder="${t('col_client')||'Nom du distributeur'}" onchange="prefillGroupeDepuisDistrib()">
           </div>
+          ${cm.facturation_nom?`<div class="form-group" style="grid-column:1/-1;margin:-2px 0 6px"><div style="font-size:12px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border-s);border-radius:6px;padding:7px 10px">🧾 Facturé à : <strong>${esc(cm.facturation_nom)}</strong> <span style="color:var(--text3)">— défini sur la fiche distributeur</span></div></div>`:''}
           <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
             <select class="form-input" id="cmd-groupe">
               <option value="">— Choisir —</option>
@@ -2789,6 +2791,18 @@ function clientForm(d={}){return `<div class="grid-2">
       ${[['T1','T1 — Priorité absolue'],['T2','T2 — Priorité moyenne'],['T3','T3 — Priorité basse']].map(p=>`<option value="${p[0]}" ${d.priorite===p[0]?'selected':''}>${p[1]}</option>`).join('')}
     </select>
   </div>
+  <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
+    <select class="form-input" id="f-facturation-mode" onchange="toggleFacturation(this.value)">
+      <option value="identique" ${!d.entite_facturation_id?'selected':''}>Identique (le distributeur se facture lui-même)</option>
+      <option value="autre" ${d.entite_facturation_id?'selected':''}>Autre distributeur…</option>
+    </select>
+    <div id="f-entite-wrap" style="margin-top:8px;${d.entite_facturation_id?'':'display:none'}">
+      <select class="form-input" id="f-entite">
+        <option value="">— Choisir le distributeur facturé —</option>
+        ${(window._clientsCache||[]).map(c=>`<option value="${c.id}" ${d.entite_facturation_id==c.id?'selected':''}>${esc(c.nom)}${c.ville?' — '+esc(c.ville):''}</option>`).join('')}
+      </select>
+    </div>
+  </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} style="width:16px;height:16px;accent-color:#22c55e">
@@ -2811,8 +2825,13 @@ function clientForm(d={}){return `<div class="grid-2">
     </label>
   </div>
 </div>`;}
-function modalNewClient(){showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function modalEditClient(id){const cl=await API.client(id);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+// Cache léger des clients (id/nom/ville) pour le sélecteur « Facturer à » de la fiche
+async function ensureClientsCache(){ if(!window._clientsCache){ try{ const cs = await API.clients(); window._clientsCache = (cs||[]).map(c=>({id:c.id,nom:c.nom,ville:c.ville})); }catch(e){ window._clientsCache=[]; } } }
+window.ensureClientsCache = ensureClientsCache;
+function toggleFacturation(mode){ const w=document.getElementById('f-entite-wrap'); if(w) w.style.display=(mode==='autre')?'':'none'; }
+window.toggleFacturation = toggleFacturation;
+async function modalNewClient(){await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditClient(id){const cl=await API.client(id);await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveClient(id){
   const surCarte = !!document.getElementById('f-sur-carte')?.checked;
   // Réseau désormais indépendant de la carte ; si affiché sur carte sans réseau choisi, défaut 'base'
@@ -2829,6 +2848,17 @@ async function saveClient(id){
     priorite: gv('f-priorite') || null,
     reseau_carte: reseau
   };
+  // Facturation : Identique (=null) ou Autre (id d'un distributeur existant)
+  const factEl = document.getElementById('f-facturation-mode');
+  if (factEl) {
+    if (factEl.value === 'autre') {
+      const eid = gv('f-entite');
+      if (!eid) { alert('Sélectionnez le distributeur à facturer, ou choisissez « Identique ».'); return; }
+      data.entite_facturation_id = parseInt(eid);
+    } else {
+      data.entite_facturation_id = null;
+    }
+  }
   if(!data.nom){ alert('Nom requis'); return; }
   if(surCarte && !data.ville && !data.cp){ alert('Renseignez au moins le code postal ou la ville : ils servent à positionner le point sur la carte.'); return; }
   try{

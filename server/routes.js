@@ -3129,8 +3129,12 @@ router.get('/commandes/alertes-blocage', async (req, res) => {
 router.get('/commandes/:id', async (req, res) => {
   try {
     const row = await db.get(
-      `SELECT cmd.*, c.nom AS client_nom, c.ville AS client_ville, c.email AS client_email, c.tel AS client_tel
-       FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id WHERE cmd.id=$1`, [req.params.id]
+      `SELECT cmd.*, c.nom AS client_nom, c.ville AS client_ville, c.email AS client_email, c.tel AS client_tel,
+              c.entite_facturation_id AS client_entite_id, ef.nom AS facturation_nom
+       FROM commandes cmd
+       LEFT JOIN clients c ON c.id = cmd.client_id
+       LEFT JOIN clients ef ON ef.id = c.entite_facturation_id
+       WHERE cmd.id=$1`, [req.params.id]
     );
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
     const lignes = await db.all(
