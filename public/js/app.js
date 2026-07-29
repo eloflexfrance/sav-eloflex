@@ -53,6 +53,7 @@ const isAdmin  = () => CURRENT_USER?.role === 'admin';
 const MODULES = [
   { key:'dashboard',     label:'Tableau de bord' },
   { key:'clients',       label:'Clients / Distributeurs' },
+  { key:'carte',         label:'Carte distributeurs' },
   { key:'interventions', label:'Interventions SAV' },
   { key:'expeditions',   label:'Expéditions SAV' },
   { key:'commandes',     label:'Suivi commandes' },
@@ -68,7 +69,7 @@ const MODULES = [
 // Modules qui héritent d'un autre module si non défini explicitement
 const PERM_FALLBACK = {
   'discussions': 'commandes',
-  'carte': 'commandes',
+  'carte':      'clients',     // Carte : par défaut, qui gère les clients voit/modifie la carte
   'devis':      'commandes',   // Devis hérite de commandes
   'dashboard':  'commandes',   // Tableau de bord toujours accessible si commandes
 };
