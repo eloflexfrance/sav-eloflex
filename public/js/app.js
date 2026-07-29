@@ -517,7 +517,7 @@ async function renderClient(ttl,c,a){
               </td></tr>`;
           })()}
           ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">💳 EDI — Prélèvement</span></td></tr>`:''}
-          ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="setView('carte')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
+          ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
           ${cl.public_site?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Site public</td><td><span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span></td></tr>`:''}
           ${cl.priorite?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Priorité</td><td><span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${cl.priorite}</span></td></tr>`:''}
         </table>
@@ -2780,7 +2780,7 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Réseau</label>
     <select class="form-input" id="f-reseau">
       <option value="">— Aucun —</option>
-      ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
+      ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés'],['capvital','CAP Vital'],['lecarre','Le Carré Medical'],['paramat','Paramat']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
     </select>
   </div>
   <div class="form-group"><label class="form-label">Priorité</label>
@@ -4863,7 +4863,10 @@ var RESEAUX_CONFIG = {
   bastide:    { label: 'Bastide',            color: '#378add', letter: 'A' },
   providom:   { label: 'Providom',           color: '#ef9f27', letter: 'P' },
   districlub: { label: 'DistriClub Medical', color: '#7f77dd', letter: 'D' },
-  negocies:   { label: 'Négociés',           color: '#16a34a', letter: 'N' }
+  negocies:   { label: 'Négociés',           color: '#16a34a', letter: 'N' },
+  capvital:   { label: 'CAP Vital',          color: '#0891b2', letter: 'V' },
+  lecarre:    { label: 'Le Carré Medical',   color: '#db2777', letter: 'C' },
+  paramat:    { label: 'Paramat',            color: '#9333ea', letter: 'M' }
 };
 
 // Génère le panneau de filtre par année de dernière commande (2019 → année en cours)
