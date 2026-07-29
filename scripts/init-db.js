@@ -242,6 +242,7 @@ async function initDB() {
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS reseau_carte TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS portable TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS public_site BOOLEAN DEFAULT FALSE`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS priorite TEXT`);
       // Adresse postale complète des clients / distributeurs
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse2 TEXT`);
