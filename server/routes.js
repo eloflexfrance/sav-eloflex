@@ -385,16 +385,16 @@ router.get('/clients/:id', async (req, res) => {
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
       `INSERT INTO clients (nom,contact,email,tel,portable,ville,type,token_portail,edi,sur_carte,reseau_carte,
-                            adresse,adresse2,cp,pays,entite_facturation_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+                            adresse,adresse2,cp,pays,entite_facturation_id,public_site)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
       [nom, contact||null, email||null, tel||null, portable||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null]
+       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site]
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
@@ -405,15 +405,16 @@ router.post('/clients', async (req, res) => {
 router.put('/clients/:id', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site } = req.body;
     const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
       `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,portable=$5,ville=$6,type=$7,
        edi=$8,sur_carte=$9,reseau_carte=$10,
-       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,updated_at=NOW() WHERE id=$16 RETURNING *`,
+       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,updated_at=NOW() WHERE id=$17 RETURNING *`,
       [nom, contact, email, tel, portable||null, ville, type, !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null,
        (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
+       !!public_site,
        req.params.id]
     );
     // Adresse modifiée : les anciennes coordonnées ne valent plus rien
