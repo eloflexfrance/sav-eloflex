@@ -385,16 +385,16 @@ router.get('/clients/:id', async (req, res) => {
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id, public_site } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
       `INSERT INTO clients (nom,contact,email,tel,portable,ville,type,token_portail,edi,sur_carte,reseau_carte,
-                            adresse,adresse2,cp,pays,entite_facturation_id,public_site)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+                            adresse,adresse2,cp,pays,entite_facturation_id,public_site,priorite)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [nom, contact||null, email||null, tel||null, portable||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site]
+       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null]
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
@@ -405,16 +405,16 @@ router.post('/clients', async (req, res) => {
 router.put('/clients/:id', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id, public_site } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite } = req.body;
     const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
       `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,portable=$5,ville=$6,type=$7,
        edi=$8,sur_carte=$9,reseau_carte=$10,
-       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,updated_at=NOW() WHERE id=$17 RETURNING *`,
+       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,priorite=$17,updated_at=NOW() WHERE id=$18 RETURNING *`,
       [nom, contact, email, tel, portable||null, ville, type, !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null,
        (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
-       !!public_site,
+       !!public_site, priorite||null,
        req.params.id]
     );
     // Adresse modifiée : les anciennes coordonnées ne valent plus rien
@@ -4505,6 +4505,10 @@ router.get('/carte/points', requireAuth, async (req, res) => {
   try {
     const annee = req.query.annee ? parseInt(req.query.annee) : new Date().getFullYear();
     const points = await db.all('SELECT * FROM distributeurs_carte ORDER BY reseau, nom');
+    // Priorité (T1/T2/T3) par client, pour l'afficher/filtrer sur la carte
+    const prioRows = await db.all(`SELECT id, priorite FROM clients WHERE priorite IS NOT NULL`);
+    const prioParClient = {};
+    for (const r of prioRows) prioParClient[r.id] = r.priorite;
     const stats = await db.all(`
       SELECT distributeur_nom, client_id,
         COUNT(*) AS nb_commandes,
@@ -4558,6 +4562,7 @@ router.get('/carte/points', requireAuth, async (req, res) => {
         ...cumul(trouves),
         lien_type: lien,
         derniere_annee: derniereAnneePour(p, trouves),
+        priorite: p.client_id ? (prioParClient[p.client_id] || null) : null,
         noms_rattaches: [...new Set(trouves.map(t => t.distributeur_nom).filter(Boolean))]
       };
     });
