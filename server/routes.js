@@ -574,14 +574,32 @@ router.post('/interventions/:id/basculer-commande', async (req, res) => {
     }
     const annee = i.date ? parseInt(String(i.date).slice(0, 4)) : new Date().getFullYear();
     const infos = 'SAV ' + (i.num_sav || ('#' + i.id)) + (i.description ? (' — ' + i.description) : '');
+    // Suivi + date : on reprend l'expédition (Envoi) du SAV, sinon le Retour
+    const suivi = i.envoi_numero || i.retour_numero || null;
+    const transp = i.envoi_transporteur || i.retour_transporteur || null;
+    const dateLivr = i.envoi_date || i.retour_date || null;
     const row = await db.run(
       `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele,
-        bdc, date_commande, num_serie, num_facture, informations, statut, origine, intervention_id)
-       VALUES ($1,$2,$3,'SAV',$4,$5,$6,$7,$8,$9,$10,'Auto','sav',$11) RETURNING id`,
+        bdc, date_commande, num_serie, num_facture, informations, statut, origine, intervention_id,
+        num_suivi, transporteur, date_livraison)
+       VALUES ($1,$2,$3,'SAV',$4,$5,$6,$7,$8,$9,$10,'Auto','sav',$11,$12,$13,$14) RETURNING id`,
       [i.client_id, i.fauteuil_id, annee, i.client_nom, i.modele || null,
-       i.num_bordereau_vf || null, i.date || null, i.serie || null, i.num_facture || null, infos, i.id]);
+       i.num_bordereau_vf || null, i.date || null, i.serie || null, i.num_facture || null, infos, i.id,
+       suivi, transp, dateLivr]);
     await db.run('UPDATE interventions SET commande_id=$1, updated_at=NOW() WHERE id=$2', [row.id, i.id]);
-    res.json({ ok: true, commande_id: row.id, cree: true });
+    // Recopier les pièces du SAV comme lignes de la commande (contenu du bordereau)
+    const prods = await db.all('SELECT ref, designation, qte FROM intervention_produits WHERE intervention_id=$1 ORDER BY id', [i.id]);
+    let nbLignes = 0;
+    for (let k = 0; k < prods.length; k++) {
+      const pr = prods[k];
+      if (!pr.designation) continue;
+      await db.run(
+        'INSERT INTO commandes_lignes (commande_id, designation, reference, quantite, ordre) VALUES ($1,$2,$3,$4,$5)',
+        [row.id, pr.designation, pr.ref || null, parseInt(pr.qte) || 1, k]
+      );
+      nbLignes++;
+    }
+    res.json({ ok: true, commande_id: row.id, cree: true, lignes: nbLignes });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
