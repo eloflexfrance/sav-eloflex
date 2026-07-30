@@ -275,6 +275,33 @@ router.get('/admin/migrer-entite-facturation', adminOnly, async (req, res) => {
   }
 });
 
+// ── Réparation : les points importés du KML n'ont jamais coché "sur_carte" sur la
+//    fiche. Après rattachement des points aux fiches (client_id), on se retrouve avec
+//    des fiches "sur la carte" mais case décochée → sauvegarder la fiche SUPPRIMERAIT
+//    le point (syncClientCarte le retire quand sur_carte est faux). Cette route coche
+//    sur_carte ET recopie les coordonnées du point sur la fiche (si absentes) pour
+//    tous les clients ayant un point lié → cohérent et sûr. Idempotente.
+router.get('/admin/sync-sur-carte', adminOnly, async (req, res) => {
+  try {
+    const c = await db.get(
+      `SELECT COUNT(DISTINCT c.id)::int AS n
+         FROM clients c JOIN distributeurs_carte dc ON dc.client_id = c.id
+        WHERE c.sur_carte = FALSE`
+    );
+    await db.run(
+      `UPDATE clients c
+          SET sur_carte = TRUE,
+              lat = COALESCE(c.lat, dc.lat),
+              lng = COALESCE(c.lng, dc.lng),
+              geocoded_at = COALESCE(c.geocoded_at, NOW()),
+              updated_at = NOW()
+         FROM distributeurs_carte dc
+        WHERE dc.client_id = c.id AND c.sur_carte = FALSE`
+    );
+    res.json({ ok: true, fiches_corrigees: c ? c.n : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/clients', async (req, res) => {
   try {
     const q = `%${req.query.q || ''}%`;
