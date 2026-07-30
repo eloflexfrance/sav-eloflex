@@ -288,6 +288,7 @@ async function chargerCommandesDashboard(){
       ${!list.length?`<div style="font-size:12px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
       <div class="table-wrap"><table class="t">
         <thead><tr>
+          ${CMD_COLS.num_annuel?'<th style="width:40px;text-align:center;color:var(--text3)">#</th>':''}
           <th>${t('col_date')||'Date'}</th>
           <th style="width:80px">Groupe</th>
           <th>${t('col_client')||'Distributeur'}</th>
