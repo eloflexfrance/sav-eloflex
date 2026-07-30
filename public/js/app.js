@@ -1124,7 +1124,9 @@ async function modalCommande(id){
           <div class="form-group" style="margin:0"><label class="form-label">Bdc / Devis</label>
             <div style="display:flex;gap:5px">
               <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="${t('cmd_num_bdc_placeholder')||'Numéro BDC ou Devis'}" oninput="majStatutBadge()">
-              <button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>
+              ${cm.origine==='sav'
+                ? `<span title="Commande issue d'un SAV : le contenu (lignes, série, facture, suivi) est repris automatiquement du SAV lié — pas d'import VosFactures ici" style="color:var(--text3);font-size:11px;align-self:center;white-space:nowrap;padding:0 6px"><i class="ti ti-tool"></i> SAV</span>`
+                : `<button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>`}
               ${cm.bdc?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'},'${esc(cm.bdc)}')"><i class="ti ti-external-link"></i></button>`:''}
             </div>
           </div>
