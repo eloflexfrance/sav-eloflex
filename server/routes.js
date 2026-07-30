@@ -2283,6 +2283,7 @@ router.get('/commandes', async (req, res) => {
          cmd.num_facture, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
          cmd.reliquat, cmd.demo_origine_nom, cmd.modele_demo, cmd.annee_onglet, cmd.groupe,
+         (cmd.informations ILIKE '%avoir%') AS est_avoir,
          c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,
          ROW_NUMBER() OVER (
            PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
