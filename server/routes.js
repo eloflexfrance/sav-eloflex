@@ -3532,50 +3532,46 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
     // Normalisation souple (ignore espaces, tirets, points, slashes)
     const normalise = s => String(s||'').toLowerCase().replace(/[\s\-\/\.]+/g,'');
     const numNorm = normalise(numero);
+    const debug = req.query.debug === '1';
     let inv = null;
+    const candidats = [];
+    const pousser = (data) => { if (Array.isArray(data)) for (const d of data) candidats.push(d); };
 
-    // Étape 1 : BL/WZ — VosFactures n'accepte pas ?number= avec kind=wz
-    // On utilise search_text qui fonctionne pour ce type
-    try {
-      const { data } = await vfApi.get('/invoices.json', {
-        params: { kind: 'wz', search_text: numero, per_page: 20 }
-      });
-      if (Array.isArray(data) && data.length) {
-        inv = data.find(d => normalise(d.number) === numNorm)
-           || data.find(d => normalise(d.number).includes(numNorm))
-           || null;
-      }
-    } catch(_) {}
+    // Recherche par TEXTE sur tous les types de documents. search_text gère les
+    // caractères spéciaux (slash « / ») que le filtre ?number= ne gère pas (ex. "D/0151").
+    for (const kind of ['wz','client_order','estimate','vat','proforma','receipt','stock','other']) {
+      try { const { data } = await vfApi.get('/invoices.json', { params: { kind, search_text: numero, per_page: 30 } }); pousser(data); } catch(_) {}
+    }
+    // Recherche sans type (tous documents confondus)
+    try { const { data } = await vfApi.get('/invoices.json', { params: { search_text: numero, per_page: 50 } }); pousser(data); } catch(_) {}
+    // Ancien filtre exact par numéro (utile pour les numéros sans caractère spécial)
+    for (const kind of ['client_order','estimate','vat','proforma','receipt','other']) {
+      try { const { data } = await vfApi.get('/invoices.json', { params: { kind, number: numero, per_page: 10 } }); pousser(data); } catch(_) {}
+    }
 
-    // Étape 2 : Autres types (BDC, devis, facture, reçu) avec filtre number
+    const matchNum = (dn) => dn === numNorm || (dn.length >= 3 && numNorm.length >= 3 && (dn.includes(numNorm) || numNorm.includes(dn)));
+    inv = candidats.find(d => normalise(d.number) === numNorm)
+       || candidats.find(d => matchNum(normalise(d.number)))
+       || null;
+
+    // Repli : scan des documents récents par type (pour un ancien doc que la recherche ne remonte pas)
     if (!inv) {
-      for (const kind of ['client_order', 'estimate', 'vat', 'stock', 'receipt', 'other', 'proforma']) {
+      for (const kind of ['client_order','estimate','wz','vat','proforma']) {
         try {
-          const { data } = await vfApi.get('/invoices.json', {
-            params: { kind, number: numero, per_page: 10 }
-          });
-          if (Array.isArray(data) && data.length) {
-            const match = data.find(d => normalise(d.number) === numNorm);
-            if (match) { inv = match; break; }
-          }
+          const { data } = await vfApi.get('/invoices.json', { params: { kind, per_page: 100, page: 1, order: 'id desc' } });
+          if (Array.isArray(data)) { const m = data.find(d => normalise(d.number) === numNorm) || data.find(d => matchNum(normalise(d.number))); if (m) { inv = m; break; } }
         } catch(_) {}
       }
     }
 
-    // Étape 3 : Fallback — récupérer les WZ récents et chercher par numéro côté serveur
-    if (!inv) {
-      try {
-        const { data } = await vfApi.get('/invoices.json', {
-          params: { kind: 'wz', per_page: 100, page: 1, order: 'id desc' }
-        });
-        if (Array.isArray(data) && data.length) {
-          inv = data.find(d => normalise(d.number) === numNorm)
-             || data.find(d => normalise(d.number).includes(numNorm))
-             || null;
-        }
-      } catch(_) {}
+    if (debug) {
+      let docParId = null;
+      if (req.query.vfid) {
+        try { const { data } = await vfApi.get(`/invoices/${req.query.vfid}.json`); docParId = { number: data.number, kind: data.kind, id: data.id, issue_date: data.issue_date }; }
+        catch (e) { docParId = { erreur: e.response?.status || e.message }; }
+      }
+      return res.json({ configured: true, found: !!inv, numNorm, doc_par_id: docParId, nb_candidats: candidats.length, candidats: candidats.slice(0, 60).map(d => ({ number: d.number, kind: d.kind, id: d.id, date: d.issue_date })) });
     }
-
     if (!inv) return res.json({ configured: true, found: false });
 
     const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
