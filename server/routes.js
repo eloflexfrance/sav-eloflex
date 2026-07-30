@@ -2385,16 +2385,16 @@ router.get('/commandes', async (req, res) => {
          cmd.reliquat, cmd.demo_origine_nom, cmd.modele_demo, cmd.annee_onglet, cmd.groupe,
          (cmd.informations ILIKE '%avoir%') AS est_avoir,
          c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,
-         CASE WHEN cmd.origine = 'sav' THEN NULL ELSE ROW_NUMBER() OVER (
-           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date), (cmd.origine IS NOT DISTINCT FROM 'sav')
+         ROW_NUMBER() OVER (
+           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
            ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
-         ) END AS num_annuel`
+         ) AS num_annuel`
       : `cmd.*, c.nom AS client_nom, c.ville AS client_ville,
          c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
-         CASE WHEN cmd.origine = 'sav' THEN NULL ELSE ROW_NUMBER() OVER (
-           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date), (cmd.origine IS NOT DISTINCT FROM 'sav')
+         ROW_NUMBER() OVER (
+           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
            ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
-         ) END AS num_annuel`;
+         ) AS num_annuel`;
     let sql = `SELECT ${fields} FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
     const conds = [], p = [];
     let idx = 0;
@@ -2445,10 +2445,11 @@ router.get('/commandes/stats', async (req, res) => {
     const annee = req.query.annee ? parseInt(req.query.annee) : null;
     const userPays = res.locals.user?.pays || req.query.pays || null;
     const paysFilter = userPays ? `AND (pays = '${userPays.replace(/'/g,"''")}' OR pays IS NULL)` : '';
-    // Les commandes issues d'un SAV facturé (origine='sav') sont exclues des compteurs de ventes
-    const anneeFilter = (annee
+    // Les commandes issues d'un SAV facturé (origine='sav') sont INCLUSES dans les compteurs
+    // de ventes et dans la numérotation annuelle (choix de Brice, 30/07).
+    const anneeFilter = annee
       ? `(annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1)) ${paysFilter}`
-      : `TRUE ${paysFilter}`) + ` AND (origine IS DISTINCT FROM 'sav')`;
+      : `TRUE ${paysFilter}`;
     const params = annee ? [annee] : [];
 
     // Calcul SQL du statut (miroir de la fonction JS statutCommande + isRealTracking)

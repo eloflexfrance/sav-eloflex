@@ -2039,6 +2039,17 @@ async function renderParametres(ttl,c,a){
       <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>${t('param_vf_sync')}</button>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-link"></i> Rattrapage VosFactures</h3>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
+        Parcourt toutes les commandes ayant un n° de BDC ou de facture, retrouve le document VosFactures correspondant
+        (y compris les anciens, ex. 2021), puis enregistre le <b>lien</b>, le <b>statut de paiement</b> et les
+        <b>infos manquantes</b> (série, modèle, date). Écritures sûres : rien n'est écrasé, seuls les champs vides sont
+        complétés. À lancer par exemple après un gros import. Garde l'onglet ouvert pendant le traitement (quelques minutes).
+      </p>
+      <button class="btn primary" id="btn-rattrapage-vf" onclick="lancerRattrapageVF()"><i class="ti ti-link"></i> Lancer le rattrapage</button>
+      <div id="rattrapage-vf-result" style="margin-top:10px"></div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-brand-stripe"></i> Pennylane <span id="pl-status-badge" style="font-size:11px;margin-left:8px"></span></h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
         Intégration Pennylane V2 — parallèle à VosFactures.<br>
@@ -2572,6 +2583,85 @@ async function lancerMigrationSuivi(){
     toast(r.detail,'ti-check');
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
+
+let RATT_LAST=null;
+async function lancerRattrapageVF(){
+  const btn=document.getElementById('btn-rattrapage-vf');
+  const out=document.getElementById('rattrapage-vf-result');
+  if(!confirm('Lancer le rattrapage VosFactures sur toutes les commandes ? Cela peut prendre plusieurs minutes — garde cet onglet ouvert pendant le traitement.')) return;
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Rattrapage en cours…'; }
+  const S={ offset:0, total:null, liens:0, paiements:0, infos:0, introuvables:[], errors:0 };
+  const LIMIT=80;
+  const maj=()=>{
+    const pct=S.total?Math.round(100*S.offset/S.total):0;
+    if(out) out.innerHTML=
+      '<div style="background:#eef2f7;border-radius:8px;overflow:hidden;height:14px;margin-bottom:8px">'+
+        '<div style="width:'+pct+'%;height:100%;background:var(--success,#1b8a3a);transition:width .3s"></div></div>'+
+      '<div style="font-size:12px;color:var(--text2)">'+pct+'% — '+(S.offset||0)+'/'+(S.total||'?')+' commandes · '+
+        S.liens+' liens · '+S.paiements+' paiements · '+S.infos+' infos · '+
+        '<b style="color:var(--danger)">'+S.introuvables.length+'</b> introuvables'+(S.errors?(' · '+S.errors+' erreurs réseau'):'')+'</div>';
+  };
+  maj();
+  try{
+    while(true){
+      let data=null;
+      for(let a=0;a<3 && !data;a++){
+        try{
+          const r=await fetch('/api/admin/vf-rattrapage?offset='+S.offset+'&limit='+LIMIT);
+          const j=await r.json();
+          if(j && j.ok) data=j;
+          else if(j && j.configured===false) throw new Error('VosFactures non configuré');
+          else throw new Error('réponse inattendue');
+        }catch(e){ if(/non configuré/.test(e.message)) throw e; S.errors++; await new Promise(x=>setTimeout(x,4000)); }
+      }
+      if(!data) throw new Error('Échec réseau répété au lot '+S.offset);
+      S.total=data.total; S.liens+=data.liens||0; S.paiements+=data.paiements||0; S.infos+=data.infos||0;
+      if(data.introuvables && data.introuvables.length) S.introuvables.push(...data.introuvables);
+      S.offset=data.next_offset; maj();
+      if(data.done) break;
+    }
+    RATT_LAST=S;
+    const nbFac=S.introuvables.filter(x=>x.type==='facture').length, nbBdc=S.introuvables.length-nbFac;
+    if(out) out.innerHTML=
+      '<div style="background:var(--success,#1b8a3a);color:#fff;border-radius:8px;padding:12px 14px;font-size:13px;margin-bottom:8px">'+
+        '✓ Rattrapage terminé — '+S.total+' commandes · '+S.liens+' liens créés · '+S.paiements+' paiements · '+S.infos+' infos complétées.</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'+S.introuvables.length+' introuvables ('+nbBdc+' BDC, '+nbFac+
+        ' factures) — souvent des numéros internes distributeur ou des cases multi-documents, sans correspondance VosFactures.</div>'+
+      '<button class="btn sm" onclick="telechargerRapportRattrapage()"><i class="ti ti-download"></i> Télécharger le rapport des introuvables</button>';
+    toast('Rattrapage VosFactures terminé','ti-check');
+  }catch(e){
+    if(out) out.innerHTML='<div style="color:var(--danger);font-size:13px">Erreur : '+esc(e.message)+
+      '. Les commandes déjà traitées sont enregistrées ; tu peux relancer pour reprendre.</div>';
+    toast(e.message,'ti-alert-circle','var(--danger)');
+  }finally{
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-link"></i> Lancer le rattrapage'; }
+  }
+}
+window.lancerRattrapageVF = lancerRattrapageVF;
+
+function telechargerRapportRattrapage(){
+  const S=RATT_LAST; if(!S){ toast('Aucun rapport disponible','ti-alert-circle','var(--danger)'); return; }
+  const e=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const parDist={}; for(const x of S.introuvables){ const k=x.distributeur||'(sans nom)'; (parDist[k]=parDist[k]||[]).push(x); }
+  const groupes=Object.entries(parDist).sort((a,b)=>b[1].length-a[1].length);
+  const nbFac=S.introuvables.filter(x=>x.type==='facture').length, nbBdc=S.introuvables.length-nbFac;
+  let rows='';
+  for(const g of groupes){
+    rows+='<tr class="grp"><td colspan="3">'+e(g[0])+' <span class="cnt">'+g[1].length+'</span></td></tr>';
+    for(const x of g[1]){ const b=x.type==='facture'?'<span class="b b-fac">Facture</span>':'<span class="b b-bdc">BDC</span>';
+      rows+='<tr><td>'+b+'</td><td class="num">'+e(x.numero)+'</td><td class="id">#'+e(x.id)+'</td></tr>'; }
+  }
+  const html='<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Rattrapage VosFactures — introuvables</title><style>'+
+    'body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f4f6f9;color:#1a2a3a}.wrap{max-width:900px;margin:0 auto;padding:24px}h1{font-size:22px;margin:0 0 4px}.sub{color:#667;margin:0 0 20px;font-size:13px}.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px}.card{background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08);flex:1;min-width:130px}.card .n{font-size:26px;font-weight:700}.card .l{font-size:12px;color:#667;text-transform:uppercase;letter-spacing:.04em}.g{color:#1b8a3a}.r{color:#b3261e}table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}td{padding:7px 12px;border-bottom:1px solid #eef1f4;font-size:13px}tr.grp td{background:#eef2f7;font-weight:700}.cnt{background:#b3261e;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;margin-left:6px}.b{display:inline-block;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:600}.b-bdc{background:#e6effa;color:#1a56a0}.b-fac{background:#fdeaea;color:#b3261e}.num{font-family:ui-monospace,Menlo,monospace}.note{background:#fff8e6;border-left:4px solid #c47f00;padding:12px 16px;border-radius:6px;margin:18px 0;font-size:13px;line-height:1.5}'+
+    '</style></head><body><div class="wrap"><h1>Rattrapage VosFactures — documents introuvables</h1><p class="sub">'+S.total+' commandes analysées</p><div class="cards">'+
+    '<div class="card"><div class="n g">'+S.liens+'</div><div class="l">Liens créés</div></div><div class="card"><div class="n g">'+S.paiements+'</div><div class="l">Paiements</div></div><div class="card"><div class="n g">'+S.infos+'</div><div class="l">Infos complétées</div></div><div class="card"><div class="n r">'+S.introuvables.length+'</div><div class="l">Introuvables</div></div></div>'+
+    '<div class="note"><b>À savoir :</b> '+nbBdc+' BDC et '+nbFac+' factures sans correspondance VosFactures — le plus souvent un numéro interne du distributeur, une case contenant deux documents, ou une annotation libre. Ce ne sont pas des erreurs de recherche.</div>'+
+    '<table><tbody>'+rows+'</tbody></table></div></body></html>';
+  const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='rattrapage-vosfactures-introuvables.html'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+window.telechargerRapportRattrapage = telechargerRapportRattrapage;
 
 async function saveParametres(){
   const p={
