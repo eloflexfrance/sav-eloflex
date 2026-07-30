@@ -389,7 +389,9 @@ router.get('/clients/adresses-incompletes', requireAuth, async (req, res) => {
 
 router.get('/clients/:id', async (req, res) => {
   try {
-    const cl = await db.get('SELECT * FROM clients WHERE id=$1', [req.params.id]);
+    const cid = parseInt(req.params.id);
+    if (!Number.isInteger(cid)) return res.status(404).json({ error: 'Client non rattaché (aucune fiche pour cette commande)' });
+    const cl = await db.get('SELECT * FROM clients WHERE id=$1', [cid]);
     if (!cl) return res.status(404).json({ error: 'Introuvable' });
     if (cl.entite_facturation_id) {
       const ef = await db.get('SELECT id, nom FROM clients WHERE id=$1', [cl.entite_facturation_id]);

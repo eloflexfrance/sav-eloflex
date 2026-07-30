@@ -618,7 +618,7 @@ async function renderFauteuil(ttl,c,a){
     <div class="breadcrumb">
       <span onclick="setView('clients')">Clients</span>
       <i class="ti ti-chevron-right" style="font-size:11px"></i>
-      <span onclick="setView('client',{clientId:${f.client_id}})">${esc(f.client_nom)}</span>
+      <span ${f.client_id?`onclick="setView('client',{clientId:${f.client_id}})"`:''}>${esc(f.client_nom||'—')}</span>
       <i class="ti ti-chevron-right" style="font-size:11px"></i>${esc(f.modele)}
     </div>
     <div class="grid-2" style="margin-bottom:12px">
@@ -982,7 +982,7 @@ async function renderCommandesTable(page=1){
         <td>${fd(cm.date_commande)}</td>
         <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
         ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
-        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span> <button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="Ouvrir la fiche client" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button></td>
+        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="Ouvrir la fiche client" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button>`:`<span title="Commande non rattachée à une fiche client" style="color:var(--border-s);padding:1px 3px;font-size:11px"><i class="ti ti-user-off"></i></span>`}</td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:10px" title="Cette commande porte un avoir (retour / remboursement) — voir le champ Informations">↩ Avoir</span>`:''}</td>
         <td class="mono">${(()=>{
