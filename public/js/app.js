@@ -329,7 +329,7 @@ async function chargerTransfertsDashboard(){  const el=document.getElementById('
         <td><div>${esc(tr.modele||'')}</div><div class="mono" style="color:var(--text3);font-size:11px">${esc(tr.serie||'')}</div></td>
         <td>${esc(tr.client_depart_nom||'—')}</td>
         <td>${esc(tr.client_arrivee_nom||'—')}</td>
-        <td class="mono" style="font-size:11px">${esc(tr.num_suivi||'—')}</td>
+        <td class="mono" style="font-size:11px">${tr.num_suivi?`${esc(tr.num_suivi)} <a href="${lienhSuiviInter(tr.transporteur,tr.num_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'—'}</td>
         <td><span class="badge ${scT[tr.statut]||''}">${stTr[tr.statut]||esc(tr.statut)}</span></td>
       </tr>`).join('')}</tbody>
     </table></div>`;
@@ -3317,7 +3317,7 @@ async function renderTransferts(ttl,c,a){
       <td>${esc(tr.client_arrivee_nom||'—')}</td>
       <td>${tr.date_arrivee?fd(tr.date_arrivee):'—'}</td>
       <td>${esc(tr.transporteur||'—')}</td>
-      <td class="mono" style="font-size:11px">${esc(tr.num_suivi||'—')}</td>
+      <td class="mono" style="font-size:11px">${tr.num_suivi?`${esc(tr.num_suivi)} <a href="${lienhSuiviInter(tr.transporteur,tr.num_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'—'}</td>
       <td><span class="badge ${scT[tr.statut]||''}">${stTr[tr.statut]||esc(tr.statut)}</span></td>
       <td><button class="btn sm danger" onclick="event.stopPropagation();if(confirm(t('transferts_confirm_suppr')))API.deleteTransfert(${tr.id}).then(()=>{render();toast(t('msg_supprime'),'ti-trash')})"><i class="ti ti-trash"></i></button></td>
     </tr>`).join('')}</tbody>
@@ -3380,7 +3380,7 @@ async function modalTransfert(id){
         </div>
         <div class="form-group">
           <label class="form-label">${t('transferts_transporteur')}</label>
-          <select class="form-input" id="tr-transporteur">
+          <select class="form-input" id="tr-transporteur" onchange="majLienSuiviTransfert()">
             <option value="">${t('select_aucun')}</option>
             <option value="DSV" ${d.transporteur==='DSV'?'selected':''}>${t('transferts_dsv')}</option>
             <option value="Autre" ${d.transporteur==='Autre'?'selected':''}>${t('transferts_autre')}</option>
@@ -3388,7 +3388,10 @@ async function modalTransfert(id){
         </div>
         <div class="form-group">
           <label class="form-label">${t('transferts_num_suivi')}</label>
-          <input class="form-input mono" id="tr-num-suivi" value="${esc(d.num_suivi||'')}">
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="form-input mono" id="tr-num-suivi" value="${esc(d.num_suivi||'')}" oninput="majLienSuiviTransfert()" style="flex:1">
+            <a id="tr-suivi-lien" target="_blank" rel="noopener" title="${t('cmd_suivre_colis')||'Suivre le colis'}" style="display:${d.num_suivi?'inline-flex':'none'};align-items:center;color:var(--accent);padding:0 6px;font-size:16px" ${d.num_suivi?`href="${lienhSuiviInter(d.transporteur,d.num_suivi)}"`:''}><i class="ti ti-external-link"></i></a>
+          </div>
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label">${t('col_statut')}</label>
@@ -3409,6 +3412,17 @@ async function modalTransfert(id){
       <button class="btn primary" onclick="saveTransfert(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);
 }
+
+// Met à jour le lien de suivi (icône) à côté du n° de suivi dans la modale de transfert
+function majLienSuiviTransfert(){
+  const n = gv('tr-num-suivi');
+  const tr = gv('tr-transporteur');
+  const a = document.getElementById('tr-suivi-lien');
+  if (!a) return;
+  if (n && n.trim()) { a.href = lienhSuiviInter(tr, n.trim()); a.style.display = 'inline-flex'; }
+  else { a.style.display = 'none'; a.removeAttribute('href'); }
+}
+window.majLienSuiviTransfert = majLienSuiviTransfert;
 
 async function searchFauteuilTransfert(q){
   const drop=document.getElementById('tr-fauteuil-drop');
