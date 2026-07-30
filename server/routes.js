@@ -3537,32 +3537,31 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
     const candidats = [];
     const pousser = (data) => { if (Array.isArray(data)) for (const d of data) candidats.push(d); };
 
-    // Recherche par TEXTE sur tous les types de documents. search_text gère les
-    // caractères spéciaux (slash « / ») que le filtre ?number= ne gère pas (ex. "D/0151").
-    for (const kind of ['wz','client_order','estimate','vat','proforma','receipt','stock','other']) {
-      try { const { data } = await vfApi.get('/invoices.json', { params: { kind, search_text: numero, per_page: 30 } }); pousser(data); } catch(_) {}
+    // IMPORTANT : deux pièges VosFactures confirmés empiriquement :
+    //  1) l'index /invoices.json filtre par PÉRIODE par défaut (documents récents) → un
+    //     document ancien (ex. 2021) n'est jamais renvoyé sans period=all.
+    //  2) le filtre `number` est EXACT sur le slash (mais insensible à la casse) : les
+    //     anciens BDC sont stockés "D/0151" alors que les récents sont "D0931". On teste
+    //     donc les variantes de format (tel quel / sans slash / slash après le préfixe).
+    const variantes = new Set();
+    const brut = numero.trim();
+    variantes.add(brut);
+    variantes.add(brut.replace(/[\s\/]+/g, ''));               // sans slash : D0151
+    const mPref = brut.match(/^([A-Za-z]+)[\s\/]*(\d.*)$/);     // slash après préfixe : D/0151
+    if (mPref) variantes.add(mPref[1] + '/' + mPref[2].replace(/[\s\/]+/g, ''));
+    for (const v of variantes) {
+      try { const { data } = await vfApi.get('/invoices.json', { params: { number: v, period: 'all', per_page: 20 } }); pousser(data); } catch(_) {}
     }
-    // Recherche sans type (tous documents confondus)
-    try { const { data } = await vfApi.get('/invoices.json', { params: { search_text: numero, per_page: 50 } }); pousser(data); } catch(_) {}
-    // Ancien filtre exact par numéro (utile pour les numéros sans caractère spécial)
-    for (const kind of ['client_order','estimate','vat','proforma','receipt','other']) {
-      try { const { data } = await vfApi.get('/invoices.json', { params: { kind, number: numero, per_page: 10 } }); pousser(data); } catch(_) {}
+    // Filet de sécurité : recherche texte large seulement si aucune variante n'a matché
+    // exactement (la correspondance stricte plus bas évite les faux positifs).
+    if (!candidats.some(d => normalise(d.number) === numNorm)) {
+      try { const { data } = await vfApi.get('/invoices.json', { params: { search_text: brut, period: 'all', per_page: 50 } }); pousser(data); } catch(_) {}
     }
 
-    const matchNum = (dn) => dn === numNorm || (dn.length >= 3 && numNorm.length >= 3 && (dn.includes(numNorm) || numNorm.includes(dn)));
+    // Correspondance STRICTE sur le numéro normalisé (évite les faux positifs type "0151").
     inv = candidats.find(d => normalise(d.number) === numNorm)
-       || candidats.find(d => matchNum(normalise(d.number)))
+       || (numNorm.length >= 4 ? candidats.find(d => normalise(d.number).includes(numNorm)) : null)
        || null;
-
-    // Repli : scan des documents récents par type (pour un ancien doc que la recherche ne remonte pas)
-    if (!inv) {
-      for (const kind of ['client_order','estimate','wz','vat','proforma']) {
-        try {
-          const { data } = await vfApi.get('/invoices.json', { params: { kind, per_page: 100, page: 1, order: 'id desc' } });
-          if (Array.isArray(data)) { const m = data.find(d => normalise(d.number) === numNorm) || data.find(d => matchNum(normalise(d.number))); if (m) { inv = m; break; } }
-        } catch(_) {}
-      }
-    }
 
     if (debug) {
       let docParId = null;
