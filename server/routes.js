@@ -3431,6 +3431,37 @@ router.get('/commandes/:id/factures-vf-suggestions', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Helper partagé : recherche robuste d'un document VosFactures par numéro ──────
+// Contourne les DEUX pièges confirmés de l'index /invoices.json :
+//  1) filtre par PÉRIODE par défaut → un doc ancien (2021) n'est jamais renvoyé sans period=all ;
+//  2) filtre `number` EXACT sur le slash (insensible à la casse) → anciens docs "D/0151"
+//     vs récents "D0931" : on interroge donc plusieurs variantes de format.
+// Retourne le document résumé (pas le détail) le mieux correspondant, ou null.
+// prefKind (optionnel) privilégie un type parmi les correspondances (ex. 'vat' pour une facture).
+async function vfLookupParNumero(vfApi, numero, prefKind) {
+  const normalise = s => String(s||'').toLowerCase().replace(/[\s\-\/\.]+/g,'');
+  const numNorm = normalise(numero);
+  const brut = String(numero||'').trim();
+  if (!brut) return null;
+  const variantes = new Set([brut, brut.replace(/[\s\/]+/g,'')]);
+  const mPref = brut.match(/^([A-Za-z]+)[\s\/]*(\d.*)$/);
+  if (mPref) variantes.add(mPref[1] + '/' + mPref[2].replace(/[\s\/]+/g,''));
+  const candidats = [];
+  for (const v of variantes) {
+    try { const { data } = await vfApi.get('/invoices.json', { params: { number: v, period: 'all', per_page: 20 } }); if (Array.isArray(data)) candidats.push(...data); } catch(_) {}
+  }
+  if (!candidats.some(d => normalise(d.number) === numNorm)) {
+    try { const { data } = await vfApi.get('/invoices.json', { params: { search_text: brut, period: 'all', per_page: 50 } }); if (Array.isArray(data)) candidats.push(...data); } catch(_) {}
+  }
+  const exacts = candidats.filter(d => normalise(d.number) === numNorm);
+  const pool = exacts.length
+    ? exacts
+    : (numNorm.length >= 4 ? candidats.filter(d => normalise(d.number).includes(numNorm)) : []);
+  if (!pool.length) return null;
+  if (prefKind) { const pk = pool.find(d => d.kind === prefKind); if (pk) return pk; }
+  return pool[0];
+}
+
 // Recherche directe d'une facture VosFactures par son numéro exact (saisi côté commande)
 // — beaucoup plus fiable que les suggestions, puisque le n° de facture correspond 1:1
 // au document VosFactures (confirmé par l'utilisateur).
@@ -3449,8 +3480,8 @@ router.get('/vosfactures/facture-lookup', async (req, res) => {
       params:  { api_token: process.env.VOSFACTURES_API_TOKEN }
     });
 
-    const { data } = await vfApi.get('/invoices.json', { params: { number: numero, per_page: 5 } });
-    const inv = Array.isArray(data) ? data.find(d => String(d.number).trim() === numero) || data[0] : null;
+    // Recherche robuste (period=all + variantes de slash), en privilégiant une facture (vat).
+    const inv = await vfLookupParNumero(vfApi, numero, 'vat');
     if (!inv) return res.json({ configured: true, found: false });
 
     const { data: detail } = await vfApi.get(`/invoices/${inv.id}.json`);
@@ -4243,6 +4274,122 @@ router.post('/commandes/:id/sync-paiement', adminOrOp, async (req, res) => {
     console.log('[PAIEMENT]', cmd.num_facture, 'vfId:', vfId, JSON.stringify(raw), '->', statut);
     res.json({ ok: true, vfId, statut, raw });
   } catch(e) { console.error('[PAIEMENT ERR]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// ── Rattrapage global VosFactures ────────────────────────────────
+// Pour TOUTES les commandes ayant un n° BDC ou un n° de facture : retrouve le document
+// VosFactures (recherche robuste period=all + variantes de slash), enregistre le LIEN,
+// le STATUT DE PAIEMENT, complète les INFOS MANQUANTES (série/modèle/date), et liste les
+// INTROUVABLES. Traite un LOT (offset/limit) pour rester sous le timeout Render → à appeler
+// en boucle (offset += traite) jusqu'à done=true.
+// Écritures SÛRES : liens + paiement toujours rafraîchis ; num_serie/modele/date_commande
+// seulement s'ils sont vides ; correspondance EXACTE sur le numéro normalisé (jamais approximatif).
+router.get('/admin/vf-rattrapage', adminOnly, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) {
+      return res.json({ configured: false });
+    }
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    const normalise = s => String(s||'').toLowerCase().replace(/[\s\-\/\.]+/g,'');
+    const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i;
+
+    const offset = Math.max(0, parseInt(req.query.offset) || 0);
+    const limit  = Math.min(120, Math.max(1, parseInt(req.query.limit) || 50));
+
+    const totalRow = await db.get(`SELECT COUNT(*)::int AS n FROM commandes
+      WHERE (bdc IS NOT NULL AND bdc <> '') OR (num_facture IS NOT NULL AND num_facture <> '')`);
+    const total = totalRow ? totalRow.n : 0;
+
+    const lot = await db.all(`SELECT id, bdc, num_facture, vf_order_id, facture_vf_id,
+        num_serie, modele, date_commande, distributeur_nom
+      FROM commandes
+      WHERE (bdc IS NOT NULL AND bdc <> '') OR (num_facture IS NOT NULL AND num_facture <> '')
+      ORDER BY id ASC LIMIT $1 OFFSET $2`, [limit, offset]);
+
+    let liens = 0, paiements = 0, infos = 0;
+    const introuvables = [];
+
+    const detailCache = {};
+    async function getDetail(id) {
+      if (detailCache[id] !== undefined) return detailCache[id];
+      try { const { data } = await vfApi.get(`/invoices/${id}.json`); detailCache[id] = data; }
+      catch(_) { detailCache[id] = null; }
+      return detailCache[id];
+    }
+
+    for (const cmd of lot) {
+      const maj = {};
+      // ── Facture ──
+      if (cmd.num_facture && cmd.num_facture.trim()) {
+        let fid = cmd.facture_vf_id;
+        if (!fid) {
+          const inv = await vfLookupParNumero(vfApi, cmd.num_facture, 'vat');
+          if (inv && normalise(inv.number) === normalise(cmd.num_facture)) {
+            fid = inv.id; maj.facture_vf_id = fid; maj.vf_invoice_id = fid; liens++;
+          } else {
+            introuvables.push({ id: cmd.id, type: 'facture', numero: cmd.num_facture, distributeur: cmd.distributeur_nom });
+          }
+        }
+        if (fid) {
+          const d = await getDetail(fid);
+          if (d) {
+            const isPaid = d.payment_status === 'paid' || !!d.paid_date || d.paid === true;
+            const today = new Date().toISOString().slice(0,10);
+            const paymentTo = (d.payment_to||'').slice(0,10);
+            const isOverdue = paymentTo && paymentTo < today && !isPaid;
+            maj.facture_paiement_statut = isPaid ? 'paye' : isOverdue ? 'impaye' : 'en_attente';
+            maj.facture_date_echeance = paymentTo || null;
+            paiements++;
+            const positions = d.positions || d.invoice_items || [];
+            if (!cmd.num_serie) {
+              const txt = [d.description||'', ...positions.map(p=>[p.name||'',p.description||''].join(' '))].join(' ');
+              const m = txt.match(SERIE_RE); if (m) maj.num_serie = m[0].trim();
+            }
+            if (!cmd.date_commande && (d.issue_date || d.sell_date)) maj.date_commande = (d.issue_date||d.sell_date).slice(0,10);
+          }
+        }
+      }
+      // ── BDC ──
+      if (cmd.bdc && cmd.bdc.trim() && !cmd.vf_order_id) {
+        const inv = await vfLookupParNumero(vfApi, cmd.bdc);
+        if (inv && normalise(inv.number) === normalise(cmd.bdc)) {
+          maj.vf_order_id = String(inv.id); liens++;
+          const besoinSerie  = !cmd.num_serie && !maj.num_serie;
+          const besoinModele = !cmd.modele && !maj.modele;
+          const besoinDate   = !cmd.date_commande && !maj.date_commande;
+          if (besoinSerie || besoinModele || besoinDate) {
+            const d = await getDetail(inv.id);
+            if (d) {
+              const positions = d.positions || d.invoice_items || [];
+              if (besoinModele) { const lf = positions.find(p=>/eloflex/i.test(p.name||'')); if (lf && lf.name) maj.modele = lf.name.trim(); }
+              if (besoinSerie)  { const txt=[d.description||'',...positions.map(p=>[p.name||'',p.description||''].join(' '))].join(' '); const m=txt.match(SERIE_RE); if(m) maj.num_serie=m[0].trim(); }
+              if (besoinDate && (d.issue_date||d.sell_date)) maj.date_commande=(d.issue_date||d.sell_date).slice(0,10);
+            }
+          }
+        } else {
+          introuvables.push({ id: cmd.id, type: 'bdc', numero: cmd.bdc, distributeur: cmd.distributeur_nom });
+        }
+      }
+      // ── Écriture ──
+      const cols = Object.keys(maj);
+      if (cols.length) {
+        if (maj.num_serie || maj.modele || maj.date_commande) infos++;
+        const sets = cols.map((c,i)=>`${c}=$${i+1}`).join(', ');
+        await db.run(`UPDATE commandes SET ${sets}, updated_at=NOW() WHERE id=$${cols.length+1}`,
+          [...cols.map(c=>maj[c]), cmd.id]);
+      }
+      await new Promise(r=>setTimeout(r,100));
+    }
+
+    const next = offset + lot.length;
+    res.json({ configured:true, ok:true, total, offset, traite:lot.length, next_offset: next,
+      done: next >= total || lot.length === 0, liens, paiements, infos, introuvables });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 
