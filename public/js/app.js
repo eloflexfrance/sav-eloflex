@@ -2782,7 +2782,7 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Réseau</label>
     <select class="form-input" id="f-reseau">
       <option value="">— Aucun —</option>
-      ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés'],['capvital','CAP Vital'],['lecarre','Le Carré Medical'],['paramat','Paramat']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
+      ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés'],['capvital','CAP Vital'],['lecarre','Le Carré Medical']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
     </select>
   </div>
   <div class="form-group"><label class="form-label">Priorité</label>
@@ -4895,8 +4895,7 @@ var RESEAUX_CONFIG = {
   districlub: { label: 'DistriClub Medical', color: '#7f77dd', letter: 'D' },
   negocies:   { label: 'Négociés',           color: '#16a34a', letter: 'N' },
   capvital:   { label: 'CAP Vital',          color: '#0891b2', letter: 'V' },
-  lecarre:    { label: 'Le Carré Medical',   color: '#db2777', letter: 'C' },
-  paramat:    { label: 'Paramat',            color: '#9333ea', letter: 'M' }
+  lecarre:    { label: 'Le Carré Medical',   color: '#db2777', letter: 'C' }
 };
 
 // Génère le panneau de filtre par année de dernière commande (2019 → année en cours)

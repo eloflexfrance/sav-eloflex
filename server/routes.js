@@ -4499,6 +4499,15 @@ const MOTS_VIDES = new Set(['sarl','sas','sasu','eurl','sa','snc','sarlu','ets',
 function motsNom(s) {
   return normNom(s).split(' ').filter(w => w.length > 1 && !MOTS_VIDES.has(w));
 }
+// Mémoïsation : chaque nom n'est normalisé/tokenisé qu'UNE fois par process.
+// Le rapprochement carte compare les mêmes noms des centaines de milliers de fois
+// (points × commandes × clients priorisés) ; sans cache, GET /carte/points prenait ~6 s.
+(function(){
+  const _nc = new Map(), _mc = new Map();
+  const _rawNorm = normNom, _rawMots = motsNom;
+  normNom = function(s){ const k = String(s||''); let v = _nc.get(k); if (v === undefined){ v = _rawNorm(k); if (_nc.size < 50000) _nc.set(k, v); } return v; };
+  motsNom = function(s){ const k = String(s||''); let v = _mc.get(k); if (v === undefined){ v = _rawMots(k); if (_mc.size < 50000) _mc.set(k, v); } return v; };
+})();
 // true si les deux noms désignent vraisemblablement la même entité
 function memeEntite(a, b) {
   const na = normNom(a), nb = normNom(b);
