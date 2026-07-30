@@ -558,6 +558,59 @@ router.get('/interventions/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Bascule SAV → commande : crée une commande LIÉE (catégorie "SAV facturé"),
+//    idempotente (si déjà liée, renvoie la commande existante). Sert au cas
+//    "BL VosFactures d'un SAV hors garantie transformé en facture".
+router.post('/interventions/:id/basculer-commande', async (req, res) => {
+  try {
+    const i = await db.get(
+      `SELECT i.*, f.modele, f.serie, c.nom AS client_nom
+         FROM interventions i JOIN fauteuils f ON f.id=i.fauteuil_id JOIN clients c ON c.id=i.client_id
+        WHERE i.id=$1`, [req.params.id]);
+    if (!i) return res.status(404).json({ error: 'Intervention introuvable' });
+    if (i.commande_id) {
+      const ex = await db.get('SELECT id FROM commandes WHERE id=$1', [i.commande_id]);
+      if (ex) return res.json({ ok: true, commande_id: i.commande_id, existant: true });
+    }
+    const annee = i.date ? parseInt(String(i.date).slice(0, 4)) : new Date().getFullYear();
+    const infos = 'SAV ' + (i.num_sav || ('#' + i.id)) + (i.description ? (' — ' + i.description) : '');
+    const row = await db.run(
+      `INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, groupe, distributeur_nom, modele,
+        bdc, date_commande, num_serie, num_facture, informations, statut, origine, intervention_id)
+       VALUES ($1,$2,$3,'SAV',$4,$5,$6,$7,$8,$9,$10,'Auto','sav',$11) RETURNING id`,
+      [i.client_id, i.fauteuil_id, annee, i.client_nom, i.modele || null,
+       i.num_bordereau_vf || null, i.date || null, i.serie || null, i.num_facture || null, infos, i.id]);
+    await db.run('UPDATE interventions SET commande_id=$1, updated_at=NOW() WHERE id=$2', [row.id, i.id]);
+    res.json({ ok: true, commande_id: row.id, cree: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Bascule commande → SAV : crée une intervention LIÉE (idempotente).
+router.post('/commandes/:id/basculer-intervention', async (req, res) => {
+  try {
+    const cmd = await db.get('SELECT * FROM commandes WHERE id=$1', [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    if (cmd.intervention_id) {
+      const ex = await db.get('SELECT id FROM interventions WHERE id=$1', [cmd.intervention_id]);
+      if (ex) return res.json({ ok: true, intervention_id: cmd.intervention_id, existant: true });
+    }
+    if (!cmd.client_id) return res.status(400).json({ error: "Commande non rattachée à une fiche client — impossible de créer un SAV." });
+    let fid = cmd.fauteuil_id;
+    if (!fid && cmd.num_serie) {
+      const f = await db.get('SELECT id FROM fauteuils WHERE serie=$1', [cmd.num_serie]);
+      if (f) fid = f.id;
+    }
+    if (!fid) return res.status(400).json({ error: "Aucun fauteuil (ni n° de série connu) sur cette commande — nécessaire pour créer un SAV." });
+    const desc = 'Créé depuis la commande ' + (cmd.bdc || ('#' + cmd.id));
+    const r = await db.run(
+      `INSERT INTO interventions (fauteuil_id, client_id, date, type, garantie, statut, description, num_facture, commande_id)
+       VALUES ($1,$2,$3,'Réparation',FALSE,'Ouvert',$4,$5,$6) RETURNING id`,
+      [fid, cmd.client_id, cmd.date_commande || new Date().toISOString().slice(0, 10), desc, cmd.num_facture || null, cmd.id]);
+    await db.run('UPDATE commandes SET intervention_id=$1, updated_at=NOW() WHERE id=$2', [r.id, cmd.id]);
+    res.json({ ok: true, intervention_id: r.id, cree: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/interventions', async (req, res) => {
   try {
     const { fauteuil_id, client_id, date, type, garantie, statut, description, notes, technicien,
@@ -2307,23 +2360,23 @@ router.get('/commandes', async (req, res) => {
     const { distributeur, client_id, statut, annee, groupe, q, date_from, date_to, page = 1, per_page = 100 } = req.query;
     const slim = req.query.slim === '1';
     const fields = slim
-      ? `cmd.id, cmd.client_id, cmd.bdc, cmd.distributeur_nom, cmd.modele, cmd.quantite, cmd.date_commande,
+      ? `cmd.id, cmd.client_id, cmd.origine, cmd.intervention_id, cmd.bdc, cmd.distributeur_nom, cmd.modele, cmd.quantite, cmd.date_commande,
          cmd.statut, cmd.num_suivi, cmd.transporteur, cmd.date_livraison, cmd.num_serie,
          cmd.num_facture, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
          cmd.reliquat, cmd.demo_origine_nom, cmd.modele_demo, cmd.annee_onglet, cmd.groupe,
          (cmd.informations ILIKE '%avoir%') AS est_avoir,
          c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,
-         ROW_NUMBER() OVER (
-           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
+         CASE WHEN cmd.origine = 'sav' THEN NULL ELSE ROW_NUMBER() OVER (
+           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date), (cmd.origine IS NOT DISTINCT FROM 'sav')
            ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
-         ) AS num_annuel`
+         ) END AS num_annuel`
       : `cmd.*, c.nom AS client_nom, c.ville AS client_ville,
          c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
-         ROW_NUMBER() OVER (
-           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
+         CASE WHEN cmd.origine = 'sav' THEN NULL ELSE ROW_NUMBER() OVER (
+           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date), (cmd.origine IS NOT DISTINCT FROM 'sav')
            ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
-         ) AS num_annuel`;
+         ) END AS num_annuel`;
     let sql = `SELECT ${fields} FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
     const conds = [], p = [];
     let idx = 0;
@@ -2374,9 +2427,10 @@ router.get('/commandes/stats', async (req, res) => {
     const annee = req.query.annee ? parseInt(req.query.annee) : null;
     const userPays = res.locals.user?.pays || req.query.pays || null;
     const paysFilter = userPays ? `AND (pays = '${userPays.replace(/'/g,"''")}' OR pays IS NULL)` : '';
-    const anneeFilter = annee
+    // Les commandes issues d'un SAV facturé (origine='sav') sont exclues des compteurs de ventes
+    const anneeFilter = (annee
       ? `(annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1)) ${paysFilter}`
-      : `TRUE ${paysFilter}`;
+      : `TRUE ${paysFilter}`) + ` AND (origine IS DISTINCT FROM 'sav')`;
     const params = annee ? [annee] : [];
 
     // Calcul SQL du statut (miroir de la fonction JS statutCommande + isRealTracking)

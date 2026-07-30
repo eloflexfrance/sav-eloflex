@@ -984,7 +984,7 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="Ouvrir la fiche client" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button>`:`<span title="Commande non rattachée à une fiche client" style="color:var(--border-s);padding:1px 3px;font-size:11px"><i class="ti ti-user-off"></i></span>`}</td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:10px" title="Cette commande porte un avoir (retour / remboursement) — voir le champ Informations">↩ Avoir</span>`:''}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:10px" title="Cette commande porte un avoir (retour / remboursement) — voir le champ Informations">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:10px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
           if(isRealTracking(cm.num_suivi)){
@@ -1070,6 +1070,10 @@ async function modalCommande(id){
       <h2 style="flex:1">${id?(t('cmd_edit')||'Modifier'):(t('cmd_add')||'Nouvelle commande')}${cm.distributeur_nom?` <span style="font-weight:400;color:var(--text2);font-size:15px">— ${esc(cm.distributeur_nom)}</span>`:''}</h2>
       ${cm.client_edi?`<span class="badge ouvert" style="font-size:11px;margin-right:4px">💳 EDI</span>`:''}
       ${/avoir/i.test(cm.informations||'')?`<span class="badge urgent" style="font-size:11px;margin-right:4px" title="${esc((cm.informations||'').replace(/"/g,'&quot;').slice(0,140))}">↩ Avoir / Retour</span>`:''}
+      ${id&&cm.origine==='sav'?`<span class="badge hg" style="font-size:11px;margin-right:4px" title="Commande issue d'un SAV facturé — exclue des stats de ventes et de la numérotation">🛠️ SAV facturé</span>`:''}
+      ${id?(cm.intervention_id
+        ? `<button class="btn sm" onclick="ouvrirInterventionLiee(${cm.intervention_id})" title="Voir le SAV lié"><i class="ti ti-tool"></i> SAV lié</button>`
+        : `<button class="btn sm" onclick="basculerCommandeVersSAV(${id})" title="Créer un SAV lié pour cette commande"><i class="ti ti-tool"></i> Créer SAV</button>`):''}
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
     <div style="display:flex;border-bottom:0.5px solid var(--border-s)">
@@ -2616,6 +2620,11 @@ async function viewIntervention(id){
         <span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span>
         <span style="font-size:11px;color:var(--text3);margin-left:auto">${fd(i.date)}</span>
       </div>
+      <div style="margin-bottom:12px">
+        ${i.commande_id
+          ? `<button class="btn sm" onclick="ouvrirCommandeLiee(${i.commande_id})"><i class="ti ti-clipboard-list"></i> Voir la commande liée</button>`
+          : `<button class="btn sm" onclick="basculerSAVversCommande(${i.id})" title="Créer une commande liée « SAV facturé » dans Suivi commandes"><i class="ti ti-clipboard-plus"></i> Basculer en commande</button>`}
+      </div>
       <div class="grid-2" style="font-size:12px;margin-bottom:12px">
         <div><div class="stat-label">Client</div><div style="font-weight:600">${esc(i.client_nom||'')}</div></div>
         <div><div class="stat-label">Fauteuil</div><div style="font-weight:600">${esc(i.modele)} – <span class="mono">${esc(i.serie)}</span></div></div>
@@ -3120,6 +3129,32 @@ function renderProduitsForm(){
       <div style="${i===0?'padding-top:18px':''}"><button class="btn sm danger" onclick="removeProduit(${i})"><i class="ti ti-x"></i></button></div>
     </div>`).join('');
 }
+
+// ── Bascule SAV <-> commande ─────────────────────────────────────
+async function basculerSAVversCommande(id){
+  try{
+    const r = await API.basculerSAVenCommande(id);
+    if(r && r.commande_id){
+      toast(r.existant?'Commande liée déjà existante':'Commande « SAV facturé » créée','ti-clipboard-check','var(--success)');
+      closeModal(); setView('commandes'); setTimeout(()=>modalCommande(r.commande_id), 250);
+    } else alert((r&&r.error)||'Échec de la bascule');
+  }catch(e){ alert(e.message); }
+}
+window.basculerSAVversCommande = basculerSAVversCommande;
+async function ouvrirCommandeLiee(cid){ closeModal(); setView('commandes'); setTimeout(()=>modalCommande(cid), 250); }
+window.ouvrirCommandeLiee = ouvrirCommandeLiee;
+async function basculerCommandeVersSAV(id){
+  try{
+    const r = await API.basculerCommandeenSAV(id);
+    if(r && r.intervention_id){
+      toast(r.existant?'SAV lié déjà existant':'SAV créé depuis la commande','ti-tool','var(--success)');
+      closeModal(); setView('interventions'); setTimeout(()=>viewIntervention(r.intervention_id), 250);
+    } else alert((r&&r.error)||'Échec de la bascule');
+  }catch(e){ alert(e.message); }
+}
+window.basculerCommandeVersSAV = basculerCommandeVersSAV;
+async function ouvrirInterventionLiee(iid){ closeModal(); setView('interventions'); setTimeout(()=>viewIntervention(iid), 250); }
+window.ouvrirInterventionLiee = ouvrirInterventionLiee;
 
 async function saveIntervention(id){
   const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client')),num_sav:gv('f-num-sav')||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau')||undefined,produits:TMP_PRODUITS};

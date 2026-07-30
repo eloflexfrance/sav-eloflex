@@ -219,6 +219,10 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_date_echeance TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_vf_id BIGINT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_final_type TEXT`);
+      // Liaison intervention (SAV) <-> commande (Suivi commandes)
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS intervention_id INTEGER REFERENCES interventions(id) ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS origine TEXT`); // 'sav' = commande issue d'un SAV facturé (exclue des stats de ventes)
+      await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS commande_id INTEGER REFERENCES commandes(id) ON DELETE SET NULL`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS lat NUMERIC(10,7)`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS lng NUMERIC(10,7)`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS geocoded_at TIMESTAMPTZ`);
