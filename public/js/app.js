@@ -593,6 +593,7 @@ async function chargerCommandesClient(clientId){
     }
     el.innerHTML=`<div class="table-wrap"><table class="t">
       <thead><tr>
+        ${CMD_COLS.num_annuel?'<th style="width:40px;text-align:center;color:var(--text3)">#</th>':''}
         <th>${t('col_date')||'Date'}</th>
         <th>${t('cmd_bdc')||'Bdc'}</th>
         <th>${t('cmd_modele')||'Modèle / Pièce'}</th>
