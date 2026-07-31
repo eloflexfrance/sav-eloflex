@@ -1149,7 +1149,7 @@ async function modalCommande(id){
               ${cm.origine==='sav'
                 ? `<span title="Commande issue d'un SAV : le contenu (lignes, série, facture, suivi) est repris automatiquement du SAV lié — pas d'import VosFactures ici" style="color:var(--text3);font-size:11px;align-self:center;white-space:nowrap;padding:0 6px"><i class="ti ti-tool"></i> SAV</span>`
                 : `<button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>`}
-              ${cm.bdc?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'},'${esc(cm.bdc)}')"><i class="ti ti-external-link"></i></button>`:''}
+              <button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'}, (document.getElementById('cmd-bdc').value||'').trim())"><i class="ti ti-external-link"></i></button>
             </div>
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">N° commande distributeur</label>
