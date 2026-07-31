@@ -216,6 +216,7 @@ async function renderDashboard(ttl,c,a){
         <div id="qs-results" class="qs-results" style="display:none"></div>
       </div>
     </div>
+    <div id="dash-demos"></div>
     <div class="card" style="margin-bottom:14px">
       <div class="section-title"><i class="ti ti-clipboard-list"></i>${t('cmd_title')||'Suivi des commandes'}
         <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
@@ -255,6 +256,22 @@ async function renderDashboard(ttl,c,a){
     </div>`;
   chargerTransfertsDashboard();
   chargerCommandesDashboard();
+  chargerDemosDashboard();
+}
+
+async function chargerDemosDashboard(){
+  const el=document.getElementById('dash-demos'); if(!el) return;
+  try{
+    const demos=await API.demosSuivi();
+    const dues=(demos||[]).filter(d=>d.du);
+    if(!dues.length){ el.innerHTML=''; return; }
+    el.innerHTML=`<div class="card" style="margin-bottom:14px;border-left:4px solid var(--warning)">
+      <div class="section-title"><i class="ti ti-wheelchair"></i> ${dues.length} démo(s) à suivre (rappel échu)
+        <button class="btn sm" style="margin-left:auto" onclick="setView('alertes')"><i class="ti ti-arrow-right"></i>Traiter</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2)">${dues.slice(0,6).map(d=>esc((d.client_nom||d.distributeur_nom||'')+' — '+(d.modele||'')+(d.num_serie?' ('+d.num_serie+')':''))).join(' · ')}${dues.length>6?' …':''}</div>
+    </div>`;
+  }catch(_){ el.innerHTML=''; }
 }
 
 async function chargerCommandesDashboard(){
@@ -1916,10 +1933,26 @@ function exportExcelFiltre(){
 async function renderAlertes(ttl,c,a){
   ttl.textContent=t('alertes_title');
   a.innerHTML=`<button class="btn" onclick="API.marquerToutesLues().then(()=>{refreshBadges();render();})"><i class="ti ti-checks"></i>${t('alertes_tout_lire')}</button>`;
-  const list=await API.alertes();
-  const icons={relance:'ti-clock',retour_manquant:'ti-truck-return',garantie_expire:'ti-shield-x',stock_faible:'ti-alert-triangle',stock_zero:'ti-circle-x',intervention_fermee:'ti-circle-check'};
-  const colors={relance:'var(--warning)',retour_manquant:'var(--accent)',garantie_expire:'var(--danger)',stock_faible:'var(--warning)',stock_zero:'var(--danger)',intervention_fermee:'var(--success)'};
-  c.innerHTML=list.length===0?`<div class="empty"><i class="ti ti-bell-off"></i>${t('alertes_empty')}</div>`:
+  const [list, demos] = await Promise.all([API.alertes(), API.demosSuivi().catch(()=>[])]);
+  const icons={relance:'ti-clock',retour_manquant:'ti-truck-return',garantie_expire:'ti-shield-x',stock_faible:'ti-alert-triangle',stock_zero:'ti-circle-x',intervention_fermee:'ti-circle-check',demo_rappel:'ti-wheelchair'};
+  const colors={relance:'var(--warning)',retour_manquant:'var(--accent)',garantie_expire:'var(--danger)',stock_faible:'var(--warning)',stock_zero:'var(--danger)',intervention_fermee:'var(--success)',demo_rappel:'var(--warning)'};
+  const demosHtml = (demos&&demos.length) ? `<div class="card" style="margin-bottom:14px">
+      <div class="section-title" style="margin-bottom:10px"><i class="ti ti-wheelchair"></i> Démos à suivre (${demos.length})</div>
+      <div class="table-wrap"><table class="t">
+        <thead><tr><th>Distributeur</th><th>Modèle / Série</th><th>Livraison</th><th>Rappel</th><th>Retour / Prolonger / Facturer</th></tr></thead>
+        <tbody>${demos.map(d=>`<tr>
+          <td>${esc(d.client_nom||d.distributeur_nom)}${d.client_ville?` <span style="color:var(--text3);font-size:11px">${esc(d.client_ville)}</span>`:''}</td>
+          <td>${esc(d.modele||'')} ${d.num_serie?`<span class="mono" style="font-size:11px;color:var(--text3)">${esc(d.num_serie)}</span>`:''}</td>
+          <td style="font-size:12px">${esc(d.date_livraison||'—')}</td>
+          <td><span class="badge ${d.du?'urgent':'hg'}" style="font-size:11px">${esc(d.demo_rappel_date)}${d.du?' ⚠':''}</span></td>
+          <td style="white-space:nowrap">
+            <button class="btn sm" onclick="demoCloturer(${d.id},'retour')" title="Retour organisé"><i class="ti ti-truck-return"></i></button>
+            <button class="btn sm" onclick="demoProlonger(${d.id},'${d.demo_rappel_date}')" title="Prolonger le rappel"><i class="ti ti-calendar-plus"></i></button>
+            <button class="btn sm success" onclick="demoCloturer(${d.id},'facture')" title="Facturé / vendu"><i class="ti ti-file-euro"></i></button>
+          </td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>` : '';
+  c.innerHTML=demosHtml + (list.length===0?`<div class="empty"><i class="ti ti-bell-off"></i>${t('alertes_empty')}</div>`:
     `<div class="card">${list.map(al=>`
       <div class="alerte-row">
         <div class="alerte-icon" style="background:${colors[al.type]||'var(--accent)'}20;color:${colors[al.type]||'var(--accent)'}">
@@ -1930,8 +1963,21 @@ async function renderAlertes(ttl,c,a){
           <div style="font-size:11px;color:var(--text3);margin-top:2px">${al.created_at?.slice(0,16).replace('T',' ')}</div>
         </div>
         <button class="btn sm" onclick="API.marquerAlerteLue(${al.id}).then(()=>{refreshBadges();render();})"><i class="ti ti-x"></i></button>
-      </div>`).join('')}</div>`;
+      </div>`).join('')}</div>`);
 }
+
+async function demoProlonger(id, cur){
+  const d = prompt('Nouvelle date de rappel (AAAA-MM-JJ) :', cur||'');
+  if(!d) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d.trim())){ alert('Format attendu : AAAA-MM-JJ'); return; }
+  try{ await API.demoProlonger(id, d.trim()); toast('Rappel prolongé au '+d.trim(),'ti-calendar-plus'); refreshBadges(); render(); }catch(e){ alert(e.message); }
+}
+async function demoCloturer(id, resultat){
+  const lbl = resultat==='facture' ? 'facturée / vendue' : 'en retour organisé';
+  if(!confirm('Marquer cette démo comme '+lbl+' ? Elle sort du suivi.')) return;
+  try{ await API.demoCloturer(id, resultat); toast('Démo clôturée ('+lbl+')','ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
+}
+window.demoProlonger=demoProlonger; window.demoCloturer=demoCloturer;
 
 // ── PARAMÈTRES ────────────────────────────────────────────────────
 

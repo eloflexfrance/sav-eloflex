@@ -3337,6 +3337,21 @@ async function majFauteuilVente(row) {
   } catch (_) { /* best-effort, ne bloque jamais la commande */ }
 }
 
+// ── Démo : au 1er marquage "fauteuil démo", programme un rappel à J+30 (date de livraison) ──
+async function majRappelDemo(row) {
+  try {
+    if (!row) return;
+    const estDemo = row.modele_demo === true || row.type_fauteuil_demo === true;
+    if (!estDemo) return;
+    if (row.demo_rappel_date || row.demo_suivi_resultat) return; // déjà suivi ou clôturé
+    const iso = s => (/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(String(s || '')) ? String(s).slice(0, 10) : null);
+    const base = iso(row.date_livraison) || iso(row.date_commande) || new Date().toISOString().slice(0, 10);
+    const d = new Date(base + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 30);
+    const rappel = d.toISOString().slice(0, 10);
+    await db.run('UPDATE commandes SET demo_rappel_date=$1 WHERE id=$2 AND demo_rappel_date IS NULL AND demo_suivi_resultat IS NULL', [rappel, row.id]);
+  } catch (_) { /* best-effort */ }
+}
+
 router.post('/commandes', async (req, res) => {
   try {
     const d = req.body;
@@ -3370,6 +3385,7 @@ router.post('/commandes', async (req, res) => {
        d.confirmation_recue ? true : false, d.date_confirmation || null]
     );
     await majFauteuilVente(row);
+    await majRappelDemo(row);
     res.status(201).json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3397,6 +3413,7 @@ router.put('/commandes/:id', async (req, res) => {
     const row = await db.run(`UPDATE commandes SET ${sets.join(', ')} WHERE id=$${++idx} RETURNING *`, p);
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
     await majFauteuilVente(row);
+    await majRappelDemo(row);
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3436,6 +3453,43 @@ router.post('/admin/fauteuils-resync', adminOnly, async (req, res) => {
     }
     res.json({ ok: true, dry, total_fauteuils: fauteuils.length, series_avec_vente: Object.keys(cible).length,
       a_corriger: changes.length, sans_vente_correspondante: nomatch, changements: changes.slice(0, 1000) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Suivi des fauteuils de démonstration (rappels J+30) ──────────────
+router.get('/demos/suivi', async (req, res) => {
+  try {
+    const rows = await db.all(
+      `SELECT cmd.id, cmd.distributeur_nom, cmd.client_id, cmd.modele, cmd.num_serie, cmd.bdc,
+              cmd.date_livraison, cmd.date_commande, cmd.demo_rappel_date,
+              c.nom AS client_nom, c.ville AS client_ville,
+              (cmd.demo_rappel_date <= to_char(NOW(),'YYYY-MM-DD')) AS du
+       FROM commandes cmd LEFT JOIN clients c ON c.id=cmd.client_id
+       WHERE cmd.demo_rappel_date IS NOT NULL AND cmd.demo_suivi_resultat IS NULL
+       ORDER BY cmd.demo_rappel_date ASC, cmd.id ASC`);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Prolonger le rappel d'une démo (choisir la prochaine date)
+router.post('/commandes/:id/demo-prolonger', async (req, res) => {
+  try {
+    const date = String(req.body.date || '').slice(0, 10);
+    if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)) return res.status(400).json({ error: 'Date invalide (AAAA-MM-JJ)' });
+    const row = await db.run('UPDATE commandes SET demo_rappel_date=$1, demo_suivi_resultat=NULL, updated_at=NOW() WHERE id=$2 RETURNING id, demo_rappel_date', [date, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Commande introuvable' });
+    res.json({ ok: true, ...row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Clôturer le suivi démo : 'retour' (organisé) ou 'facture' (vendu/facturé)
+router.post('/commandes/:id/demo-cloturer', async (req, res) => {
+  try {
+    const r = String(req.body.resultat || '').toLowerCase();
+    if (!['retour', 'facture'].includes(r)) return res.status(400).json({ error: "resultat doit être 'retour' ou 'facture'" });
+    const row = await db.run('UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat=$1, updated_at=NOW() WHERE id=$2 RETURNING id, demo_suivi_resultat', [r, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Commande introuvable' });
+    res.json({ ok: true, ...row });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

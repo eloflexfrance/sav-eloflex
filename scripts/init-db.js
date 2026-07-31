@@ -222,6 +222,9 @@ async function initDB() {
       // Liaison intervention (SAV) <-> commande (Suivi commandes)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS intervention_id INTEGER REFERENCES interventions(id) ON DELETE SET NULL`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS origine TEXT`); // 'sav' = commande issue d'un SAV facturé (exclue des stats de ventes)
+      // Suivi des fauteuils de démonstration : rappel à J+30 (dépôt-vente)
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_rappel_date TEXT`);      // prochaine date de rappel (NULL = pas de suivi actif)
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_suivi_resultat TEXT`);   // NULL=en cours, 'retour', 'facture'
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS commande_id INTEGER REFERENCES commandes(id) ON DELETE SET NULL`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS lat NUMERIC(10,7)`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS lng NUMERIC(10,7)`);

@@ -82,10 +82,50 @@ async function runDailyChecks() {
     for (const p of stockZero)
       await addAlerte('stock_zero', p.id, `🔴 Rupture de stock : ${p.designation} (${p.ref})`);
 
-    if (enAttente.length + expSansRetour.length + expirent.length > 0)
-      console.log(`[CRON] ${new Date().toISOString()} — ${enAttente.length} relance(s), ${expSansRetour.length} retour(s) manquant(s), ${expirent.length} garantie(s)`);
+    // 5. Fauteuils de démonstration arrivés à échéance de rappel (J+30, dépôt-vente)
+    const demosDues = await db.all(
+      `SELECT cmd.id, cmd.distributeur_nom, cmd.modele, cmd.num_serie, cmd.demo_rappel_date,
+              c.nom AS client_nom
+       FROM commandes cmd LEFT JOIN clients c ON c.id=cmd.client_id
+       WHERE cmd.demo_rappel_date IS NOT NULL AND cmd.demo_suivi_resultat IS NULL
+         AND cmd.demo_rappel_date <= to_char(NOW(),'YYYY-MM-DD')`
+    );
+    for (const d of demosDues) {
+      await addAlerte('demo_rappel', d.id,
+        `🔄 Démo à suivre : ${d.client_nom || d.distributeur_nom} — ${d.modele || ''} ${d.num_serie || ''} (rappel du ${d.demo_rappel_date}). Organiser le retour, prolonger ou facturer.`);
+    }
+    if (demosDues.length) await envoyerEmailDemos(demosDues);
+
+    if (enAttente.length + expSansRetour.length + expirent.length + demosDues.length > 0)
+      console.log(`[CRON] ${new Date().toISOString()} — ${enAttente.length} relance(s), ${expSansRetour.length} retour(s) manquant(s), ${expirent.length} garantie(s), ${demosDues.length} démo(s)`);
 
   } catch(e) { console.error('[CRON] Erreur :', e.message); }
+}
+
+// Email de rappel des démos à suivre (si notifications email activées)
+async function envoyerEmailDemos(demos) {
+  try {
+    const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
+    if (p.email_notifications !== '1') return;
+    if (!p.email_smtp_host || !p.email_smtp_user || !p.email_smtp_pass) return;
+    const dest = p.email_cc_relance || p.email_from || p.email_smtp_user;
+    if (!dest) return;
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: p.email_smtp_host, port: parseInt(p.email_smtp_port) || 587, secure: false,
+      auth: { user: p.email_smtp_user, pass: p.email_smtp_pass }
+    });
+    const lignes = demos.map(d => `<li>${d.client_nom || d.distributeur_nom} — ${d.modele || ''} ${d.num_serie || ''} (rappel du ${d.demo_rappel_date})</li>`).join('');
+    const url = process.env.APP_URL || '';
+    await transporter.sendMail({
+      from: p.email_from || p.email_smtp_user, to: dest,
+      subject: `🔄 ${demos.length} fauteuil(s) de démo à suivre`,
+      html: `<p>${demos.length} fauteuil(s) de démonstration arrivent à échéance de rappel (J+30) :</p><ul>${lignes}</ul>
+             <p>Pour chacun : <b>organiser le retour</b>, <b>prolonger</b> le rappel, ou <b>facturer</b>.</p>
+             ${url ? `<p><a href="${url}">Ouvrir l'application → Alertes</a></p>` : ''}`
+    });
+    console.log(`[CRON] Email démos envoyé (${demos.length})`);
+  } catch (e) { console.error('[CRON] Email démos err:', e.message); }
 }
 
 // ── Ping anti-veille Render ───────────────────────────────────────
