@@ -3310,6 +3310,33 @@ router.put('/commandes/:id/retour-lignes', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Propriété fauteuil : bascule vers le magasin d'une commande de VENTE réelle ──
+// Règle (validée) : le propriétaire d'un fauteuil = le magasin de sa DERNIÈRE vente
+// facturée. On ignore les dépôts-vente/démos (sans facture) et les transferts SAV.
+const EST_VENTE_SQL = "(facture_vf_id IS NOT NULL OR num_facture ~ '^[A-Za-z]?[0-9]{3,}')";
+const SERIE_NORM_CMD = "UPPER(REGEXP_REPLACE(num_serie,'[^A-Za-z0-9]','','g'))";
+const DATE_TRI = "(CASE WHEN date_commande ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN LEFT(date_commande,10)::date ELSE NULL END)";
+async function majFauteuilVente(row) {
+  try {
+    if (!row || !row.num_serie || !row.client_id) return;
+    if (row.origine === 'sav') return;
+    const nf = String(row.num_facture || '').trim();
+    if (!row.facture_vf_id && !/^[A-Za-z]?[0-9]{3,}/.test(nf)) return; // pas une vente
+    const sn = String(row.num_serie).toUpperCase().replace(/[^A-Za-z0-9]/g, '');
+    if (sn.length < 4) return;
+    // ne bascule que si cette commande est la vente la plus récente pour cette série
+    const last = await db.get(
+      `SELECT id FROM commandes
+       WHERE ${SERIE_NORM_CMD}=$1 AND (origine IS DISTINCT FROM 'sav') AND ${EST_VENTE_SQL}
+       ORDER BY ${DATE_TRI} DESC NULLS LAST, id DESC LIMIT 1`, [sn]);
+    if (last && parseInt(last.id) === parseInt(row.id)) {
+      await db.run(
+        `UPDATE fauteuils SET client_id=$1, updated_at=NOW()
+         WHERE UPPER(REGEXP_REPLACE(serie,'[^A-Za-z0-9]','','g'))=$2`, [row.client_id, sn]);
+    }
+  } catch (_) { /* best-effort, ne bloque jamais la commande */ }
+}
+
 router.post('/commandes', async (req, res) => {
   try {
     const d = req.body;
@@ -3342,6 +3369,7 @@ router.post('/commandes', async (req, res) => {
        d.commande_type || null, d.ref_suede || null, d.date_envoi_suede || null,
        d.confirmation_recue ? true : false, d.date_confirmation || null]
     );
+    await majFauteuilVente(row);
     res.status(201).json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3368,7 +3396,46 @@ router.put('/commandes/:id', async (req, res) => {
     p.push(req.params.id);
     const row = await db.run(`UPDATE commandes SET ${sets.join(', ')} WHERE id=$${++idx} RETURNING *`, p);
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
+    await majFauteuilVente(row);
     res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Recalcul en masse : propriétaire de chaque fauteuil = magasin de sa dernière vente facturée ──
+// Corrige d'un coup les fauteuils désynchronisés (réaffectations, reventes de démo).
+// ?dry=1 pour un aperçu sans écrire.
+router.post('/admin/fauteuils-resync', adminOnly, async (req, res) => {
+  try {
+    const dry = req.query.dry === '1';
+    const rows = await db.all(
+      `SELECT DISTINCT ON (sn) sn, client_id, id AS cmd_id, num_facture, date_commande
+       FROM (
+         SELECT ${SERIE_NORM_CMD} AS sn, client_id, id, num_facture, date_commande
+         FROM commandes
+         WHERE num_serie IS NOT NULL AND num_serie <> '' AND client_id IS NOT NULL
+           AND (origine IS DISTINCT FROM 'sav') AND ${EST_VENTE_SQL}
+       ) s
+       ORDER BY sn, ${DATE_TRI} DESC NULLS LAST, id DESC`);
+    const cible = {};
+    for (const r of rows) cible[r.sn] = { client_id: r.client_id, cmd_id: r.cmd_id, facture: r.num_facture };
+    const fauteuils = await db.all(
+      `SELECT id, serie, client_id, UPPER(REGEXP_REPLACE(serie,'[^A-Za-z0-9]','','g')) AS sn
+       FROM fauteuils WHERE serie IS NOT NULL AND serie <> ''`);
+    const changes = []; let nomatch = 0;
+    for (const f of fauteuils) {
+      const t = cible[f.sn];
+      if (!t) { nomatch++; continue; }
+      if (parseInt(t.client_id) !== parseInt(f.client_id)) {
+        changes.push({ fauteuil_id: f.id, serie: f.serie, from: f.client_id, to: t.client_id, via_cmd: t.cmd_id, facture: t.facture });
+      }
+    }
+    if (!dry) {
+      for (const c of changes) {
+        await db.run('UPDATE fauteuils SET client_id=$1, updated_at=NOW() WHERE id=$2', [c.to, c.fauteuil_id]);
+      }
+    }
+    res.json({ ok: true, dry, total_fauteuils: fauteuils.length, series_avec_vente: Object.keys(cible).length,
+      a_corriger: changes.length, sans_vente_correspondante: nomatch, changements: changes.slice(0, 1000) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
