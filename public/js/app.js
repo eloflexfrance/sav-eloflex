@@ -559,13 +559,16 @@ async function renderClient(ttl,c,a){
     </div>
     <div class="section-title" style="margin:16px 0 8px"><i class="ti ti-clipboard-list"></i>Commandes</div>
     <div id="client-commandes-list" style="margin-bottom:20px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>`;
-  chargerCommandesClient(cl.nom);
+  chargerCommandesClient(cl.id);
 }
 
-async function chargerCommandesClient(distribNom){
+async function chargerCommandesClient(clientId){
   const el = document.getElementById('client-commandes-list'); if(!el) return;
   try{
-    const res = await API.commandes({ distributeur: distribNom, per_page: 200 });
+    // Filtrage par client_id EXACT (et non par nom) : plusieurs agences partagent le même
+    // nom générique (ex. « BASTIDE LE CONFORT MEDICAL » pour Nantes, Poitiers…) → un filtre
+    // par nom ramasserait les commandes de toutes les agences. Le client_id isole la bonne fiche.
+    const res = await API.commandes({ client_id: clientId, per_page: 200 });
     const list = res.rows||[];
     if(!list.length){
       el.innerHTML=`<div style="font-size:12px;color:var(--text3)">Aucune commande pour ce distributeur.</div>`;

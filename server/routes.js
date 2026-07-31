@@ -461,6 +461,21 @@ router.put('/clients/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Poser / réparer le lien VosFactures (vf_id) d'une fiche ──────────
+// Utilisé pour le rattrapage des liens manquants issus de la comparaison VF↔app.
+router.post('/admin/client-set-vfid', adminOnly, async (req, res) => {
+  try {
+    const cid = parseInt(req.body.client_id);
+    if (!Number.isInteger(cid)) return res.status(400).json({ error: 'client_id invalide' });
+    const brut = req.body.vf_id;
+    const vid = (brut === null || brut === '' || brut === undefined) ? null : parseInt(brut);
+    if (vid !== null && !Number.isInteger(vid)) return res.status(400).json({ error: 'vf_id invalide' });
+    const row = await db.run('UPDATE clients SET vf_id=$1, updated_at=NOW() WHERE id=$2 RETURNING id, nom, vf_id', [vid, cid]);
+    if (!row) return res.status(404).json({ error: 'Fiche introuvable' });
+    res.json({ ok: true, client: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/clients/:id/regenerer-token', async (req, res) => {
   try {
     const token = crypto.randomBytes(20).toString('hex');
