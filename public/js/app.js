@@ -794,34 +794,55 @@ function renderCmdLignes(){
           <div id="cmd-piece-drop-${i}" class="piece-dropdown" style="display:none"></div>
         </div>
       </td>
-      <td style="padding:4px 6px"><input class="form-input mono" style="font-size:11px;padding:4px 7px" value="${esc(l.reference||'')}" oninput="TMP_CMD_LIGNES[${i}].reference=this.value" placeholder="Réf."></td>
+      <td style="padding:4px 6px">
+        <div style="position:relative">
+          <input class="form-input mono cmd-ligne-ref" style="font-size:11px;padding:4px 7px" value="${esc(l.reference||'')}" placeholder="Réf."
+            oninput="TMP_CMD_LIGNES[${i}].reference=this.value;searchCmdPieces(${i},this.value,'ref')"
+            onfocus="searchCmdPieces(${i},this.value,'ref')"
+            onblur="setTimeout(()=>{const d=document.getElementById('cmd-piece-drop-ref-${i}');if(d)d.style.display='none'},150)">
+          <div id="cmd-piece-drop-ref-${i}" class="piece-dropdown" style="display:none"></div>
+        </div>
+      </td>
       <td style="padding:4px 6px"><input class="form-input" type="number" min="1" style="font-size:12px;padding:4px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_CMD_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
       <td style="padding:4px 2px"><button class="btn sm danger" onclick="removeCmdLigne(${i})" style="padding:4px 6px"><i class="ti ti-x"></i></button></td>
     </tr>`).join('')}</tbody>
   </table>`;
 }
 
-function searchCmdPieces(idx, q){
-  const drop = document.getElementById('cmd-piece-drop-'+idx); if(!drop) return;
-  const query = q.toLowerCase().trim();
+function searchCmdPieces(idx, q, field){
+  field = field==='ref' ? 'ref' : 'desig';
+  const dropId = field==='ref' ? 'cmd-piece-drop-ref-'+idx : 'cmd-piece-drop-'+idx;
+  const drop = document.getElementById(dropId); if(!drop) return;
+  const query = (q||'').toLowerCase().trim();
   if(!query){ drop.style.display='none'; return; }
-  const results = CACHE.catalogue.filter(p =>
+  // Depuis le champ Référence : on privilégie une correspondance sur la réf ; sinon on cherche partout
+  let results = CACHE.catalogue.filter(p =>
     p.designation.toLowerCase().includes(query) ||
     (p.ref && p.ref.toLowerCase().includes(query)) ||
     (p.ref_fournisseur && p.ref_fournisseur.toLowerCase().includes(query))
-  ).slice(0,12);
+  );
+  if(field==='ref'){
+    results.sort((a,b)=>{
+      const ar=(a.ref||'').toLowerCase().startsWith(query)?0:1;
+      const br=(b.ref||'').toLowerCase().startsWith(query)?0:1;
+      return ar-br;
+    });
+  }
+  results = results.slice(0,12);
   if(!results.length){ drop.style.display='none'; return; }
   window._CMD_PIECE_RESULTS = window._CMD_PIECE_RESULTS || {};
-  window._CMD_PIECE_RESULTS[idx] = results;
-  drop.innerHTML = results.map((p,ri) => `<div class="piece-option" onmousedown="event.preventDefault();selectCmdPieceResult(${idx},${ri})">
+  window._CMD_PIECE_RESULTS[field+'-'+idx] = results;
+  drop.innerHTML = results.map((p,ri) => `<div class="piece-option" onmousedown="event.preventDefault();selectCmdPieceResult(${idx},${ri},'${field}')">
     <div style="font-size:12px;font-weight:600">${esc(p.designation)}</div>
     <div style="font-size:11px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref||'')}</span></div>
   </div>`).join('');
   drop.style.display = 'block';
 }
 
-function selectCmdPieceResult(idx, resultIdx){
-  const p = (window._CMD_PIECE_RESULTS && window._CMD_PIECE_RESULTS[idx]) ? window._CMD_PIECE_RESULTS[idx][resultIdx] : null;
+function selectCmdPieceResult(idx, resultIdx, field){
+  field = field==='ref' ? 'ref' : 'desig';
+  const store = window._CMD_PIECE_RESULTS || {};
+  const p = store[field+'-'+idx] ? store[field+'-'+idx][resultIdx] : null;
   if(!p) return;
   TMP_CMD_LIGNES[idx] = { ...TMP_CMD_LIGNES[idx], designation: p.designation||'', reference: p.ref||'' };
   renderCmdLignes();
@@ -1070,6 +1091,8 @@ window.prefillGroupeDepuisDistrib = prefillGroupeDepuisDistrib;
 
 async function modalCommande(id){
   window._currentCmdId = id;
+  // Assure que la base produits est chargée pour l'autocomplétion des lignes (désignation / référence)
+  if(!CACHE.catalogue.length){ try{ CACHE.catalogue = await API.catalogue(); }catch(e){} }
   let cm = id ? await API.commande(id) : {statut:'Auto', quantite:1};
 
   const hasExp  = !!(cm.num_suivi || cm.date_livraison || cm.num_bordereau || cm.num_serie);
