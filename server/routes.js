@@ -3352,6 +3352,35 @@ async function majRappelDemo(row) {
   } catch (_) { /* best-effort */ }
 }
 
+// ── Origine démo : sur une revente (vente d'un fauteuil qui a été en démo ailleurs),
+//    renseigne automatiquement le magasin d'où venait la démo, via le n° de série.
+//    Ne remplit que si le champ est vide (respecte une saisie manuelle).
+async function majOrigineDemo(row) {
+  try {
+    if (!row || !row.num_serie || !row.client_id) return;
+    if (row.origine === 'sav') return;
+    if (row.demo_origine_nom) return;                 // déjà renseigné → on n'écrase pas
+    // La commande courante doit être une vente (la revente du fauteuil de démo)
+    const nf = String(row.num_facture || '').trim();
+    if (!row.facture_vf_id && !/^[A-Za-z]?[0-9]{3,}/.test(nf)) return;
+    const sn = String(row.num_serie).toUpperCase().replace(/[^A-Za-z0-9]/g, '');
+    if (sn.length < 4) return;
+    // Cherche une commande DÉMO, même série, dans un AUTRE magasin
+    const demo = await db.get(
+      `SELECT distributeur_nom FROM commandes
+       WHERE ${SERIE_NORM_CMD}=$1 AND modele_demo=true
+         AND client_id IS DISTINCT FROM $2
+         AND (origine IS DISTINCT FROM 'sav')
+       ORDER BY ${DATE_TRI} DESC NULLS LAST, id DESC LIMIT 1`, [sn, row.client_id]);
+    if (demo && demo.distributeur_nom) {
+      await db.run(
+        `UPDATE commandes SET demo_origine_nom=$1
+         WHERE id=$2 AND (demo_origine_nom IS NULL OR demo_origine_nom='')`,
+        [demo.distributeur_nom, row.id]);
+    }
+  } catch (_) { /* best-effort, ne bloque jamais la commande */ }
+}
+
 router.post('/commandes', async (req, res) => {
   try {
     const d = req.body;
@@ -3386,6 +3415,7 @@ router.post('/commandes', async (req, res) => {
     );
     await majFauteuilVente(row);
     await majRappelDemo(row);
+    await majOrigineDemo(row);
     res.status(201).json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -3414,7 +3444,38 @@ router.put('/commandes/:id', async (req, res) => {
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
     await majFauteuilVente(row);
     await majRappelDemo(row);
+    await majOrigineDemo(row);
     res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Backfill "Origine démo" : remplit demo_origine_nom sur les reventes déjà en base ──
+// Pour chaque vente (série connue) dont le fauteuil a été en démo dans un autre magasin,
+// renseigne le magasin d'origine. N'écrase jamais une valeur existante. ?dry=1 = aperçu.
+router.post('/admin/backfill-origine-demo', adminOnly, async (req, res) => {
+  try {
+    const dry = req.query.dry === '1';
+    // Ventes candidates : série présente, pas SAV, pas encore d'origine démo
+    const ventes = await db.all(
+      `SELECT id, client_id, distributeur_nom, ${SERIE_NORM_CMD} AS sn
+       FROM commandes
+       WHERE num_serie IS NOT NULL AND ${SERIE_NORM_CMD} <> ''
+         AND (origine IS DISTINCT FROM 'sav') AND ${EST_VENTE_SQL}
+         AND (demo_origine_nom IS NULL OR demo_origine_nom='')`);
+    const maj = [];
+    for (const v of ventes) {
+      if (!v.sn || v.sn.length < 4) continue;
+      const demo = await db.get(
+        `SELECT distributeur_nom FROM commandes
+         WHERE ${SERIE_NORM_CMD}=$1 AND modele_demo=true
+           AND client_id IS DISTINCT FROM $2 AND (origine IS DISTINCT FROM 'sav')
+         ORDER BY ${DATE_TRI} DESC NULLS LAST, id DESC LIMIT 1`, [v.sn, v.client_id]);
+      if (demo && demo.distributeur_nom && demo.distributeur_nom !== v.distributeur_nom) {
+        maj.push({ cmd_id: v.id, magasin: v.distributeur_nom, origine: demo.distributeur_nom });
+        if (!dry) await db.run('UPDATE commandes SET demo_origine_nom=$1 WHERE id=$2 AND (demo_origine_nom IS NULL OR demo_origine_nom=\'\')', [demo.distributeur_nom, v.id]);
+      }
+    }
+    res.json({ ok: true, dry, total_candidats: ventes.length, renseignes: maj.length, details: maj.slice(0, 200) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
