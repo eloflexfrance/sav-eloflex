@@ -1073,6 +1073,39 @@ var RESEAU_VERS_GROUPE = {
 
 // Pré-remplit le "Groupe" d'une commande à partir du réseau du distributeur saisi,
 // seulement si le champ Groupe est encore vide (ne jamais écraser un choix manuel).
+// ── Autocomplétion du distributeur dans la modale de commande ──
+// Propose les fiches clients existantes quand on tape le nom ; en sélectionnant
+// une proposition on fixe le client_id exact (évite les doublons/amalgames à la création).
+function searchCmdDistrib(q){
+  const drop = document.getElementById('cmd-distrib-drop'); if(!drop) return;
+  const src = Array.isArray(window._ALL_CLIENTS) ? window._ALL_CLIENTS : (window._ALL_CLIENTS && window._ALL_CLIENTS.rows) || [];
+  const query = (q||'').toLowerCase().trim();
+  if(!query){ drop.style.display='none'; return; }
+  const results = src.filter(c =>
+    (c.nom && c.nom.toLowerCase().includes(query)) ||
+    (c.ville && c.ville.toLowerCase().includes(query))
+  ).slice(0,15);
+  if(!results.length){ drop.style.display='none'; return; }
+  drop.innerHTML = results.map(c => `<div class="piece-option" onmousedown="event.preventDefault();selectCmdDistrib(${c.id},'${(c.nom||'').replace(/'/g,"\\'")}')">
+    <div style="font-size:12px;font-weight:600">${esc(c.nom||'')}</div>
+    <div style="font-size:11px;color:var(--text3)">${esc(c.ville||'')}${c.cp?' ('+esc(c.cp)+')':''}</div>
+  </div>`).join('');
+  drop.style.display = 'block';
+}
+function cmdDistribInput(v){
+  // Saisie manuelle → on annule tout client_id sélectionné précédemment (nouveau distributeur possible)
+  const hid = document.getElementById('cmd-client-id'); if(hid) hid.value='';
+  searchCmdDistrib(v);
+}
+function selectCmdDistrib(id, nom){
+  const inp = document.getElementById('cmd-distrib');
+  const hid = document.getElementById('cmd-client-id');
+  if(inp) inp.value = nom;
+  if(hid) hid.value = id;
+  const drop = document.getElementById('cmd-distrib-drop'); if(drop) drop.style.display='none';
+  prefillGroupeDepuisDistrib();
+}
+
 async function prefillGroupeDepuisDistrib(){
   var champGroupe = document.getElementById('cmd-groupe');
   var champDistrib = document.getElementById('cmd-distrib');
@@ -1093,6 +1126,8 @@ async function modalCommande(id){
   window._currentCmdId = id;
   // Assure que la base produits est chargée pour l'autocomplétion des lignes (désignation / référence)
   if(!CACHE.catalogue.length){ try{ CACHE.catalogue = await API.catalogue(); }catch(e){} }
+  // Base clients pour l'autocomplétion du distributeur (propositions quand on tape le nom)
+  if(!window._ALL_CLIENTS){ try{ window._ALL_CLIENTS = await API.clients(); }catch(e){ window._ALL_CLIENTS = []; } }
   let cm = id ? await API.commande(id) : {statut:'Auto', quantite:1};
 
   const hasExp  = !!(cm.num_suivi || cm.date_livraison || cm.num_bordereau || cm.num_serie);
@@ -1149,7 +1184,15 @@ async function modalCommande(id){
       <div id="cmd-tab-commande" style="${initTab!=='commande'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${t('col_client')||'Distributeur'} *</label>
-            <input class="form-input" id="cmd-distrib" value="${esc(cm.distributeur_nom||'')}" required placeholder="${t('col_client')||'Nom du distributeur'}" onchange="prefillGroupeDepuisDistrib()">
+            <div style="position:relative">
+              <input class="form-input" id="cmd-distrib" autocomplete="off" value="${esc(cm.distributeur_nom||'')}" required placeholder="${t('col_client')||'Nom du distributeur'}"
+                oninput="cmdDistribInput(this.value)"
+                onfocus="searchCmdDistrib(this.value)"
+                onchange="prefillGroupeDepuisDistrib()"
+                onblur="setTimeout(()=>{const d=document.getElementById('cmd-distrib-drop');if(d)d.style.display='none'},150)">
+              <input type="hidden" id="cmd-client-id" value="${cm.client_id||''}">
+              <div id="cmd-distrib-drop" class="piece-dropdown" style="display:none"></div>
+            </div>
           </div>
           ${cm.facturation_nom?`<div class="form-group" style="grid-column:1/-1;margin:-2px 0 6px"><div style="font-size:12px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border-s);border-radius:6px;padding:7px 10px">🧾 Facturé à : <strong>${esc(cm.facturation_nom)}</strong> <span style="color:var(--text3)">— défini sur la fiche distributeur</span></div></div>`:''}
           <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
@@ -1829,6 +1872,8 @@ async function enregistrerCommande(id){
     num_facture_pennylane: gv('cmd-facture-pl')||null,
     pays: gv('cmd-pays')||CURRENT_USER.pays||'France',
   };
+  // Si une proposition a été sélectionnée dans l'autocomplétion, on rattache à la fiche exacte
+  const _cid = parseInt(gv('cmd-client-id'))||null; if(_cid) d.client_id = _cid;
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
     let cmdId = id;
