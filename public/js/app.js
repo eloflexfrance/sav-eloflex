@@ -5545,10 +5545,11 @@ function afficherMarkers(recadrer) {
     } else {
       if (!_cartePrioriteSans) return;
     }
-    if (q && (p.nom + ' ' + (p.ville||'') + ' ' + (p.description||'')).toLowerCase().indexOf(q) < 0) return;
+    if (q && (p.nom + ' ' + (p.ville||'') + ' ' + (p.description||'') + ' ' + (p.zone_chalandise||'')).toLowerCase().indexOf(q) < 0) return;
     var marker = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon: pinIconCarte(p.reseau, p) });
     marker.bindPopup(function(){ return popupCarte(p); }, { maxWidth: 280 });
     marker.on('popupopen', function(e){ wirePopupCarte(e, p); });
+    marker.on('popupclose', function(){ effacerCouverture(); });
     marker.addTo(_carteMap);
     _carteMarkers.push(marker);
     bounds.push([parseFloat(p.lat), parseFloat(p.lng)]);
@@ -5616,9 +5617,14 @@ function popupCarte(p) {
     '</div>' +
     (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> Voir la fiche complète →</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
+    (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:11px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:11px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
     '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px"><i class="ti ti-map-2" style="font-size:11px"></i> Zone de chalandise / départements</label>' +
     '<textarea id="carte-zone-' + p.id + '" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard, Bouches-du-Rhône" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px;font-size:12px;resize:vertical;font-family:inherit">' + _esc(p.zone_chalandise||'') + '</textarea>' +
-    '<button onclick="sauverZoneCarte(' + p.id + ')" style="margin-top:5px;margin-bottom:10px;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">Enregistrer la zone</button>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-top:5px;margin-bottom:10px">' +
+      '<input id="carte-rayon-' + p.id + '" type="number" min="0" step="5" value="' + (p.rayon_km!=null?_esc(String(p.rayon_km)):'') + '" placeholder="rayon km" style="width:90px;border:0.5px solid #cfcfca;border-radius:6px;padding:5px 7px;font-size:12px" title="Rayon de couverture en km (optionnel)">' +
+      '<span style="font-size:11px;color:#888">km</span>' +
+      '<button onclick="sauverCouvertureCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">Enregistrer la couverture</button>' +
+    '</div>' +
     '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px">Note interne</label>' +
     '<textarea id="carte-note-' + p.id + '" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px;font-size:12px;resize:vertical;font-family:inherit">' + _esc(p.note_interne||'') + '</textarea>' +
     '<button onclick="sauverNoteCarte(' + p.id + ')" style="margin-top:5px;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">Enregistrer note</button>' +
@@ -5626,7 +5632,77 @@ function popupCarte(p) {
     '</div>';
 }
 
-function wirePopupCarte(e, p) { /* rien de spécial */ }
+function wirePopupCarte(e, p) { dessinerCouverture(p); }
+
+// ── Couverture géographique d'un distributeur (départements colorés + rayon) ──
+var _carteCouvertureLayer = null;   // couche des overlays de couverture (départements + cercle)
+var _departementsGeoP = null;       // promesse de chargement du fond de départements (une seule fois)
+var _departementsIdx = null;        // index code -> feature GeoJSON
+
+function chargerDepartementsGeo() {
+  if (_departementsGeoP) return _departementsGeoP;
+  var url = 'https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/departements-version-simplifiee.geojson';
+  _departementsGeoP = fetch(url).then(function(r){ return r.json(); }).then(function(geo){
+    _departementsIdx = {};
+    (geo.features||[]).forEach(function(f){ if (f.properties && f.properties.code) _departementsIdx[String(f.properties.code).toUpperCase()] = f; });
+    return _departementsIdx;
+  }).catch(function(e){ _departementsGeoP = null; return null; });
+  return _departementsGeoP;
+}
+
+// Extrait les codes départements d'un texte libre ("84, 30, 13" ou "Vaucluse, Gard"…)
+function parseDepartements(txt) {
+  if (!txt) return [];
+  var codes = [];
+  // Corse : 2A / 2B
+  var corse = txt.toUpperCase().match(/\b2[AB]\b/g);
+  if (corse) corse.forEach(function(c){ codes.push(c); });
+  // Codes numériques : DOM (971-976) puis départements 2 chiffres (avec 0 ajouté si 1 chiffre)
+  var nums = txt.match(/\b\d{1,3}\b/g) || [];
+  nums.forEach(function(n){
+    if (n.length === 3) { if (/^97[1-6]$/.test(n)) codes.push(n); }
+    else { var c = n.length === 1 ? '0' + n : n; if (parseInt(c,10) >= 1 && parseInt(c,10) <= 95) codes.push(c); }
+  });
+  return [...new Set(codes)];
+}
+
+function effacerCouverture() {
+  if (_carteCouvertureLayer && _carteMap) { _carteMap.removeLayer(_carteCouvertureLayer); }
+  _carteCouvertureLayer = null;
+}
+
+function dessinerCouverture(p) {
+  effacerCouverture();
+  if (!_carteMap || !p) return;
+  var cfg = (typeof RESEAUX_CONFIG !== 'undefined' && RESEAUX_CONFIG[p.reseau]) || { color: '#2e7cf6' };
+  var couleur = cfg.color || '#2e7cf6';
+  var layer = L.layerGroup();
+  // 1) Rayon en km
+  if (p.rayon_km && parseFloat(p.rayon_km) > 0 && p.lat && p.lng) {
+    L.circle([parseFloat(p.lat), parseFloat(p.lng)], {
+      radius: parseFloat(p.rayon_km) * 1000,
+      color: couleur, weight: 1.5, fillColor: couleur, fillOpacity: 0.10
+    }).addTo(layer);
+  }
+  layer.addTo(_carteMap);
+  _carteCouvertureLayer = layer;
+  // 2) Départements colorés (fond chargé à la demande)
+  var codes = parseDepartements(p.zone_chalandise);
+  if (codes.length) {
+    chargerDepartementsGeo().then(function(idx){
+      if (!idx || _carteCouvertureLayer !== layer) return; // popup fermé/point changé entre-temps
+      codes.forEach(function(code){
+        var f = idx[code];
+        if (!f) return;
+        L.geoJSON(f, { style: { color: couleur, weight: 1.5, fillColor: couleur, fillOpacity: 0.22 } })
+          .bindTooltip('Dép. ' + code + (f.properties && f.properties.nom ? ' — ' + f.properties.nom : ''), { sticky: true })
+          .addTo(layer);
+      });
+    });
+  }
+}
+window.dessinerCouverture = dessinerCouverture;
+window.effacerCouverture = effacerCouverture;
 
 // Ouvre la fiche client complète depuis un point de la carte
 function ouvrirFicheDistrib(clientId){
@@ -5658,19 +5734,21 @@ function sauverNoteCarte(id) {
 }
 window.sauverNoteCarte = sauverNoteCarte;
 
-function sauverZoneCarte(id) {
+function sauverCouvertureCarte(id) {
   var ta = document.getElementById('carte-zone-' + id);
+  var ra = document.getElementById('carte-rayon-' + id);
   if (!ta) return;
   var zone = ta.value;
+  var rayon = ra && ra.value !== '' ? parseFloat(ra.value) : null;
   fetch('/api/carte/points/' + id + '/zone', {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: zone })
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: zone, rayon_km: rayon })
   }).then(function(r){ return r.json(); }).then(function(){
     var pt = _cartePoints.find(function(x){ return x.id === id; });
-    if (pt) pt.zone_chalandise = zone;
-    if (typeof toast === 'function') toast('Zone de chalandise enregistrée', 'ti-map-2', 'var(--success)');
+    if (pt) { pt.zone_chalandise = zone; pt.rayon_km = (rayon && rayon > 0) ? rayon : null; if (typeof dessinerCouverture === 'function') dessinerCouverture(pt); }
+    if (typeof toast === 'function') toast('Couverture enregistrée', 'ti-map-2', 'var(--success)');
   }).catch(function(e){ alert('Erreur : ' + e.message); });
 }
-window.sauverZoneCarte = sauverZoneCarte;
+window.sauverCouvertureCarte = sauverCouvertureCarte;
 
 var _carteRayonCircle = null;
 var _carteGeoCenter = null;

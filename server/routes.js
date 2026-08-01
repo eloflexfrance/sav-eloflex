@@ -5052,11 +5052,13 @@ router.put('/carte/points/:id/note', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Route: sauvegarder la zone de chalandise / départements couverts d'un point
+// Route: sauvegarder la zone de chalandise (départements) + rayon de couverture d'un point
 router.put('/carte/points/:id/zone', requireAuth, async (req, res) => {
   try {
-    const { zone } = req.body;
-    await db.run('UPDATE distributeurs_carte SET zone_chalandise=$1, updated_at=NOW() WHERE id=$2', [zone||null, req.params.id]);
+    const { zone, rayon_km } = req.body;
+    const rayon = (rayon_km === '' || rayon_km === null || rayon_km === undefined) ? null : parseFloat(rayon_km);
+    await db.run('UPDATE distributeurs_carte SET zone_chalandise=$1, rayon_km=$2, updated_at=NOW() WHERE id=$3',
+      [zone || null, (Number.isFinite(rayon) && rayon > 0) ? rayon : null, req.params.id]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
