@@ -244,6 +244,8 @@ async function initDB() {
       )`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_reseau ON distributeurs_carte(reseau)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_nom ON distributeurs_carte(nom)`);
+      // Zone de chalandise / départements couverts (saisi depuis le popup de la carte)
+      await client.query(`ALTER TABLE distributeurs_carte ADD COLUMN IF NOT EXISTS zone_chalandise TEXT`);
       // Affichage d'un client sur la carte distributeurs
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS sur_carte BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS reseau_carte TEXT`);

@@ -5616,6 +5616,9 @@ function popupCarte(p) {
     '</div>' +
     (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> Voir la fiche complète →</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
+    '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px"><i class="ti ti-map-2" style="font-size:11px"></i> Zone de chalandise / départements</label>' +
+    '<textarea id="carte-zone-' + p.id + '" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard, Bouches-du-Rhône" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px;font-size:12px;resize:vertical;font-family:inherit">' + _esc(p.zone_chalandise||'') + '</textarea>' +
+    '<button onclick="sauverZoneCarte(' + p.id + ')" style="margin-top:5px;margin-bottom:10px;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">Enregistrer la zone</button>' +
     '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px">Note interne</label>' +
     '<textarea id="carte-note-' + p.id + '" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px;font-size:12px;resize:vertical;font-family:inherit">' + _esc(p.note_interne||'') + '</textarea>' +
     '<button onclick="sauverNoteCarte(' + p.id + ')" style="margin-top:5px;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:5px 12px;font-size:12px;cursor:pointer">Enregistrer note</button>' +
@@ -5654,6 +5657,20 @@ function sauverNoteCarte(id) {
   }).catch(function(e){ alert('Erreur : ' + e.message); });
 }
 window.sauverNoteCarte = sauverNoteCarte;
+
+function sauverZoneCarte(id) {
+  var ta = document.getElementById('carte-zone-' + id);
+  if (!ta) return;
+  var zone = ta.value;
+  fetch('/api/carte/points/' + id + '/zone', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: zone })
+  }).then(function(r){ return r.json(); }).then(function(){
+    var pt = _cartePoints.find(function(x){ return x.id === id; });
+    if (pt) pt.zone_chalandise = zone;
+    if (typeof toast === 'function') toast('Zone de chalandise enregistrée', 'ti-map-2', 'var(--success)');
+  }).catch(function(e){ alert('Erreur : ' + e.message); });
+}
+window.sauverZoneCarte = sauverZoneCarte;
 
 var _carteRayonCircle = null;
 var _carteGeoCenter = null;

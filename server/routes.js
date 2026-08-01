@@ -5052,6 +5052,15 @@ router.put('/carte/points/:id/note', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Route: sauvegarder la zone de chalandise / départements couverts d'un point
+router.put('/carte/points/:id/zone', requireAuth, async (req, res) => {
+  try {
+    const { zone } = req.body;
+    await db.run('UPDATE distributeurs_carte SET zone_chalandise=$1, updated_at=NOW() WHERE id=$2', [zone||null, req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Route: liste des clients pour rattachement manuel
 router.get('/carte/clients-liste', requireAuth, async (req, res) => {
   try {
