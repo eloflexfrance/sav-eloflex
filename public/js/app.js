@@ -5407,6 +5407,22 @@ async function ajouterDistributeurCarte(clientId, nom){
 }
 window.ajouterDistributeurCarte = ajouterDistributeurCarte;
 
+// Rafraîchit les points/marqueurs SANS reconstruire la carte ni recadrer (conserve la vue
+// actuelle). Utilisé après une modification/suppression pour ne pas revenir sur la France.
+function rafraichirPointsCarte() {
+  if (!_carteMap) { chargerPoints(); return; }
+  fetch('/api/carte/points?annee=' + _carteAnnee)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!Array.isArray(data)) return;
+      _cartePoints = data;
+      majCompteursCarte();
+      afficherMarkers(); // redessine les marqueurs sur la carte existante, sans recadrer
+    })
+    .catch(function(){});
+}
+window.rafraichirPointsCarte = rafraichirPointsCarte;
+
 function chargerPoints() {
   if (typeof L === 'undefined') {
     var cc = document.getElementById('carte-leaflet');
@@ -6105,7 +6121,9 @@ function sauverPointCarte(id) {
       }
       Promise.all(suites).catch(function(){}).then(function(){
         fermerModalPoint();
-        chargerPoints();
+        // Modification d'un point existant : on garde la vue actuelle (pas de recadrage France).
+        // Nouveau point : rechargement complet pour l'intégrer proprement.
+        if (id) rafraichirPointsCarte(); else chargerPoints();
         if (typeof toast === 'function') toast(id ? 'Distributeur modifié' : 'Distributeur ajouté', 'ti-check', 'var(--success)');
       });
     })
@@ -6119,7 +6137,7 @@ function supprimerPointCarte(id) {
   fetch('/api/carte/points/' + id, { method: 'DELETE' })
     .then(function(r){ return r.json(); })
     .then(function(){
-      chargerPoints();
+      rafraichirPointsCarte(); // conserve la vue actuelle
       if (typeof toast === 'function') toast('Distributeur supprimé', 'ti-check', 'var(--success)');
     })
     .catch(function(e){ alert('Erreur : ' + e.message); });
