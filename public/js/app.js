@@ -4872,7 +4872,7 @@ function lienhSuiviInter(transporteur, numero) {
   if (t.indexOf('ups') >= 0) return 'https://www.ups.com/track?loc=fr_FR&tracknum=' + n;
   if (t.indexOf('dhl') >= 0) return 'https://www.dhl.com/fr-fr/home/tracking/tracking-express.html?tracking-id=' + n;
   if (t.indexOf('schenker') >= 0) return 'https://www.dbschenker.com/app/tracking-public/?refNumber=' + n + '&language_region=fr-FR_FR';
-  if (t.indexOf('dsv') >= 0) return 'https://mydsv.com/track-shipment?query=' + n;
+  if (t.indexOf('dsv') >= 0) return 'https://www.dsv.com/mydsv/tracking-public/?refNumber=' + n + '&language_region=fr-FR_FR';
   if (t.indexOf('gls') >= 0) return 'https://gls-group.eu/FR/fr/suivi-colis?match=' + n;
   if (t.indexOf('tnt') >= 0) return 'https://www.tnt.com/express/fr_fr/site/outils-expedition/suivi.html?searchType=CON&cons=' + n;
   return 'https://t.17track.net/fr#nums=' + n;
