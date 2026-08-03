@@ -4783,26 +4783,35 @@ router.post('/catalogue/import-vf-ids', adminOnly, async (req, res) => {
 async function geocoderClient(client) {
   try {
     const axios = require('axios');
-    // Repli progressif : adresse exacte → CP+ville → ville. Nominatim ne renvoie souvent
-    // RIEN quand la rue/le numéro exact n'est pas dans OSM (petites communes) : on se rabat
-    // alors au niveau de la commune pour au moins positionner le distributeur.
-    const base = { format: 'json', limit: 1, countrycodes: 'fr' };
+    const cp = String(client.cp || '').trim();
+    const ville = String(client.ville || '').trim();
+    // 1) API du gouvernement (geo.api.gouv.fr) : fiable, sans limite de débit, centre de commune.
+    //    Par code postal d'abord (robuste même si la ville est mal orthographiée), puis par nom.
+    if (/^\d{5}$/.test(cp)) {
+      try {
+        const { data } = await axios.get('https://geo.api.gouv.fr/communes', { params: { codePostal: cp, fields: 'centre', format: 'json' }, timeout: 6000 });
+        if (data && data.length && data[0].centre && data[0].centre.coordinates) return { lat: data[0].centre.coordinates[1], lng: data[0].centre.coordinates[0] };
+      } catch (_) {}
+    }
+    if (ville) {
+      try {
+        const { data } = await axios.get('https://geo.api.gouv.fr/communes', { params: { nom: ville, fields: 'centre', boost: 'population', limit: 1 }, timeout: 6000 });
+        if (data && data.length && data[0].centre && data[0].centre.coordinates) return { lat: data[0].centre.coordinates[1], lng: data[0].centre.coordinates[0] };
+      } catch (_) {}
+    }
+    // 2) Repli Nominatim (adresse précise, ou pays étranger) — dernier recours.
     const headers = { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' };
     const tentatives = [];
-    if (client.adresse && client.ville) tentatives.push({ q: [client.adresse, client.cp, client.ville].filter(Boolean).join(', ') + ', France' });
-    const cpVille = [client.cp, client.ville].filter(Boolean).join(' ').trim();
-    if (cpVille) tentatives.push({ q: cpVille + ', France' });
-    if (client.ville) tentatives.push({ q: client.ville + ', France' });
-    // Ultime repli : code postal seul (très robuste en France, résout même si la ville est mal orthographiée)
-    if (client.cp && /^\d{5}$/.test(String(client.cp).trim())) tentatives.push({ postalcode: String(client.cp).trim() });
-    for (const t of tentatives) {
+    if (client.adresse && ville) tentatives.push([client.adresse, cp, ville].filter(Boolean).join(', ') + ', France');
+    if (ville) tentatives.push(ville + ', France');
+    for (const q of tentatives) {
       try {
         const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
-          params: { ...base, ...t }, headers, timeout: 6000
+          params: { q, format: 'json', limit: 1, countrycodes: 'fr' }, headers, timeout: 5000
         });
         if (data && data.length) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-      } catch (_) { /* tente le repli suivant */ }
-      await new Promise(r => setTimeout(r, 350)); // débit Nominatim entre tentatives
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 300));
     }
     return null;
   } catch(_) { return null; }
