@@ -5629,7 +5629,7 @@ function popupCarte(p) {
       (p.cp || p.ville ? '<strong>' + _esc((p.cp||'') + ' ' + (p.ville||'')) + '</strong><br>' : '') +
       (p.pays && p.pays !== 'France' ? '<span style="font-weight:600">' + libellePays(p.pays) + '</span><br>' : '') +
       (telTxt ? '<a href="tel:' + telHref + '" style="color:var(--accent);text-decoration:none;font-size:14.5px;font-weight:600"><i class="ti ti-phone" style="font-size:13px"></i> ' + _esc(telTxt) + '</a><br>' : '') +
-      (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:14px;font-weight:600;word-break:break-all"><i class="ti ti-mail" style="font-size:13px"></i> ' + _esc(emailTxt) + '</a>' : '') +
+      (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:12px;font-weight:500;word-break:break-all"><i class="ti ti-mail" style="font-size:12px"></i> ' + _esc(emailTxt) + '</a>' : '') +
     '</div>' +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
       '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:11px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
