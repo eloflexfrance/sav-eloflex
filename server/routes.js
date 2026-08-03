@@ -4786,18 +4786,19 @@ async function geocoderClient(client) {
     // Repli progressif : adresse exacte → CP+ville → ville. Nominatim ne renvoie souvent
     // RIEN quand la rue/le numéro exact n'est pas dans OSM (petites communes) : on se rabat
     // alors au niveau de la commune pour au moins positionner le distributeur.
+    const base = { format: 'json', limit: 1, countrycodes: 'fr' };
+    const headers = { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' };
     const tentatives = [];
-    if (client.adresse && client.ville) tentatives.push([client.adresse, client.cp, client.ville].filter(Boolean).join(', ') + ', France');
+    if (client.adresse && client.ville) tentatives.push({ q: [client.adresse, client.cp, client.ville].filter(Boolean).join(', ') + ', France' });
     const cpVille = [client.cp, client.ville].filter(Boolean).join(' ').trim();
-    if (cpVille) tentatives.push(cpVille + ', France');
-    if (client.ville) tentatives.push(client.ville + ', France');
-    for (const q of tentatives) {
-      if (!q || q === ', France') continue;
+    if (cpVille) tentatives.push({ q: cpVille + ', France' });
+    if (client.ville) tentatives.push({ q: client.ville + ', France' });
+    // Ultime repli : code postal seul (très robuste en France, résout même si la ville est mal orthographiée)
+    if (client.cp && /^\d{5}$/.test(String(client.cp).trim())) tentatives.push({ postalcode: String(client.cp).trim() });
+    for (const t of tentatives) {
       try {
         const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
-          params: { q, format: 'json', limit: 1, countrycodes: 'fr' },
-          headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
-          timeout: 6000
+          params: { ...base, ...t }, headers, timeout: 6000
         });
         if (data && data.length) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
       } catch (_) { /* tente le repli suivant */ }
