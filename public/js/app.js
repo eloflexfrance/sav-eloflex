@@ -5623,14 +5623,14 @@ function popupCarte(p) {
   return '<div style="width:262px;font-size:13px">' +
     '<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + labelReseauTraduit(p.reseau, cfg.label) + '</div>' +
     '<div style="font-weight:700;font-size:15px;margin-bottom:6px;line-height:1.3">' + _esc(p.nom) + '</div>' +
-    (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:13px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:12px"></i> ' + prioLib + '</span></div>' : '') +
     '<div style="font-size:13.5px;line-height:1.65;margin-bottom:10px;color:var(--text)">' +
       ((p.adresse && p.adresse.trim().toLowerCase() !== String(p.nom||'').trim().toLowerCase()) ? _esc(p.adresse) + '<br>' : '') +
-      (p.cp || p.ville ? '<strong>' + _esc((p.cp||'') + ' ' + (p.ville||'')) + '</strong><br>' : '') +
+      (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
       (p.pays && p.pays !== 'France' ? '<span style="font-weight:600">' + libellePays(p.pays) + '</span><br>' : '') +
       (telTxt ? '<a href="tel:' + telHref + '" style="color:var(--accent);text-decoration:none;font-size:14.5px;font-weight:600"><i class="ti ti-phone" style="font-size:13px"></i> ' + _esc(telTxt) + '</a><br>' : '') +
       (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:12px;font-weight:500;word-break:break-all"><i class="ti ti-mail" style="font-size:12px"></i> ' + _esc(emailTxt) + '</a>' : '') +
     '</div>' +
+    (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:13px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:12px"></i> ' + prioLib + '</span></div>' : '') +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
       '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:11px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
       statutTxt +
