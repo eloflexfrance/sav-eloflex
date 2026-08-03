@@ -4872,6 +4872,7 @@ function lienhSuiviInter(transporteur, numero) {
   if (t.indexOf('ups') >= 0) return 'https://www.ups.com/track?loc=fr_FR&tracknum=' + n;
   if (t.indexOf('dhl') >= 0) return 'https://www.dhl.com/fr-fr/home/tracking/tracking-express.html?tracking-id=' + n;
   if (t.indexOf('schenker') >= 0) return 'https://www.dbschenker.com/app/tracking-public/?refNumber=' + n + '&language_region=fr-FR_FR';
+  if (t.indexOf('dsv') >= 0) return 'https://mydsv.com/track-shipment?query=' + n;
   if (t.indexOf('gls') >= 0) return 'https://gls-group.eu/FR/fr/suivi-colis?match=' + n;
   if (t.indexOf('tnt') >= 0) return 'https://www.tnt.com/express/fr_fr/site/outils-expedition/suivi.html?searchType=CON&cons=' + n;
   return 'https://t.17track.net/fr#nums=' + n;
@@ -5084,7 +5085,10 @@ window._esc = _esc; window._fd = _fd;
 // ═══════════════════════════════════════════════════════════════════
 var _carteMap = null;
 var _carteAnnee = new Date().getFullYear();
-var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true, negocies:true };
+var _carteReseaux = { base:true, bastide:true, providom:true, districlub:true, negocies:true, capvital:true, lecarre:true };
+var _carteHorsCarte = false;   // affiche aussi les distributeurs hors carte (décoché par défaut)
+var _carteHorsPoints = [];     // points "hors carte" chargés à la demande
+var _carteHorsMarkers = [];
 // Filtre par année de dernière commande : par défaut, TOUTES les années affichées
 // (pour localiser tous les distributeurs). _carteToutesAnnees=true ignore le filtre.
 var _carteAnneesFiltre = {};
@@ -5171,21 +5175,21 @@ window.labelReseauTraduit = labelReseauTraduit;
 
 function legendeAnnees(){
   var actuelle = new Date().getFullYear();
-  var html = '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
-    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#888;font-weight:700;margin-bottom:6px">' + (t('carte_derniere_commande')||'Dernière commande') + '</div>' +
-    '<label style="display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;font-size:12px;font-weight:600">' +
+  var html = '<div class="card" style="padding:13px;margin-bottom:10px">' +
+    '<div class="section-title"><i class="ti ti-calendar"></i>' + (t('carte_annee')||'Année') + '</div>' +
+    '<label style="display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">' +
       '<input type="checkbox" ' + (_carteToutesAnnees?'checked':'') + ' onchange="basculerToutesAnnees(this.checked)"> ' + (t('carte_toutes_annees')||'Toutes les années') +
     '</label>' +
     '<div id="carte-annees-liste" style="' + (_carteToutesAnnees?'opacity:.4;pointer-events:none':'') + '">';
   for (var y = actuelle; y >= 2019; y--) {
     html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:12px">' +
       '<input type="checkbox" ' + (_carteAnneesFiltre[y]?'checked':'') + ' onchange="basculerAnnee(' + y + ',this.checked)"> ' + y +
-      '<span id="cnt-annee-' + y + '" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
+      '<span id="cnt-annee-' + y + '" style="margin-left:auto;font-size:11px;color:var(--text3)">0</span>' +
       '</label>';
   }
-  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:12px;color:#777">' +
+  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:12px;color:var(--text2)">' +
     '<input type="checkbox" ' + (_carteSansAnnee?'checked':'') + ' onchange="basculerSansAnnee(this.checked)"> ' + (t('carte_sans_commande')||'Sans commande / avant 2019') +
-    '<span id="cnt-annee-sans" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
+    '<span id="cnt-annee-sans" style="margin-left:auto;font-size:11px;color:var(--text3)">0</span>' +
     '</label>';
   html += '</div></div>';
   return html;
@@ -5213,19 +5217,19 @@ window.basculerAnnee = basculerAnnee;
 function legendePriorites(){
   var libelles = { T1:'T1 — Priorité absolue', T2:'T2 — Priorité moyenne', T3:'T3 — Priorité basse' };
   var couleurs = { T1:'#dc2626', T2:'#d97706', T3:'#65a30d' };
-  var html = '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
-    '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:#888;font-weight:700;margin-bottom:6px">' + (t('carte_priorite')||'Priorité') + '</div>';
+  var html = '<div class="card" style="padding:13px;margin-bottom:10px">' +
+    '<div class="section-title"><i class="ti ti-flag"></i>' + (t('carte_priorite')||'Priorité') + '</div>';
   ['T1','T2','T3'].forEach(function(p){
     html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:12px">' +
       '<input type="checkbox" ' + (_cartePriorites[p]?'checked':'') + ' onchange="basculerPriorite(\'' + p + '\',this.checked)">' +
       '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + couleurs[p] + '"></span>' +
       libelles[p] +
-      '<span id="cnt-prio-' + p + '" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
+      '<span id="cnt-prio-' + p + '" style="margin-left:auto;font-size:11px;color:var(--text3)">0</span>' +
       '</label>';
   });
-  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:12px;color:#777">' +
+  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:12px;color:var(--text2)">' +
     '<input type="checkbox" ' + (_cartePrioriteSans?'checked':'') + ' onchange="basculerPrioriteSans(this.checked)"> ' + (t('carte_priorite_sans')||'Sans priorité') +
-    '<span id="cnt-prio-sans" style="margin-left:auto;font-size:11px;color:#999">0</span>' +
+    '<span id="cnt-prio-sans" style="margin-left:auto;font-size:11px;color:var(--text3)">0</span>' +
     '</label>';
   html += '</div>';
   return html;
@@ -5263,33 +5267,40 @@ function renderCarte(ttl, c, a) {
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px">' +
       '<input type="checkbox" ' + (_carteReseaux[k]?'checked':'') + ' onchange="_carteReseaux[\'' + k + '\']=this.checked;afficherMarkers()">' +
       '<span style="width:14px;height:14px;border-radius:50%;background:' + r.color + ';border:2px solid #fff;box-shadow:0 0 0 1px #0002"></span>' +
-      '<span style="flex:1;font-size:13px">' + labelReseauTraduit(k, r.label) + '</span>' +
-      '<span id="cnt-' + k + '" style="font-size:12px;color:#999">0</span>' +
+      '<span style="flex:1;font-size:13px;color:var(--text)">' + labelReseauTraduit(k, r.label) + '</span>' +
+      '<span id="cnt-' + k + '" style="font-size:12px;color:var(--text3)">0</span>' +
       '</label>';
   }).join('');
 
   // Conteneur en position absolue pour garantir une hauteur
-  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:#fff">' +
-    '<div style="width:240px;border-right:0.5px solid #e3e3e0;padding:14px;overflow:auto;flex-shrink:0;background:#fafafa">' +
-      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:10px;font-weight:700">' + (t('carte_reseaux')||'Réseaux') + '</div>' +
-      legende +
+  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
+    '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
+      '<div class="card" style="padding:13px;margin-bottom:10px">' +
+        '<div class="section-title"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</div>' +
+        legende +
+        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
+          '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
+          '<span style="width:13px;height:13px;border-radius:50%;background:#d0d0cc;border:1.5px solid #7a7a7a"></span>' +
+          '<span style="flex:1">' + (t('carte_hors_carte')||'Autres distributeurs (hors carte)') + '</span>' +
+        '</label>' +
+      '</div>' +
       legendeAnnees() +
       legendePriorites() +
-      '<div style="margin-top:16px;padding-top:12px;border-top:0.5px solid #e3e3e0">' +
-        '<label style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em;font-weight:700;display:block;margin-bottom:6px">' + (t('carte_recherche')||'Recherche') + '</label>' +
+      '<div class="card" style="padding:13px">' +
+        '<div class="section-title"><i class="ti ti-search"></i>' + (t('carte_recherche')||'Recherche') + '</div>' +
         '<div style="position:relative;margin-bottom:4px">' +
-          '<input id="carte-search" placeholder="' + (t('carte_nom_distrib')||'Nom de distributeur…') + '" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 26px 6px 9px;font-size:13px">' +
-          '<span onclick="document.getElementById(\'carte-search\').value=\'\';afficherMarkers(true)" title="Effacer" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:#bbb;font-size:13px">✕</span>' +
+          '<input id="carte-search" class="form-input" placeholder="' + (t('carte_nom_distrib')||'Nom de distributeur…') + '" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;padding:6px 26px 6px 9px;font-size:13px">' +
+          '<span onclick="document.getElementById(\'carte-search\').value=\'\';afficherMarkers(true)" title="Effacer" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text3);font-size:13px">✕</span>' +
         '</div>' +
-        '<div id="carte-nom-result" style="font-size:11px;color:#888;margin-bottom:8px;min-height:14px"></div>' +
+        '<div id="carte-nom-result" style="font-size:11px;color:var(--text3);margin-bottom:8px;min-height:14px"></div>' +
         '<div style="display:flex;gap:6px">' +
-          '<input id="carte-geo" placeholder="' + (t('carte_ville_cp')||'Ville ou code postal') + '" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:6px 9px;font-size:13px">' +
-          '<button onclick="rechercheGeo()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-search"></i></button>' +
+          '<input id="carte-geo" class="form-input" placeholder="' + (t('carte_ville_cp')||'Ville ou code postal') + '" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;padding:6px 9px;font-size:13px">' +
+          '<button onclick="rechercheGeo()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-search"></i></button>' +
         '</div>' +
-        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#666;cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid #cfcfca;border-radius:4px;padding:1px 4px;font-size:12px"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
+        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:12px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
+        '<div id="carte-geo-result" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>' +
+        '<div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
       '</div>' +
-      '<div id="carte-geo-result" style="margin-top:10px;font-size:12px;color:#666"></div>' +
-      '<div style="margin-top:14px;font-size:11px;color:#aaa;line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
     '</div>' +
     '<div id="carte-leaflet" style="flex:1;height:100%;background:#dce4ec"></div>' +
     '</div>';
@@ -5585,6 +5596,18 @@ function rechercheNom() {
 }
 window.rechercheNom = rechercheNom;
 
+// Sélecteur de priorité dans le popup carte (modifiable sans passer par la fiche client)
+function prioSelectCarte(p) {
+  var libs = { '':'— Aucune priorité —', T1:'T1 — Priorité absolue', T2:'T2 — Priorité moyenne', T3:'T3 — Priorité basse' };
+  var opts = ['','T1','T2','T3'].map(function(v){
+    return '<option value="' + v + '"' + ((p.priorite||'')===v?' selected':'') + '>' + libs[v] + '</option>';
+  }).join('');
+  return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
+    '<span style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em">Priorité</span>' +
+    '<select onchange="sauverPrioriteCarte(' + p.id + ',this.value)" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer">' + opts + '</select>' +
+    '</div>';
+}
+
 function popupCarte(p) {
   var cfg = RESEAUX_CONFIG[p.reseau] || { label:'?', color:'#888' };
   var statutTxt = p.impayes > 0 ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:99px;font-size:11px">⚠️ ' + p.impayes + ' impayé' + (p.impayes>1?'s':'') + '</span>'
@@ -5598,7 +5621,7 @@ function popupCarte(p) {
       (p.priorite ? ' <span style="font-size:10px;font-weight:700;color:#fff;background:' + ({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'}[p.priorite]||'#888') + ';padding:1px 6px;border-radius:99px;vertical-align:middle">' + p.priorite + '</span>' : '') +
     '</div>' +
     '<div style="color:#666;line-height:1.5;margin-bottom:8px">' +
-      (p.adresse ? _esc(p.adresse) + '<br>' : '') +
+      ((p.adresse && p.adresse.trim().toLowerCase() !== String(p.nom||'').trim().toLowerCase()) ? _esc(p.adresse) + '<br>' : '') +
       (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
       (p.pays && p.pays !== 'France' ? '<span style="font-weight:600">' + libellePays(p.pays) + '</span><br>' : '') +
       (p.tel ? '<i class="ti ti-phone" style="font-size:11px"></i> ' + _esc(p.tel) + '<br>' : '') +
@@ -5617,6 +5640,7 @@ function popupCarte(p) {
     '</div>' +
     (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> Voir la fiche complète →</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
+    prioSelectCarte(p) +
     (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:11px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:11px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
     '<label style="display:block;font-size:11px;color:#888;text-transform:uppercase;margin-bottom:3px"><i class="ti ti-map-2" style="font-size:11px"></i> Zone de chalandise / départements</label>' +
     '<textarea id="carte-zone-' + p.id + '" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard, Bouches-du-Rhône" style="width:100%;border:0.5px solid #cfcfca;border-radius:6px;padding:6px;font-size:12px;resize:vertical;font-family:inherit">' + _esc(p.zone_chalandise||'') + '</textarea>' +
@@ -5749,6 +5773,61 @@ function sauverCouvertureCarte(id) {
   }).catch(function(e){ alert('Erreur : ' + e.message); });
 }
 window.sauverCouvertureCarte = sauverCouvertureCarte;
+
+// Enregistre la priorité depuis le popup carte → met à jour la fiche client (répercussion
+// automatique dans Clients / distributeurs, et inversement au rechargement de la carte).
+function sauverPrioriteCarte(id, prio) {
+  fetch('/api/carte/points/' + id + '/priorite', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priorite: prio || null })
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if (res && res.error) { alert(res.error); return; }
+    var pt = _cartePoints.find(function(x){ return x.id === id; });
+    if (pt) pt.priorite = prio || null;
+    afficherMarkers();
+    if (typeof toast === 'function') toast('Priorité mise à jour', 'ti-flag', 'var(--success)');
+  }).catch(function(e){ alert('Erreur : ' + e.message); });
+}
+window.sauverPrioriteCarte = sauverPrioriteCarte;
+
+// ── Distributeurs "hors carte" (présents dans Clients/distributeurs, pas sur la carte) ──
+function basculerHorsCarte(actif) {
+  _carteHorsCarte = !!actif;
+  if (!actif) { (_carteHorsMarkers || []).forEach(function(m){ if (_carteMap) _carteMap.removeLayer(m); }); _carteHorsMarkers = []; return; }
+  if (_carteHorsPoints.length) { afficherHorsMarkers(); return; }
+  var info = document.getElementById('carte-nom-result');
+  if (info) info.innerHTML = '<span style="color:#666">Chargement des distributeurs hors carte…</span>';
+  fetch('/api/carte/hors-carte').then(function(r){ return r.json(); }).then(function(rows){
+    _carteHorsPoints = Array.isArray(rows) ? rows : [];
+    afficherHorsMarkers();
+    if (info) info.innerHTML = _carteHorsPoints.length
+      ? '<span style="color:#16a34a">' + _carteHorsPoints.length + ' distributeur(s) hors carte affiché(s)</span>'
+      : '<span style="color:#b45309">Aucun distributeur hors carte géocodé pour l\'instant.</span>';
+  }).catch(function(e){ if (info) info.innerHTML = '<span style="color:#dc2626">Erreur : ' + esc(e.message) + '</span>'; });
+}
+window.basculerHorsCarte = basculerHorsCarte;
+
+function afficherHorsMarkers() {
+  (_carteHorsMarkers || []).forEach(function(m){ if (_carteMap) _carteMap.removeLayer(m); });
+  _carteHorsMarkers = [];
+  if (!_carteMap || !_carteHorsCarte) return;
+  _carteHorsPoints.forEach(function(c){
+    if (c.lat == null || c.lng == null) return;
+    var m = L.circleMarker([parseFloat(c.lat), parseFloat(c.lng)], { radius: 6, color: '#7a7a7a', weight: 1.5, fillColor: '#d0d0cc', fillOpacity: 0.85 });
+    m.bindPopup(popupHorsCarte(c), { maxWidth: 260 });
+    m.addTo(_carteMap); _carteHorsMarkers.push(m);
+  });
+}
+function popupHorsCarte(c) {
+  return '<div style="width:230px;font-size:13px">' +
+    '<div style="font-weight:700;font-size:14px;margin-bottom:4px">' + _esc(c.nom) + ' <span style="font-size:10px;color:#888;font-weight:600">(hors carte)</span></div>' +
+    '<div style="color:#666;line-height:1.5;margin-bottom:8px">' +
+      ((c.adresse && c.adresse.trim().toLowerCase() !== String(c.nom||'').trim().toLowerCase()) ? _esc(c.adresse) + '<br>' : '') +
+      ((c.cp || c.ville) ? _esc((c.cp||'') + ' ' + (c.ville||'')) : '') + '</div>' +
+    '<button onclick="ajouterDistributeurCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:6px"><i class="ti ti-map-pin-plus"></i> Ajouter à la carte</button>' +
+    '<button onclick="ouvrirFicheDistrib(' + c.id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer">Voir la fiche →</button>' +
+    '</div>';
+}
+window.afficherHorsMarkers = afficherHorsMarkers;
 
 var _carteRayonCircle = null;
 var _carteGeoCenter = null;

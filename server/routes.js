@@ -5063,6 +5063,93 @@ router.put('/carte/points/:id/zone', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Route: modifier la priorité d'un point depuis la carte → écrit sur la fiche client
+router.put('/carte/points/:id/priorite', requireAuth, async (req, res) => {
+  try {
+    const prio = req.body.priorite || null;
+    if (prio && !['T1', 'T2', 'T3'].includes(prio)) return res.status(400).json({ error: 'Priorité invalide' });
+    const pt = await db.get('SELECT id, client_id, nom FROM distributeurs_carte WHERE id=$1', [req.params.id]);
+    if (!pt) return res.status(404).json({ error: 'Point introuvable' });
+    let clientId = pt.client_id;
+    if (!clientId) {
+      const c = await db.get('SELECT id FROM clients WHERE LOWER(TRIM(nom))=LOWER(TRIM($1))', [pt.nom]);
+      if (c) clientId = c.id;
+    }
+    if (!clientId) return res.status(400).json({ error: 'Point non relié à une fiche client — priorité non enregistrable. Reliez-le d\'abord via « Rattacher ».' });
+    await db.run('UPDATE clients SET priorite=$1, updated_at=NOW() WHERE id=$2', [prio, clientId]);
+    res.json({ ok: true, client_id: clientId, priorite: prio });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Route: distributeurs présents dans Clients/distributeurs mais PAS sur la carte
+// (hors Particulier), qui possèdent des coordonnées. Sert au filtre "hors carte".
+router.get('/carte/hors-carte', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(
+      `SELECT id, nom, ville, cp, adresse, tel, email, lat, lng, priorite, reseau_carte
+         FROM clients
+        WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
+          AND lat IS NOT NULL AND lng IS NOT NULL`
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin: copie l'adresse réelle (fiche client) sur les points de carte reliés à un client.
+// Corrige les points dont l'adresse affichée = le nom. ?dry=1 pour aperçu.
+router.post('/admin/carte-sync-adresses', adminOnly, async (req, res) => {
+  try {
+    const dry = req.query.dry === '1';
+    const pts = await db.all(
+      `SELECT dc.id, dc.nom, dc.adresse AS adr_actuelle, c.adresse AS adr_client, c.cp AS cp_client, c.ville AS ville_client
+         FROM distributeurs_carte dc JOIN clients c ON c.id = dc.client_id
+        WHERE c.adresse IS NOT NULL AND TRIM(c.adresse) <> ''
+          AND LOWER(TRIM(COALESCE(dc.adresse,''))) IS DISTINCT FROM LOWER(TRIM(c.adresse))`
+    );
+    const maj = [];
+    for (const p of pts) {
+      // ne corriger que si l'adresse actuelle est vide ou = au nom, ou différente de la vraie
+      const bogus = !p.adr_actuelle || p.adr_actuelle.trim().toLowerCase() === String(p.nom || '').trim().toLowerCase();
+      const differente = String(p.adr_actuelle || '').trim().toLowerCase() !== String(p.adr_client || '').trim().toLowerCase();
+      if (bogus || differente) {
+        maj.push({ id: p.id, nom: p.nom, avant: p.adr_actuelle, apres: p.adr_client });
+        if (!dry) await db.run('UPDATE distributeurs_carte SET adresse=$1, cp=COALESCE($2,cp), ville=COALESCE($3,ville), updated_at=NOW() WHERE id=$4',
+          [p.adr_client, p.cp_client || null, p.ville_client || null, p.id]);
+      }
+    }
+    res.json({ ok: true, dry, corrigees: maj.length, details: maj.slice(0, 200) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin: géocode par lot les distributeurs hors carte (hors Particulier) sans coordonnées.
+// ?limit=N (défaut 40). À lancer plusieurs fois pour tout couvrir.
+router.post('/admin/geocoder-hors-carte', adminOnly, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 40, 100);
+    const rows = await db.all(
+      `SELECT id, nom, adresse, cp, ville, pays FROM clients
+        WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
+          AND (lat IS NULL OR lng IS NULL) AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')
+        ORDER BY id LIMIT $1`, [limit]);
+    let ok = 0, ko = 0;
+    for (const c of rows) {
+      try {
+        const geo = await geocoderClient(c);
+        if (geo && geo.lat && geo.lng) {
+          await db.run('UPDATE clients SET lat=$1, lng=$2, geocoded_at=NOW() WHERE id=$3', [geo.lat, geo.lng, c.id]);
+          ok++;
+        } else ko++;
+      } catch (_) { ko++; }
+      await new Promise(r => setTimeout(r, 1100)); // respect du débit Nominatim (~1/s)
+    }
+    const reste = await db.get(
+      `SELECT COUNT(*)::int AS n FROM clients
+        WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
+          AND (lat IS NULL OR lng IS NULL) AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')`);
+    res.json({ ok: true, geocodes: ok, echecs: ko, restants: reste ? reste.n : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Route: liste des clients pour rattachement manuel
 router.get('/carte/clients-liste', requireAuth, async (req, res) => {
   try {
