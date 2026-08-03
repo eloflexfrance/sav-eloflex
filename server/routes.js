@@ -4783,15 +4783,27 @@ router.post('/catalogue/import-vf-ids', adminOnly, async (req, res) => {
 async function geocoderClient(client) {
   try {
     const axios = require('axios');
-    const adresse = [client.adresse, client.cp, client.ville, 'France'].filter(Boolean).join(', ');
-    if (!adresse || !client.ville) return null;
-    const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
-      params: { q: adresse, format: 'json', limit: 1, countrycodes: 'fr' },
-      headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
-      timeout: 5000
-    });
-    if (!data || !data.length) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    // Repli progressif : adresse exacte → CP+ville → ville. Nominatim ne renvoie souvent
+    // RIEN quand la rue/le numéro exact n'est pas dans OSM (petites communes) : on se rabat
+    // alors au niveau de la commune pour au moins positionner le distributeur.
+    const tentatives = [];
+    if (client.adresse && client.ville) tentatives.push([client.adresse, client.cp, client.ville].filter(Boolean).join(', ') + ', France');
+    const cpVille = [client.cp, client.ville].filter(Boolean).join(' ').trim();
+    if (cpVille) tentatives.push(cpVille + ', France');
+    if (client.ville) tentatives.push(client.ville + ', France');
+    for (const q of tentatives) {
+      if (!q || q === ', France') continue;
+      try {
+        const { data } = await axios.get('https://nominatim.openstreetmap.org/search', {
+          params: { q, format: 'json', limit: 1, countrycodes: 'fr' },
+          headers: { 'User-Agent': 'EloflexSAV/1.0 (info@eloflex.fr)' },
+          timeout: 6000
+        });
+        if (data && data.length) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      } catch (_) { /* tente le repli suivant */ }
+      await new Promise(r => setTimeout(r, 350)); // débit Nominatim entre tentatives
+    }
+    return null;
   } catch(_) { return null; }
 }
 
@@ -5153,6 +5165,24 @@ router.post('/admin/geocoder-hors-carte', adminOnly, async (req, res) => {
           AND lat IS NULL AND geocoded_at IS NULL
           AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')`);
     res.json({ ok: true, geocodes: ok, echecs: ko, restants: reste ? reste.n : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin: réarme le géocodage (geocoded_at=NULL) des distributeurs hors carte encore sans
+// coordonnées mais qui ont au moins une ville/CP — pour re-tenter avec le repli commune.
+router.post('/admin/reset-geocodage-hors-carte', adminOnly, async (req, res) => {
+  try {
+    const r = await db.run(
+      `UPDATE clients SET geocoded_at=NULL
+        WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
+          AND lat IS NULL AND geocoded_at IS NOT NULL
+          AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')`);
+    const n = await db.get(
+      `SELECT COUNT(*)::int AS n FROM clients
+        WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
+          AND lat IS NULL AND geocoded_at IS NULL
+          AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')`);
+    res.json({ ok: true, a_regeocoder: n ? n.n : null });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
