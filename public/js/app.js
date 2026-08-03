@@ -5176,7 +5176,7 @@ window.labelReseauTraduit = labelReseauTraduit;
 function legendeAnnees(){
   var actuelle = new Date().getFullYear();
   var html = '<div class="card" style="padding:13px;margin-bottom:10px">' +
-    '<div class="section-title"><i class="ti ti-calendar"></i>' + (t('carte_annee')||'Année') + '</div>' +
+    '<div class="section-title"><i class="ti ti-calendar"></i>Année</div>' +
     '<label style="display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">' +
       '<input type="checkbox" ' + (_carteToutesAnnees?'checked':'') + ' onchange="basculerToutesAnnees(this.checked)"> ' + (t('carte_toutes_annees')||'Toutes les années') +
     '</label>' +
@@ -5281,7 +5281,7 @@ function renderCarte(ttl, c, a) {
         '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
           '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
           '<span style="width:13px;height:13px;border-radius:50%;background:#d0d0cc;border:1.5px solid #7a7a7a"></span>' +
-          '<span style="flex:1">' + (t('carte_hors_carte')||'Autres distributeurs (hors carte)') + '</span>' +
+          '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
         '</label>' +
       '</div>' +
       legendeAnnees() +
