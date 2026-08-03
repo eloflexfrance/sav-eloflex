@@ -5126,10 +5126,12 @@ router.post('/admin/carte-sync-adresses', adminOnly, async (req, res) => {
 router.post('/admin/geocoder-hors-carte', adminOnly, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 40, 100);
+    // geocoded_at IS NULL = pas encore tenté (les échecs sont marqués pour ne pas les re-tenter en boucle)
     const rows = await db.all(
       `SELECT id, nom, adresse, cp, ville, pays FROM clients
         WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
-          AND (lat IS NULL OR lng IS NULL) AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')
+          AND lat IS NULL AND geocoded_at IS NULL
+          AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')
         ORDER BY id LIMIT $1`, [limit]);
     let ok = 0, ko = 0;
     for (const c of rows) {
@@ -5138,15 +5140,60 @@ router.post('/admin/geocoder-hors-carte', adminOnly, async (req, res) => {
         if (geo && geo.lat && geo.lng) {
           await db.run('UPDATE clients SET lat=$1, lng=$2, geocoded_at=NOW() WHERE id=$3', [geo.lat, geo.lng, c.id]);
           ok++;
-        } else ko++;
+        } else {
+          await db.run('UPDATE clients SET geocoded_at=NOW() WHERE id=$1', [c.id]); // marque "tenté, échoué"
+          ko++;
+        }
       } catch (_) { ko++; }
       await new Promise(r => setTimeout(r, 1100)); // respect du débit Nominatim (~1/s)
     }
     const reste = await db.get(
       `SELECT COUNT(*)::int AS n FROM clients
         WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
-          AND (lat IS NULL OR lng IS NULL) AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')`);
+          AND lat IS NULL AND geocoded_at IS NULL
+          AND (COALESCE(ville,'')<>'' OR COALESCE(cp,'')<>'')`);
     res.json({ ok: true, geocodes: ok, echecs: ko, restants: reste ? reste.n : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin: enrichit l'adresse des distributeurs hors carte depuis VosFactures (via vf_id),
+// quand l'adresse app est vide ou sans numéro de rue. Réarme le géocodage (geocoded_at=NULL).
+// ?limit=N (défaut 40). À lancer avant le géocodage pour améliorer le taux de réussite.
+router.post('/admin/enrichir-adresses-vf', adminOnly, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) return res.json({ ok: false, reason: 'VosFactures non configuré' });
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      timeout: 8000, params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    const limit = Math.min(parseInt(req.query.limit) || 40, 100);
+    // hors carte, non particulier, vf_id présent, adresse vide ou sans chiffre (donc pas une vraie rue), pas encore enrichie
+    const rows = await db.all(
+      `SELECT id, nom, vf_id, adresse, cp, ville FROM clients
+        WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
+          AND vf_id IS NOT NULL AND lat IS NULL AND geocoded_at IS NULL
+          AND (adresse IS NULL OR TRIM(adresse)='' OR adresse !~ '[0-9]')
+        ORDER BY id LIMIT $1`, [limit]);
+    let maj = 0, sansRue = 0, err = 0;
+    for (const c of rows) {
+      try {
+        const { data } = await vfApi.get('/clients/' + c.vf_id + '.json');
+        const street = String((data && data.street) || '').replace(/\r?\n/g, ' ').trim();
+        if (street && /[0-9]/.test(street)) {
+          await db.run(
+            `UPDATE clients SET adresse=$1, cp=COALESCE(NULLIF($2,''),cp), ville=COALESCE(NULLIF($3,''),ville), geocoded_at=NULL WHERE id=$4`,
+            [street, String((data.post_code || '')).trim(), String((data.city || '')).trim(), c.id]);
+          maj++;
+        } else {
+          // pas d'adresse rue exploitable côté VF : on marque comme tenté pour ne pas boucler
+          await db.run('UPDATE clients SET geocoded_at=COALESCE(geocoded_at, NOW()) WHERE id=$1', [c.id]);
+          sansRue++;
+        }
+      } catch (_) { err++; }
+      await new Promise(r => setTimeout(r, 130));
+    }
+    res.json({ ok: true, enrichis: maj, sans_rue_vf: sansRue, erreurs: err, traites: rows.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
