@@ -5724,6 +5724,8 @@ function popupCarte(p) {
   var prioLib  = {T1:'T1 — Priorité absolue',T2:'T2 — Priorité moyenne',T3:'T3 — Priorité basse'}[p.priorite] || '';
   var telTxt   = p.tel ? String(p.tel).trim() : '';
   var telHref  = telTxt.replace(/[^0-9+]/g, '');
+  var mobTxt   = p.portable ? String(p.portable).trim() : '';
+  var mobHref  = mobTxt.replace(/[^0-9+]/g, '');
   var emailTxt = p.email ? String(p.email).trim() : '';
   return '<div style="width:262px;font-size:13px">' +
     '<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + labelReseauTraduit(p.reseau, cfg.label) + '</div>' +
@@ -5733,6 +5735,7 @@ function popupCarte(p) {
       (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
       (p.pays && p.pays !== 'France' ? '<span style="font-weight:600">' + libellePays(p.pays) + '</span><br>' : '') +
       (telTxt ? '<a href="tel:' + telHref + '" style="color:var(--accent);text-decoration:none;font-size:14.5px;font-weight:600"><i class="ti ti-phone" style="font-size:13px"></i> ' + _esc(telTxt) + '</a><br>' : '') +
+      (mobTxt ? '<a href="tel:' + mobHref + '" style="color:var(--accent);text-decoration:none;font-size:14.5px;font-weight:600"><i class="ti ti-device-mobile" style="font-size:13px"></i> ' + _esc(mobTxt) + '</a><br>' : '') +
       (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:12px;font-weight:500;word-break:break-all"><i class="ti ti-mail" style="font-size:12px"></i> ' + _esc(emailTxt) + '</a>' : '') +
     '</div>' +
     (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:13px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:12px"></i> ' + prioLib + '</span></div>' : '') +
@@ -6193,7 +6196,8 @@ function modalPointCarte(id) {
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Pays</label><select id="pc-pays" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + optionsPays(p ? p.pays : 'France') + '</select></div>' +
         '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Téléphone</label><input id="pc-tel" value="' + (p&&p.tel?_esc(p.tel):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
-        '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
+        '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Portable</label><input id="pc-portable" value="' + (p&&p.portable?_esc(p.portable):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="display:flex;gap:8px">' +
           '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Priorité</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
             ['','T1','T2','T3'].map(function(v){ var lib={'':'— Aucune —',T1:'T1 — absolue',T2:'T2 — moyenne',T3:'T3 — basse'}[v]; return '<option value="'+v+'"'+(p&&(p.priorite||'')===v?' selected':'')+'>'+lib+'</option>'; }).join('') +
@@ -6295,6 +6299,7 @@ function sauverPointCarte(id) {
     cp: document.getElementById('pc-cp').value.trim(),
     ville: document.getElementById('pc-ville').value.trim(),
     tel: document.getElementById('pc-tel').value.trim(),
+    portable: (document.getElementById('pc-portable') || {}).value ? document.getElementById('pc-portable').value.trim() : '',
     email: document.getElementById('pc-email').value.trim(),
     lat: parseFloat(document.getElementById('pc-lat').value),
     lng: parseFloat(document.getElementById('pc-lng').value),

@@ -5293,13 +5293,13 @@ router.get('/carte/reseaux', requireAuth, async (req, res) => {
 // ── CRUD point carte (ajout/modif/suppression manuelle) ──────────
 router.post('/carte/points', requireAuth, async (req, res) => {
   try {
-    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id, pays } = req.body;
+    const { reseau, nom, adresse, cp, ville, tel, portable, email, lat, lng, client_id, pays } = req.body;
     if (!reseau || !nom || lat == null || lng == null)
       return res.status(400).json({ error: 'reseau, nom, lat, lng requis' });
     const row = await db.get(
-      `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id, pays)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [reseau, nom, adresse||null, cp||null, ville||null, tel||null, email||null,
+      `INSERT INTO distributeurs_carte (reseau, nom, adresse, cp, ville, tel, portable, email, lat, lng, client_id, pays)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [reseau, nom, adresse||null, cp||null, ville||null, tel||null, portable||null, email||null,
        parseFloat(lat), parseFloat(lng), client_id || null, pays || 'France']
     );
     res.json({ ok: true, point: row });
@@ -5308,16 +5308,16 @@ router.post('/carte/points', requireAuth, async (req, res) => {
 
 router.put('/carte/points/:id', requireAuth, async (req, res) => {
   try {
-    const { reseau, nom, adresse, cp, ville, tel, email, lat, lng, client_id, pays } = req.body;
+    const { reseau, nom, adresse, cp, ville, tel, portable, email, lat, lng, client_id, pays } = req.body;
     const row = await db.get(
       `UPDATE distributeurs_carte SET
         reseau=COALESCE($1,reseau), nom=COALESCE($2,nom), adresse=$3, cp=$4, ville=$5,
         tel=$6, email=$7, lat=COALESCE($8,lat), lng=COALESCE($9,lng),
-        client_id=$10, pays=COALESCE($11,pays), updated_at=NOW()
+        client_id=$10, pays=COALESCE($11,pays), portable=$13, updated_at=NOW()
        WHERE id=$12 RETURNING *`,
       [reseau||null, nom||null, adresse||null, cp||null, ville||null, tel||null, email||null,
        lat!=null?parseFloat(lat):null, lng!=null?parseFloat(lng):null,
-       client_id ? parseInt(client_id) : null, pays||null, req.params.id]
+       client_id ? parseInt(client_id) : null, pays||null, req.params.id, portable||null]
     );
     if (!row) return res.status(404).json({ error: 'Point introuvable' });
     res.json({ ok: true, point: row });
