@@ -5476,6 +5476,10 @@ function chargerPoints() {
         _carteMap.addLayer(_carteClusterGroup);
       }
       afficherMarkers();
+      // Si le filtre "hors carte" est actif, on redessine ses points (données fraîches) sur la
+      // nouvelle carte — sinon la case reste cochée mais les points disparaissent au rechargement.
+      _carteHorsMarkers = [];
+      if (_carteHorsCarte) { _carteHorsPoints = []; basculerHorsCarte(true); }
       // Le conteneur n'a pas toujours sa taille finale à l'init : recadrer après stabilisation
       // (cadrerAuto respecte un distributeur ciblé au lieu de forcer la France)
       setTimeout(cadrerAuto, 100);
