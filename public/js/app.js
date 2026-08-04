@@ -5099,6 +5099,8 @@ var _cartePriorites = { T1:true, T2:true, T3:true };
 var _cartePrioriteSans = true; // affiche les points sans priorité assignée
 (function(){ _carteAnneesFiltre[new Date().getFullYear()] = true; })();
 var _carteMarkers = [];
+var _carteClusterGroup = null; // groupe de clustering (leaflet.markercluster) si dispo
+var _carteDeptFiltre = '';     // filtre "département couvert" (code normalisé, ex "84", "2A")
 var _cartePoints = [];
 // Point actuellement ciblé (via « Voir sur la carte ») : les recadrages auto
 // (après chargement / resize) doivent le respecter au lieu de revenir sur la France.
@@ -5259,6 +5261,8 @@ function renderCarte(ttl, c, a) {
     '<button onclick="cadrerFrance()" title="Recentrer sur la France" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-focus-centered"></i> Recentrer</button>' +
     (typeof isAdmin==='function' && isAdmin() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-plus"></i> Ajouter</button>' : '') +
     (typeof isAdmin==='function' && isAdmin() ? '<button onclick="ouvrirRattachements()" title="Relier les points aux fiches clients" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-link"></i> Rattacher</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="lancerGeocodageCarte()" title="Positionner les distributeurs dont l\'adresse a été complétée" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-pin-search"></i> Géocoder</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="controleVillesCarte()" title="Repérer les villes ne correspondant pas au code postal" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-check"></i> Contrôle villes</button>' : '') +
     (typeof isAdmin==='function' && isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
 
@@ -5298,6 +5302,14 @@ function renderCarte(ttl, c, a) {
           '<button onclick="rechercheGeo()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-search"></i></button>' +
         '</div>' +
         '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:12px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
+        '<div style="margin-top:10px;padding-top:8px;border-top:0.5px solid var(--border)">' +
+          '<label style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.03em;font-weight:600;display:block;margin-bottom:4px"><i class="ti ti-map-2" style="font-size:11px"></i> Département couvert</label>' +
+          '<div style="display:flex;gap:6px">' +
+            '<input id="carte-dept" class="form-input" placeholder="ex : 84" value="' + esc(_carteDeptFiltre||'') + '" oninput="setDeptFiltre(this.value)" style="flex:1;padding:6px 9px;font-size:13px">' +
+            '<button onclick="setDeptFiltre(\'\');var d=document.getElementById(\'carte-dept\');if(d)d.value=\'\'" title="Effacer" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer">✕</button>' +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--text3);margin-top:3px">Filtre les distributeurs qui couvrent ce département (zone de chalandise).</div>' +
+        '</div>' +
         '<div id="carte-geo-result" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>' +
         '<div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
       '</div>' +
@@ -5360,7 +5372,7 @@ function voirDistributeurSurCarte(clientId, nom){
         var ll = mk.getLatLng();
         return Math.abs(ll.lat - parseFloat(pt.lat)) < 1e-6 && Math.abs(ll.lng - parseFloat(pt.lng)) < 1e-6;
       });
-      if (m) m.openPopup();
+      if (m) ouvrirPopupMarkerCarte(m);
       if (info) info.innerHTML = '<span style="color:#16a34a">' + esc(nom || pt.nom) + ' — centré sur la carte</span>';
     } else {
       // Pas de point pour ce distributeur : proposer de l'ajouter directement
@@ -5452,12 +5464,17 @@ function chargerPoints() {
       if (!container) return;
       if (_carteMap) { _carteMap.remove(); _carteMap = null; }
       // Les calques de la carte précédente n'existent plus
-      _carteRayonCircle = null; _carteGeoMarker = null; _carteMarkers = [];
+      _carteRayonCircle = null; _carteGeoMarker = null; _carteMarkers = []; _carteClusterGroup = null;
       _carteMap = L.map('carte-leaflet', { preferCanvas: false });
       _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap', maxZoom: 19
       }).addTo(_carteMap);
+      // Regroupement des points en pastilles chiffrées (leaflet.markercluster) si disponible
+      if (typeof L.markerClusterGroup === 'function') {
+        _carteClusterGroup = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 48, showCoverageOnHover: false, spiderfyOnMaxZoom: true });
+        _carteMap.addLayer(_carteClusterGroup);
+      }
       afficherMarkers();
       // Le conteneur n'a pas toujours sa taille finale à l'init : recadrer après stabilisation
       // (cadrerAuto respecte un distributeur ciblé au lieu de forcer la France)
@@ -5541,6 +5558,15 @@ function majCompteursCarte(){
 }
 window.majCompteursCarte = majCompteursCarte;
 
+// Ouvre le popup d'un marqueur, en dézoomant le cluster qui le contient si nécessaire
+function ouvrirPopupMarkerCarte(m) {
+  if (!m) return;
+  if (_carteClusterGroup && typeof _carteClusterGroup.zoomToShowLayer === 'function') {
+    _carteClusterGroup.zoomToShowLayer(m, function(){ m.openPopup(); });
+  } else { m.openPopup(); }
+}
+window.ouvrirPopupMarkerCarte = ouvrirPopupMarkerCarte;
+
 function afficherMarkers(recadrer) {
   if (!_carteMap) return;
   majCompteursCarte();
@@ -5548,7 +5574,8 @@ function afficherMarkers(recadrer) {
   q = q.trim().toLowerCase();
 
   // Retirer les anciens
-  _carteMarkers.forEach(function(m){ _carteMap.removeLayer(m); });
+  if (_carteClusterGroup) _carteClusterGroup.clearLayers();
+  else _carteMarkers.forEach(function(m){ _carteMap.removeLayer(m); });
   _carteMarkers = [];
 
   var bounds = [];
@@ -5573,11 +5600,13 @@ function afficherMarkers(recadrer) {
       if (!_cartePrioriteSans) return;
     }
     if (q && (p.nom + ' ' + (p.ville||'') + ' ' + (p.description||'') + ' ' + (p.zone_chalandise||'')).toLowerCase().indexOf(q) < 0) return;
+    // Filtre strict "département couvert" (zone de chalandise uniquement)
+    if (_carteDeptFiltre) { var deps = parseDepartements(p.zone_chalandise); if (deps.indexOf(_carteDeptFiltre) < 0) return; }
     var marker = L.marker([parseFloat(p.lat), parseFloat(p.lng)], { icon: pinIconCarte(p.reseau, p) });
     marker.bindPopup(function(){ return popupCarte(p); }, { maxWidth: 280 });
     marker.on('popupopen', function(e){ wirePopupCarte(e, p); });
     marker.on('popupclose', function(){ effacerCouverture(); });
-    marker.addTo(_carteMap);
+    if (_carteClusterGroup) _carteClusterGroup.addLayer(marker); else marker.addTo(_carteMap);
     _carteMarkers.push(marker);
     bounds.push([parseFloat(p.lat), parseFloat(p.lng)]);
   });
@@ -5592,7 +5621,7 @@ function afficherMarkers(recadrer) {
   } else if (bounds.length === 1) {
     // Un seul résultat : on zoome dessus et on ouvre sa fiche
     _carteMap.setView(bounds[0], 13, { animate: true });
-    if (_carteMarkers[0]) _carteMarkers[0].openPopup();
+    if (_carteMarkers[0]) ouvrirPopupMarkerCarte(_carteMarkers[0]);
     if (info) info.innerHTML = '<span style="color:#16a34a">1 distributeur trouvé</span>';
   } else if (bounds.length > 1) {
     // Plusieurs résultats : on cadre sur l'ensemble
@@ -5839,6 +5868,96 @@ function popupHorsCarte(c) {
 }
 window.afficherHorsMarkers = afficherHorsMarkers;
 
+// ── Filtre strict "département couvert" ──
+function setDeptFiltre(v) {
+  var s = String(v || '').toUpperCase().replace(/[^0-9AB]/g, '');
+  if (/^\d$/.test(s)) s = '0' + s;            // "5" -> "05"
+  _carteDeptFiltre = s;
+  afficherMarkers(true);
+}
+window.setDeptFiltre = setDeptFiltre;
+
+// ── Bouton "Géocoder" : enrichissement VosFactures + positionnement des adresses manquantes ──
+async function lancerGeocodageCarte() {
+  if (!confirm('Positionner les distributeurs dont l\'adresse est renseignée ?\n\nÉtapes : complément d\'adresse depuis VosFactures, puis géocodage par code postal. Cela peut prendre quelques minutes.')) return;
+  var info = document.getElementById('carte-nom-result');
+  var setInfo = function(t, col) { if (info) info.innerHTML = '<span style="color:' + (col || '#666') + '">' + t + '</span>'; };
+  try {
+    setInfo('Complément des adresses depuis VosFactures…');
+    for (var i = 0; i < 12; i++) { var e = await fetch('/api/admin/enrichir-adresses-vf?limit=80', { method: 'POST' }).then(function(r){ return r.json(); }); if (!e || (e.traites || 0) < 80) break; }
+    var tot = 0;
+    for (var j = 0; j < 60; j++) {
+      var r = await fetch('/api/admin/geocoder-hors-carte?limit=15', { method: 'POST' }).then(function(r){ return r.json(); });
+      tot += (r.geocodes || 0);
+      setInfo('Géocodage en cours… ' + tot + ' positionné(s), ' + (r.restants || 0) + ' restant(s)');
+      if (!r.restants || r.restants <= 0) break;
+    }
+    setInfo('Terminé : ' + tot + ' distributeur(s) positionné(s).', '#16a34a');
+    _carteHorsPoints = [];
+    if (_carteHorsCarte) basculerHorsCarte(true); // recharge les points hors carte affichés
+    if (typeof toast === 'function') toast('Géocodage terminé (' + tot + ')', 'ti-map-pin', 'var(--success)');
+  } catch (e) { setInfo('Erreur : ' + esc(e.message), '#dc2626'); }
+}
+window.lancerGeocodageCarte = lancerGeocodageCarte;
+
+// ── Contrôle "ville ↔ code postal" : repère les villes ne correspondant pas au CP officiel ──
+async function controleVillesCarte() {
+  var info = document.getElementById('carte-nom-result');
+  var setInfo = function(t, col) { if (info) info.innerHTML = '<span style="color:' + (col || '#666') + '">' + t + '</span>'; };
+  try {
+    setInfo('Contrôle des villes en cours…');
+    var norm = function(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\bSAINT\b/g,'ST').trim(); };
+    var cls = await fetch('/api/clients').then(function(r){ return r.json(); });
+    var arr = Array.isArray(cls) ? cls : (cls.rows || []);
+    var fiches = arr.filter(function(c){ return c.type !== 'Particulier' && c.ville && String(c.ville).trim() && /^\d{5}$/.test(String(c.cp||'').trim()); });
+    var cps = Object.keys(fiches.reduce(function(a,c){ a[String(c.cp).trim()]=1; return a; }, {}));
+    var cache = {};
+    for (var i = 0; i < cps.length; i++) {
+      try { var j = await fetch('https://geo.api.gouv.fr/communes?codePostal=' + cps[i] + '&fields=nom&format=json').then(function(r){ return r.json(); }); cache[cps[i]] = (j||[]).map(function(x){ return { brut:x.nom, n:norm(x.nom) }; }); }
+      catch(e) { cache[cps[i]] = null; }
+      if (i % 15 === 0) setInfo('Contrôle des villes… ' + i + '/' + cps.length);
+    }
+    var mism = [];
+    fiches.forEach(function(c){
+      var off = cache[String(c.cp).trim()]; if (!off || !off.length) return;
+      var v = norm(c.ville);
+      var ok = off.some(function(o){ return o.n === v || o.n.indexOf(v) >= 0 || v.indexOf(o.n) >= 0; });
+      if (!ok) mism.push({ id: c.id, nom: c.nom, ville: c.ville, cp: c.cp, suggestion: off[0].brut, autres: off.map(function(o){ return o.brut; }).join(', ') });
+    });
+    setInfo(mism.length + ' incohérence(s) trouvée(s).', mism.length ? '#d97706' : '#16a34a');
+    afficherModalControleVilles(mism);
+  } catch (e) { setInfo('Erreur : ' + esc(e.message), '#dc2626'); }
+}
+window.controleVillesCarte = controleVillesCarte;
+
+function afficherModalControleVilles(mism) {
+  var lignes = mism.length ? mism.map(function(m){
+    return '<tr style="border-bottom:0.5px solid var(--border)">' +
+      '<td style="padding:6px 8px">' + esc(m.nom) + '</td>' +
+      '<td style="padding:6px 8px;color:#dc2626">' + esc(m.ville) + '</td>' +
+      '<td style="padding:6px 8px;text-align:center">' + esc(m.cp) + '</td>' +
+      '<td style="padding:6px 8px;color:#16a34a">' + esc(m.suggestion) + '</td>' +
+      '<td style="padding:6px 8px;text-align:right"><button onclick="corrigerVilleCarte(' + m.id + ',\'' + String(m.suggestion).replace(/'/g,'&#39;') + '\',this)" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">Corriger</button></td>' +
+    '</tr>';
+  }).join('') : '<tr><td colspan="5" style="padding:14px;text-align:center;color:var(--text3)">Aucune incohérence détectée 🎉</td></tr>';
+  var html = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">' +
+    '<div style="background:var(--surface);border-radius:12px;padding:20px;width:760px;max-width:94vw;max-height:86vh;overflow:auto" onclick="event.stopPropagation()">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><h3 style="margin:0;font-size:16px">Contrôle ville ↔ code postal — ' + mism.length + ' à vérifier</h3><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer"><i class="ti ti-x"></i></button></div>' +
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">La ville de la fiche ne correspond pas à la commune officielle du code postal. « Corriger » remplace la ville par la commune officielle proposée.</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg)"><th style="padding:6px 8px;text-align:left">Distributeur</th><th style="padding:6px 8px;text-align:left">Ville (fiche)</th><th style="padding:6px 8px">CP</th><th style="padding:6px 8px;text-align:left">Commune officielle</th><th></th></tr></thead><tbody>' + lignes + '</tbody></table>' +
+    '</div></div>';
+  var div = document.createElement('div'); div.innerHTML = html; document.body.appendChild(div.firstChild);
+}
+function corrigerVilleCarte(id, ville, btn) {
+  fetch('/api/clients/' + id + '/ville', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ville: ville }) })
+    .then(function(r){ return r.json(); }).then(function(res){
+      if (res && res.error) { alert(res.error); return; }
+      if (btn) { btn.textContent = '✓ Corrigé'; btn.disabled = true; btn.style.background = '#9ca3af'; }
+      if (typeof toast === 'function') toast('Ville corrigée', 'ti-check', 'var(--success)');
+    }).catch(function(e){ alert('Erreur : ' + e.message); });
+}
+window.corrigerVilleCarte = corrigerVilleCarte;
+
 var _carteRayonCircle = null;
 var _carteGeoCenter = null;
 var _carteGeoMarker = null;
@@ -5985,7 +6104,7 @@ function zoomSurPoint(id) {
     var ll = m.getLatLng();
     return Math.abs(ll.lat - parseFloat(p.lat)) < 0.0001 && Math.abs(ll.lng - parseFloat(p.lng)) < 0.0001;
   });
-  if (marker) marker.openPopup();
+  if (marker) ouvrirPopupMarkerCarte(marker);
 }
 window.zoomSurPoint = zoomSurPoint;
 

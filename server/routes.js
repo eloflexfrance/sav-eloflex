@@ -5237,6 +5237,16 @@ router.post('/admin/enrichir-adresses-vf', adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Corrige la ville d'un client (contrôle ville ↔ code postal depuis la carte)
+router.put('/clients/:id/ville', requireAuth, async (req, res) => {
+  try {
+    const ville = String(req.body.ville || '').trim();
+    if (!ville) return res.status(400).json({ error: 'Ville requise' });
+    await db.run('UPDATE clients SET ville=$1, updated_at=NOW() WHERE id=$2', [ville, req.params.id]);
+    res.json({ ok: true, ville });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Route: liste des clients pour rattachement manuel
 router.get('/carte/clients-liste', requireAuth, async (req, res) => {
   try {
