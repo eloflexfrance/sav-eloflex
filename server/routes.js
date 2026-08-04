@@ -5237,6 +5237,17 @@ router.post('/admin/enrichir-adresses-vf', adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Bascule une liste de clients en "Particulier" (allège la liste des distributeurs hors carte)
+router.post('/admin/passer-particulier', adminOnly, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body.ids) ? req.body.ids.map(function(x){ return parseInt(x); }).filter(function(x){ return Number.isInteger(x); }) : [];
+    if (!ids.length) return res.status(400).json({ error: 'Aucun id fourni' });
+    const r = await db.run(
+      `UPDATE clients SET type='Particulier', sur_carte=false, updated_at=NOW() WHERE id = ANY($1::int[])`, [ids]);
+    res.json({ ok: true, demandes: ids.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Corrige la ville d'un client (contrôle ville ↔ code postal depuis la carte)
 router.put('/clients/:id/ville', requireAuth, async (req, res) => {
   try {

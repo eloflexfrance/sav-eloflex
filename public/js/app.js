@@ -6126,8 +6126,12 @@ function modalPointCarte(id) {
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Réseau</label><select id="pc-reseau" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + reseauOpts + '</select></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Nom du distributeur *</label><input id="pc-nom" value="' + (p?_esc(p.nom):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Client rattaché <span style="color:#999">(recommandé)</span></label>' +
-          '<select id="pc-client" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"><option value="">— Rattachement par nom —</option></select>' +
-          '<div style="font-size:11px;color:#999;margin-top:3px">Lier au client garantit que ses ventes s\'affichent, même si l\'orthographe diffère.</div></div>' +
+          '<div style="position:relative">' +
+            '<input id="pc-client-search" autocomplete="off" placeholder="Taper le nom du client…" oninput="pcClientInput(this.value)" onfocus="searchPcClient(this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'pc-client-drop\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
+            '<input type="hidden" id="pc-client" value="' + (p&&p.client_id?p.client_id:'') + '">' +
+            '<div id="pc-client-drop" class="piece-dropdown" style="display:none"></div>' +
+          '</div>' +
+          '<div style="font-size:11px;color:#999;margin-top:3px">Lier au client garantit que ses ventes s\'affichent, même si l\'orthographe diffère. Laisser vide = rattachement par nom.</div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Adresse</label><input id="pc-adresse" value="' + (p&&p.adresse?_esc(p.adresse):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="display:flex;gap:8px"><div style="width:110px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Code postal</label><input id="pc-cp" value="' + (p&&p.cp?_esc(p.cp):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
@@ -6163,23 +6167,46 @@ function modalPointCarte(id) {
   document.body.appendChild(div);
   if (_carteMap) _carteMap.closePopup();
 
-  // Remplir la liste des clients
+  // Charger la liste des clients pour l'autocomplétion + pré-remplir si déjà rattaché
   fetch('/api/carte/clients-liste')
     .then(function(r){ return r.json(); })
     .then(function(clients){
-      var sel = document.getElementById('pc-client');
-      if (!sel || !Array.isArray(clients)) return;
-      clients.forEach(function(cl){
-        var o = document.createElement('option');
-        o.value = cl.id;
-        o.textContent = cl.nom + (cl.ville ? ' — ' + cl.ville : '');
-        if (p && p.client_id === cl.id) o.selected = true;
-        sel.appendChild(o);
-      });
+      window._PC_CLIENTS = Array.isArray(clients) ? clients : [];
+      if (p && p.client_id) {
+        var cur = window._PC_CLIENTS.find(function(c){ return c.id === p.client_id; });
+        var inp = document.getElementById('pc-client-search');
+        if (cur && inp) inp.value = cur.nom + (cur.ville ? ' — ' + cur.ville : '');
+      }
     })
     .catch(function(){});
 }
 window.modalPointCarte = modalPointCarte;
+
+// Autocomplétion du client rattaché dans la modale "Modifier" de la carte
+function pcClientInput(v) {
+  var hid = document.getElementById('pc-client'); if (hid) hid.value = ''; // saisie manuelle annule la sélection
+  searchPcClient(v);
+}
+function searchPcClient(q) {
+  var drop = document.getElementById('pc-client-drop'); if (!drop) return;
+  var src = window._PC_CLIENTS || [];
+  var query = (q || '').toLowerCase().trim();
+  var res = (query ? src.filter(function(c){ return (c.nom && c.nom.toLowerCase().indexOf(query) >= 0) || (c.ville && c.ville.toLowerCase().indexOf(query) >= 0); }) : src).slice(0, 25);
+  if (!res.length) { drop.style.display = 'none'; return; }
+  drop.innerHTML = res.map(function(c){
+    return '<div class="piece-option" onmousedown="event.preventDefault();selectPcClient(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')">' +
+      '<div style="font-size:12px;font-weight:600">' + esc(c.nom) + '</div>' +
+      (c.ville ? '<div style="font-size:11px;color:var(--text3)">' + esc(c.ville) + '</div>' : '') + '</div>';
+  }).join('');
+  drop.style.display = 'block';
+}
+function selectPcClient(id, nom) {
+  var inp = document.getElementById('pc-client-search'), hid = document.getElementById('pc-client');
+  if (inp) inp.value = nom;
+  if (hid) hid.value = id;
+  var drop = document.getElementById('pc-client-drop'); if (drop) drop.style.display = 'none';
+}
+window.pcClientInput = pcClientInput; window.searchPcClient = searchPcClient; window.selectPcClient = selectPcClient;
 
 function fermerModalPoint() {
   var m = document.getElementById('modal-point-carte');
