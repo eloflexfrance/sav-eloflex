@@ -5562,12 +5562,12 @@ window.chargerPoints = chargerPoints;
 
 function pinIconCarte(reseau, point) {
   var cfg = RESEAUX_CONFIG[reseau] || { color:'#888', letter:'?' };
-  // Image spécifique par groupe (marqueur = l'image, ancrée par la pointe en bas)
+  // Image spécifique par groupe (marqueur = l'image ronde, ancrée en son centre)
   if (cfg.img) {
-    var noteI = point.note_interne ? '<div style="position:absolute;top:0;right:0;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
+    var noteI = point.note_interne ? '<div style="position:absolute;top:-1px;right:-1px;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
     var htmlI = '<div style="position:relative;width:34px;height:34px">' +
       '<img src="' + cfg.img + '" width="34" height="34" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">' + noteI + '</div>';
-    return L.divIcon({ html: htmlI, className: '', iconSize: [34,34], iconAnchor: [17,34], popupAnchor: [0,-32] });
+    return L.divIcon({ html: htmlI, className: '', iconSize: [34,34], iconAnchor: [17,17], popupAnchor: [0,-18] });
   }
   // Anneau de statut selon commandes
   var ring = point.impayes > 0 ? '#ef4444' : point.en_cours > 0 ? '#f97316' : point.nb_commandes > 0 ? '#22c55e' : '#cbd5e1';
