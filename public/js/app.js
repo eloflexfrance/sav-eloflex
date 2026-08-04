@@ -4617,6 +4617,7 @@ window.supprimerCommandeSuede = supprimerCommandeSuede;
 // ═══════════════════════════════════════════════════════════════════
 var _ratDonnees = null;
 var _ratChoix = {};      // id du point -> id du client retenu (ou null)
+var _ratChoixNom = {};   // id du point -> nom du client choisi manuellement (affichage)
 
 function ouvrirRattachements() {
   var div = document.createElement('div');
@@ -4639,9 +4640,41 @@ function ouvrirRattachements() {
     '</div>';
   document.body.appendChild(div);
   _ratChoix = {};
+  _ratChoixNom = {};
+  // Liste des clients pour la recherche manuelle (« Autre fiche… »)
+  fetch('/api/carte/clients-liste').then(function(r){ return r.json(); }).then(function(c){ window._RAT_CLIENTS = Array.isArray(c) ? c : []; }).catch(function(){});
   chargerRattachements();
 }
 window.ouvrirRattachements = ouvrirRattachements;
+
+// Recherche manuelle d'une fiche client pour un point (écran Rattacher)
+function ratSearch(pid, q) {
+  var drop = document.getElementById('rat-drop-' + pid); if (!drop) return;
+  var src = window._RAT_CLIENTS || [];
+  var query = (q || '').toLowerCase().trim();
+  if (!query) { drop.style.display = 'none'; return; }
+  var res = src.filter(function(c){ return (c.nom && c.nom.toLowerCase().indexOf(query) >= 0) || (c.ville && c.ville.toLowerCase().indexOf(query) >= 0); }).slice(0, 20);
+  if (!res.length) { drop.style.display = 'none'; return; }
+  drop.innerHTML = res.map(function(c){
+    return '<div class="piece-option" onmousedown="event.preventDefault();ratSelect(' + pid + ',' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')">' +
+      '<div style="font-size:12px;font-weight:600">' + _esc(c.nom) + '</div>' +
+      (c.ville ? '<div style="font-size:11px;color:var(--text3)">' + _esc(c.ville) + '</div>' : '') + '</div>';
+  }).join('');
+  drop.style.display = 'block';
+}
+window.ratSearch = ratSearch;
+function ratSelect(pid, clientId, nom) {
+  _ratChoix[pid] = clientId;
+  _ratChoixNom[pid] = nom;
+  var drop = document.getElementById('rat-drop-' + pid); if (drop) drop.style.display = 'none';
+  var inp = document.getElementById('rat-search-' + pid); if (inp) inp.value = '';
+  var disp = document.getElementById('rat-choix-' + pid); if (disp) disp.innerHTML = '<i class="ti ti-check"></i> Rattaché à : <strong>' + _esc(nom) + '</strong>';
+  // Décocher les radios de suggestion de ce point (le choix manuel prime)
+  var radios = document.querySelectorAll('input[name="rat-' + pid + '"]');
+  radios.forEach(function(r){ r.checked = false; });
+  majCompteurRat();
+}
+window.ratSelect = ratSelect;
 
 function fermerRattachements() {
   var m = document.getElementById('modal-rattachements');
@@ -4713,6 +4746,11 @@ function dessinerRattachements() {
             ' onchange="choisirRattachement(' + p.id + ',null)">' +
           '<span style="font-size:12px;color:var(--text3)">Aucune de ces fiches</span>' +
         '</label>' +
+        '<div style="position:relative;margin-top:4px;padding-top:6px;border-top:0.5px dashed var(--border)">' +
+          '<input id="rat-search-' + p.id + '" placeholder="🔎 Chercher une autre fiche…" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;background:var(--surface)">' +
+          '<div id="rat-drop-' + p.id + '" class="piece-dropdown" style="display:none"></div>' +
+          '<div id="rat-choix-' + p.id + '" style="font-size:11px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> Rattaché à : <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
+        '</div>' +
       '</div>';
     }).join('');
   }
@@ -4721,12 +4759,21 @@ function dessinerRattachements() {
     html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin:18px 0 8px">' +
             'Sans correspondance (' + sansRien.length + ')</div>' +
             '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Ces points n\u2019ont pas d\u2019équivalent parmi les fiches clients. Leurs ventes restent rapprochées par le nom.</div>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
             sansRien.map(function(p){
               var cfg = RESEAUX_CONFIG[p.reseau] || { color: '#888' };
-              return '<span style="font-size:12px;border:0.5px solid var(--border);border-radius:99px;padding:3px 10px;display:inline-flex;align-items:center;gap:6px">' +
-                '<span style="width:8px;height:8px;border-radius:50%;background:' + cfg.color + '"></span>' + _esc(p.nom) + '</span>';
-            }).join('') + '</div>';
+              return '<div style="border:0.5px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">' +
+                '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+                  '<span style="width:11px;height:11px;border-radius:50%;background:' + cfg.color + ';flex-shrink:0"></span>' +
+                  '<strong style="font-size:13px">' + _esc(p.nom) + '</strong>' +
+                  '<span style="font-size:11px;color:var(--text3)">' + _esc([p.cp, p.ville].filter(Boolean).join(' ')) + '</span>' +
+                '</div>' +
+                '<div style="position:relative">' +
+                  '<input id="rat-search-' + p.id + '" placeholder="🔎 Chercher une fiche à relier…" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;background:var(--surface)">' +
+                  '<div id="rat-drop-' + p.id + '" class="piece-dropdown" style="display:none"></div>' +
+                  '<div id="rat-choix-' + p.id + '" style="font-size:11px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> Rattaché à : <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
+                '</div>' +
+              '</div>';
+            }).join('');
   }
 
   l.innerHTML = html;
