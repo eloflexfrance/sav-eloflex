@@ -5203,13 +5203,13 @@ function cadrerAuto() {
 window.cadrerAuto = cadrerAuto;
 
 var RESEAUX_CONFIG = {
-  base:       { label: 'De base',            color: '#e24b4a', letter: 'B' },
-  bastide:    { label: 'Bastide',            color: '#378add', letter: 'A' },
-  providom:   { label: 'Providom',           color: '#ef9f27', letter: 'P' },
-  districlub: { label: 'DistriClub Medical', color: '#7f77dd', letter: 'D' },
-  negocies:   { label: 'Négociés',           color: '#16a34a', letter: 'N' },
-  capvital:   { label: 'CAP Vital',          color: '#0891b2', letter: 'V' },
-  lecarre:    { label: 'Le Carré Medical',   color: '#db2777', letter: 'C' }
+  base:       { label: 'De base',            color: '#e24b4a', letter: 'B', img: '/img/reseaux/base.png' },
+  bastide:    { label: 'Bastide',            color: '#378add', letter: 'A', img: '/img/reseaux/bastide.png' },
+  providom:   { label: 'Providom',           color: '#ef9f27', letter: 'P', img: '/img/reseaux/providom.png' },
+  districlub: { label: 'DistriClub Medical', color: '#7f77dd', letter: 'D', img: '/img/reseaux/districlub.png' },
+  negocies:   { label: 'Négociés',           color: '#16a34a', letter: 'N', img: '/img/reseaux/negocies.png' },
+  capvital:   { label: 'CAP Vital',          color: '#0891b2', letter: 'V', img: '/img/reseaux/capvital.png' },
+  lecarre:    { label: 'Le Carré Medical',   color: '#db2777', letter: 'C', img: '/img/reseaux/lecarre.png' }
 };
 
 // Génère le panneau de filtre par année de dernière commande (2019 → année en cours)
@@ -5317,7 +5317,9 @@ function renderCarte(ttl, c, a) {
     var r = RESEAUX_CONFIG[k];
     return '<label style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px">' +
       '<input type="checkbox" ' + (_carteReseaux[k]?'checked':'') + ' onchange="_carteReseaux[\'' + k + '\']=this.checked;afficherMarkers()">' +
-      '<span style="width:14px;height:14px;border-radius:50%;background:' + r.color + ';border:2px solid #fff;box-shadow:0 0 0 1px #0002"></span>' +
+      (r.img
+        ? '<img src="' + r.img + '" width="22" height="22" style="display:block;flex-shrink:0" alt="">'
+        : '<span style="width:14px;height:14px;border-radius:50%;background:' + r.color + ';border:2px solid #fff;box-shadow:0 0 0 1px #0002"></span>') +
       '<span style="flex:1;font-size:13px;color:var(--text)">' + labelReseauTraduit(k, r.label) + '</span>' +
       '<span id="cnt-' + k + '" style="font-size:12px;color:var(--text3)">0</span>' +
       '</label>';
@@ -5560,6 +5562,13 @@ window.chargerPoints = chargerPoints;
 
 function pinIconCarte(reseau, point) {
   var cfg = RESEAUX_CONFIG[reseau] || { color:'#888', letter:'?' };
+  // Image spécifique par groupe (marqueur = l'image, ancrée par la pointe en bas)
+  if (cfg.img) {
+    var noteI = point.note_interne ? '<div style="position:absolute;top:0;right:0;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
+    var htmlI = '<div style="position:relative;width:44px;height:44px">' +
+      '<img src="' + cfg.img + '" width="44" height="44" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">' + noteI + '</div>';
+    return L.divIcon({ html: htmlI, className: '', iconSize: [44,44], iconAnchor: [22,44], popupAnchor: [0,-42] });
+  }
   // Anneau de statut selon commandes
   var ring = point.impayes > 0 ? '#ef4444' : point.en_cours > 0 ? '#f97316' : point.nb_commandes > 0 ? '#22c55e' : '#cbd5e1';
   var noted = point.note_interne ? '<div style="position:absolute;top:-2px;right:-2px;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
