@@ -5565,9 +5565,9 @@ function pinIconCarte(reseau, point) {
   // Image spécifique par groupe (marqueur = l'image, ancrée par la pointe en bas)
   if (cfg.img) {
     var noteI = point.note_interne ? '<div style="position:absolute;top:0;right:0;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
-    var htmlI = '<div style="position:relative;width:44px;height:44px">' +
-      '<img src="' + cfg.img + '" width="44" height="44" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">' + noteI + '</div>';
-    return L.divIcon({ html: htmlI, className: '', iconSize: [44,44], iconAnchor: [22,44], popupAnchor: [0,-42] });
+    var htmlI = '<div style="position:relative;width:34px;height:34px">' +
+      '<img src="' + cfg.img + '" width="34" height="34" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">' + noteI + '</div>';
+    return L.divIcon({ html: htmlI, className: '', iconSize: [34,34], iconAnchor: [17,34], popupAnchor: [0,-32] });
   }
   // Anneau de statut selon commandes
   var ring = point.impayes > 0 ? '#ef4444' : point.en_cours > 0 ? '#f97316' : point.nb_commandes > 0 ? '#22c55e' : '#cbd5e1';
