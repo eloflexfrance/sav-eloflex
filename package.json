@@ -10,6 +10,7 @@
     "sync-vosfactures": "node scripts/sync-vosfactures.js"
   },
   "dependencies": {
+    "acorn": "^8.18.0",
     "axios": "^1.7.2",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.5.0",
