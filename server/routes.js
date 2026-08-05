@@ -5352,9 +5352,44 @@ const PAYS_ISO = {
   'Portugal':'pt', 'Denmark':'dk', 'Norway':'no', 'Finland':'fi', 'Austria':'at', 'Ireland':'ie'
 };
 
+// Géocodage France via l'API du gouvernement (geo.api.gouv.fr) : fiable, sans
+// limite de débit — contrairement à Nominatim qui bloque l'IP du serveur en usage
+// intensif (d'où certains codes postaux "qui ne marchent pas" sur la carte).
+async function geocoderGouvFr(requete) {
+  const axios = require('axios');
+  const s = String(requete || '');
+  const cpM = s.match(/\b(\d{5})\b/);
+  // 1) Par code postal : le plus robuste (marche même si la ville est mal orthographiée).
+  if (cpM) {
+    try {
+      const { data } = await axios.get('https://geo.api.gouv.fr/communes', { params: { codePostal: cpM[1], fields: 'centre', format: 'json' }, timeout: 6000 });
+      if (data && data.length && data[0].centre && data[0].centre.coordinates)
+        return { lat: data[0].centre.coordinates[1], lng: data[0].centre.coordinates[0], display: data[0].nom || '' };
+    } catch (_) {}
+  }
+  // 2) Par nom de commune : on isole le segment ville (après le CP, sinon dernier segment).
+  let ville = '';
+  if (cpM) ville = s.slice(s.indexOf(cpM[1]) + 5).replace(/^[\s,]+/, '').split(',')[0].trim();
+  else { const parts = s.split(','); ville = (parts[parts.length - 1] || '').trim(); }
+  ville = ville.replace(/\bfrance\b/ig, '').replace(/\d/g, '').trim();
+  if (ville) {
+    try {
+      const { data } = await axios.get('https://geo.api.gouv.fr/communes', { params: { nom: ville, fields: 'centre', boost: 'population', limit: 1 }, timeout: 6000 });
+      if (data && data.length && data[0].centre && data[0].centre.coordinates)
+        return { lat: data[0].centre.coordinates[1], lng: data[0].centre.coordinates[0], display: data[0].nom || '' };
+    } catch (_) {}
+  }
+  return null;
+}
+
 // Interroge Nominatim en ciblant le pays, puis sans restriction si rien n'est trouvé
 async function geocoderLibre(requete, pays) {
   const axios = require('axios');
+  // France : on privilégie l'API du gouvernement (fiable, sans limite) avant Nominatim.
+  if (!pays || pays === 'France') {
+    const gouv = await geocoderGouvFr(requete);
+    if (gouv) return gouv;
+  }
   const iso = PAYS_ISO[pays] || null;
   // Pays explicite : on cible ce pays, puis on élargit.
   // Pays non précisé : on privilégie la France, puis le monde entier.
