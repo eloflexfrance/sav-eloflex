@@ -5334,7 +5334,7 @@ function renderCarte(ttl, c, a) {
         legende +
         '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
           '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
-          '<span style="width:13px;height:13px;border-radius:50%;background:#d0d0cc;border:1.5px solid #7a7a7a"></span>' +
+          '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
           '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
         '</label>' +
       '</div>' +
@@ -5916,9 +5916,13 @@ function afficherHorsMarkers() {
   (_carteHorsMarkers || []).forEach(function(m){ if (_carteMap) _carteMap.removeLayer(m); });
   _carteHorsMarkers = [];
   if (!_carteMap || !_carteHorsCarte) return;
+  var iconAutres = L.divIcon({
+    html: '<img src="/img/reseaux/inconnu.png" width="30" height="30" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">',
+    className: '', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -15]
+  });
   _carteHorsPoints.forEach(function(c){
     if (c.lat == null || c.lng == null) return;
-    var m = L.circleMarker([parseFloat(c.lat), parseFloat(c.lng)], { radius: 6, color: '#7a7a7a', weight: 1.5, fillColor: '#d0d0cc', fillOpacity: 0.85 });
+    var m = L.marker([parseFloat(c.lat), parseFloat(c.lng)], { icon: iconAutres });
     m.bindPopup(popupHorsCarte(c), { maxWidth: 260 });
     m.addTo(_carteMap); _carteHorsMarkers.push(m);
   });
