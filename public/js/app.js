@@ -5755,6 +5755,7 @@ function popupCarte(p) {
           ? 'Rapproché par nom : ' + _esc((p.noms_rattaches||[]).join(', '))
           : '<span style="color:#d97706">⚠ Aucune commande rattachée — liez ce point à un client pour fiabiliser</span>') +
     '</div>' +
+    (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:11px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:11px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
     (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:11px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
     (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> Voir la fiche complète →</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
@@ -5762,7 +5763,7 @@ function popupCarte(p) {
     '</div>';
 }
 
-function wirePopupCarte(e, p) { /* zone de chalandise retirée — plus rien à dessiner */ }
+function wirePopupCarte(e, p) { dessinerCouverture(p); }
 
 // ── Couverture géographique d'un distributeur (départements colorés + rayon) ──
 var _carteCouvertureLayer = null;   // couche des overlays de couverture (départements + cercle)
@@ -6251,9 +6252,13 @@ function modalPointCarte(id) {
         '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Téléphone</label><input id="pc-tel" value="' + (p&&p.tel?_esc(p.tel):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Portable</label><input id="pc-portable" value="' + (p&&p.portable?_esc(p.portable):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
-        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Priorité</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
+        '<div style="display:flex;gap:8px">' +
+          '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Priorité</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
             ['','T1','T2','T3'].map(function(v){ var lib={'':'— Aucune —',T1:'T1 — absolue',T2:'T2 — moyenne',T3:'T3 — basse'}[v]; return '<option value="'+v+'"'+(p&&(p.priorite||'')===v?' selected':'')+'>'+lib+'</option>'; }).join('') +
           '</select></div>' +
+          '<div style="width:130px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Rayon (km)</label><input id="pc-rayon" type="number" min="0" step="5" value="' + (p&&p.rayon_km!=null?_esc(String(p.rayon_km)):'') + '" placeholder="optionnel" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '</div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Zone de chalandise / départements</label><textarea id="pc-zone" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px;resize:vertical;font-family:inherit">' + (p&&p.zone_chalandise?_esc(p.zone_chalandise):'') + '</textarea></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Note interne</label><textarea id="pc-note" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px;resize:vertical;font-family:inherit">' + (p&&p.note_interne?_esc(p.note_interne):'') + '</textarea></div>' +
         '<div style="background:#f8f9fa;border-radius:8px;padding:10px 12px">' +
           '<div style="display:flex;gap:8px;align-items:flex-end">' +
@@ -6359,9 +6364,11 @@ function sauverPointCarte(id) {
     alert('Nom, latitude et longitude sont obligatoires.');
     return;
   }
-  // Champs additionnels gérés dans "Modifier" : priorité, note
+  // Champs additionnels gérés dans "Modifier" : priorité, zone/rayon, note
   var extra = {
     priorite: (document.getElementById('pc-priorite') || {}).value || null,
+    zone: (document.getElementById('pc-zone') || {}).value || '',
+    rayon: (document.getElementById('pc-rayon') && document.getElementById('pc-rayon').value !== '') ? parseFloat(document.getElementById('pc-rayon').value) : null,
     note: (document.getElementById('pc-note') || {}).value || ''
   };
   var url = id ? '/api/carte/points/' + id : '/api/carte/points';
@@ -6373,6 +6380,7 @@ function sauverPointCarte(id) {
       var pid = id || (d && (d.id || (d.point && d.point.id)));
       var suites = [];
       if (pid) {
+        suites.push(fetch('/api/carte/points/' + pid + '/zone', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: extra.zone, rayon_km: extra.rayon }) }));
         suites.push(fetch('/api/carte/points/' + pid + '/note', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: extra.note }) }));
         suites.push(fetch('/api/carte/points/' + pid + '/priorite', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priorite: extra.priorite }) }).then(function(r){ return r.json(); }).then(function(pr){ if (pr && pr.error) console.warn('Priorité :', pr.error); }).catch(function(){}));
       }
