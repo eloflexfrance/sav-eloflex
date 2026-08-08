@@ -5032,11 +5032,13 @@ router.get('/carte/points', requireAuth, async (req, res) => {
       en_cours:     a.en_cours     + (parseInt(s.en_cours) || 0)
     }), { nb_commandes: 0, impayes: 0, en_cours: 0 });
 
-    // Dernière année d'un point : max sur les lignes rapprochées (par client_id sinon par nom)
+    // Dernière année d'un point.
+    // Point rattaché à une fiche (client_id) → UNIQUEMENT ses commandes (pas d'amalgame
+    // par nom de chaîne). Sinon seulement, rapprochement par nom.
     const derniereAnneePour = (p, trouves) => {
-      let cand = [];
-      if (p.client_id) cand = dernieres.filter(d => d.client_id === p.client_id);
-      if (!cand.length) cand = dernieres.filter(d => memeEntite(p.nom, d.distributeur_nom));
+      const cand = p.client_id
+        ? dernieres.filter(d => d.client_id === p.client_id)
+        : dernieres.filter(d => memeEntite(p.nom, d.distributeur_nom));
       const annees = cand.map(d => d.derniere_annee).filter(Boolean);
       return annees.length ? Math.max(...annees) : null;
     };
@@ -5044,13 +5046,14 @@ router.get('/carte/points', requireAuth, async (req, res) => {
     const enriched = points.map(p => {
       let trouves = [];
       let lien = 'aucun';
-      // 1) Lien explicite via client_id : prioritaire et sans ambiguïté
+      // Point rattaché à une fiche (client_id) : on compte UNIQUEMENT ses commandes.
+      // Pas de repli sur le nom : sinon on amalgamait les commandes de toute l'enseigne
+      // (ex. « DISTRI CLUB MEDICAL VALENTIGNEY » récupérait celles de « Distri Club Medical »).
       if (p.client_id) {
         trouves = stats.filter(s => s.client_id === p.client_id);
-        if (trouves.length) lien = 'client';
-      }
-      // 2) Sinon rapprochement par nom (accents et mots gérés)
-      if (!trouves.length) {
+        lien = 'client';
+      } else {
+        // Pas de fiche liée → rapprochement par nom (accents et mots gérés)
         trouves = stats.filter(s => memeEntite(p.nom, s.distributeur_nom));
         if (trouves.length) lien = 'nom';
       }
