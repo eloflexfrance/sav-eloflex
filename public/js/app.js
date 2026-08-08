@@ -2497,9 +2497,23 @@ async function ouvrirDansVF(vfId, bdc){
     return;
   }
   if(!bdc){ toast('Renseigne d\'abord le numéro','ti-alert-circle','var(--warning)'); return; }
-  // Pas d'ID connu → ouvrir directement la recherche VosFactures
-  // (évite l'API qui ne supporte pas les WZ en recherche par numéro)
-  window.open(`https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(bdc)}`, '_blank', 'noopener');
+  // Pas d'ID connu (ex. commande non encore enregistrée) : on retrouve le document
+  // via l'API (même recherche que l'import) pour ouvrir la pièce EXACTE.
+  // La recherche web VosFactures (?search_text=) n'applique pas le filtre → on l'évite si possible.
+  // L'onglet est ouvert tout de suite (dans le geste du clic) pour ne pas être bloqué par le navigateur.
+  const win = window.open('about:blank', '_blank');
+  const urlRecherche = `https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(bdc)}`;
+  const aller = (url) => { if(win && !win.closed){ win.location.href = url; } else { window.open(url, '_blank', 'noopener'); } };
+  try{
+    const r = await API.vfBdcLookup(bdc);
+    if(r && r.found && r.vf_id){
+      aller(`https://${account}.vosfactures.fr/invoices/${r.vf_id}`);
+    } else {
+      aller(urlRecherche); // document non retrouvé par l'API (ex. WZ) → repli sur la recherche
+    }
+  }catch(_){
+    aller(urlRecherche);
+  }
 }
 
 async function creerBLVF(id){

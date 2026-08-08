@@ -235,8 +235,12 @@ if (acorn) {
   ok('Exports window.X vérifiés au contrôle 2');
 } else {
   const sansAuto = appJs.replace(/window\.([A-Za-z_$][\w$]*)\s*=\s*\1\s*;/g, '');
+  // Valeurs qui ne sont PAS des références de fonction (littéraux) : « window.X = null »
+  // n'est pas un export de fonction mais une variable d'état → à ignorer.
+  const NON_FONCTIONS = new Set(['null', 'undefined', 'true', 'false', 'NaN', 'Infinity']);
   const orphelins = [];
   for (const m of appJs.matchAll(/window\.([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;/g)) {
+    if (NON_FONCTIONS.has(m[2])) continue;
     if (!estDefini(m[2], sansAuto)) orphelins.push(`${m[1]} = ${m[2]}`);
   }
   orphelins.length
