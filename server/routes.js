@@ -3402,8 +3402,8 @@ router.post('/commandes', async (req, res) => {
         bdc, date_commande, vf_order_id, client_final, client_final_type, cf_nom, cf_prenom, cf_adresse, cf_cp, cf_ville, cf_tel, cf_email, num_suivi, transporteur, date_livraison, num_serie, num_facture,
         invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo,
         num_retour, transporteur_retour, date_retour, num_commande_distrib,
-        commande_type, ref_suede, date_envoi_suede, confirmation_recue, date_confirmation)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41) RETURNING *`,
+        commande_type, ref_suede, date_envoi_suede, confirmation_recue, date_confirmation, facture_vf_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.client_final_type || null, d.cf_nom||null, d.cf_prenom||null, d.cf_adresse||null, d.cf_cp||null, d.cf_ville||null, d.cf_tel||null, d.cf_email||null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
@@ -3411,7 +3411,7 @@ router.post('/commandes', async (req, res) => {
        d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null, d.modele_demo ? true : false,
        d.num_retour || null, d.transporteur_retour || null, d.date_retour || null, d.num_commande_distrib || null,
        d.commande_type || null, d.ref_suede || null, d.date_envoi_suede || null,
-       d.confirmation_recue ? true : false, d.date_confirmation || null]
+       d.confirmation_recue ? true : false, d.date_confirmation || null, d.facture_vf_id || null]
     );
     await majFauteuilVente(row);
     await majRappelDemo(row);
@@ -3431,7 +3431,7 @@ router.put('/commandes/:id', async (req, res) => {
       'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib',
       'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
       'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation',
-      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'pays'];
+      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'facture_vf_id', 'pays'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {

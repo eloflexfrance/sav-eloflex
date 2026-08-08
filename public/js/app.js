@@ -1402,12 +1402,13 @@ async function modalCommande(id){
       <div id="cmd-tab-facturation" style="${initTab!=='facturation'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${t('cmd_facture_vf_label')||'N° facture VosFactures'}</label>
+            <input type="hidden" id="cmd-facture-vfid" value="${cm.facture_vf_id||''}">
             <div style="display:flex;gap:5px">
-              <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
-              <button class="btn sm" type="button" title="Ouvrir la facture dans VosFactures" onclick="ouvrirDansVF(${cm.facture_vf_id||'null'}, (document.getElementById('cmd-facture').value||'').trim())"><i class="ti ti-external-link"></i></button>
+              <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge();var _v=document.getElementById('cmd-facture-vfid');if(_v)_v.value=''">
+              <button class="btn sm" type="button" title="Ouvrir la facture dans VosFactures" onclick="ouvrirDansVF((document.getElementById('cmd-facture-vfid')||{}).value||null, (document.getElementById('cmd-facture').value||'').trim())"><i class="ti ti-external-link"></i></button>
+              ${id&&cm.num_facture?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="Vérifier le paiement dans VosFactures"><i class="ti ti-refresh"></i></button>`:''}
             </div>
           </div>
-          ${id&&cm.num_facture?`<button onclick="syncPaiementCommande(${id})" title="Vérifier paiement VosFactures" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0 4px;font-size:14px;line-height:1">↻</button>`:''}
           ${cm.facture_paiement_statut?'<span class="badge '+(cm.facture_paiement_statut==="payé"?"g":cm.facture_paiement_statut==="impayé"?"urgent":"attente")+'" style="font-size:11px">'+(cm.facture_paiement_statut==="payé"?"✅ Payé":cm.facture_paiement_statut==="impayé"?"⚠️ Impayé":"⏳ En attente")+'</span>':''}
           <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
@@ -1590,6 +1591,8 @@ function appliquerFactureVF(i){
   const f = (window._VF_SUGGEST||{})[i]; if(!f) return;
   if($('cmd-facture')) $('cmd-facture').value = f.numero || '';
   if(f.num_serie && $('cmd-serie')) $('cmd-serie').value = f.num_serie;
+  // Mémorise l'ID VosFactures de la facture rattachée → lien direct immédiat + persistance à l'enregistrement
+  if($('cmd-facture-vfid')) $('cmd-facture-vfid').value = f.id || '';
   toast(t('cmd_vf_applique')||'Facture rattachée — vérifie puis enregistre');
 }
 
@@ -1853,6 +1856,7 @@ async function enregistrerCommande(id){
     num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
     date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
+    facture_vf_id: gv('cmd-facture-vfid')||null,
     informations: gv('cmd-infos'),
     reliquat: !!document.getElementById('cmd-reliquat')?.checked,
     reliquat_description: gv('cmd-reliquat-description')||null,
