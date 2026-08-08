@@ -2624,7 +2624,7 @@ async function renderCommandesKanban(){
   const reqId = ++_cmdReqId;
   const res = await API.commandes({ annee: CMD_FILTERS.annee, mois: CMD_FILTERS.mois, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
   const list = res.rows||[];
-  const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème'];
+  const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Problème','Annulé'];
   const grouped = {};
   COLS.forEach(s => grouped[s] = []);
   list.forEach(cm => {
