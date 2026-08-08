@@ -744,6 +744,8 @@ async function renderExpeditions(ttl,c,a){
 
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
 const cmdStatutClass = s => s==='Payé'?'g':s==='Livré'?'g':s==='Facturé'?'facture':s==='Impayé'?'urgent':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='En attente confirmation'?'ouvert':'ouvert';
+// Commande contenant un fauteuil roulant (vs pièces détachées uniquement)
+const estCmdFauteuil = cm => !!(cm.type_fauteuil_neuf || cm.type_fauteuil_demo || cm.commande_type==='fauteuil' || /eloflex/i.test(cm.modele||''));
 
 const STATUTS_CMD = ['Auto','En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
 
@@ -1009,7 +1011,7 @@ async function renderCommandesTable(page=1){
         <th>${t('col_date')||'Date'}</th><th style="width:75px">Groupe</th>
         ${CMD_COLS.pays&&!CURRENT_USER.pays?'<th style="width:80px">Pays</th>':''}
         <th>${t('col_client')||'Distributeur'}</th>
-        <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
+        <th>${t('cmd_bdc')||'Bdc'}</th><th style="width:30px;text-align:center" title="Type : fauteuil roulant ou pièces détachées"><i class="ti ti-wheelchair"></i></th><th>Articles</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th><th>Date livraison</th><th>${t('cmd_serie')||'N° série'}</th>
         ${CMD_COLS.facture?`<th>${t('cmd_facture')||'N° Facture'}</th>`:''}
         ${CMD_COLS.date_facture?'<th>Date facturation</th>':''}
@@ -1027,6 +1029,9 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="Ouvrir la fiche client" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button>`:`<span title="Commande non rattachée à une fiche client" style="color:var(--border-s);padding:1px 3px;font-size:11px"><i class="ti ti-user-off"></i></span>`}</td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
+        <td style="text-align:center">${estCmdFauteuil(cm)
+          ? `<i class="ti ti-wheelchair" style="color:var(--accent);font-size:16px" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"></i>`
+          : `<i class="ti ti-box" style="color:var(--text3);font-size:13px" title="Pièces détachées"></i>`}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:10px" title="Cette commande porte un avoir (retour / remboursement) — voir le champ Informations">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:10px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
@@ -1493,9 +1498,13 @@ async function modalCommande(id, prefill){
       <div id="cmd-tab-facturation" style="${initTab!=='facturation'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${t('cmd_facture_vf_label')||'N° facture VosFactures'}</label>
-            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
+            <input type="hidden" id="cmd-facture-vfid" value="${cm.facture_vf_id||''}">
+            <div style="display:flex;gap:5px">
+              <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge();var _v=document.getElementById('cmd-facture-vfid');if(_v)_v.value=''">
+              <button class="btn sm" type="button" title="Ouvrir la facture dans VosFactures" onclick="ouvrirDansVF((document.getElementById('cmd-facture-vfid')||{}).value||null, (document.getElementById('cmd-facture').value||'').trim())"><i class="ti ti-external-link"></i></button>
+              ${id&&cm.num_facture?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="Vérifier le paiement dans VosFactures"><i class="ti ti-refresh"></i></button>`:''}
+            </div>
           </div>
-          ${id&&cm.num_facture?`<button onclick="syncPaiementCommande(${id})" title="Vérifier paiement VosFactures" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0 4px;font-size:14px;line-height:1">↻</button>`:''}
           ${cm.facture_paiement_statut?'<span class="badge '+(cm.facture_paiement_statut==="payé"?"g":cm.facture_paiement_statut==="impayé"?"urgent":"attente")+'" style="font-size:11px">'+(cm.facture_paiement_statut==="payé"?"✅ Payé":cm.facture_paiement_statut==="impayé"?"⚠️ Impayé":"⏳ En attente")+'</span>':''}
           <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
@@ -1678,6 +1687,7 @@ function appliquerFactureVF(i){
   const f = (window._VF_SUGGEST||{})[i]; if(!f) return;
   if($('cmd-facture')) $('cmd-facture').value = f.numero || '';
   if(f.num_serie && $('cmd-serie')) $('cmd-serie').value = f.num_serie;
+  if($('cmd-facture-vfid')) $('cmd-facture-vfid').value = f.id || '';
   toast(t('cmd_vf_applique')||'Facture rattachée — vérifie puis enregistre');
 }
 
@@ -1942,6 +1952,7 @@ async function enregistrerCommande(id){
     num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
     date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
+    facture_vf_id: gv('cmd-facture-vfid')||null,
     informations: gv('cmd-infos'),
     reliquat: !!document.getElementById('cmd-reliquat')?.checked,
     reliquat_description: gv('cmd-reliquat-description')||null,
@@ -5427,21 +5438,8 @@ function renderCarte(ttl, c, a) {
       '</label>';
   }).join('');
 
-  // Conteneur en position absolue pour garantir une hauteur
-  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
-    '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
-      '<div class="card" style="padding:13px;margin-bottom:10px">' +
-        '<div class="section-title"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</div>' +
-        legende +
-        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
-          '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
-          '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
-          '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
-        '</label>' +
-      '</div>' +
-      legendeAnnees() +
-      legendePriorites() +
-      '<div class="card" style="padding:13px">' +
+  // Panneau "Recherche" (placé en premier, tout en haut de la sidebar)
+  var rechercheCard = '<div class="card" style="padding:13px;margin-bottom:10px">' +
         '<div class="section-title"><i class="ti ti-search"></i>' + (t('carte_recherche')||'Recherche') + '</div>' +
         '<div style="position:relative;margin-bottom:4px">' +
           '<input id="carte-search" class="form-input" placeholder="' + (t('carte_nom_distrib')||'Nom de distributeur…') + '" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;padding:6px 26px 6px 9px;font-size:13px">' +
@@ -5455,7 +5453,23 @@ function renderCarte(ttl, c, a) {
         '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:12px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
         '<div id="carte-geo-result" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>' +
         '<div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
+      '</div>';
+
+  // Conteneur en position absolue pour garantir une hauteur
+  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
+    '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
+      rechercheCard +
+      '<div class="card" style="padding:13px;margin-bottom:10px">' +
+        '<div class="section-title"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</div>' +
+        legende +
+        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
+          '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
+          '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
+          '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
+        '</label>' +
       '</div>' +
+      legendeAnnees() +
+      legendePriorites() +
     '</div>' +
     '<div id="carte-leaflet" style="flex:1;height:100%;background:#dce4ec"></div>' +
     '</div>';
@@ -5856,6 +5870,7 @@ function popupCarte(p) {
           ? 'Rapproché par nom : ' + _esc((p.noms_rattaches||[]).join(', '))
           : '<span style="color:#d97706">⚠ Aucune commande rattachée — liez ce point à un client pour fiabiliser</span>') +
     '</div>' +
+    (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:11px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:11px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
     (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:11px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
     (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> Voir la fiche complète →</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
@@ -5863,7 +5878,7 @@ function popupCarte(p) {
     '</div>';
 }
 
-function wirePopupCarte(e, p) { /* zone de chalandise retirée — plus rien à dessiner */ }
+function wirePopupCarte(e, p) { dessinerCouverture(p); }
 
 // ── Couverture géographique d'un distributeur (départements colorés + rayon) ──
 var _carteCouvertureLayer = null;   // couche des overlays de couverture (départements + cercle)
@@ -6352,9 +6367,13 @@ function modalPointCarte(id) {
         '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Téléphone</label><input id="pc-tel" value="' + (p&&p.tel?_esc(p.tel):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Portable</label><input id="pc-portable" value="' + (p&&p.portable?_esc(p.portable):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
-        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Priorité</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
+        '<div style="display:flex;gap:8px">' +
+          '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Priorité</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
             ['','T1','T2','T3'].map(function(v){ var lib={'':'— Aucune —',T1:'T1 — absolue',T2:'T2 — moyenne',T3:'T3 — basse'}[v]; return '<option value="'+v+'"'+(p&&(p.priorite||'')===v?' selected':'')+'>'+lib+'</option>'; }).join('') +
           '</select></div>' +
+          '<div style="width:130px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Rayon (km)</label><input id="pc-rayon" type="number" min="0" step="5" value="' + (p&&p.rayon_km!=null?_esc(String(p.rayon_km)):'') + '" placeholder="optionnel" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '</div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Zone de chalandise / départements</label><textarea id="pc-zone" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px;resize:vertical;font-family:inherit">' + (p&&p.zone_chalandise?_esc(p.zone_chalandise):'') + '</textarea></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Note interne</label><textarea id="pc-note" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px;resize:vertical;font-family:inherit">' + (p&&p.note_interne?_esc(p.note_interne):'') + '</textarea></div>' +
         '<div style="background:#f8f9fa;border-radius:8px;padding:10px 12px">' +
           '<div style="display:flex;gap:8px;align-items:flex-end">' +
@@ -6460,9 +6479,11 @@ function sauverPointCarte(id) {
     alert('Nom, latitude et longitude sont obligatoires.');
     return;
   }
-  // Champs additionnels gérés dans "Modifier" : priorité, note
+  // Champs additionnels gérés dans "Modifier" : priorité, zone/rayon, note
   var extra = {
     priorite: (document.getElementById('pc-priorite') || {}).value || null,
+    zone: (document.getElementById('pc-zone') || {}).value || '',
+    rayon: (document.getElementById('pc-rayon') && document.getElementById('pc-rayon').value !== '') ? parseFloat(document.getElementById('pc-rayon').value) : null,
     note: (document.getElementById('pc-note') || {}).value || ''
   };
   var url = id ? '/api/carte/points/' + id : '/api/carte/points';
@@ -6474,6 +6495,7 @@ function sauverPointCarte(id) {
       var pid = id || (d && (d.id || (d.point && d.point.id)));
       var suites = [];
       if (pid) {
+        suites.push(fetch('/api/carte/points/' + pid + '/zone', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: extra.zone, rayon_km: extra.rayon }) }));
         suites.push(fetch('/api/carte/points/' + pid + '/note', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: extra.note }) }));
         suites.push(fetch('/api/carte/points/' + pid + '/priorite', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priorite: extra.priorite }) }).then(function(r){ return r.json(); }).then(function(pr){ if (pr && pr.error) console.warn('Priorité :', pr.error); }).catch(function(){}));
       }
