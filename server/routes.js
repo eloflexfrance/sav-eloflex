@@ -3690,6 +3690,7 @@ router.get('/vosfactures/facture-lookup', async (req, res) => {
 
     res.json({
       configured: true, found: true,
+      vf_id: inv.id,
       numero: inv.number, date: inv.issue_date || inv.sell_date,
       num_serie: m ? m[0].trim() : null,
       buyer_name: inv.buyer_name,

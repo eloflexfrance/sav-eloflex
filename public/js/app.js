@@ -1402,7 +1402,10 @@ async function modalCommande(id){
       <div id="cmd-tab-facturation" style="${initTab!=='facturation'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${t('cmd_facture_vf_label')||'N° facture VosFactures'}</label>
-            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
+            <div style="display:flex;gap:5px">
+              <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
+              <button class="btn sm" type="button" title="Ouvrir la facture dans VosFactures" onclick="ouvrirDansVF(${cm.facture_vf_id||'null'}, (document.getElementById('cmd-facture').value||'').trim())"><i class="ti ti-external-link"></i></button>
+            </div>
           </div>
           ${id&&cm.num_facture?`<button onclick="syncPaiementCommande(${id})" title="Vérifier paiement VosFactures" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0 4px;font-size:14px;line-height:1">↻</button>`:''}
           ${cm.facture_paiement_statut?'<span class="badge '+(cm.facture_paiement_statut==="payé"?"g":cm.facture_paiement_statut==="impayé"?"urgent":"attente")+'" style="font-size:11px">'+(cm.facture_paiement_statut==="payé"?"✅ Payé":cm.facture_paiement_statut==="impayé"?"⚠️ Impayé":"⏳ En attente")+'</span>':''}
@@ -2485,23 +2488,9 @@ async function ouvrirDansVF(vfId, bdc){
     return;
   }
   if(!bdc){ toast('Renseigne d\'abord le numéro','ti-alert-circle','var(--warning)'); return; }
-  // Pas d'ID connu (ex. commande non encore enregistrée) : on retrouve le document
-  // via l'API (même recherche que l'import) pour ouvrir la pièce EXACTE.
-  // La recherche web VosFactures (?search_text=) n'applique pas le filtre → on l'évite si possible.
-  // L'onglet est ouvert tout de suite (dans le geste du clic) pour ne pas être bloqué par le navigateur.
-  const win = window.open('about:blank', '_blank');
-  const urlRecherche = `https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(bdc)}`;
-  const aller = (url) => { if(win && !win.closed){ win.location.href = url; } else { window.open(url, '_blank', 'noopener'); } };
-  try{
-    const r = await API.vfBdcLookup(bdc);
-    if(r && r.found && r.vf_id){
-      aller(`https://${account}.vosfactures.fr/invoices/${r.vf_id}`);
-    } else {
-      aller(urlRecherche); // document non retrouvé par l'API (ex. WZ) → repli sur la recherche
-    }
-  }catch(_){
-    aller(urlRecherche);
-  }
+  // Pas d'ID connu → ouvrir directement la recherche VosFactures
+  // (évite l'API qui ne supporte pas les WZ en recherche par numéro)
+  window.open(`https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(bdc)}`, '_blank', 'noopener');
 }
 
 async function creerBLVF(id){
