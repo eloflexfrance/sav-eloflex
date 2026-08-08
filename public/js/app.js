@@ -5352,21 +5352,8 @@ function renderCarte(ttl, c, a) {
       '</label>';
   }).join('');
 
-  // Conteneur en position absolue pour garantir une hauteur
-  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
-    '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
-      '<div class="card" style="padding:13px;margin-bottom:10px">' +
-        '<div class="section-title"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</div>' +
-        legende +
-        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
-          '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
-          '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
-          '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
-        '</label>' +
-      '</div>' +
-      legendeAnnees() +
-      legendePriorites() +
-      '<div class="card" style="padding:13px">' +
+  // Panneau "Recherche" (placé en premier, tout en haut de la sidebar)
+  var rechercheCard = '<div class="card" style="padding:13px;margin-bottom:10px">' +
         '<div class="section-title"><i class="ti ti-search"></i>' + (t('carte_recherche')||'Recherche') + '</div>' +
         '<div style="position:relative;margin-bottom:4px">' +
           '<input id="carte-search" class="form-input" placeholder="' + (t('carte_nom_distrib')||'Nom de distributeur…') + '" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;padding:6px 26px 6px 9px;font-size:13px">' +
@@ -5380,7 +5367,23 @@ function renderCarte(ttl, c, a) {
         '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:12px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
         '<div id="carte-geo-result" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>' +
         '<div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
+      '</div>';
+
+  // Conteneur en position absolue pour garantir une hauteur
+  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
+    '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
+      rechercheCard +
+      '<div class="card" style="padding:13px;margin-bottom:10px">' +
+        '<div class="section-title"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</div>' +
+        legende +
+        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
+          '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
+          '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
+          '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
+        '</label>' +
       '</div>' +
+      legendeAnnees() +
+      legendePriorites() +
     '</div>' +
     '<div id="carte-leaflet" style="flex:1;height:100%;background:#dce4ec"></div>' +
     '</div>';
