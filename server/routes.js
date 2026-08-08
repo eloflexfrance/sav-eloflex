@@ -4411,6 +4411,106 @@ router.get('/notes/recent', adminOrOp, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Fil d'équipe (discussions / annonces internes) ─────────────────
+async function _discOwnerOrAdmin(id, me) {
+  const m = await db.get('SELECT user_id FROM discussion_messages WHERE id=$1', [id]);
+  if (!m) return { err: 404 };
+  if (m.user_id !== me.id && me.role !== 'admin') return { err: 403 };
+  return { ok: true };
+}
+
+router.get('/discussions/fil', requireAuth, async (req, res) => {
+  try {
+    const archived = req.query.archived === '1';
+    const me = req.session.user || {};
+    const msgs = await db.all(
+      'SELECT * FROM discussion_messages WHERE archived=$1 ORDER BY pinned DESC, created_at DESC', [archived]
+    );
+    const reacts = await db.all('SELECT * FROM discussion_reactions');
+    const byMsg = {};
+    reacts.forEach(r => { (byMsg[r.message_id] = byMsg[r.message_id] || []).push(r); });
+    const out = msgs.map(m => {
+      const grouped = {};
+      (byMsg[m.id] || []).forEach(r => { (grouped[r.emoji] = grouped[r.emoji] || []).push(r); });
+      const reactions = Object.keys(grouped).map(emoji => ({
+        emoji, count: grouped[emoji].length,
+        users: grouped[emoji].map(x => x.user_nom),
+        mine: grouped[emoji].some(x => x.user_id === me.id)
+      }));
+      return { ...m, reactions, can_edit: (m.user_id === me.id || me.role === 'admin') };
+    });
+    res.json(out);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/discussions/fil', requireAuth, async (req, res) => {
+  try {
+    const me = req.session.user || {};
+    const contenu = (req.body.contenu || '').trim();
+    if (!contenu) return res.status(400).json({ error: 'Message vide' });
+    const row = await db.get(
+      'INSERT INTO discussion_messages (user_id, user_nom, contenu) VALUES ($1,$2,$3) RETURNING *',
+      [me.id || null, me.nom || 'Utilisateur', contenu]
+    );
+    res.json({ ok: true, message: row });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/discussions/fil/:id', requireAuth, async (req, res) => {
+  try {
+    const me = req.session.user || {};
+    const chk = await _discOwnerOrAdmin(req.params.id, me);
+    if (chk.err) return res.status(chk.err).json({ error: chk.err === 404 ? 'Introuvable' : 'Non autorisé' });
+    const contenu = (req.body.contenu || '').trim();
+    if (!contenu) return res.status(400).json({ error: 'Message vide' });
+    const row = await db.get('UPDATE discussion_messages SET contenu=$1, updated_at=NOW() WHERE id=$2 RETURNING *', [contenu, req.params.id]);
+    res.json({ ok: true, message: row });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/discussions/fil/:id', requireAuth, async (req, res) => {
+  try {
+    const me = req.session.user || {};
+    const chk = await _discOwnerOrAdmin(req.params.id, me);
+    if (chk.err) return res.status(chk.err).json({ error: chk.err === 404 ? 'Introuvable' : 'Non autorisé' });
+    await db.run('DELETE FROM discussion_messages WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/discussions/fil/:id/archive', requireAuth, async (req, res) => {
+  try {
+    const me = req.session.user || {};
+    const chk = await _discOwnerOrAdmin(req.params.id, me);
+    if (chk.err) return res.status(chk.err).json({ error: chk.err === 404 ? 'Introuvable' : 'Non autorisé' });
+    await db.run('UPDATE discussion_messages SET archived=$1, updated_at=NOW() WHERE id=$2', [!!req.body.archived, req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/discussions/fil/:id/pin', requireAuth, async (req, res) => {
+  try {
+    const me = req.session.user || {};
+    const chk = await _discOwnerOrAdmin(req.params.id, me);
+    if (chk.err) return res.status(chk.err).json({ error: chk.err === 404 ? 'Introuvable' : 'Non autorisé' });
+    await db.run('UPDATE discussion_messages SET pinned=$1, updated_at=NOW() WHERE id=$2', [!!req.body.pinned, req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Toggle réaction (tout utilisateur authentifié)
+router.post('/discussions/fil/:id/reaction', requireAuth, async (req, res) => {
+  try {
+    const me = req.session.user || {};
+    const emoji = (req.body.emoji || '').trim();
+    if (!emoji) return res.status(400).json({ error: 'emoji requis' });
+    const ex = await db.get('SELECT id FROM discussion_reactions WHERE message_id=$1 AND user_id=$2 AND emoji=$3', [req.params.id, me.id, emoji]);
+    if (ex) await db.run('DELETE FROM discussion_reactions WHERE id=$1', [ex.id]);
+    else await db.run('INSERT INTO discussion_reactions (message_id, user_id, user_nom, emoji) VALUES ($1,$2,$3,$4)', [req.params.id, me.id || null, me.nom || 'Utilisateur', emoji]);
+    res.json({ ok: true, active: !ex });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET nombre de notes par commande (pour badges)
 router.get('/notes/counts', adminOrOp, async (req, res) => {
   try {

@@ -5042,16 +5042,142 @@ window.lienhSuiviInter = lienhSuiviInter;
 // ═══════════════════════════════════════════════════════════════════
 // VUE DISCUSSIONS — fil des notes internes, toutes commandes
 // ═══════════════════════════════════════════════════════════════════
+var _DISC_TAB = 'fil';
+var _DISC_ARCH = false;
+var _DISC_EDIT = null;
+var DISC_EMOJIS = ['👍','✅','❤️','👀','🎉'];
+
 function renderDiscussions(ttl, c, a) {
   ttl.textContent = t('nav_discussions') || 'Discussions';
   a.innerHTML = '<button onclick="renderDiscussionsRecharger()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-refresh"></i> Actualiser</button>';
-  c.innerHTML = '<div id="disc-body" style="color:var(--text2);font-size:13px;padding:20px 0">Chargement…</div>';
-  chargerDiscussions();
+  var tab = function(k,lbl){ return '<button id="disc-tab-'+k+'" onclick="switchDiscTab(\''+k+'\')" style="flex:0 0 auto;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;border-bottom:2px solid transparent;color:var(--text2)">'+lbl+'</button>'; };
+  c.innerHTML =
+    '<div style="display:flex;gap:4px;border-bottom:0.5px solid var(--border-s);margin-bottom:14px">' +
+      tab('fil','💬 Fil d\'équipe') + tab('notes','📦 Notes commandes') +
+    '</div>' +
+    '<div id="disc-fil"></div>' +
+    '<div id="disc-notes" style="display:none"><div id="disc-body" style="color:var(--text2);font-size:13px;padding:10px 0">Chargement…</div></div>';
+  switchDiscTab(_DISC_TAB);
 }
 window.renderDiscussions = renderDiscussions;
 
-function renderDiscussionsRecharger() { chargerDiscussions(); }
+function switchDiscTab(k){
+  _DISC_TAB = k;
+  ['fil','notes'].forEach(function(x){
+    var pane = document.getElementById('disc-'+x), btn = document.getElementById('disc-tab-'+x);
+    if (pane) pane.style.display = (x===k)?'':'none';
+    if (btn){ btn.style.borderBottom = (x===k)?'2px solid var(--accent)':'2px solid transparent'; btn.style.color = (x===k)?'var(--accent)':'var(--text2)'; }
+  });
+  if (k==='fil') chargerFil(); else chargerDiscussions();
+}
+window.switchDiscTab = switchDiscTab;
+
+function renderDiscussionsRecharger() { if (_DISC_TAB==='fil') chargerFil(); else chargerDiscussions(); }
 window.renderDiscussionsRecharger = renderDiscussionsRecharger;
+
+function chargerFil(){
+  var host = document.getElementById('disc-fil'); if(!host) return;
+  host.innerHTML =
+    '<div class="card" style="padding:12px 14px;margin-bottom:14px">' +
+      '<textarea id="fil-nouveau" rows="2" placeholder="Écrire un message à l\'équipe…" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;font-family:inherit"></textarea>' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-top:8px">' +
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;margin-left:auto"><input type="checkbox" id="fil-arch-toggle" ' + (_DISC_ARCH?'checked':'') + ' onchange="_DISC_ARCH=this.checked;chargerFil()"> Afficher les archivés</label>' +
+        '<button class="btn primary" onclick="publierFil()"><i class="ti ti-send"></i> Publier</button>' +
+      '</div>' +
+    '</div>' +
+    '<div id="fil-liste" style="color:var(--text2);font-size:13px">Chargement…</div>';
+  fetch('/api/discussions/fil?archived=' + (_DISC_ARCH?'1':'0'))
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(list){
+      var el = document.getElementById('fil-liste'); if(!el) return;
+      if(!Array.isArray(list) || !list.length){ el.innerHTML = '<div class="empty"><i class="ti ti-messages"></i>'+(_DISC_ARCH?'Aucun message archivé.':'Aucun message pour le moment. Sois le premier à publier !')+'</div>'; return; }
+      el.innerHTML = list.map(filCarte).join('');
+    })
+    .catch(function(e){ var el=document.getElementById('fil-liste'); if(el) el.innerHTML='<div style="color:var(--danger);padding:10px 0">Erreur : '+_esc(e.message)+'</div>'; });
+}
+window.chargerFil = chargerFil;
+
+function filCarte(m){
+  var edit = _DISC_EDIT === m.id;
+  var reacts = DISC_EMOJIS.map(function(em){
+    var found = (m.reactions||[]).find(function(r){ return r.emoji===em; });
+    var cnt = found ? found.count : 0, mine = found ? found.mine : false, title = found ? found.users.join(', ') : '';
+    return '<button onclick="reactFil('+m.id+',\''+em+'\')" title="'+_esc(title)+'" style="border:0.5px solid '+(mine?'var(--accent)':'var(--border-s)')+';background:'+(mine?'rgba(46,124,246,.10)':'var(--surface)')+';border-radius:99px;padding:2px 9px;font-size:13px;cursor:pointer;line-height:1.5">'+em+(cnt?' <span style="font-size:11px;color:var(--text2)">'+cnt+'</span>':'')+'</button>';
+  }).join(' ');
+  var actions = '';
+  if (m.can_edit){
+    actions += '<button onclick="pinFil('+m.id+','+(m.pinned?'false':'true')+')" title="'+(m.pinned?'Désépingler':'Épingler')+'" style="background:none;border:none;cursor:pointer;color:'+(m.pinned?'var(--accent)':'var(--text3)')+';padding:2px 4px"><i class="ti ti-pin'+(m.pinned?'-filled':'')+'"></i></button>';
+    actions += '<button onclick="archiveFil('+m.id+','+(m.archived?'false':'true')+')" title="'+(m.archived?'Désarchiver':'Archiver')+'" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:2px 4px"><i class="ti ti-archive"></i></button>';
+    actions += '<button onclick="editFil('+m.id+')" title="Éditer" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:2px 4px"><i class="ti ti-pencil"></i></button>';
+    actions += '<button onclick="supprFil('+m.id+')" title="Supprimer" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:2px 4px"><i class="ti ti-trash"></i></button>';
+  }
+  var corps = edit
+    ? '<textarea id="fil-edit-'+m.id+'" rows="3" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;font-family:inherit">'+_esc(m.contenu)+'</textarea>' +
+      '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">Annuler</button><button class="btn sm primary" onclick="sauverEditFil('+m.id+')">Enregistrer</button></div>'
+    : '<div style="font-size:13.5px;white-space:pre-wrap;line-height:1.5">'+_esc(m.contenu)+'</div>';
+  var initiale = (m.user_nom||'?').trim().charAt(0).toUpperCase();
+  return '<div class="card" style="padding:12px 14px;margin-bottom:10px;'+(m.pinned?'border-left:3px solid var(--accent)':'')+'">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+      '<span style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">'+_esc(initiale)+'</span>' +
+      '<span style="font-weight:700;font-size:13px">'+_esc(m.user_nom||'Utilisateur')+'</span>' +
+      (m.pinned?'<span class="badge ouvert" style="font-size:10px"><i class="ti ti-pin-filled" style="font-size:10px"></i> Épinglé</span>':'') +
+      (m.archived?'<span class="badge hg" style="font-size:10px">Archivé</span>':'') +
+      '<span style="font-size:11px;color:var(--text3)">'+_fd(m.created_at)+ (m.updated_at && m.updated_at!==m.created_at ? ' · modifié' : '') +'</span>' +
+      '<span style="margin-left:auto;display:flex;gap:2px">'+actions+'</span>' +
+    '</div>' +
+    corps +
+    (edit?'':'<div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap">'+reacts+'</div>') +
+  '</div>';
+}
+
+function publierFil(){
+  var ta = document.getElementById('fil-nouveau'); if(!ta) return;
+  var contenu = ta.value.trim(); if(!contenu){ toast('Message vide','ti-alert-circle','var(--warning)'); return; }
+  fetch('/api/discussions/fil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contenu:contenu})})
+    .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ chargerFil(); } else toast((d&&d.error)||'Erreur','ti-alert-circle','var(--danger)'); })
+    .catch(function(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); });
+}
+window.publierFil = publierFil;
+
+function reactFil(id, emoji){
+  fetch('/api/discussions/fil/'+id+'/reaction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({emoji:emoji})})
+    .then(function(r){return r.json();}).then(function(){ chargerFil(); }).catch(function(){});
+}
+window.reactFil = reactFil;
+
+function editFil(id){ _DISC_EDIT = id; chargerFil(); }
+window.editFil = editFil;
+
+function sauverEditFil(id){
+  var ta = document.getElementById('fil-edit-'+id); if(!ta) return;
+  var contenu = ta.value.trim(); if(!contenu){ toast('Message vide','ti-alert-circle','var(--warning)'); return; }
+  fetch('/api/discussions/fil/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({contenu:contenu})})
+    .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ _DISC_EDIT=null; chargerFil(); } else toast((d&&d.error)||'Non autorisé','ti-alert-circle','var(--danger)'); })
+    .catch(function(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); });
+}
+window.sauverEditFil = sauverEditFil;
+
+function supprFil(id){
+  if(!confirm('Supprimer ce message ?')) return;
+  fetch('/api/discussions/fil/'+id,{method:'DELETE'})
+    .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ chargerFil(); } else toast((d&&d.error)||'Non autorisé','ti-alert-circle','var(--danger)'); })
+    .catch(function(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); });
+}
+window.supprFil = supprFil;
+
+function archiveFil(id, val){
+  fetch('/api/discussions/fil/'+id+'/archive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archived:val})})
+    .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok) chargerFil(); else toast((d&&d.error)||'Non autorisé','ti-alert-circle','var(--danger)'); })
+    .catch(function(){});
+}
+window.archiveFil = archiveFil;
+
+function pinFil(id, val){
+  fetch('/api/discussions/fil/'+id+'/pin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pinned:val})})
+    .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok) chargerFil(); else toast((d&&d.error)||'Non autorisé','ti-alert-circle','var(--danger)'); })
+    .catch(function(){});
+}
+window.pinFil = pinFil;
 
 function chargerDiscussions() {
   var el = document.getElementById('disc-body');

@@ -292,6 +292,29 @@ async function initDB() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_commande ON commande_notes(commande_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_created ON commande_notes(created_at DESC)`);
 
+      // ── Fil d'équipe (discussions / annonces internes) ─────────────
+      await client.query(`CREATE TABLE IF NOT EXISTS discussion_messages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        user_nom TEXT,
+        contenu TEXT NOT NULL,
+        pinned BOOLEAN DEFAULT FALSE,
+        archived BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE TABLE IF NOT EXISTS discussion_reactions (
+        id SERIAL PRIMARY KEY,
+        message_id INTEGER REFERENCES discussion_messages(id) ON DELETE CASCADE,
+        user_id INTEGER,
+        user_nom TEXT,
+        emoji TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(message_id, user_id, emoji)
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_disc_msg_created ON discussion_messages(created_at DESC)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_disc_react_msg ON discussion_reactions(message_id)`);
+
       // ── Devis VosFactures ──────────────────────────────────────────
       await client.query(`CREATE TABLE IF NOT EXISTS devis (
         id SERIAL PRIMARY KEY,
