@@ -165,6 +165,7 @@ async function render(){
     else if(STATE.view==='carte')         { renderCarte(ttl,c,a); return; }
   else if(STATE.view==='discussions')   {
     localStorage.setItem('sav_discussions_seen', Date.now());
+    localStorage.setItem('sav_fil_seen', Date.now());
     const badge = document.getElementById('discussions-badge');
     if(badge) badge.style.display='none';
     renderDiscussions(ttl,c,a); return;
@@ -178,12 +179,26 @@ async function render(){
 // ── Badges ────────────────────────────────────────────────────────
 async function refreshDiscussionsBadge(){
   try {
-    const lastSeen = parseInt(localStorage.getItem('sav_discussions_seen')||'0');
-    const notes = await API.notesRecent(5);
-    const newOnes = notes.filter(n => new Date(n.created_at).getTime() > lastSeen && n.user_id !== CURRENT_USER?.id);
+    const me = CURRENT_USER ? CURRENT_USER.id : null;
+    const seenNotes = parseInt(localStorage.getItem('sav_discussions_seen')||'0');
+    const seenFil   = parseInt(localStorage.getItem('sav_fil_seen')||'0');
+    let count = 0;
+    // Nouveaux messages/réponses du fil d'équipe
+    try {
+      const fil = await fetch('/api/discussions/fil?archived=0').then(r => r.ok ? r.json() : []);
+      (Array.isArray(fil) ? fil : []).forEach(m => {
+        if (new Date(m.created_at).getTime() > seenFil && m.user_id !== me) count++;
+        (m.replies || []).forEach(rp => { if (new Date(rp.created_at).getTime() > seenFil && rp.user_id !== me) count++; });
+      });
+    } catch(_) {}
+    // Nouvelles notes de commandes
+    try {
+      const notes = await API.notesRecent(30);
+      count += notes.filter(n => new Date(n.created_at).getTime() > seenNotes && n.user_id !== me).length;
+    } catch(_) {}
     const badge = document.getElementById('discussions-badge');
     if (badge) {
-      if (newOnes.length) { badge.textContent = newOnes.length; badge.style.display=''; }
+      if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.style.display = ''; }
       else badge.style.display = 'none';
     }
   } catch(_) {}
@@ -4276,6 +4291,8 @@ applyNavTranslations();
   loadVfStatus();
   refreshBadges();
   setInterval(refreshBadges, 60000);
+  refreshDiscussionsBadge();
+  setInterval(refreshDiscussionsBadge, 45000);
   render();
 
 
@@ -5090,6 +5107,8 @@ function chargerFil(){
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(list){
       var el = document.getElementById('fil-liste'); if(!el) return;
+      try { localStorage.setItem('sav_fil_seen', Date.now()); } catch(_) {}
+      if (typeof refreshDiscussionsBadge === 'function') refreshDiscussionsBadge();
       if(!Array.isArray(list) || !list.length){ el.innerHTML = '<div class="empty"><i class="ti ti-messages"></i>'+(_DISC_ARCH?'Aucun message archivé.':'Aucun message pour le moment. Sois le premier à publier !')+'</div>'; return; }
       el.innerHTML = list.map(filCarte).join('');
     })
