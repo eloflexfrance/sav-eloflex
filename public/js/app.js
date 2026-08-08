@@ -5126,9 +5126,45 @@ function filCarte(m){
       '<span style="margin-left:auto;display:flex;gap:2px">'+actions+'</span>' +
     '</div>' +
     corps +
-    (edit?'':'<div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap">'+reacts+'</div>') +
+    (edit ? '' :
+      '<div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap">'+reacts+'</div>' +
+      ((m.replies||[]).length ? '<div style="margin-top:8px">'+(m.replies||[]).map(filReply).join('')+'</div>' : '') +
+      '<div style="display:flex;gap:6px;margin-top:8px;padding-left:34px">' +
+        '<input id="reply-'+m.id+'" placeholder="Répondre…" onkeydown="if(event.key===\'Enter\'){event.preventDefault();repondreFil('+m.id+')}" style="flex:1;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 9px;font-size:12px">' +
+        '<button class="btn sm" onclick="repondreFil('+m.id+')"><i class="ti ti-corner-down-right"></i> Répondre</button>' +
+      '</div>'
+    ) +
   '</div>';
 }
+
+// Réponse (style réduit, indentée sous le message d'origine)
+function filReply(r){
+  var edit = _DISC_EDIT === r.id;
+  var actions = (r.can_edit && !edit)
+    ? '<button onclick="editFil('+r.id+')" title="Éditer" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 3px"><i class="ti ti-pencil" style="font-size:12px"></i></button>' +
+      '<button onclick="supprFil('+r.id+')" title="Supprimer" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:1px 3px"><i class="ti ti-trash" style="font-size:12px"></i></button>'
+    : '';
+  var corps = edit
+    ? '<textarea id="fil-edit-'+r.id+'" rows="2" style="width:100%;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 8px;font-size:12px;resize:vertical;font-family:inherit">'+_esc(r.contenu)+'</textarea><div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">Annuler</button><button class="btn sm primary" onclick="sauverEditFil('+r.id+')">Enregistrer</button></div>'
+    : '<div style="font-size:12px;white-space:pre-wrap;line-height:1.45;color:var(--text)">'+_esc(r.contenu)+'</div>';
+  var ini = (r.user_nom||'?').trim().charAt(0).toUpperCase();
+  return '<div style="display:flex;gap:7px;padding:6px 0 6px 10px;border-left:2px solid var(--border-s);margin-left:22px;margin-top:6px">' +
+    '<span style="width:20px;height:20px;border-radius:50%;background:var(--text3);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0">'+_esc(ini)+'</span>' +
+    '<div style="flex:1">' +
+      '<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:600;font-size:12px">'+_esc(r.user_nom||'Utilisateur')+'</span><span style="font-size:10px;color:var(--text3)">'+_fd(r.created_at)+(r.updated_at && r.updated_at!==r.created_at?' · modifié':'')+'</span><span style="margin-left:auto;display:flex;gap:2px">'+actions+'</span></div>' +
+      corps +
+    '</div>' +
+  '</div>';
+}
+
+function repondreFil(id){
+  var inp = document.getElementById('reply-'+id); if(!inp) return;
+  var contenu = inp.value.trim(); if(!contenu) return;
+  fetch('/api/discussions/fil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contenu:contenu, parent_id:id})})
+    .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ chargerFil(); } else toast((d&&d.error)||'Erreur','ti-alert-circle','var(--danger)'); })
+    .catch(function(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); });
+}
+window.filReply = filReply; window.repondreFil = repondreFil;
 
 function publierFil(){
   var ta = document.getElementById('fil-nouveau'); if(!ta) return;

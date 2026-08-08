@@ -295,6 +295,7 @@ async function initDB() {
       // ── Fil d'équipe (discussions / annonces internes) ─────────────
       await client.query(`CREATE TABLE IF NOT EXISTS discussion_messages (
         id SERIAL PRIMARY KEY,
+        parent_id INTEGER,
         user_id INTEGER,
         user_nom TEXT,
         contenu TEXT NOT NULL,
@@ -303,6 +304,7 @@ async function initDB() {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )`);
+      await client.query(`ALTER TABLE discussion_messages ADD COLUMN IF NOT EXISTS parent_id INTEGER`);
       await client.query(`CREATE TABLE IF NOT EXISTS discussion_reactions (
         id SERIAL PRIMARY KEY,
         message_id INTEGER REFERENCES discussion_messages(id) ON DELETE CASCADE,

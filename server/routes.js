@@ -4424,11 +4424,14 @@ router.get('/discussions/fil', requireAuth, async (req, res) => {
     const archived = req.query.archived === '1';
     const me = req.session.user || {};
     const msgs = await db.all(
-      'SELECT * FROM discussion_messages WHERE archived=$1 ORDER BY pinned DESC, created_at DESC', [archived]
+      'SELECT * FROM discussion_messages WHERE parent_id IS NULL AND archived=$1 ORDER BY pinned DESC, created_at DESC', [archived]
     );
+    const replies = await db.all('SELECT * FROM discussion_messages WHERE parent_id IS NOT NULL ORDER BY created_at ASC');
     const reacts = await db.all('SELECT * FROM discussion_reactions');
     const byMsg = {};
     reacts.forEach(r => { (byMsg[r.message_id] = byMsg[r.message_id] || []).push(r); });
+    const repByParent = {};
+    replies.forEach(r => { (repByParent[r.parent_id] = repByParent[r.parent_id] || []).push({ ...r, can_edit: (r.user_id === me.id || me.role === 'admin') }); });
     const out = msgs.map(m => {
       const grouped = {};
       (byMsg[m.id] || []).forEach(r => { (grouped[r.emoji] = grouped[r.emoji] || []).push(r); });
@@ -4437,7 +4440,7 @@ router.get('/discussions/fil', requireAuth, async (req, res) => {
         users: grouped[emoji].map(x => x.user_nom),
         mine: grouped[emoji].some(x => x.user_id === me.id)
       }));
-      return { ...m, reactions, can_edit: (m.user_id === me.id || me.role === 'admin') };
+      return { ...m, reactions, replies: repByParent[m.id] || [], can_edit: (m.user_id === me.id || me.role === 'admin') };
     });
     res.json(out);
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -4448,9 +4451,15 @@ router.post('/discussions/fil', requireAuth, async (req, res) => {
     const me = req.session.user || {};
     const contenu = (req.body.contenu || '').trim();
     if (!contenu) return res.status(400).json({ error: 'Message vide' });
+    let parentId = req.body.parent_id ? parseInt(req.body.parent_id) : null;
+    if (parentId) {
+      const parent = await db.get('SELECT id, parent_id FROM discussion_messages WHERE id=$1', [parentId]);
+      if (!parent) return res.status(400).json({ error: 'Message parent introuvable' });
+      if (parent.parent_id) parentId = parent.parent_id; // une seule profondeur : on rattache au message racine
+    }
     const row = await db.get(
-      'INSERT INTO discussion_messages (user_id, user_nom, contenu) VALUES ($1,$2,$3) RETURNING *',
-      [me.id || null, me.nom || 'Utilisateur', contenu]
+      'INSERT INTO discussion_messages (parent_id, user_id, user_nom, contenu) VALUES ($1,$2,$3,$4) RETURNING *',
+      [parentId, me.id || null, me.nom || 'Utilisateur', contenu]
     );
     res.json({ ok: true, message: row });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -4473,7 +4482,8 @@ router.delete('/discussions/fil/:id', requireAuth, async (req, res) => {
     const me = req.session.user || {};
     const chk = await _discOwnerOrAdmin(req.params.id, me);
     if (chk.err) return res.status(chk.err).json({ error: chk.err === 404 ? 'Introuvable' : 'Non autorisé' });
-    await db.run('DELETE FROM discussion_messages WHERE id=$1', [req.params.id]);
+    // Supprime le message et ses éventuelles réponses
+    await db.run('DELETE FROM discussion_messages WHERE id=$1 OR parent_id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
