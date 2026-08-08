@@ -1042,7 +1042,7 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
     }
 
     res.json({
-      configured: true, found: true, vf_id: doc.id, numero: doc.number,
+      configured: true, found: true, vf_id: doc.id, numero: doc.number, source,
       date: dateDoc, fournisseur, lignes
     });
   } catch (e) { res.status(500).json({ error: e.message }); }

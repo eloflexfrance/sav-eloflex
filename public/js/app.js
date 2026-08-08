@@ -2581,6 +2581,33 @@ async function envoyerEmailConfirmation(id){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+// Ouvre le bon de livraison / bordereau dans VosFactures.
+// Le champ peut contenir un ID (ou une URL warehouse_documents…), ou un simple numéro
+// de document — dans ce cas on retrouve la pièce par son numéro et on ouvre le document exact.
+async function ouvrirBordereauVF(num){
+  const account = window._VF_ACCOUNT;
+  num = (num == null ? '' : String(num)).trim();
+  if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
+  if(!num){ return; }
+  const base = 'https://' + account + '.vosfactures.fr/';
+  const win = window.open('about:blank', '_blank');
+  const go = (url) => { if(win && !win.closed){ win.location.href = url; } else { window.open(url, '_blank', 'noopener'); } };
+  // ID direct ou URL warehouse_documents collée
+  const m = num.match(/warehouse_documents\/(\d+)/);
+  if(m){ go(base + 'warehouse_documents/' + m[1]); return; }
+  if(/^\d{5,}$/.test(num)){ go(base + 'warehouse_documents/' + num); return; }
+  // Sinon : on retrouve le document par son numéro
+  try{
+    const r = await API.stockLookup(num);
+    if(r && r.found && r.vf_id){
+      go(base + (r.source === 'invoice' ? 'invoices/' : 'warehouse_documents/') + r.vf_id);
+      return;
+    }
+  }catch(_){}
+  go(base + 'documents?q=' + encodeURIComponent(num)); // repli
+}
+window.ouvrirBordereauVF = ouvrirBordereauVF;
+
 async function genererFactureVF(id){
   if(!confirm('Générer la facture dans VosFactures ?\n\nLa commande passera au statut "Facturé" et le N° de facture sera renseigné automatiquement.')) return;
   toast('Génération en cours…','ti-loader-2');
@@ -2992,7 +3019,7 @@ async function viewIntervention(id){
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-send"></i>Expédition</div>
       ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Envoi</div><div style="font-size:12px">${esc(i.envoi_transporteur)} — <a href="${lienhSuiviInter(i.envoi_transporteur,i.envoi_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.envoi_numero)}</a> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun envoi</div>'}
-      ${i.num_bordereau_vf?`<div style="margin-top:8px"><a href="https://eloflex.vosfactures.fr/documents?q=${esc(i.num_bordereau_vf)}" target="_blank" style="color:var(--accent);font-size:12px;text-decoration:none"><i class="ti ti-file-invoice" style="font-size:11px"></i> BL/Bordereau : ${esc(i.num_bordereau_vf)}</a></div>`:''}
+      ${i.num_bordereau_vf?`<div style="margin-top:8px"><a href="#" data-bl="${esc(i.num_bordereau_vf)}" onclick="event.preventDefault();ouvrirBordereauVF(this.dataset.bl)" style="color:var(--accent);font-size:12px;text-decoration:none;cursor:pointer"><i class="ti ti-file-invoice" style="font-size:11px"></i> BL/Bordereau : ${esc(i.num_bordereau_vf)}</a></div>`:''}
       <div class="section-title" style="margin-top:10px"><i class="ti ti-arrow-back-up"></i>Retour</div>
       ${i.retour_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Retour</div><div style="font-size:12px">${esc(i.retour_transporteur)} — <a href="${lienhSuiviInter(i.retour_transporteur,i.retour_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.retour_numero)}</a> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun retour</div>'}
       <div class="divider"></div>
