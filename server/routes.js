@@ -2398,7 +2398,6 @@ router.get('/commandes', async (req, res) => {
          cmd.num_facture, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
          cmd.reliquat, cmd.demo_origine_nom, cmd.modele_demo, cmd.annee_onglet, cmd.groupe,
-         cmd.commande_type, cmd.type_fauteuil_neuf, cmd.type_fauteuil_demo, cmd.type_pieces,
          (cmd.informations ILIKE '%avoir%') AS est_avoir,
          c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,
          ROW_NUMBER() OVER (
@@ -3403,8 +3402,9 @@ router.post('/commandes', async (req, res) => {
         bdc, date_commande, vf_order_id, client_final, client_final_type, cf_nom, cf_prenom, cf_adresse, cf_cp, cf_ville, cf_tel, cf_email, num_suivi, transporteur, date_livraison, num_serie, num_facture,
         invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo,
         num_retour, transporteur_retour, date_retour, num_commande_distrib,
-        commande_type, ref_suede, date_envoi_suede, confirmation_recue, date_confirmation, facture_vf_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42) RETURNING *`,
+        commande_type, ref_suede, date_envoi_suede, confirmation_recue, date_confirmation,
+        facture_vf_id, bdc_source, bdc_doc_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.client_final_type || null, d.cf_nom||null, d.cf_prenom||null, d.cf_adresse||null, d.cf_cp||null, d.cf_ville||null, d.cf_tel||null, d.cf_email||null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
@@ -3412,7 +3412,8 @@ router.post('/commandes', async (req, res) => {
        d.num_bordereau || null, d.reliquat ? true : false, d.reliquat_description || null, d.modele_demo ? true : false,
        d.num_retour || null, d.transporteur_retour || null, d.date_retour || null, d.num_commande_distrib || null,
        d.commande_type || null, d.ref_suede || null, d.date_envoi_suede || null,
-       d.confirmation_recue ? true : false, d.date_confirmation || null, d.facture_vf_id || null]
+       d.confirmation_recue ? true : false, d.date_confirmation || null,
+       d.facture_vf_id || null, d.bdc_source || null, d.bdc_doc_id || null]
     );
     await majFauteuilVente(row);
     await majRappelDemo(row);
@@ -3432,7 +3433,7 @@ router.put('/commandes/:id', async (req, res) => {
       'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib',
       'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
       'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation',
-      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'facture_vf_id', 'pays'];
+      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'facture_vf_id', 'bdc_source', 'bdc_doc_id', 'pays'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
@@ -3691,7 +3692,6 @@ router.get('/vosfactures/facture-lookup', async (req, res) => {
 
     res.json({
       configured: true, found: true,
-      vf_id: inv.id,
       numero: inv.number, date: inv.issue_date || inv.sell_date,
       num_serie: m ? m[0].trim() : null,
       buyer_name: inv.buyer_name,
@@ -5032,13 +5032,11 @@ router.get('/carte/points', requireAuth, async (req, res) => {
       en_cours:     a.en_cours     + (parseInt(s.en_cours) || 0)
     }), { nb_commandes: 0, impayes: 0, en_cours: 0 });
 
-    // Dernière année d'un point.
-    // Point rattaché à une fiche (client_id) → UNIQUEMENT ses commandes (pas d'amalgame
-    // par nom de chaîne). Sinon seulement, rapprochement par nom.
+    // Dernière année d'un point : max sur les lignes rapprochées (par client_id sinon par nom)
     const derniereAnneePour = (p, trouves) => {
-      const cand = p.client_id
-        ? dernieres.filter(d => d.client_id === p.client_id)
-        : dernieres.filter(d => memeEntite(p.nom, d.distributeur_nom));
+      let cand = [];
+      if (p.client_id) cand = dernieres.filter(d => d.client_id === p.client_id);
+      if (!cand.length) cand = dernieres.filter(d => memeEntite(p.nom, d.distributeur_nom));
       const annees = cand.map(d => d.derniere_annee).filter(Boolean);
       return annees.length ? Math.max(...annees) : null;
     };
@@ -5046,14 +5044,13 @@ router.get('/carte/points', requireAuth, async (req, res) => {
     const enriched = points.map(p => {
       let trouves = [];
       let lien = 'aucun';
-      // Point rattaché à une fiche (client_id) : on compte UNIQUEMENT ses commandes.
-      // Pas de repli sur le nom : sinon on amalgamait les commandes de toute l'enseigne
-      // (ex. « DISTRI CLUB MEDICAL VALENTIGNEY » récupérait celles de « Distri Club Medical »).
+      // 1) Lien explicite via client_id : prioritaire et sans ambiguïté
       if (p.client_id) {
         trouves = stats.filter(s => s.client_id === p.client_id);
-        lien = 'client';
-      } else {
-        // Pas de fiche liée → rapprochement par nom (accents et mots gérés)
+        if (trouves.length) lien = 'client';
+      }
+      // 2) Sinon rapprochement par nom (accents et mots gérés)
+      if (!trouves.length) {
         trouves = stats.filter(s => memeEntite(p.nom, s.distributeur_nom));
         if (trouves.length) lien = 'nom';
       }

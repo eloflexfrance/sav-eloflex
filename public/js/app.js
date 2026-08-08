@@ -744,8 +744,6 @@ async function renderExpeditions(ttl,c,a){
 
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
 const cmdStatutClass = s => s==='Payé'?'g':s==='Livré'?'g':s==='Facturé'?'facture':s==='Impayé'?'urgent':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='En attente confirmation'?'ouvert':'ouvert';
-// Commande contenant un fauteuil roulant (vs pièces détachées uniquement)
-const estCmdFauteuil = cm => !!(cm.type_fauteuil_neuf || cm.type_fauteuil_demo || cm.commande_type==='fauteuil' || /eloflex/i.test(cm.modele||''));
 
 const STATUTS_CMD = ['Auto','En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
 
@@ -890,7 +888,7 @@ async function renderCommandes(ttl,c,a){
     <button class="btn" id="btn-kanban-toggle" onclick="CMD_VIEW=CMD_VIEW==='liste'?'kanban':'liste';renderCommandesView()" title="Basculer liste / Kanban">
       <i class="ti ${CMD_VIEW==='kanban'?'ti-list':'ti-layout-kanban'}"></i> ${CMD_VIEW==='kanban'?'Liste':'Kanban'}
     </button>
-    <button class="btn primary" onclick="modalCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>`;
+    <button class="btn primary" onclick="modalNouvelleCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>`;
 
   // Stats filtrées par l'année sélectionnée (ou année en cours par défaut pour les compteurs)
   const anneeFiltre = CMD_FILTERS.annee ? parseInt(CMD_FILTERS.annee) : new Date().getFullYear();
@@ -1011,7 +1009,7 @@ async function renderCommandesTable(page=1){
         <th>${t('col_date')||'Date'}</th><th style="width:75px">Groupe</th>
         ${CMD_COLS.pays&&!CURRENT_USER.pays?'<th style="width:80px">Pays</th>':''}
         <th>${t('col_client')||'Distributeur'}</th>
-        <th>${t('cmd_bdc')||'Bdc'}</th><th style="width:30px;text-align:center" title="Type : fauteuil roulant ou pièces détachées"><i class="ti ti-wheelchair"></i></th><th>Articles</th>
+        <th>${t('cmd_bdc')||'Bdc'}</th><th>${t('cmd_modele')||'Modèle'}</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th><th>Date livraison</th><th>${t('cmd_serie')||'N° série'}</th>
         ${CMD_COLS.facture?`<th>${t('cmd_facture')||'N° Facture'}</th>`:''}
         ${CMD_COLS.date_facture?'<th>Date facturation</th>':''}
@@ -1029,9 +1027,6 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="Ouvrir la fiche client" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button>`:`<span title="Commande non rattachée à une fiche client" style="color:var(--border-s);padding:1px 3px;font-size:11px"><i class="ti ti-user-off"></i></span>`}</td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
-        <td style="text-align:center">${estCmdFauteuil(cm)
-          ? `<i class="ti ti-wheelchair" style="color:var(--accent);font-size:16px" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"></i>`
-          : `<i class="ti ti-box" style="color:var(--text3);font-size:13px" title="Pièces détachées"></i>`}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:10px" title="Cette commande porte un avoir (retour / remboursement) — voir le champ Informations">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:10px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
@@ -1127,13 +1122,97 @@ async function prefillGroupeDepuisDistrib(){
 }
 window.prefillGroupeDepuisDistrib = prefillGroupeDepuisDistrib;
 
-async function modalCommande(id){
+// ── Nouvelle commande : fenêtre initiale d'import VosFactures / Pennylane ──────────
+function modalNouvelleCommande(){
+  window._NC_SOURCE = 'vf';
+  showModal(`
+    <div class="modal-header">
+      <i class="ti ti-clipboard-plus" style="font-size:18px;color:var(--accent)"></i>
+      <h2 style="flex:1">${t('cmd_add')||'Nouvelle commande'}</h2>
+      <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
+      <div style="font-size:13px;color:var(--text2)">Importer une commande depuis son numéro :</div>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="nc-src-vf" class="btn" onclick="ncSetSource('vf')" style="flex:1"><i class="ti ti-file-invoice"></i> VosFactures</button>
+        <button type="button" id="nc-src-pl" class="btn" onclick="ncSetSource('pennylane')" style="flex:1"><i class="ti ti-brand-stripe"></i> Pennylane</button>
+      </div>
+      <div>
+        <label class="form-label">Numéro de commande (BDC / devis)</label>
+        <input class="form-input mono" id="nc-numero" placeholder="Numéro VosFactures ou Pennylane" onkeydown="if(event.key==='Enter')importerNouvelleCommande()" style="width:100%">
+      </div>
+      <div id="nc-msg" style="font-size:12px;color:var(--text3);min-height:16px"></div>
+      <div style="display:flex;gap:8px;justify-content:space-between;margin-top:4px">
+        <button class="btn" type="button" onclick="closeModal();modalCommande()"><i class="ti ti-edit"></i> Saisie manuelle</button>
+        <button class="btn primary" type="button" onclick="importerNouvelleCommande()"><i class="ti ti-download"></i> Importer</button>
+      </div>
+    </div>
+  `);
+  setTimeout(function(){ ncSetSource('vf'); var i=document.getElementById('nc-numero'); if(i) i.focus(); }, 50);
+}
+function ncSetSource(src){
+  window._NC_SOURCE = src;
+  [['vf','vf'],['pl','pennylane']].forEach(function(k){
+    var b=document.getElementById('nc-src-'+k[0]); if(b) b.classList.toggle('primary', src===k[1]);
+  });
+}
+async function importerNouvelleCommande(){
+  var numero=(document.getElementById('nc-numero').value||'').trim();
+  var src=window._NC_SOURCE||'vf';
+  var msg=document.getElementById('nc-msg');
+  if(!numero){ if(msg) msg.innerHTML='<span style="color:var(--danger)">Indique d’abord un numéro.</span>'; return; }
+  if(msg) msg.innerHTML='<i class="ti ti-loader-2"></i> Recherche dans '+(src==='pennylane'?'Pennylane':'VosFactures')+'…';
+  var today=new Date().toISOString().slice(0,10);
+  try{
+    var r = src==='pennylane' ? await API.pennylane_bdc_lookup(numero) : await API.vfBdcLookup(numero);
+    if(r && r.configured===false){ if(msg) msg.innerHTML='<span style="color:var(--danger)">'+(src==='pennylane'?'Pennylane':'VosFactures')+' non configuré.</span>'; return; }
+    if(r && r.found){
+      var estFauteuil=/eloflex/i.test(r.modele||'');
+      var prefill={
+        statut:'Auto',
+        distributeur_nom: r.distributeur||'',
+        bdc: r.numero||numero,
+        quantite: r.quantite||1,
+        modele: r.modele||'',
+        modele_demo: !!r.modele_demo,
+        lignes: r.lignes||[],
+        date_commande: today,          // date du jour, pas celle tirée de VF/Pennylane
+        bdc_source: src,
+        bdc_doc_id: (r.vf_id!=null? String(r.vf_id) : ''),
+        commande_type: estFauteuil ? 'fauteuil' : (r.modele ? 'pieces' : '')
+      };
+      if(estFauteuil){ if(r.modele_demo) prefill.type_fauteuil_demo=true; else prefill.type_fauteuil_neuf=true; }
+      else if(r.modele){ prefill.type_pieces=true; }
+      closeModal();
+      modalCommande(null, prefill);
+    } else {
+      // Introuvable → formulaire vide avec le numéro pré-rempli (saisie manuelle)
+      if(msg) msg.innerHTML='<span style="color:var(--warning)">Introuvable dans '+(src==='pennylane'?'Pennylane':'VosFactures')+' — ouverture en saisie manuelle…</span>';
+      setTimeout(function(){ closeModal(); modalCommande(null, { statut:'Auto', quantite:1, bdc:numero, date_commande:today, bdc_source:src }); }, 600);
+    }
+  }catch(e){ if(msg) msg.innerHTML='<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>'; }
+}
+// Ouvre le bon de commande dans le bon système (VosFactures ou Pennylane)
+function ouvrirBdcSource(){
+  var src=(document.getElementById('cmd-bdc-source')||{}).value||'';
+  var docid=(document.getElementById('cmd-bdc-docid')||{}).value||'';
+  var bdc=(document.getElementById('cmd-bdc').value||'').trim();
+  if(src==='pennylane'){
+    if(docid){ window.open('https://app.pennylane.com/companies/invoices/'+docid, '_blank', 'noopener'); }
+    else { toast('Pièce Pennylane non identifiée — ouvre Pennylane manuellement','ti-alert-circle','var(--warning)'); window.open('https://app.pennylane.com/companies/invoices', '_blank', 'noopener'); }
+    return;
+  }
+  ouvrirDansVF(docid||null, bdc);
+}
+window.modalNouvelleCommande=modalNouvelleCommande; window.ncSetSource=ncSetSource; window.importerNouvelleCommande=importerNouvelleCommande; window.ouvrirBdcSource=ouvrirBdcSource;
+
+async function modalCommande(id, prefill){
   window._currentCmdId = id;
   // Assure que la base produits est chargée pour l'autocomplétion des lignes (désignation / référence)
   if(!CACHE.catalogue.length){ try{ CACHE.catalogue = await API.catalogue(); }catch(e){} }
   // Base clients pour l'autocomplétion du distributeur (propositions quand on tape le nom)
   if(!window._ALL_CLIENTS){ try{ window._ALL_CLIENTS = await API.clients(); }catch(e){ window._ALL_CLIENTS = []; } }
-  let cm = id ? await API.commande(id) : {statut:'Auto', quantite:1};
+  let cm = id ? await API.commande(id) : Object.assign({statut:'Auto', quantite:1}, prefill||{});
 
   const hasExp  = !!(cm.num_suivi || cm.date_livraison || cm.num_bordereau || cm.num_serie);
   const hasFact = !!(cm.num_facture || (cm.statut && cm.statut!=='Auto' && cm.statut!=='En préparation' && cm.statut!=='En attente confirmation'));
@@ -1215,12 +1294,14 @@ async function modalCommande(id){
             <input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}">
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">Bdc / Devis</label>
+            <input type="hidden" id="cmd-bdc-source" value="${cm.bdc_source||(cm.vf_commande_id?'vf':'')}">
+            <input type="hidden" id="cmd-bdc-docid" value="${cm.bdc_doc_id||cm.vf_commande_id||''}">
             <div style="display:flex;gap:5px">
               <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="${t('cmd_num_bdc_placeholder')||'Numéro BDC ou Devis'}" oninput="majStatutBadge()">
               ${cm.origine==='sav'
                 ? `<span title="Commande issue d'un SAV : le contenu (lignes, série, facture, suivi) est repris automatiquement du SAV lié — pas d'import VosFactures ici" style="color:var(--text3);font-size:11px;align-self:center;white-space:nowrap;padding:0 6px"><i class="ti ti-tool"></i> SAV</span>`
                 : `<button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>`}
-              <button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(${cm.vf_commande_id||'null'}, (document.getElementById('cmd-bdc').value||'').trim())"><i class="ti ti-external-link"></i></button>
+              <button class="btn sm" type="button" title="Ouvrir le bon de commande (VosFactures / Pennylane)" onclick="ouvrirBdcSource()"><i class="ti ti-external-link"></i></button>
             </div>
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">N° commande distributeur</label>
@@ -1266,14 +1347,19 @@ async function modalCommande(id){
           </div>
         </div>
         <div style="margin-bottom:12px">
-          <label class="form-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-            ${t('cmd_lignes_bdc')||'Lignes du bon de commande'}
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
+            <span class="form-label" style="margin:0">${t('cmd_lignes_bdc')||'Lignes du bon de commande'}</span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
+              <input type="checkbox" id="cmd-ajout-articles" ${id?'checked':''} onchange="var w=document.getElementById('cmd-ajout-btn-wrap');if(w)w.style.display=this.checked?'':'none'"> Uniquement si oubli ou complément d'articles
+            </label>
+          </div>
+          <div id="cmd-ajout-btn-wrap" style="display:${id?'':'none'};margin-bottom:6px">
             <button class="btn sm" type="button" onclick="addCmdLigne()"><i class="ti ti-plus"></i> ${t('btn_ajouter')||'+ Ajouter'}</button>
-          </label>
+          </div>
           <div id="cmd-lignes-list" style="border:0.5px solid var(--border-s);border-radius:var(--radius);padding:6px;min-height:40px"></div>
         </div>
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">${t('cmd_date_commande')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande||''}"></div>
+          <div class="form-group"><label class="form-label">${t('cmd_date_commande')||'Date commande'}</label><input class="form-input" id="cmd-date" type="date" value="${cm.date_commande || (id ? '' : new Date().toISOString().slice(0,10))}"></div>
           <div class="form-group"><label class="form-label">Pays</label>
             ${CURRENT_USER.pays
               ? `<div class="form-input" style="background:var(--bg);cursor:default">${esc(CURRENT_USER.pays)}</div><input type="hidden" id="cmd-pays" value="${esc(CURRENT_USER.pays)}">`
@@ -1407,13 +1493,9 @@ async function modalCommande(id){
       <div id="cmd-tab-facturation" style="${initTab!=='facturation'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${t('cmd_facture_vf_label')||'N° facture VosFactures'}</label>
-            <input type="hidden" id="cmd-facture-vfid" value="${cm.facture_vf_id||''}">
-            <div style="display:flex;gap:5px">
-              <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge();var _v=document.getElementById('cmd-facture-vfid');if(_v)_v.value=''">
-              <button class="btn sm" type="button" title="Ouvrir la facture dans VosFactures" onclick="ouvrirDansVF((document.getElementById('cmd-facture-vfid')||{}).value||null, (document.getElementById('cmd-facture').value||'').trim())"><i class="ti ti-external-link"></i></button>
-              ${id&&cm.num_facture?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="Vérifier le paiement dans VosFactures"><i class="ti ti-refresh"></i></button>`:''}
-            </div>
+            <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge()">
           </div>
+          ${id&&cm.num_facture?`<button onclick="syncPaiementCommande(${id})" title="Vérifier paiement VosFactures" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0 4px;font-size:14px;line-height:1">↻</button>`:''}
           ${cm.facture_paiement_statut?'<span class="badge '+(cm.facture_paiement_statut==="payé"?"g":cm.facture_paiement_statut==="impayé"?"urgent":"attente")+'" style="font-size:11px">'+(cm.facture_paiement_statut==="payé"?"✅ Payé":cm.facture_paiement_statut==="impayé"?"⚠️ Impayé":"⏳ En attente")+'</span>':''}
           <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
@@ -1469,7 +1551,7 @@ async function modalCommande(id){
   window._CMD_CONF_DATE = cm.date_confirmation || null;
   TMP_CMD_LIGNES = (cm.lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
   TMP_RETOUR_LIGNES = (cm.retour_lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
-  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majZonePreuveLivraison(); }, 60);
+  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majZonePreuveLivraison(); if(!id && cm.distributeur_nom) prefillGroupeDepuisDistrib(); }, 60);
 }
 
 function switchCmdTab(tab){
@@ -1596,8 +1678,6 @@ function appliquerFactureVF(i){
   const f = (window._VF_SUGGEST||{})[i]; if(!f) return;
   if($('cmd-facture')) $('cmd-facture').value = f.numero || '';
   if(f.num_serie && $('cmd-serie')) $('cmd-serie').value = f.num_serie;
-  // Mémorise l'ID VosFactures de la facture rattachée → lien direct immédiat + persistance à l'enregistrement
-  if($('cmd-facture-vfid')) $('cmd-facture-vfid').value = f.id || '';
   toast(t('cmd_vf_applique')||'Facture rattachée — vérifie puis enregistre');
 }
 
@@ -1852,6 +1932,7 @@ async function enregistrerCommande(id){
     distributeur_nom: gv('cmd-distrib'), groupe: gv('cmd-groupe'), modele: gv('cmd-modele'),
     quantite: parseInt(gv('cmd-quantite'))||1,
     bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
+    bdc_source: gv('cmd-bdc-source')||null, bdc_doc_id: gv('cmd-bdc-docid')||null,
     client_final: gv('cf-nom') || gv('cmd-clientfinal'),
     client_final_type: gv('cmd-clientfinal-type')||null,
     cf_nom: gv('cf-nom')||null, cf_prenom: gv('cf-prenom')||null,
@@ -1861,7 +1942,6 @@ async function enregistrerCommande(id){
     num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
     date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
-    facture_vf_id: gv('cmd-facture-vfid')||null,
     informations: gv('cmd-infos'),
     reliquat: !!document.getElementById('cmd-reliquat')?.checked,
     reliquat_description: gv('cmd-reliquat-description')||null,
@@ -2497,23 +2577,18 @@ async function ouvrirDansVF(vfId, bdc){
     return;
   }
   if(!bdc){ toast('Renseigne d\'abord le numéro','ti-alert-circle','var(--warning)'); return; }
-  // Pas d'ID connu (ex. commande non encore enregistrée) : on retrouve le document
-  // via l'API (même recherche que l'import) pour ouvrir la pièce EXACTE.
-  // La recherche web VosFactures (?search_text=) n'applique pas le filtre → on l'évite si possible.
-  // L'onglet est ouvert tout de suite (dans le geste du clic) pour ne pas être bloqué par le navigateur.
+  // Pas d'ID connu : on retrouve le document via l'API (même recherche que l'import) pour
+  // ouvrir la pièce EXACTE. La recherche web VosFactures (?search_text=) n'applique pas le
+  // filtre → on l'évite si possible. L'onglet est ouvert tout de suite (geste du clic) pour
+  // ne pas être bloqué par le navigateur.
   const win = window.open('about:blank', '_blank');
   const urlRecherche = `https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(bdc)}`;
   const aller = (url) => { if(win && !win.closed){ win.location.href = url; } else { window.open(url, '_blank', 'noopener'); } };
   try{
     const r = await API.vfBdcLookup(bdc);
-    if(r && r.found && r.vf_id){
-      aller(`https://${account}.vosfactures.fr/invoices/${r.vf_id}`);
-    } else {
-      aller(urlRecherche); // document non retrouvé par l'API (ex. WZ) → repli sur la recherche
-    }
-  }catch(_){
-    aller(urlRecherche);
-  }
+    if(r && r.found && r.vf_id){ aller(`https://${account}.vosfactures.fr/invoices/${r.vf_id}`); }
+    else { aller(urlRecherche); }
+  }catch(_){ aller(urlRecherche); }
 }
 
 async function creerBLVF(id){
@@ -2538,7 +2613,7 @@ async function renderCommandesKanban(){
   const reqId = ++_cmdReqId;
   const res = await API.commandes({ annee: CMD_FILTERS.annee, mois: CMD_FILTERS.mois, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
   const list = res.rows||[];
-  const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Problème','Annulé'];
+  const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème'];
   const grouped = {};
   COLS.forEach(s => grouped[s] = []);
   list.forEach(cm => {
@@ -5352,8 +5427,21 @@ function renderCarte(ttl, c, a) {
       '</label>';
   }).join('');
 
-  // Panneau "Recherche" (placé en premier, tout en haut de la sidebar)
-  var rechercheCard = '<div class="card" style="padding:13px;margin-bottom:10px">' +
+  // Conteneur en position absolue pour garantir une hauteur
+  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
+    '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
+      '<div class="card" style="padding:13px;margin-bottom:10px">' +
+        '<div class="section-title"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</div>' +
+        legende +
+        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
+          '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
+          '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
+          '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
+        '</label>' +
+      '</div>' +
+      legendeAnnees() +
+      legendePriorites() +
+      '<div class="card" style="padding:13px">' +
         '<div class="section-title"><i class="ti ti-search"></i>' + (t('carte_recherche')||'Recherche') + '</div>' +
         '<div style="position:relative;margin-bottom:4px">' +
           '<input id="carte-search" class="form-input" placeholder="' + (t('carte_nom_distrib')||'Nom de distributeur…') + '" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;padding:6px 26px 6px 9px;font-size:13px">' +
@@ -5367,23 +5455,7 @@ function renderCarte(ttl, c, a) {
         '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:12px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
         '<div id="carte-geo-result" style="margin-top:10px;font-size:12px;color:var(--text2)"></div>' +
         '<div style="margin-top:10px;font-size:11px;color:var(--text3);line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
-      '</div>';
-
-  // Conteneur en position absolue pour garantir une hauteur
-  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
-    '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
-      rechercheCard +
-      '<div class="card" style="padding:13px;margin-bottom:10px">' +
-        '<div class="section-title"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</div>' +
-        legende +
-        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
-          '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
-          '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
-          '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
-        '</label>' +
       '</div>' +
-      legendeAnnees() +
-      legendePriorites() +
     '</div>' +
     '<div id="carte-leaflet" style="flex:1;height:100%;background:#dce4ec"></div>' +
     '</div>';

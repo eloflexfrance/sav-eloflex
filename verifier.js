@@ -236,7 +236,7 @@ if (acorn) {
 } else {
   const sansAuto = appJs.replace(/window\.([A-Za-z_$][\w$]*)\s*=\s*\1\s*;/g, '');
   // Valeurs qui ne sont PAS des références de fonction (littéraux) : « window.X = null »
-  // n'est pas un export de fonction mais une variable d'état → à ignorer.
+  // est une variable d'état, pas un export de fonction → à ignorer.
   const NON_FONCTIONS = new Set(['null', 'undefined', 'true', 'false', 'NaN', 'Infinity']);
   const orphelins = [];
   for (const m of appJs.matchAll(/window\.([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;/g)) {

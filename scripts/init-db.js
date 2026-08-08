@@ -218,6 +218,8 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_paiement_statut TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_date_echeance TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_vf_id BIGINT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS bdc_source TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS bdc_doc_id TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_final_type TEXT`);
       // Liaison intervention (SAV) <-> commande (Suivi commandes)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS intervention_id INTEGER REFERENCES interventions(id) ON DELETE SET NULL`);
