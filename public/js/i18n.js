@@ -1461,8 +1461,8 @@ const EN_STR = {
  "Note interne": "Internal note",
  "Aucune note — ajoutez un commentaire ci-dessous.": "No notes — add a comment below."
 };
-function L(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
-if(typeof window!=='undefined') window.L = L;
+function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
+if(typeof window!=='undefined') window.TR = TR;
 
 // Fonction de traduction
 function t(key) {
