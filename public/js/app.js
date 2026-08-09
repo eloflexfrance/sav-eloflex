@@ -93,7 +93,7 @@ function canWrite(module) {
 const isOp = () => isAdmin() || Object.values(CURRENT_USER?.permissions || {}).includes('write');
 
 async function seDeconnecter(){
-  if(!confirm('Se déconnecter ?')) return;
+  if(!confirm(L('Se déconnecter ?'))) return;
   await fetch('/api/auth/logout', { method:'POST' });
   window.location.href = '/login';
 }
@@ -307,13 +307,13 @@ async function chargerCommandesDashboard(){
       <div style="font-size:11px;color:var(--text2);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Année ${anneeEnCours}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
         <div class="stat-card"><div class="stat-label">${t('cmd_total')||'Total'}</div><div class="stat-value">${stats.total}</div></div>
-        <div class="stat-card"><div class="stat-label">🦽 Avec N° série</div><div class="stat-value" style="color:var(--accent)">${stats.fauteuils_serie||0}</div></div>
+        <div class="stat-card"><div class="stat-label">${L('🦽 Avec N° série')}</div><div class="stat-value" style="color:var(--accent)">${stats.fauteuils_serie||0}</div></div>
         <div class="stat-card"><div class="stat-label">⏳ En attente</div><div class="stat-value">${stats.en_attente||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_en_prep')||'En préparation'}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_facture_statut')||'Facturé'}</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
-        <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="Voir les commandes impayées"><div class="stat-label" style="color:var(--danger)">⚠️ Impayés</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
+        <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="Voir les commandes impayées"><div class="stat-label" style="color:var(--danger)">${L('⚠️ Impayés')}</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
         <div class="stat-card"><div class="stat-label">🔄 ${t('cmd_demo_count')||'Démos'}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_probleme')||'Problème'}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
       </div>
@@ -375,9 +375,9 @@ async function chargerTransfertsDashboard(){  const el=document.getElementById('
 // Récupère les distributeurs à adresse incomplète, propose les adresses
 // VosFactures, laisse corriger à la main, puis enregistre en masse.
 async function modalCompleterAdresses(){
-  showModal(`<div class="modal-header"><i class="ti ti-map-pin-cog" style="font-size:18px;color:var(--accent)"></i><h2>Compléter les adresses</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-map-pin-cog" style="font-size:18px;color:var(--accent)"></i><h2>${L('Compléter les adresses')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="max-width:900px">
-      <div id="adr-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">Analyse des distributeurs et récupération des adresses VosFactures…</div></div>
+      <div id="adr-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">${L('Analyse des distributeurs et récupération des adresses VosFactures…')}</div></div>
     </div>`);
   try {
     const r = await API.adressesIncompletes();
@@ -408,7 +408,7 @@ function dessinerAdresses(r){
     </div>
     <div class="table-wrap" style="max-height:52vh;overflow:auto">
       <table class="t"><thead><tr>
-        <th style="min-width:150px">Distributeur</th>
+        <th style="min-width:150px">${L('Distributeur')}</th>
         <th style="min-width:200px">Adresse (rue)</th>
         <th style="width:90px">CP</th>
         <th style="min-width:130px">Ville</th>
@@ -429,7 +429,7 @@ function dessinerAdresses(r){
     </div>
     <div class="modal-footer" style="margin-top:12px">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
-      <button class="btn primary" onclick="enregistrerAdresses()"><i class="ti ti-check"></i>Enregistrer les adresses</button>
+      <button class="btn primary" onclick="enregistrerAdresses()"><i class="ti ti-check"></i>${L('Enregistrer les adresses')}</button>
     </div>`;
 }
 
@@ -471,7 +471,7 @@ async function enregistrerAdresses(){
     // On n'envoie que si une rue a été renseignée (le but de l'écran)
     if (rue) aEnvoyer.push({ id: l.id, adresse: rue, cp: cp||l.cp||null, ville: ville||l.ville||null });
   });
-  if (!aEnvoyer.length) { toast('Aucune adresse à enregistrer', 'ti-alert-circle'); return; }
+  if (!aEnvoyer.length) { toast(L('Aucune adresse à enregistrer'), 'ti-alert-circle'); return; }
   if (!confirm(`Enregistrer ${aEnvoyer.length} adresse(s) ? Les points carte concernés seront repositionnés.`)) return;
   try {
     const r = await API.completerAdresses(aEnvoyer);
@@ -526,7 +526,7 @@ async function renderClient(ttl,c,a){
   a.innerHTML=`
     <button class="btn sm success" onclick="exportClientPDF(${cl.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
     <button class="btn sm" onclick="modalPortail(${cl.id},'${cl.token_portail||''}')"><i class="ti ti-link"></i>Portail</button>
-    <button class="btn sm" onclick="modalNewFauteuil(${cl.id})"><i class="ti ti-plus"></i>Fauteuil</button>
+    <button class="btn sm" onclick="modalNewFauteuil(${cl.id})"><i class="ti ti-plus"></i>${L('Fauteuil')}</button>
     <button class="btn sm primary" onclick="modalNewIntervention(null,${cl.id})"><i class="ti ti-plus"></i>Intervention</button>`;
   const s=cl.stats||{};
   c.innerHTML=`
@@ -538,7 +538,7 @@ async function renderClient(ttl,c,a){
           ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Portable',cl.portable],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
           ${(()=>{
             const lignes=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
-            if(!lignes.length) return `<tr><td style="color:var(--text3);padding:3px 0;width:100px">Adresse</td><td style="color:var(--text3)">— <span style="font-size:11px">(à compléter)</span></td></tr>`;
+            if(!lignes.length) return `<tr><td style="color:var(--text3);padding:3px 0;width:100px">Adresse</td><td style="color:var(--text3)">— <span style="font-size:11px">${L('(à compléter)')}</span></td></tr>`;
             const q=encodeURIComponent(lignes.join(', '));
             return `<tr><td style="color:var(--text3);padding:5px 0;width:100px;vertical-align:top">Adresse</td>
               <td style="font-weight:500;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}
@@ -549,15 +549,15 @@ async function renderClient(ttl,c,a){
                 </div>
               </td></tr>`;
           })()}
-          ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">💳 EDI — Prélèvement</span></td></tr>`:''}
-          ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')">🗺️ Affiché sur la carte distributeurs</span></td></tr>`:''}
+          ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">${L('💳 EDI — Prélèvement')}</span></td></tr>`:''}
+          ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')">${L('🗺️ Affiché sur la carte distributeurs')}</span></td></tr>`:''}
           ${cl.public_site?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Site public</td><td><span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span></td></tr>`:''}
-          ${cl.priorite?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Priorité</td><td><span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${cl.priorite}</span></td></tr>`:''}
+          ${cl.priorite?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${L('Priorité')}</td><td><span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${cl.priorite}</span></td></tr>`:''}
           ${cl.entite_facturation_id?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Facturation</td><td><span class="badge ouvert">🧾 Facturé à ${esc(cl.entite_facturation_nom||'—')}</span></td></tr>`:''}
         </table>
         <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
-          <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>Fusionner</button>
+          <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>${L('Fusionner')}</button>
         </div>
       </div>
       <div class="card">
@@ -578,7 +578,7 @@ async function renderClient(ttl,c,a){
             <div style="font-weight:700;font-size:13px"><i class="ti ti-wheelchair" style="font-size:13px;margin-right:3px"></i>${esc(f.modele)}</div>
             <button class="btn sm" onclick="event.stopPropagation();exportFauteuilPDF(${f.id})"><i class="ti ti-file-type-pdf"></i></button>
           </div>
-          <div style="font-size:11px;color:var(--text3)">Série : <span class="mono">${esc(f.serie)}</span></div>
+          <div style="font-size:11px;color:var(--text3)">${L('Série :')} <span class="mono">${esc(f.serie)}</span></div>
           <div style="font-size:11px;color:var(--text3)">Année : ${f.annee||'—'}</div>
           ${f.date_achat?`<div style="font-size:11px;color:var(--text3)">Achat : ${fd(f.date_achat)}</div>`:''}
           ${f.num_facture?`<div style="font-size:11px;margin:3px 0;display:flex;align-items:center;gap:4px"><i class="ti ti-receipt" style="font-size:12px;color:var(--accent)"></i><span style="color:var(--accent)" class="mono">${esc(f.num_facture)}</span></div>`:''}
@@ -603,7 +603,7 @@ async function chargerCommandesClient(clientId){
     const res = await API.commandes({ client_id: clientId, per_page: 200 });
     const list = res.rows||[];
     if(!list.length){
-      el.innerHTML=`<div style="font-size:12px;color:var(--text3)">Aucune commande pour ce distributeur.</div>`;
+      el.innerHTML=`<div style="font-size:12px;color:var(--text3)">${L('Aucune commande pour ce distributeur.')}</div>`;
       return;
     }
     el.innerHTML=`<div class="table-wrap"><table class="t">
@@ -613,7 +613,7 @@ async function chargerCommandesClient(clientId){
         <th>${t('cmd_bdc')||'Bdc'}</th>
         <th>${t('cmd_modele')||'Modèle / Pièce'}</th>
         <th>${t('cmd_suivi')||'N° suivi'}</th>
-        <th>N° série</th>
+        <th>${L('N° série')}</th>
         <th>${t('col_statut')||'Statut'}</th>
       </tr></thead>
       <tbody>${list.map(cm=>{
@@ -660,16 +660,16 @@ async function renderFauteuil(ttl,c,a){
     </div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="card">
-        <div class="section-title"><i class="ti ti-wheelchair"></i>Fauteuil</div>
+        <div class="section-title"><i class="ti ti-wheelchair"></i>${L('Fauteuil')}</div>
         <table style="width:100%;font-size:12px">
           ${[['Modèle',f.modele],['N° de série',f.serie],['Année',f.annee],['Couleur',f.couleur]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:110px">${k}</td><td style="font-weight:500">${esc(String(v||'—'))}</td></tr>`).join('')}
           ${f.date_achat?`<tr><td style="color:var(--text3);padding:3px 0">Date d'achat</td><td>${fd(f.date_achat)}</td></tr>`:''}
-          ${f.num_facture?`<tr><td style="color:var(--text3);padding:3px 0">Facture</td><td><span class="mono" style="color:var(--accent)">${esc(f.num_facture)}</span></td></tr>`:''}
+          ${f.num_facture?`<tr><td style="color:var(--text3);padding:3px 0">${L('Facture')}</td><td><span class="mono" style="color:var(--accent)">${esc(f.num_facture)}</span></td></tr>`:''}
           <tr><td style="color:var(--text3);padding:3px 0">Garantie</td><td>${garantieChip(f)}</td></tr>
         </table>
       </div>
       <div class="card">
-        <div class="section-title"><i class="ti ti-chart-bar"></i>Historique SAV</div>
+        <div class="section-title"><i class="ti ti-chart-bar"></i>${L('Historique SAV')}</div>
         <div class="grid-2">
           <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${inters.length}</div></div>
           <div class="stat-card"><div class="stat-label">Garantie</div><div class="stat-value" style="color:var(--success)">${inters.filter(i=>i.garantie).length}</div></div>
@@ -918,13 +918,13 @@ async function renderCommandes(ttl,c,a){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:14px">
       <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${stats.total}</div></div>
       <div class="stat-card"><div class="stat-label">⏳ Attente</div><div class="stat-value">${stats.en_attente||0}</div></div>
-      <div class="stat-card"><div class="stat-label">En prép.</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
-      <div class="stat-card"><div class="stat-label">Expédié</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
-      <div class="stat-card"><div class="stat-label">Livré</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
-      <div class="stat-card"><div class="stat-label">Facturé</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
-      <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="Voir les commandes impayées"><div class="stat-label" style="color:var(--danger)">⚠️ Impayés</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
-      <div class="stat-card"><div class="stat-label">🔄 Démos</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
-      <div class="stat-card"><div class="stat-label">Problème</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
+      <div class="stat-card"><div class="stat-label">${L('En prép.')}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
+      <div class="stat-card"><div class="stat-label">${L('Expédié')}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
+      <div class="stat-card"><div class="stat-label">${L('Livré')}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
+      <div class="stat-card"><div class="stat-label">${L('Facturé')}</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
+      <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="Voir les commandes impayées"><div class="stat-label" style="color:var(--danger)">${L('⚠️ Impayés')}</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
+      <div class="stat-card"><div class="stat-label">${L('🔄 Démos')}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
+      <div class="stat-card"><div class="stat-label">${L('Problème')}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
       <input class="form-input" style="max-width:220px;padding:6px 10px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;clearTimeout(window._cmdSearchTimer);window._cmdSearchTimer=setTimeout(()=>renderCommandesTable(1),300)">
@@ -943,8 +943,8 @@ async function renderCommandes(ttl,c,a){
         <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
         <option value="Livré" ${CMD_FILTERS.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
         <option value="Facturé" ${CMD_FILTERS.statut==='Facturé'?'selected':''}>${t('cmd_facture_statut')||'Facturé'}</option>
-        <option value="Payé" ${CMD_FILTERS.statut==='Payé'?'selected':''}>✅ Payé</option>
-        <option value="Impayé" ${CMD_FILTERS.statut==='Impayé'?'selected':''}>⚠️ Impayé</option>
+        <option value="Payé" ${CMD_FILTERS.statut==='Payé'?'selected':''}>${L('✅ Payé')}</option>
+        <option value="Impayé" ${CMD_FILTERS.statut==='Impayé'?'selected':''}>${L('⚠️ Impayé')}</option>
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
@@ -958,12 +958,12 @@ async function renderCommandes(ttl,c,a){
       <div style="display:flex;gap:16px;flex-wrap:wrap">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.num_annuel?'checked':''} onchange="CMD_COLS.num_annuel=this.checked;saveCmdCols();renderCommandesTable(1)"> # N° annuel</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.paiement?'checked':''} onchange="CMD_COLS.paiement=this.checked;saveCmdCols();renderCommandesTable(1)"> 💳 Paiement VF</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.facture?'checked':''} onchange="CMD_COLS.facture=this.checked;saveCmdCols();renderCommandesTable(1)"> N° Facture</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.facture?'checked':''} onchange="CMD_COLS.facture=this.checked;saveCmdCols();renderCommandesTable(1)"> ${L('N° Facture')}</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_facture?'checked':''} onchange="CMD_COLS.date_facture=this.checked;saveCmdCols();renderCommandesTable(1)"> Date facturation</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> 🔄 Origine démo</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.edi?'checked':''} onchange="CMD_COLS.edi=this.checked;saveCmdCols();renderCommandesTable(1)"> 💳 EDI (prélèvement)</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> ${L('🔄 Origine démo')}</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.edi?'checked':''} onchange="CMD_COLS.edi=this.checked;saveCmdCols();renderCommandesTable(1)"> ${L('💳 EDI (prélèvement)')}</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.pays?'checked':''} onchange="CMD_COLS.pays=this.checked;saveCmdCols();renderCommandesTable(1)"> 🌍 Pays</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.retour?'checked':''} onchange="CMD_COLS.retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ↩ Retour</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.retour?'checked':''} onchange="CMD_COLS.retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${L('↩ Retour')}</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_retour?'checked':''} onchange="CMD_COLS.date_retour=this.checked;saveCmdCols();renderCommandesTable(1)"> 📅 Date retour</label>
       </div>
     </div>
@@ -1152,13 +1152,13 @@ function modalNouvelleCommande(){
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
     <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
-      <div style="font-size:13px;color:var(--text2)">Importer une commande depuis son numéro :</div>
+      <div style="font-size:13px;color:var(--text2)">${L('Importer une commande depuis son numéro :')}</div>
       <div style="display:flex;gap:8px">
         <button type="button" id="nc-src-vf" class="btn" onclick="ncSetSource('vf')" style="flex:1"><i class="ti ti-file-invoice"></i> VosFactures</button>
         <button type="button" id="nc-src-pl" class="btn" onclick="ncSetSource('pennylane')" style="flex:1"><i class="ti ti-brand-stripe"></i> Pennylane</button>
       </div>
       <div>
-        <label class="form-label">Numéro de commande (BDC / devis)</label>
+        <label class="form-label">${L('Numéro de commande (BDC / devis)')}</label>
         <input class="form-input mono" id="nc-numero" placeholder="Numéro VosFactures ou Pennylane" onkeydown="if(event.key==='Enter')importerNouvelleCommande()" style="width:100%">
       </div>
       <div id="nc-msg" style="font-size:12px;color:var(--text3);min-height:16px"></div>
@@ -1219,7 +1219,7 @@ function ouvrirBdcSource(){
   var bdc=(document.getElementById('cmd-bdc').value||'').trim();
   if(src==='pennylane'){
     if(docid){ window.open('https://app.pennylane.com/companies/invoices/'+docid, '_blank', 'noopener'); }
-    else { toast('Pièce Pennylane non identifiée — ouvre Pennylane manuellement','ti-alert-circle','var(--warning)'); window.open('https://app.pennylane.com/companies/invoices', '_blank', 'noopener'); }
+    else { toast(L('Pièce Pennylane non identifiée — ouvre Pennylane manuellement'),'ti-alert-circle','var(--warning)'); window.open('https://app.pennylane.com/companies/invoices', '_blank', 'noopener'); }
     return;
   }
   ouvrirDansVF(docid||null, bdc);
@@ -1253,11 +1253,11 @@ async function modalCommande(id, prefill){
       <i class="ti ti-clipboard-list" style="font-size:18px;color:var(--accent)"></i>
       <h2 style="flex:1">${id?(t('cmd_edit')||'Modifier'):(t('cmd_add')||'Nouvelle commande')}${cm.distributeur_nom?` <span style="font-weight:400;color:var(--text2);font-size:15px">— ${esc(cm.distributeur_nom)}</span>`:''}</h2>
       ${cm.client_edi?`<span class="badge ouvert" style="font-size:11px;margin-right:4px">💳 EDI</span>`:''}
-      ${/avoir/i.test(cm.informations||'')?`<span class="badge urgent" style="font-size:11px;margin-right:4px" title="${esc((cm.informations||'').replace(/"/g,'&quot;').slice(0,140))}">↩ Avoir / Retour</span>`:''}
-      ${id&&cm.origine==='sav'?`<span class="badge hg" style="font-size:11px;margin-right:4px" title="Commande issue d'un SAV facturé — exclue des stats de ventes et de la numérotation">🛠️ SAV facturé</span>`:''}
+      ${/avoir/i.test(cm.informations||'')?`<span class="badge urgent" style="font-size:11px;margin-right:4px" title="${esc((cm.informations||'').replace(/"/g,'&quot;').slice(0,140))}">${L('↩ Avoir / Retour')}</span>`:''}
+      ${id&&cm.origine==='sav'?`<span class="badge hg" style="font-size:11px;margin-right:4px" title="Commande issue d'un SAV facturé — exclue des stats de ventes et de la numérotation">${L('🛠️ SAV facturé')}</span>`:''}
       ${id?(cm.intervention_id
-        ? `<button class="btn sm" onclick="ouvrirInterventionLiee(${cm.intervention_id})" title="Voir le SAV lié"><i class="ti ti-tool"></i> SAV lié</button>`
-        : `<button class="btn sm" onclick="basculerCommandeVersSAV(${id})" title="Créer un SAV lié pour cette commande"><i class="ti ti-tool"></i> Créer SAV</button>`):''}
+        ? `<button class="btn sm" onclick="ouvrirInterventionLiee(${cm.intervention_id})" title="Voir le SAV lié"><i class="ti ti-tool"></i> ${L('SAV lié')}</button>`
+        : `<button class="btn sm" onclick="basculerCommandeVersSAV(${id})" title="Créer un SAV lié pour cette commande"><i class="ti ti-tool"></i> ${L('Créer SAV')}</button>`):''}
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
     <div style="display:flex;border-bottom:0.5px solid var(--border-s)">
@@ -1275,8 +1275,8 @@ async function modalCommande(id, prefill){
         <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
         <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
         <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>${t('cmd_facture_statut')||'Facturé'}</option>
-        <option value="Payé" ${cm.statut==='Payé'?'selected':''}>✅ Payé</option>
-        <option value="Impayé" ${cm.statut==='Impayé'?'selected':''}>⚠️ Impayé</option>
+        <option value="Payé" ${cm.statut==='Payé'?'selected':''}>${L('✅ Payé')}</option>
+        <option value="Impayé" ${cm.statut==='Impayé'?'selected':''}>${L('⚠️ Impayé')}</option>
         <option value="Problème" ${cm.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
@@ -1298,7 +1298,7 @@ async function modalCommande(id, prefill){
               <div id="cmd-distrib-drop" class="piece-dropdown" style="display:none"></div>
             </div>
           </div>
-          ${cm.facturation_nom?`<div class="form-group" style="grid-column:1/-1;margin:-2px 0 6px"><div style="font-size:12px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border-s);border-radius:6px;padding:7px 10px">🧾 Facturé à : <strong>${esc(cm.facturation_nom)}</strong> <span style="color:var(--text3)">— défini sur la fiche distributeur</span></div></div>`:''}
+          ${cm.facturation_nom?`<div class="form-group" style="grid-column:1/-1;margin:-2px 0 6px"><div style="font-size:12px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border-s);border-radius:6px;padding:7px 10px">${L('🧾 Facturé à :')} <strong>${esc(cm.facturation_nom)}</strong> <span style="color:var(--text3)">${L('— défini sur la fiche distributeur')}</span></div></div>`:''}
           <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
             <select class="form-input" id="cmd-groupe">
               <option value="">— Choisir —</option>
@@ -1310,7 +1310,7 @@ async function modalCommande(id, prefill){
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 2fr 2fr;gap:10px;margin-bottom:12px">
-          <div class="form-group" style="margin:0"><label class="form-label">Quantité</label>
+          <div class="form-group" style="margin:0"><label class="form-label">${L('Quantité')}</label>
             <input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}">
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">Bdc / Devis</label>
@@ -1388,7 +1388,7 @@ async function modalCommande(id, prefill){
               ? `<div class="form-input" style="background:var(--bg);cursor:default">${esc(CURRENT_USER.pays)}</div><input type="hidden" id="cmd-pays" value="${esc(CURRENT_USER.pays)}">`
               : `<select class="form-input" id="cmd-pays">
                   <option value="France" ${(cm.pays||'France')==='France'?'selected':''}>🇫🇷 France</option>
-                  <option value="Sweden" ${cm.pays==='Sweden'?'selected':''}>🇸🇪 Suède</option>
+                  <option value="Sweden" ${cm.pays==='Sweden'?'selected':''}>${L('🇸🇪 Suède')}</option>
                   <option value="UK" ${cm.pays==='UK'?'selected':''}>🇬🇧 United Kingdom</option>
                   <option value="Germany" ${cm.pays==='Germany'?'selected':''}>🇩🇪 Deutschland</option>
                   <option value="Spain" ${cm.pays==='Spain'?'selected':''}>🇪🇸 España</option>
@@ -1403,12 +1403,12 @@ async function modalCommande(id, prefill){
 
       <div id="cmd-tab-expedition" style="${initTab!=='expedition'?'display:none':''}">
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">Client final (bénéficiaire)</label>
+          <div class="form-group"><label class="form-label">${L('Client final (bénéficiaire)')}</label>
             <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="Nom du bénéficiaire">
           </div>
           <div class="form-group"><label class="form-label">Type de destinataire</label>
             <select class="form-input" id="cmd-clientfinal-type" onchange="toggleClientFinalForm(this.value)">
-              <option value="">— Même adresse que le distributeur</option>
+              <option value="">${L('— Même adresse que le distributeur')}</option>
               <option value="particulier" ${cm.client_final_type==='particulier'?'selected':''}>🏠 Particulier</option>
               <option value="entreprise" ${cm.client_final_type==='entreprise'?'selected':''}>🏢 Entreprise / Structure</option>
             </select>
@@ -1427,7 +1427,7 @@ async function modalCommande(id, prefill){
                 <div id="cf-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:999;max-height:180px;overflow-y:auto"></div>
               </div>
               <div class="form-group" id="cf-prenom-group" style="${cm.client_final_type==='particulier'?'':'display:none'}">
-                <label class="form-label">Prénom</label>
+                <label class="form-label">${L('Prénom')}</label>
                 <input class="form-input" id="cf-prenom" value="${esc(cm.cf_prenom||'')}" placeholder="Prénom">
               </div>
               <div class="form-group" style="grid-column:1/-1">
@@ -1443,7 +1443,7 @@ async function modalCommande(id, prefill){
                 <input class="form-input" id="cf-ville" value="${esc(cm.cf_ville||'')}" placeholder="Paris" oninput="cfAutocomplete(this,'ville')">
               </div>
               <div class="form-group">
-                <label class="form-label">Téléphone</label>
+                <label class="form-label">${L('Téléphone')}</label>
                 <input class="form-input" id="cf-tel" type="tel" value="${esc(cm.cf_tel||'')}" placeholder="06 00 00 00 00">
               </div>
               <div class="form-group">
@@ -1477,7 +1477,7 @@ async function modalCommande(id, prefill){
               ${cm.num_bordereau?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(null,'${esc(cm.num_bordereau)}')"><i class="ti ti-external-link"></i></button>`:''}
             </div>
           </div>
-          <div class="form-group"><label class="form-label">N° série</label>
+          <div class="form-group"><label class="form-label">${L('N° série')}</label>
             <input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}" placeholder="${t('cmd_num_serie_placeholder')||'Numéro de série'}">
           </div>
         </div>
@@ -1564,7 +1564,7 @@ async function modalCommande(id, prefill){
       ${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i></button>`:''}
       ${id?`<button class="btn sm" onclick="envoyerEmailConfirmation(${id})" title="Demander confirmation BDC"><i class="ti ti-mail"></i> ${t('btn_confirmer_bdc')||'Confirmer'}</button>`:''}
       ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Email d'expédition"><i class="ti ti-mail"></i> ${t('btn_email_exped')||'Email expéd.'}</button>`:''}
-      ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="Créer la facture dans VosFactures"><i class="ti ti-receipt-2"></i> Facture VF</button>`:''}
+      ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="Créer la facture dans VosFactures"><i class="ti ti-receipt-2"></i> ${L('Facture VF')}</button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
@@ -1799,7 +1799,7 @@ async function lookupBordereauVF(){
   toast('Recherche dans VosFactures…','ti-loader-2');
   try{
     const r = await API.vfBdcLookup(numero);
-    if(!r.configured){ toast('VosFactures non configuré','ti-alert-circle','var(--danger)'); return; }
+    if(!r.configured){ toast(L('VosFactures non configuré'),'ti-alert-circle','var(--danger)'); return; }
     if(!r.found){ toast('Bordereau introuvable dans VosFactures','ti-alert-circle','var(--danger)'); return; }
     let remplis = [];
     if(r.lignes && r.lignes.length){
@@ -1837,7 +1837,7 @@ function majStatutBadge(){
 
 function ouvrirAvoirVF(num){
   const account = window._VF_ACCOUNT;
-  if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
+  if(!account){ toast(L('Compte VosFactures non configuré'),'ti-alert-circle','var(--warning)'); return; }
   window.open(`https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(num)}`, '_blank', 'noopener');
 }
 
@@ -2090,13 +2090,13 @@ async function renderRapports(ttl,c,a){
     <div class="grid-2" style="gap:14px">
       <div class="card">
         <div class="section-title"><i class="ti ti-file-spreadsheet"></i>Export Excel</div>
-        <div class="form-group"><label class="form-label">Période</label>
+        <div class="form-group"><label class="form-label">${L('Période')}</label>
           <div class="grid-2"><input class="form-input" id="exp-from" type="date"><input class="form-input" id="exp-to" type="date"></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
           <button class="btn success" onclick="exportExcel('interventions')"><i class="ti ti-tool"></i>Interventions</button>
-          <button class="btn success" onclick="exportExcel('catalogue')"><i class="ti ti-box"></i>Catalogue pièces</button>
-          <button class="btn success" onclick="exportExcel('expeditions')"><i class="ti ti-truck-delivery"></i>Expéditions</button>
+          <button class="btn success" onclick="exportExcel('catalogue')"><i class="ti ti-box"></i>${L('Catalogue pièces')}</button>
+          <button class="btn success" onclick="exportExcel('expeditions')"><i class="ti ti-truck-delivery"></i>${L('Expéditions')}</button>
           <button class="btn success" onclick="exportExcel('clients')"><i class="ti ti-users"></i>Clients</button>
           <button class="btn primary" onclick="exportExcel('complet')"><i class="ti ti-file-zip"></i>Export complet (tous les onglets)</button>
         </div>
@@ -2104,16 +2104,16 @@ async function renderRapports(ttl,c,a){
       <div class="card">
         <div class="section-title"><i class="ti ti-file-type-pdf"></i>Export PDF</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="font-size:12px;color:var(--text2)">Les PDF se génèrent depuis chaque fiche client, fauteuil ou intervention via le bouton PDF correspondant.</div>
+          <div style="font-size:12px;color:var(--text2)">${L('Les PDF se génèrent depuis chaque fiche client, fauteuil ou intervention via le bouton PDF correspondant.')}</div>
           <div class="divider"></div>
           <div class="section-title"><i class="ti ti-filter"></i>Filtres interventions</div>
-          <div class="form-group"><label class="form-label">Statut</label>
-            <select class="form-input" id="r-statut"><option value="">Tous</option><option>Ouvert</option><option>En attente</option><option>Fermé</option></select>
+          <div class="form-group"><label class="form-label">${L('Statut')}</label>
+            <select class="form-input" id="r-statut"><option value="">Tous</option><option>Ouvert</option><option>En attente</option><option>${L('Fermé')}</option></select>
           </div>
           <div class="form-group"><label class="form-label">Garantie</label>
             <select class="form-input" id="r-garantie"><option value="">Tous</option><option value="1">Sous garantie</option><option value="0">Hors garantie</option></select>
           </div>
-          <button class="btn success" onclick="exportExcelFiltre()"><i class="ti ti-file-spreadsheet"></i>Export filtré</button>
+          <button class="btn success" onclick="exportExcelFiltre()"><i class="ti ti-file-spreadsheet"></i>${L('Export filtré')}</button>
         </div>
       </div>
     </div>`;
@@ -2121,14 +2121,14 @@ async function renderRapports(ttl,c,a){
 
 function exportExcel(type){
   API.exportExcel(type,{date_from:gv('exp-from')||undefined, date_to:gv('exp-to')||undefined});
-  toast('Téléchargement en cours…','ti-download');
+  toast(L('Téléchargement en cours…'),'ti-download');
 }
 function exportExcelFiltre(){
   const params={};
   const s=gv('r-statut'); if(s) params.statut=s;
   const g=gv('r-garantie'); if(g!=='') params.garantie=g;
   API.exportExcel('interventions',params);
-  toast('Téléchargement en cours…','ti-download');
+  toast(L('Téléchargement en cours…'),'ti-download');
 }
 
 // ── ALERTES ───────────────────────────────────────────────────────
@@ -2142,7 +2142,7 @@ async function renderAlertes(ttl,c,a){
   const demosHtml = (demos&&demos.length) ? `<div class="card" style="margin-bottom:14px">
       <div class="section-title" style="margin-bottom:10px"><i class="ti ti-wheelchair"></i> Démos à suivre (${demos.length})</div>
       <div class="table-wrap"><table class="t">
-        <thead><tr><th>Distributeur</th><th>Modèle / Série</th><th>Livraison</th><th>Rappel</th><th>Retour / Prolonger / Facturer</th></tr></thead>
+        <thead><tr><th>${L('Distributeur')}</th><th>${L('Modèle / Série')}</th><th>${L('Livraison')}</th><th>Rappel</th><th>${L('Retour / Prolonger / Facturer')}</th></tr></thead>
         <tbody>${demos.map(d=>`<tr>
           <td>${esc(d.client_nom||d.distributeur_nom)}${d.client_ville?` <span style="color:var(--text3);font-size:11px">${esc(d.client_ville)}</span>`:''}</td>
           <td>${esc(d.modele||'')} ${d.num_serie?`<span class="mono" style="font-size:11px;color:var(--text3)">${esc(d.num_serie)}</span>`:''}</td>
@@ -2170,15 +2170,15 @@ async function renderAlertes(ttl,c,a){
 }
 
 async function demoProlonger(id, cur){
-  const d = prompt('Nouvelle date de rappel (AAAA-MM-JJ) :', cur||'');
+  const d = prompt(L('Nouvelle date de rappel (AAAA-MM-JJ) :'), cur||'');
   if(!d) return;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d.trim())){ alert('Format attendu : AAAA-MM-JJ'); return; }
-  try{ await API.demoProlonger(id, d.trim()); toast('Rappel prolongé au '+d.trim(),'ti-calendar-plus'); refreshBadges(); render(); }catch(e){ alert(e.message); }
+  try{ await API.demoProlonger(id, d.trim()); toast(L('Rappel prolongé au ')+d.trim(),'ti-calendar-plus'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 async function demoCloturer(id, resultat){
   const lbl = resultat==='facture' ? 'facturée / vendue' : 'en retour organisé';
-  if(!confirm('Marquer cette démo comme '+lbl+' ? Elle sort du suivi.')) return;
-  try{ await API.demoCloturer(id, resultat); toast('Démo clôturée ('+lbl+')','ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
+  if(!confirm(L('Marquer cette démo comme ')+lbl+' ? Elle sort du suivi.')) return;
+  try{ await API.demoCloturer(id, resultat); toast(L('Démo clôturée (')+lbl+')','ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 window.demoProlonger=demoProlonger; window.demoCloturer=demoCloturer;
 
@@ -2192,7 +2192,7 @@ async function renderParametres(ttl,c,a){
   setTimeout(chargerResumeSauvegarde, 50);
   c.innerHTML=`
     <div class="param-section">
-      <h3><i class="ti ti-database-export"></i>Sauvegarde de la base</h3>
+      <h3><i class="ti ti-database-export"></i>${L('Sauvegarde de la base')}</h3>
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
         L'ensemble des données (commandes, clients, interventions, notes, points de carte…) dans un fichier unique.
         Une sauvegarde compressée part automatiquement vers info@eloflex.fr chaque lundi.
@@ -2200,14 +2200,14 @@ async function renderParametres(ttl,c,a){
       </div>
       <div id="sauvegarde-resume" style="font-size:12px;color:var(--text3);margin-bottom:12px">Chargement…</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a class="btn primary" href="/api/sauvegarde/export" download><i class="ti ti-download"></i>Télécharger la sauvegarde</a>
-        <button class="btn" onclick="envoyerSauvegardeMaintenant(this)"><i class="ti ti-mail-forward"></i>Envoyer par courriel</button>
+        <a class="btn primary" href="/api/sauvegarde/export" download><i class="ti ti-download"></i>${L('Télécharger la sauvegarde')}</a>
+        <button class="btn" onclick="envoyerSauvegardeMaintenant(this)"><i class="ti ti-mail-forward"></i>${L('Envoyer par courriel')}</button>
       </div>
       <div style="margin-top:16px;padding-top:14px;border-top:0.5px solid var(--border)">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px"><i class="ti ti-database-import"></i> Restaurer une sauvegarde</div>
-        <div style="font-size:12px;color:var(--danger);margin-bottom:8px">⚠ Remplace TOUTES les données actuelles par celles du fichier. À utiliser sur une base vide ou pour restaurer après incident. Accepte les fichiers .json et .json.gz.</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px"><i class="ti ti-database-import"></i> ${L('Restaurer une sauvegarde')}</div>
+        <div style="font-size:12px;color:var(--danger);margin-bottom:8px">${L('⚠ Remplace TOUTES les données actuelles par celles du fichier. À utiliser sur une base vide ou pour restaurer après incident. Accepte les fichiers .json et .json.gz.')}</div>
         <input type="file" id="restore-file" accept=".json,.gz,application/json,application/gzip" style="font-size:12px">
-        <button class="btn danger" onclick="restaurerSauvegarde(this)" style="margin-left:8px"><i class="ti ti-upload"></i>Restaurer</button>
+        <button class="btn danger" onclick="restaurerSauvegarde(this)" style="margin-left:8px"><i class="ti ti-upload"></i>${L('Restaurer')}</button>
         <div id="restore-result" style="font-size:12px;margin-top:8px"></div>
       </div>
     </div>
@@ -2235,15 +2235,15 @@ async function renderParametres(ttl,c,a){
         <div class="form-group"><label class="form-label">${t('param_smtp_user')}</label><input class="form-input" id="p-smtp-user" placeholder="sav@eloflex.fr" value="${esc(p.email_smtp_user||'')}"></div>
         <div class="form-group"><label class="form-label">${t('param_smtp_pass')}</label><input class="form-input" id="p-smtp-pass" type="password" placeholder="••••••••" value="${esc(p.email_smtp_pass||'')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('param_email_from')}</label><input class="form-input" id="p-email-from" placeholder="SAV Eloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
-        <div class="form-group"><label class="form-label">CC — Emails SAV (confirmations, expéditions)</label><input class="form-input" id="p-email-cc-sav" placeholder="sav@eloflex.fr" value="${esc(p.email_cc_sav||'sav@eloflex.fr')}"></div>
+        <div class="form-group"><label class="form-label">${L('CC — Emails SAV (confirmations, expéditions)')}</label><input class="form-input" id="p-email-cc-sav" placeholder="sav@eloflex.fr" value="${esc(p.email_cc_sav||'sav@eloflex.fr')}"></div>
         <div class="form-group"><label class="form-label">CC — Emails relances devis & BDC</label><input class="form-input" id="p-email-cc-relance" placeholder="info@eloflex.fr" value="${esc(p.email_cc_relance||'info@eloflex.fr')}"></div>
       </div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-mail"></i> Email relances devis (compte séparé)</h3>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Utilisé pour les relances devis et BDC commercial. Laissez vide pour utiliser le même compte que SAV.</div>
+      <h3><i class="ti ti-mail"></i> ${L('Email relances devis (compte séparé)')}</h3>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px">${L('Utilisé pour les relances devis et BDC commercial. Laissez vide pour utiliser le même compte que SAV.')}</div>
       <div class="grid-2">
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Expéditeur relances</label><input class="form-input" id="p-email-from-relance" placeholder="info@eloflex.fr" value="${esc(p.email_from_relance||p.email_from||'')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${L('Expéditeur relances')}</label><input class="form-input" id="p-email-from-relance" placeholder="info@eloflex.fr" value="${esc(p.email_from_relance||p.email_from||'')}"></div>
         <div class="form-group"><label class="form-label">Utilisateur SMTP relances</label><input class="form-input" id="p-smtp-user-relance" placeholder="Même que SAV si vide" value="${esc(p.email_smtp_user_relance||'')}"></div>
         <div class="form-group"><label class="form-label">Mot de passe SMTP relances</label><input class="form-input" type="password" autocomplete="new-password" id="p-smtp-pass-relance" placeholder="Même que SAV si vide" value="${esc(p.email_smtp_pass_relance||'')}"></div>
       </div>
@@ -2270,7 +2270,7 @@ async function renderParametres(ttl,c,a){
       </div>
       <div class="form-group"><label class="form-label">${t('param_langue')}</label>
         <div style="display:flex;gap:8px;margin-top:4px">
-          <button class="btn ${LANG==='fr'?'primary':''}" id="btn-lang-fr" onclick="switchLang('fr')" style="min-width:90px">🇫🇷 Français</button>
+          <button class="btn ${LANG==='fr'?'primary':''}" id="btn-lang-fr" onclick="switchLang('fr')" style="min-width:90px">${L('🇫🇷 Français')}</button>
           <button class="btn ${LANG==='en'?'primary':''}" id="btn-lang-en" onclick="switchLang('en')" style="min-width:90px">🇬🇧 English</button>
         </div>
       </div>
@@ -2316,12 +2316,12 @@ async function renderParametres(ttl,c,a){
     </div>
     <div class="param-section">
       <h3><i class="ti ti-copy"></i> Doublons de commandes</h3>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Commandes ayant le même numéro de BDC ou devis pour le même distributeur.</p>
-      <button class="btn danger" onclick="supprimerTousDoublons()" id="btn-suppr-doublons"><i class="ti ti-trash"></i> Supprimer tous les doublons</button>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">${L('Commandes ayant le même numéro de BDC ou devis pour le même distributeur.')}</p>
+      <button class="btn danger" onclick="supprimerTousDoublons()" id="btn-suppr-doublons"><i class="ti ti-trash"></i> ${L('Supprimer tous les doublons')}</button>
       <div id="param-doublons-list" style="margin-top:10px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-clock-exclamation"></i> Commandes bloquées</h3>
+      <h3><i class="ti ti-clock-exclamation"></i> ${L('Commandes bloquées')}</h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Commandes "En préparation" sans numéro de suivi valide depuis plus de :</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
         <select class="form-input" id="blocage-seuil" style="width:auto" onchange="chargerAlertesBlocage()">
@@ -2337,7 +2337,7 @@ async function renderParametres(ttl,c,a){
     <div class="param-section">
       <h3><i class="ti ti-receipt-2"></i> Migration facturation historique</h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
-        Passe toutes les commandes antérieures à juin 2026 (hors Annulé et déjà Facturé) au statut <b>Facturé</b>.<br>
+        Passe toutes les commandes antérieures à juin 2026 (hors Annulé et déjà Facturé) au statut <b>${L('Facturé')}</b>.<br>
         <span style="color:var(--danger);font-size:11px">⚠ Action irréversible — à n'exécuter qu'une seule fois.</span>
       </p>
       <button class="btn" onclick="lancerMigrationFacture()" id="btn-migration-facture"><i class="ti ti-check"></i> Passer l'historique en Facturé</button>
@@ -2359,16 +2359,16 @@ async function renderParametres(ttl,c,a){
       </label>
       <div id="import-commandes-result" style="margin-top:10px"></div>
     </div>`;
-  API.vfStatus().then(s=>{const el=$('vf-status-detail');if(el)el.innerHTML=s.configured?`<span style="color:var(--success)">✓ Compte configuré : ${esc(s.account||'')}${s.last_sync?' — Dernière sync : '+s.last_sync.created_at?.slice(0,16).replace('T',' '):''}</span>`:`<span style="color:var(--danger)">⚠ Non configuré — renseigner VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT dans .env</span>`;}).catch(()=>{});
+  API.vfStatus().then(s=>{const el=$('vf-status-detail');if(el)el.innerHTML=s.configured?`<span style="color:var(--success)">✓ Compte configuré : ${esc(s.account||'')}${s.last_sync?' — Dernière sync : '+s.last_sync.created_at?.slice(0,16).replace('T',' '):''}</span>`:`<span style="color:var(--danger)">${L('⚠ Non configuré — renseigner VOSFACTURES_API_TOKEN et VOSFACTURES_ACCOUNT dans .env')}</span>`;}).catch(()=>{});
 
   // Section utilisateurs — toujours affichée dans Paramètres (la route /parametres est déjà adminOnly)
   const usersSection = document.createElement('div');
   usersSection.className = 'param-section';
   usersSection.id = 'section-utilisateurs';
   usersSection.innerHTML = `
-    <h3><i class="ti ti-users-group"></i> Utilisateurs & accès</h3>
+    <h3><i class="ti ti-users-group"></i> ${L('Utilisateurs & accès')}</h3>
     <div id="users-list-wrap" style="margin-bottom:14px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
-    <button class="btn primary" onclick="modalNouvelUtilisateur()"><i class="ti ti-user-plus"></i> Ajouter un utilisateur</button>`;
+    <button class="btn primary" onclick="modalNouvelUtilisateur()"><i class="ti ti-user-plus"></i> ${L('Ajouter un utilisateur')}</button>`;
   c.appendChild(usersSection);
   chargerListeUtilisateurs();
   chargerAlertesBlocage();
@@ -2381,9 +2381,9 @@ async function chargerListeUtilisateurs(){
   wrap.innerHTML = `<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div>`;
   try{
     const users = await API.users();
-    if(!users.length){ wrap.innerHTML=`<div style="font-size:12px;color:var(--text2)">Aucun utilisateur.</div>`; return; }
+    if(!users.length){ wrap.innerHTML=`<div style="font-size:12px;color:var(--text2)">${L('Aucun utilisateur.')}</div>`; return; }
     wrap.innerHTML=`<div class="table-wrap"><table class="t">
-      <thead><tr><th>Nom</th><th>E-mail</th><th>Pays</th><th>Type</th><th>Statut</th><th>Dernière connexion</th><th></th></tr></thead>
+      <thead><tr><th>Nom</th><th>E-mail</th><th>Pays</th><th>Type</th><th>${L('Statut')}</th><th>${L('Dernière connexion')}</th><th></th></tr></thead>
       <tbody>${users.map(u=>`<tr>
         <td style="font-weight:600">${esc(u.nom)}</td>
         <td style="font-size:12px">${esc(u.email)}</td>
@@ -2406,9 +2406,9 @@ function _permGrid(perms={}){
     <table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr style="background:var(--bg)">
         <th style="padding:6px 10px;text-align:left;font-weight:600;color:var(--text2)">Module</th>
-        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--success);width:100px">Accès complet</th>
+        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--success);width:100px">${L('Accès complet')}</th>
         <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--warning);width:100px">Lecture seule</th>
-        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--text3);width:90px">Masquée</th>
+        <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--text3);width:90px">${L('Masquée')}</th>
       </tr></thead>
       <tbody>${MODULES.map((m,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
         <td style="padding:7px 10px">${m.label}</td>
@@ -2440,20 +2440,20 @@ function modalNouvelUtilisateur(){
     <div class="modal-header"><i class="ti ti-user-plus" style="color:var(--accent)"></i><h2>Nouvel utilisateur</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto">
       <div class="grid-2">
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Prénom et nom *</label><input class="form-input" id="nu-nom" placeholder="Frédéric Dijd"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${L('Prénom et nom *')}</label><input class="form-input" id="nu-nom" placeholder="Frédéric Dijd"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse e-mail *</label><input class="form-input" id="nu-email" type="email" placeholder="frederic@eloflex.fr"></div>
         <div class="form-group"><label class="form-label">Mot de passe * <span style="font-size:10px;color:var(--text2)">(8 car. min.)</span></label><input class="form-input" id="nu-mdp" type="password" placeholder="••••••••"></div>
         <div class="form-group"><label class="form-label">Langue de l'interface</label>
           <select class="form-input" id="nu-langue">
-            <option value="fr">🇫🇷 Français</option>
+            <option value="fr">${L('🇫🇷 Français')}</option>
             <option value="en">🇬🇧 English</option>
           </select>
         </div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Pays / Périmètre commandes</label>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${L('Pays / Périmètre commandes')}</label>
           <select class="form-input" id="nu-pays">
             <option value="">🌍 Tous pays (admin global)</option>
             <option value="France">🇫🇷 France</option>
-            <option value="Sweden">🇸🇪 Suède</option>
+            <option value="Sweden">${L('🇸🇪 Suède')}</option>
             <option value="UK">🇬🇧 United Kingdom</option>
             <option value="Germany">🇩🇪 Deutschland</option>
             <option value="Spain">🇪🇸 España</option>
@@ -2462,12 +2462,12 @@ function modalNouvelUtilisateur(){
             <option value="Switzerland">🇨🇭 Suisse</option>
             <option value="Netherlands">🇳🇱 Nederland</option>
           </select>
-          <div style="font-size:11px;color:var(--text2);margin-top:4px">Laisse vide pour un accès admin à tous les pays.</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px">${L('Laisse vide pour un accès admin à tous les pays.')}</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius)">
         <input type="checkbox" id="nu-admin" onchange="_onAdminToggle()" style="width:16px;height:16px;cursor:pointer">
-        <label for="nu-admin" style="font-size:13px;font-weight:600;color:var(--danger);cursor:pointer">Administrateur — accès complet à tout (y compris Paramètres et exports)</label>
+        <label for="nu-admin" style="font-size:13px;font-weight:600;color:var(--danger);cursor:pointer">${L('Administrateur — accès complet à tout (y compris Paramètres et exports)')}</label>
       </div>
       <div id="perm-grid">
         <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Permissions par module (cocher une case par ligne, ou aucune pour bloquer l'accès) :</div>
@@ -2475,8 +2475,8 @@ function modalNouvelUtilisateur(){
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="closeModal()">Annuler</button>
-      <button class="btn primary" onclick="creerUtilisateur()"><i class="ti ti-check"></i> Créer</button>
+      <button class="btn" onclick="closeModal()">${L('Annuler')}</button>
+      <button class="btn primary" onclick="creerUtilisateur()"><i class="ti ti-check"></i> ${L('Créer')}</button>
     </div>`);
 }
 
@@ -2500,19 +2500,19 @@ async function modalEditerUtilisateur(id){
     <div class="modal-header"><i class="ti ti-edit" style="color:var(--accent)"></i><h2>Modifier l'utilisateur</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto">
       <div class="grid-2">
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Prénom et nom</label><input class="form-input" id="eu-nom" value="${esc(user.nom)}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${L('Prénom et nom')}</label><input class="form-input" id="eu-nom" value="${esc(user.nom)}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">E-mail</label><input class="form-input" id="eu-email" type="email" value="${esc(user.email)}"></div>
         <div class="form-group"><label class="form-label">Langue de l'interface</label>
           <select class="form-input" id="eu-langue">
-            <option value="fr" ${(user.langue||'fr')==='fr'?'selected':''}>🇫🇷 Français</option>
+            <option value="fr" ${(user.langue||'fr')==='fr'?'selected':''}>${L('🇫🇷 Français')}</option>
             <option value="en" ${user.langue==='en'?'selected':''}>🇬🇧 English</option>
           </select>
         </div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">Pays / Périmètre commandes</label>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${L('Pays / Périmètre commandes')}</label>
           <select class="form-input" id="eu-pays">
             <option value="" ${!user.pays?'selected':''}>🌍 Tous pays (admin global)</option>
             <option value="France" ${user.pays==='France'?'selected':''}>🇫🇷 France</option>
-            <option value="Sweden" ${user.pays==='Sweden'?'selected':''}>🇸🇪 Suède</option>
+            <option value="Sweden" ${user.pays==='Sweden'?'selected':''}>${L('🇸🇪 Suède')}</option>
             <option value="UK" ${user.pays==='UK'?'selected':''}>🇬🇧 United Kingdom</option>
             <option value="Germany" ${user.pays==='Germany'?'selected':''}>🇩🇪 Deutschland</option>
             <option value="Spain" ${user.pays==='Spain'?'selected':''}>🇪🇸 España</option>
@@ -2522,16 +2522,16 @@ async function modalEditerUtilisateur(id){
             <option value="Netherlands" ${user.pays==='Netherlands'?'selected':''}>🇳🇱 Nederland</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Statut</label>
+        <div class="form-group"><label class="form-label">${L('Statut')}</label>
           <select class="form-input" id="eu-actif">
             <option value="1" ${user.actif?'selected':''}>Actif</option>
-            <option value="0" ${!user.actif?'selected':''}>Désactivé</option>
+            <option value="0" ${!user.actif?'selected':''}>${L('Désactivé')}</option>
           </select>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius)">
         <input type="checkbox" id="eu-admin" onchange="_onAdminToggle()" ${user.role==='admin'?'checked':''} style="width:16px;height:16px;cursor:pointer">
-        <label for="eu-admin" style="font-size:13px;font-weight:600;color:var(--danger);cursor:pointer">Administrateur — accès complet à tout</label>
+        <label for="eu-admin" style="font-size:13px;font-weight:600;color:var(--danger);cursor:pointer">${L('Administrateur — accès complet à tout')}</label>
       </div>
       <div id="perm-grid" ${user.role==='admin'?'style="display:none"':''}>
         <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Permissions par module :</div>
@@ -2539,8 +2539,8 @@ async function modalEditerUtilisateur(id){
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="closeModal()">Annuler</button>
-      <button class="btn primary" onclick="enregistrerUtilisateur(${id})"><i class="ti ti-check"></i> Enregistrer</button>
+      <button class="btn" onclick="closeModal()">${L('Annuler')}</button>
+      <button class="btn primary" onclick="enregistrerUtilisateur(${id})"><i class="ti ti-check"></i> ${L('Enregistrer')}</button>
     </div>`);
 }
 
@@ -2551,27 +2551,27 @@ async function enregistrerUtilisateur(id){
   const pays=gv('eu-pays')||null;
   try{
     await API.updateUser(id, { nom:gv('eu-nom'), email:gv('eu-email'), admin, permissions, langue, actif: gv('eu-actif')==='1', pays });
-    closeModal(); toast('Utilisateur mis à jour'); chargerListeUtilisateurs();
+    closeModal(); toast(L('Utilisateur mis à jour')); chargerListeUtilisateurs();
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
 function modalResetPassword(id, nom){
   showModal(`
-    <div class="modal-header"><i class="ti ti-key" style="color:var(--accent)"></i><h2>Nouveau mot de passe</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-header"><i class="ti ti-key" style="color:var(--accent)"></i><h2>${L('Nouveau mot de passe')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <div style="margin-bottom:12px;font-size:13px">Définir un nouveau mot de passe pour <b>${esc(nom)}</b>.</div>
-      <div class="form-group"><label class="form-label">Nouveau mot de passe <span style="font-size:10px;color:var(--text2)">(8 car. min.)</span></label>
+      <div style="margin-bottom:12px;font-size:13px">${L('Définir un nouveau mot de passe pour')} <b>${esc(nom)}</b>.</div>
+      <div class="form-group"><label class="form-label">${L('Nouveau mot de passe')} <span style="font-size:10px;color:var(--text2)">(8 car. min.)</span></label>
         <input class="form-input" id="rp-mdp" type="password" placeholder="••••••••"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="closeModal()">Annuler</button>
+      <button class="btn" onclick="closeModal()">${L('Annuler')}</button>
       <button class="btn primary" onclick="appliquerResetPassword(${id})"><i class="ti ti-check"></i> Appliquer</button>
     </div>`);
 }
 
 async function appliquerResetPassword(id){
   const mdp = gv('rp-mdp');
-  if(mdp.length < 8){ toast('Minimum 8 caractères.','ti-alert-circle','var(--danger)'); return; }
+  if(mdp.length < 8){ toast(L('Minimum 8 caractères.'),'ti-alert-circle','var(--danger)'); return; }
   try{
     const r = await API.resetUserPassword(id, mdp);
     closeModal(); toast(r.message||'Mot de passe mis à jour');
@@ -2588,7 +2588,7 @@ async function supprimerUtilisateur(id, nom){
 }
 
 async function envoyerEmailConfirmation(id){
-  if(!confirm('Envoyer un email de demande de confirmation BDC au distributeur ?')) return;
+  if(!confirm(L('Envoyer un email de demande de confirmation BDC au distributeur ?'))) return;
   toast('Envoi en cours…','ti-loader-2');
   try{
     const r = await API.emailConfirmation(id);
@@ -2603,7 +2603,7 @@ async function envoyerEmailConfirmation(id){
 async function ouvrirBordereauVF(num){
   const account = window._VF_ACCOUNT;
   num = (num == null ? '' : String(num)).trim();
-  if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
+  if(!account){ toast(L('Compte VosFactures non configuré'),'ti-alert-circle','var(--warning)'); return; }
   if(!num){ return; }
   const base = 'https://' + account + '.vosfactures.fr/';
   const win = window.open('about:blank', '_blank');
@@ -2626,7 +2626,7 @@ window.ouvrirBordereauVF = ouvrirBordereauVF;
 
 async function genererFactureVF(id){
   if(!confirm('Générer la facture dans VosFactures ?\n\nLa commande passera au statut "Facturé" et le N° de facture sera renseigné automatiquement.')) return;
-  toast('Génération en cours…','ti-loader-2');
+  toast(L('Génération en cours…'),'ti-loader-2');
   try{
     const r = await API.genererFacture(id);
     if(r.ok){
@@ -2639,7 +2639,7 @@ async function genererFactureVF(id){
 
 async function ouvrirDansVF(vfId, bdc){
   const account = window._VF_ACCOUNT;
-  if(!account){ toast('Compte VosFactures non configuré','ti-alert-circle','var(--warning)'); return; }
+  if(!account){ toast(L('Compte VosFactures non configuré'),'ti-alert-circle','var(--warning)'); return; }
   // Si on a l'ID VosFactures → lien direct vers le document
   if(vfId){
     window.open(`https://${account}.vosfactures.fr/invoices/${vfId}`, '_blank', 'noopener');
@@ -2661,8 +2661,8 @@ async function ouvrirDansVF(vfId, bdc){
 }
 
 async function creerBLVF(id){
-  if(!confirm('Créer le bordereau de livraison dans VosFactures ?')) return;
-  toast('Création BL en cours…','ti-loader-2');
+  if(!confirm(L('Créer le bordereau de livraison dans VosFactures ?'))) return;
+  toast(L('Création BL en cours…'),'ti-loader-2');
   try{
     const r = await API.creerBL(id);
     if(r.ok){
@@ -2706,7 +2706,7 @@ async function renderCommandesKanban(){
               </div>
               ${cm.modele?`<div style="color:var(--text3);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px">${esc(cm.modele)}</div>`:''}
               ${cm.reliquat?`<span class="badge hg" style="font-size:10px;margin-top:4px;display:inline-block">⏰ Reliquat</span>`:''}
-              ${cm.modele_demo?`<span class="badge hg" style="font-size:10px;margin-top:4px;display:inline-block">🔄 Démo</span>`:''}
+              ${cm.modele_demo?`<span class="badge hg" style="font-size:10px;margin-top:4px;display:inline-block">${L('🔄 Démo')}</span>`:''}
             </div>`).join('')}
           ${grouped[col].length===0?`<div style="font-size:12px;color:var(--text3);text-align:center;padding:12px 0">—</div>`:''}
         </div>
@@ -2735,10 +2735,10 @@ async function chargerDoublonsBanner(){
         <div style="flex:1">
           <div style="font-weight:700;font-size:13px;color:var(--warning);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
             <span>${rows.length} doublon${rows.length>1?'s':''} détecté${rows.length>1?'s':''} — même numéro de BDC pour plusieurs commandes</span>
-            <button class="btn sm danger" onclick="supprimerTousDoublonsBanner(this)" style="margin-left:12px;white-space:nowrap"><i class="ti ti-trash"></i> Supprimer tous</button>
+            <button class="btn sm danger" onclick="supprimerTousDoublonsBanner(this)" style="margin-left:12px;white-space:nowrap"><i class="ti ti-trash"></i> ${L('Supprimer tous')}</button>
           </div>
           <div class="table-wrap"><table class="t" style="font-size:12px">
-            <thead><tr><th>BDC</th><th>Distributeur</th><th style="text-align:center">Nb</th><th>Commandes</th></tr></thead>
+            <thead><tr><th>BDC</th><th>${L('Distributeur')}</th><th style="text-align:center">Nb</th><th>Commandes</th></tr></thead>
             <tbody>${rows.map(r=>`<tr>
               <td class="mono"><b>${esc(r.bdc)}</b></td>
               <td>${esc(r.distributeur_nom)}</td>
@@ -2768,7 +2768,7 @@ async function chargerAlertesBlocage(){
     const nonExp  = Array.isArray(data) ? data : (data.non_expedies||[]);
     const nonFact = Array.isArray(data) ? [] : (data.non_facturees||[]);
     if(!nonExp.length && !nonFact.length){
-      el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> Aucune alerte — tout est à jour !</div>`;
+      el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> ${L('Aucune alerte — tout est à jour !')}</div>`;
       return;
     }
     const tableRow = (r, type) => `<tr onclick="modalCommande(${r.id})" style="cursor:pointer">
@@ -2781,7 +2781,7 @@ async function chargerAlertesBlocage(){
       <td><button class="btn sm" onclick="event.stopPropagation();modalCommande(${r.id})"><i class="ti ti-pencil"></i></button></td>
     </tr>`;
     el.innerHTML=`<div class="table-wrap"><table class="t">
-      <thead><tr><th>Type</th><th>Distributeur</th><th>Bdc</th><th>Modèle</th><th>Date réf.</th><th>Délai</th><th></th></tr></thead>
+      <thead><tr><th>Type</th><th>${L('Distributeur')}</th><th>Bdc</th><th>${L('Modèle')}</th><th>${L('Date réf.')}</th><th>${L('Délai')}</th><th></th></tr></thead>
       <tbody>
         ${nonExp.map(r=>tableRow(r,'non_expedie')).join('')}
         ${nonFact.map(r=>tableRow(r,'non_facturee')).join('')}
@@ -2791,7 +2791,7 @@ async function chargerAlertesBlocage(){
 }
 
 async function supprimerTousDoublonsBanner(btn){
-  if(!confirm('Supprimer tous les doublons ?\n\nPour chaque BDC en doublon, la commande la plus complète est conservée (priorité : source VosFactures > N° suivi > N° série > facture).\n\nAction irréversible.')) return;
+  if(!confirm(L('Supprimer tous les doublons ?\n\nPour chaque BDC en doublon, la commande la plus complète est conservée (priorité : source VosFactures > N° suivi > N° série > facture).\n\nAction irréversible.'))) return;
   if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> Suppression…'; }
   try{
     const r = await API.supprimerDoublons();
@@ -2827,14 +2827,14 @@ async function chargerDoublonsParametres(){
   try{
     const rows = await API.commandesDoublons();
     if(!rows.length){
-      el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> Aucun doublon détecté.</div>`;
+      el.innerHTML=`<div style="font-size:12px;color:var(--success)"><i class="ti ti-check"></i> ${L('Aucun doublon détecté.')}</div>`;
       return;
     }
     el.innerHTML=`<div style="font-size:12px;color:var(--warning);margin-bottom:8px;font-weight:600">
       <i class="ti ti-alert-triangle"></i> ${rows.length} BDC en doublon
     </div>
     <div class="table-wrap"><table class="t" style="font-size:12px">
-      <thead><tr><th>BDC</th><th>Distributeur</th><th>Nb</th><th>Commandes</th></tr></thead>
+      <thead><tr><th>BDC</th><th>${L('Distributeur')}</th><th>Nb</th><th>Commandes</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td class="mono"><b>${esc(r.bdc)}</b></td>
         <td>${esc(r.distributeur_nom)}</td>
@@ -2865,7 +2865,7 @@ async function lancerMigrationFacture(){
 }
 
 async function lancerMigrationSuivi(){
-  if(!confirm('Migrer les faux numéros de suivi (RETOUR BRICE, SUÈDE, etc.) vers les champs appropriés ? Cette action est irréversible.')) return;
+  if(!confirm(L('Migrer les faux numéros de suivi (RETOUR BRICE, SUÈDE, etc.) vers les champs appropriés ? Cette action est irréversible.'))) return;
   toast('Migration en cours…','ti-loader-2');
   try{
     const r = await API.fixSuivi();
@@ -2917,7 +2917,7 @@ async function lancerRattrapageVF(){
       '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'+S.introuvables.length+' introuvables ('+nbBdc+' BDC, '+nbFac+
         ' factures) — souvent des numéros internes distributeur ou des cases multi-documents, sans correspondance VosFactures.</div>'+
       '<button class="btn sm" onclick="telechargerRapportRattrapage()"><i class="ti ti-download"></i> Télécharger le rapport des introuvables</button>';
-    toast('Rattrapage VosFactures terminé','ti-check');
+    toast(L('Rattrapage VosFactures terminé'),'ti-check');
   }catch(e){
     if(out) out.innerHTML='<div style="color:var(--danger);font-size:13px">Erreur : '+esc(e.message)+
       '. Les commandes déjà traitées sont enregistrées ; tu peux relancer pour reprendre.</div>';
@@ -2929,7 +2929,7 @@ async function lancerRattrapageVF(){
 window.lancerRattrapageVF = lancerRattrapageVF;
 
 function telechargerRapportRattrapage(){
-  const S=RATT_LAST; if(!S){ toast('Aucun rapport disponible','ti-alert-circle','var(--danger)'); return; }
+  const S=RATT_LAST; if(!S){ toast(L('Aucun rapport disponible'),'ti-alert-circle','var(--danger)'); return; }
   const e=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const parDist={}; for(const x of S.introuvables){ const k=x.distributeur||'(sans nom)'; (parDist[k]=parDist[k]||[]).push(x); }
   const groupes=Object.entries(parDist).sort((a,b)=>b[1].length-a[1].length);
@@ -3003,12 +3003,12 @@ async function viewIntervention(id){
       </div>
       <div style="margin-bottom:12px">
         ${i.commande_id
-          ? `<button class="btn sm" onclick="ouvrirCommandeLiee(${i.commande_id})"><i class="ti ti-clipboard-list"></i> Voir la commande liée</button>`
+          ? `<button class="btn sm" onclick="ouvrirCommandeLiee(${i.commande_id})"><i class="ti ti-clipboard-list"></i> ${L('Voir la commande liée')}</button>`
           : `<button class="btn sm" onclick="basculerSAVversCommande(${i.id})" title="Créer une commande liée « SAV facturé » dans Suivi commandes"><i class="ti ti-clipboard-plus"></i> Basculer en commande</button>`}
       </div>
       <div class="grid-2" style="font-size:12px;margin-bottom:12px">
         <div><div class="stat-label">Client</div><div style="font-weight:600">${esc(i.client_nom||'')}</div></div>
-        <div><div class="stat-label">Fauteuil</div><div style="font-weight:600">${esc(i.modele)} – <span class="mono">${esc(i.serie)}</span></div></div>
+        <div><div class="stat-label">${L('Fauteuil')}</div><div style="font-weight:600">${esc(i.modele)} – <span class="mono">${esc(i.serie)}</span></div></div>
         <div>
           <div class="stat-label">Facture VosFactures
             <button class="btn sm" style="padding:1px 6px;font-size:10px;margin-left:6px" onclick="toggleEditFacture(${i.id},'${esc(i.num_facture||'')}')"><i class="ti ti-edit" style="font-size:10px"></i></button>
@@ -3025,25 +3025,25 @@ async function viewIntervention(id){
         <div><div class="stat-label">Technicien</div><div>${esc(i.technicien||'—')}</div></div>
       </div>
       <div class="form-group"><div class="form-label">Description</div><div style="font-size:12px;background:var(--bg);padding:8px;border-radius:var(--radius)">${esc(i.description||'—')}</div></div>
-      ${i.notes?`<div class="form-group"><div class="form-label">Intervention réalisée</div><div style="font-size:12px;color:var(--text2)">${esc(i.notes)}</div></div>`:''}
+      ${i.notes?`<div class="form-group"><div class="form-label">${L('Intervention réalisée')}</div><div style="font-size:12px;color:var(--text2)">${esc(i.notes)}</div></div>`:''}
       <div class="divider"></div>
-      <div class="section-title"><i class="ti ti-box"></i>Pièces</div>
+      <div class="section-title"><i class="ti ti-box"></i>${L('Pièces')}</div>
       ${(i.produits||[]).length===0?'<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>':`
-        <table class="t"><thead><tr><th>${t('col_designation')}</th><th>Réf</th><th>${t('col_qte')||'Qté'}</th><th>PU HT</th><th>Total HT</th></tr></thead>
+        <table class="t"><thead><tr><th>${t('col_designation')}</th><th>${L('Réf')}</th><th>${t('col_qte')||'Qté'}</th><th>PU HT</th><th>Total HT</th></tr></thead>
         <tbody>${(i.produits||[]).map(p=>`<tr><td>${esc(p.designation)}</td><td class="mono">${esc(p.ref||'')}</td><td>${p.qte}</td><td>${parseFloat(p.pxht||0).toFixed(2)} €</td><td style="font-weight:700">${(parseFloat(p.pxht||0)*p.qte).toFixed(2)} €</td></tr>`).join('')}</tbody></table>
         <div style="text-align:right;padding-top:6px;font-weight:700;font-size:13px">Total HT : ${total.toFixed(2)} €</div>`}
       <div class="divider"></div>
-      <div class="section-title"><i class="ti ti-send"></i>Expédition</div>
+      <div class="section-title"><i class="ti ti-send"></i>${L('Expédition')}</div>
       ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Envoi</div><div style="font-size:12px">${esc(i.envoi_transporteur)} — <a href="${lienhSuiviInter(i.envoi_transporteur,i.envoi_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.envoi_numero)}</a> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun envoi</div>'}
       ${i.num_bordereau_vf?`<div style="margin-top:8px"><a href="#" data-bl="${esc(i.num_bordereau_vf)}" onclick="event.preventDefault();ouvrirBordereauVF(this.dataset.bl)" style="color:var(--accent);font-size:12px;text-decoration:none;cursor:pointer"><i class="ti ti-file-invoice" style="font-size:11px"></i> BL/Bordereau : ${esc(i.num_bordereau_vf)}</a></div>`:''}
-      <div class="section-title" style="margin-top:10px"><i class="ti ti-arrow-back-up"></i>Retour</div>
-      ${i.retour_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Retour</div><div style="font-size:12px">${esc(i.retour_transporteur)} — <a href="${lienhSuiviInter(i.retour_transporteur,i.retour_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.retour_numero)}</a> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun retour</div>'}
+      <div class="section-title" style="margin-top:10px"><i class="ti ti-arrow-back-up"></i>${L('Retour')}</div>
+      ${i.retour_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">${L('Retour')}</div><div style="font-size:12px">${esc(i.retour_transporteur)} — <a href="${lienhSuiviInter(i.retour_transporteur,i.retour_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.retour_numero)}</a> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun retour</div>'}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-photo"></i>Photos (${photos.length})</div>
       <div id="photo-gallery">${renderPhotoGallery(photos,i.id)}</div>
       <div id="photo-upload-zone" class="photo-drop-zone" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handlePhotoDrop(event,${i.id})">
         <i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:3px">Glisser-déposer des photos ici</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:3px">${L('Glisser-déposer des photos ici')}</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div>
         <label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir des fichiers<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${i.id})"></label>
       </div>
@@ -3052,15 +3052,15 @@ async function viewIntervention(id){
       <div id="commentaires-list">${renderCommentaires(i.commentaires||[],i.id)}</div>
       <div style="display:flex;gap:8px;margin-top:8px">
         <input class="form-input" id="new-comment" placeholder="Ajouter un commentaire…" style="flex:1">
-        <button class="btn primary" onclick="addComment(${i.id})"><i class="ti ti-send"></i>Envoyer</button>
+        <button class="btn primary" onclick="addComment(${i.id})"><i class="ti ti-send"></i>${L('Envoyer')}</button>
       </div>
       <div class="divider"></div>
-      <div class="section-title" style="cursor:pointer" onclick="toggleHistorique(${i.id})"><i class="ti ti-history"></i>Historique des modifications <i class="ti ti-chevron-down" id="hist-chevron" style="margin-left:auto"></i></div>
+      <div class="section-title" style="cursor:pointer" onclick="toggleHistorique(${i.id})"><i class="ti ti-history"></i>${L('Historique des modifications')} <i class="ti ti-chevron-down" id="hist-chevron" style="margin-left:auto"></i></div>
       <div id="historique-list" style="display:none">${renderHistorique(i.historique||[])}</div>
     </div>
     <div class="modal-footer">
-      <button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>
-      <button class="btn" onclick="closeModal()">Fermer</button>
+      <button class="btn danger" onclick="if(confirm(L('Supprimer ?')))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>
+      <button class="btn" onclick="closeModal()">${L('Fermer')}</button>
     </div>`);
 }
 
@@ -3079,7 +3079,7 @@ async function addComment(interId){
   const comms=await API.commentaires(interId);
   $('commentaires-list').innerHTML=renderCommentaires(comms,interId);
   $('new-comment').value='';
-  toast('Commentaire ajouté','ti-message');
+  toast(L('Commentaire ajouté'),'ti-message');
 }
 
 function renderHistorique(hist){
@@ -3127,12 +3127,12 @@ async function handlePhotoFiles(files,interId){
     $('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);
     zone.innerHTML=uploadZoneHTML(interId);
     toast(`${files.length} photo${files.length>1?'s':''} ajoutée${files.length>1?'s':''}`, 'ti-photo');
-  }catch(e){zone.innerHTML=uploadZoneHTML(interId);toast('Erreur upload : '+e.message,'ti-alert-circle','var(--danger)');}
+  }catch(e){zone.innerHTML=uploadZoneHTML(interId);toast(L('Erreur upload : ')+e.message,'ti-alert-circle','var(--danger)');}
 }
 function handlePhotoDrop(e,interId){e.preventDefault();$('photo-upload-zone').classList.remove('drag-over');if(e.dataTransfer.files.length)handlePhotoFiles(e.dataTransfer.files,interId);}
-function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:13px;color:var(--text2);margin-bottom:3px">Glisser-déposer des photos ici</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir des fichiers<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
-async function deletePhoto(interId,photoId){if(!confirm('Supprimer ?'))return;await API.deletePhoto(interId,photoId);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);toast('Photo supprimée','ti-trash');}
-async function editPhotoLegende(interId,photoId,cur){const l=prompt('Légende :',cur);if(l===null)return;await API.updatePhotoLegende(interId,photoId,l);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);}
+function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:13px;color:var(--text2);margin-bottom:3px">${L('Glisser-déposer des photos ici')}</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir des fichiers<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
+async function deletePhoto(interId,photoId){if(!confirm(L('Supprimer ?')))return;await API.deletePhoto(interId,photoId);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);toast('Photo supprimée','ti-trash');}
+async function editPhotoLegende(interId,photoId,cur){const l=prompt(L('Légende :'),cur);if(l===null)return;await API.updatePhotoLegende(interId,photoId,l);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);}
 
 let LB={filenames:[],idx:0};
 function openLightbox(interId,idx,filenames){LB={filenames,idx};showLightbox();}
@@ -3163,33 +3163,33 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Distributeur','Revendeur','Particulier'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
   <div class="form-group"><label class="form-label">Contact</label><input class="form-input" id="f-contact" value="${esc(d.contact||'')}"></div>
   <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" value="${esc(d.email||'')}"></div>
-  <div class="form-group"><label class="form-label">Téléphone</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
+  <div class="form-group"><label class="form-label">${L('Téléphone')}</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
   <div class="form-group"><label class="form-label">Portable</label><input class="form-input" id="f-portable" value="${esc(d.portable||'')}"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse</label><input class="form-input" id="f-adresse" placeholder="12 rue des Lilas" value="${esc(d.adresse||'')}"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Complément d'adresse</label><input class="form-input" id="f-adresse2" placeholder="Bâtiment B, ZI de la Plaine…" value="${esc(d.adresse2||'')}"></div>
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
   <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays">${optionsPays(d.pays||'France')}</select></div>
-  <div class="form-group"><label class="form-label">Réseau</label>
+  <div class="form-group"><label class="form-label">${L('Réseau')}</label>
     <select class="form-input" id="f-reseau">
-      <option value="">— Aucun —</option>
+      <option value="">${L('— Aucun —')}</option>
       ${[['base','De base'],['bastide','Bastide'],['providom','Providom'],['districlub','DistriClub Medical'],['negocies','Négociés'],['capvital','CAP Vital'],['lecarre','Le Carré Medical']].map(r=>`<option value="${r[0]}" ${d.reseau_carte===r[0]?'selected':''}>${r[1]}</option>`).join('')}
     </select>
   </div>
-  <div class="form-group"><label class="form-label">Priorité</label>
+  <div class="form-group"><label class="form-label">${L('Priorité')}</label>
     <select class="form-input" id="f-priorite">
-      <option value="">— Aucune —</option>
+      <option value="">${L('— Aucune —')}</option>
       ${[['T1','T1 — Priorité absolue'],['T2','T2 — Priorité moyenne'],['T3','T3 — Priorité basse']].map(p=>`<option value="${p[0]}" ${d.priorite===p[0]?'selected':''}>${p[1]}</option>`).join('')}
     </select>
   </div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
     <select class="form-input" id="f-facturation-mode" onchange="toggleFacturation(this.value)">
-      <option value="identique" ${!d.entite_facturation_id?'selected':''}>Identique (le distributeur se facture lui-même)</option>
+      <option value="identique" ${!d.entite_facturation_id?'selected':''}>${L('Identique (le distributeur se facture lui-même)')}</option>
       <option value="autre" ${d.entite_facturation_id?'selected':''}>Autre distributeur…</option>
     </select>
     <div id="f-entite-wrap" style="margin-top:8px;${d.entite_facturation_id?'':'display:none'}">
       <select class="form-input" id="f-entite">
-        <option value="">— Choisir le distributeur facturé —</option>
+        <option value="">${L('— Choisir le distributeur facturé —')}</option>
         ${(window._clientsCache||[]).map(c=>`<option value="${c.id}" ${d.entite_facturation_id==c.id?'selected':''}>${esc(c.nom)}${c.ville?' — '+esc(c.ville):''}</option>`).join('')}
       </select>
     </div>
@@ -3198,21 +3198,21 @@ function clientForm(d={}){return `<div class="grid-2">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} style="width:16px;height:16px;accent-color:#22c55e">
       <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#16a34a">🗺️ Afficher sur la carte distributeurs</div>
-      <div style="font-size:11px;color:var(--text2)">Le point est créé et positionné depuis la ville, avec le réseau choisi ci-dessus</div></div>
+      <div style="font-size:11px;color:var(--text2)">${L('Le point est créé et positionné depuis la ville, avec le réseau choisi ci-dessus')}</div></div>
     </label>
   </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.public_site?'rgba(217,119,6,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-public-site" ${d.public_site?'checked':''} style="width:16px;height:16px;accent-color:#d97706">
       <div style="flex:1"><div style="font-size:13px;font-weight:600;color:#b45309">🌐 Visible sur le site public (eloflex.fr)</div>
-      <div style="font-size:11px;color:var(--text2)">Ce distributeur apparaîtra sur la carte publique du site (nom, adresse, téléphone uniquement). Nécessite une adresse et un positionnement.</div></div>
+      <div style="font-size:11px;color:var(--text2)">${L('Ce distributeur apparaîtra sur la carte publique du site (nom, adresse, téléphone uniquement). Nécessite une adresse et un positionnement.')}</div></div>
     </label>
   </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.edi?'rgba(46,124,246,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-edi" ${d.edi?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)">
-      <div><div style="font-size:13px;font-weight:600;color:var(--accent)">💳 EDI — Prélèvement automatique</div>
-      <div style="font-size:11px;color:var(--text2)">Ce distributeur règle ses factures par prélèvement EDI</div></div>
+      <div><div style="font-size:13px;font-weight:600;color:var(--accent)">${L('💳 EDI — Prélèvement automatique')}</div>
+      <div style="font-size:11px;color:var(--text2)">${L('Ce distributeur règle ses factures par prélèvement EDI')}</div></div>
     </label>
   </div>
 </div>`;}
@@ -3221,8 +3221,8 @@ async function ensureClientsCache(){ if(!window._clientsCache){ try{ const cs = 
 window.ensureClientsCache = ensureClientsCache;
 function toggleFacturation(mode){ const w=document.getElementById('f-entite-wrap'); if(w) w.style.display=(mode==='autre')?'':'none'; }
 window.toggleFacturation = toggleFacturation;
-async function modalNewClient(){await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function modalEditClient(id){const cl=await API.client(id);await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalNewClient(){await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:18px;color:var(--accent)"></i><h2>${L('Nouveau client')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditClient(id){const cl=await API.client(id);await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>${L('Modifier client')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveClient(id){
   const surCarte = !!document.getElementById('f-sur-carte')?.checked;
   // Réseau désormais indépendant de la carte ; si affiché sur carte sans réseau choisi, défaut 'base'
@@ -3244,22 +3244,22 @@ async function saveClient(id){
   if (factEl) {
     if (factEl.value === 'autre') {
       const eid = gv('f-entite');
-      if (!eid) { alert('Sélectionnez le distributeur à facturer, ou choisissez « Identique ».'); return; }
+      if (!eid) { alert(L('Sélectionnez le distributeur à facturer, ou choisissez « Identique ».')); return; }
       data.entite_facturation_id = parseInt(eid);
     } else {
       data.entite_facturation_id = null;
     }
   }
   if(!data.nom){ alert('Nom requis'); return; }
-  if(surCarte && !data.ville && !data.cp){ alert('Renseignez au moins le code postal ou la ville : ils servent à positionner le point sur la carte.'); return; }
+  if(surCarte && !data.ville && !data.cp){ alert(L('Renseignez au moins le code postal ou la ville : ils servent à positionner le point sur la carte.')); return; }
   try{
     const r = id ? await API.updateClient(id, data) : await API.createClient(data);
     toast(id ? 'Client mis à jour' : 'Client créé');
     // Retour du positionnement sur la carte
     if (surCarte && r && r.carte && !r.carte.ok) {
-      setTimeout(function(){ alert('Client enregistré, mais non placé sur la carte :\n' + (r.carte.reason || 'raison inconnue') + '\n\nVous pouvez le positionner manuellement depuis la carte.'); }, 400);
+      setTimeout(function(){ alert(L('Client enregistré, mais non placé sur la carte :\n') + (r.carte.reason || 'raison inconnue') + '\n\nVous pouvez le positionner manuellement depuis la carte.'); }, 400);
     } else if (surCarte && r && r.carte && r.carte.action === 'cree') {
-      setTimeout(function(){ toast('Placé sur la carte', 'ti-map-pin', 'var(--success)'); }, 600);
+      setTimeout(function(){ toast(L('Placé sur la carte'), 'ti-map-pin', 'var(--success)'); }, 600);
     }
     closeModal(); render();
   }catch(e){ alert(e.message); }
@@ -3274,32 +3274,32 @@ async function modalPortail(id,token){
       <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Ce lien permet au client de suivre ses interventions en lecture seule, sans accès à l'administration.</p>
       <div class="portail-link"><i class="ti ti-external-link"></i><span id="portail-url">${esc(url)}</span></div>
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn primary" onclick="navigator.clipboard.writeText('${esc(url)}');toast('Lien copié','ti-copy')"><i class="ti ti-copy"></i>Copier</button>
-        <button class="btn" onclick="regenererToken(${id})"><i class="ti ti-refresh"></i>Régénérer le lien</button>
+        <button class="btn primary" onclick="navigator.clipboard.writeText('${esc(url)}');toast(L('Lien copié'),'ti-copy')"><i class="ti ti-copy"></i>Copier</button>
+        <button class="btn" onclick="regenererToken(${id})"><i class="ti ti-refresh"></i>${L('Régénérer le lien')}</button>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn" onclick="closeModal()">Fermer</button></div>`);}
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${L('Fermer')}</button></div>`);}
 
 async function regenererToken(id){if(!confirm('Régénérer invalide l\'ancien lien. Continuer ?'))return;const r=await API.regenererToken(id);const base=window.location.origin;const url=`${base}/portail.html?token=${r.token}`;$('portail-url').textContent=url;toast('Lien régénéré','ti-refresh');}
 
 // ── MODALES FAUTEUILS ─────────────────────────────────────────────
 
 function fauteuilForm(d={}, clients=null){const mods=['Modèle L','Modèle F','Modèle P','Modèle D2','Modèle X','Modèle H','Modèle C3','Modèle C','Modèle K','Modèle H2','Modèle S1'];
-  const selDistrib = Array.isArray(clients) ? `<div class="form-group" style="grid-column:1/-1"><label class="form-label">Distributeur</label><select class="form-input" id="f-client">${clients.map(c=>`<option value="${c.id}" ${d.client_id===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select></div>` : '';
+  const selDistrib = Array.isArray(clients) ? `<div class="form-group" style="grid-column:1/-1"><label class="form-label">${L('Distributeur')}</label><select class="form-input" id="f-client">${clients.map(c=>`<option value="${c.id}" ${d.client_id===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select></div>` : '';
   return `<div class="grid-2">
   ${selDistrib}
-  <div class="form-group"><label class="form-label">Modèle *</label><select class="form-input" id="f-modele">${mods.map(m=>`<option ${d.modele===m?'selected':''}>${m}</option>`).join('')}</select></div>
-  <div class="form-group"><label class="form-label">N° de série *</label><input class="form-input" id="f-serie" value="${esc(d.serie||'')}"></div>
-  <div class="form-group"><label class="form-label">Année</label><input class="form-input" id="f-annee" type="number" value="${d.annee||new Date().getFullYear()}"></div>
+  <div class="form-group"><label class="form-label">${L('Modèle *')}</label><select class="form-input" id="f-modele">${mods.map(m=>`<option ${d.modele===m?'selected':''}>${m}</option>`).join('')}</select></div>
+  <div class="form-group"><label class="form-label">${L('N° de série *')}</label><input class="form-input" id="f-serie" value="${esc(d.serie||'')}"></div>
+  <div class="form-group"><label class="form-label">${L('Année')}</label><input class="form-input" id="f-annee" type="number" value="${d.annee||new Date().getFullYear()}"></div>
   <div class="form-group"><label class="form-label">Couleur</label><input class="form-input" id="f-couleur" value="${esc(d.couleur||'')}"></div>
   <div class="form-group"><label class="form-label">Date d'achat</label><input class="form-input" id="f-dateachat" type="date" value="${d.date_achat||''}"></div>
-  <div class="form-group"><label class="form-label">Durée garantie (mois)</label><input class="form-input" id="f-garduree" type="number" min="0" value="${d.duree_garantie_mois||24}"></div>
+  <div class="form-group"><label class="form-label">${L('Durée garantie (mois)')}</label><input class="form-input" id="f-garduree" type="number" min="0" value="${d.duree_garantie_mois||24}"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">N° facture VosFactures</label><input class="form-input" id="f-facture" value="${esc(d.num_facture||'')}"></div>
 </div>
 <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes">${esc(d.notes||'')}</textarea></div>`;}
-function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent)"></i><h2>Nouveau fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function modalEditFauteuil(id){const [f,clients]=await Promise.all([API.fauteuil(id),API.clients()]);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>Modifier fauteuil</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f,clients)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function saveFauteuil(id,clientId){const selClient=gv('f-client');const data={client_id:selClient?parseInt(selClient):clientId,modele:gv('f-modele'),serie:gv('f-serie'),annee:parseInt(gv('f-annee')),couleur:gv('f-couleur'),date_achat:gv('f-dateachat'),duree_garantie_mois:parseInt(gv('f-garduree'))||24,num_facture:gv('f-facture'),notes:gv('f-notes')};if(!data.serie){alert('N° de série requis');return;}try{if(id)await API.updateFauteuil(id,data);else await API.createFauteuil(data);toast(id?'Fauteuil mis à jour':'Fauteuil créé');closeModal();render();}catch(e){alert(e.message);}}
+function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent)"></i><h2>${L('Nouveau fauteuil')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditFauteuil(id){const [f,clients]=await Promise.all([API.fauteuil(id),API.clients()]);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:18px;color:var(--accent)"></i><h2>${L('Modifier fauteuil')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f,clients)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function saveFauteuil(id,clientId){const selClient=gv('f-client');const data={client_id:selClient?parseInt(selClient):clientId,modele:gv('f-modele'),serie:gv('f-serie'),annee:parseInt(gv('f-annee')),couleur:gv('f-couleur'),date_achat:gv('f-dateachat'),duree_garantie_mois:parseInt(gv('f-garduree'))||24,num_facture:gv('f-facture'),notes:gv('f-notes')};if(!data.serie){alert(L('N° de série requis'));return;}try{if(id)await API.updateFauteuil(id,data);else await API.createFauteuil(data);toast(id?'Fauteuil mis à jour':'Fauteuil créé');closeModal();render();}catch(e){alert(e.message);}}
 async function deleteFauteuil(id,clientId){if(!confirm(t('confirm_suppr_fauteuil')))return;await API.deleteFauteuil(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('client',{clientId});}
 
 // ── MODALES INTERVENTIONS ─────────────────────────────────────────
@@ -3336,8 +3336,8 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
       <!-- FAUTEUIL — recherche libre dans toute la base -->
       <div class="form-group" style="grid-column:1/-1">
         <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
-          <span>Fauteuil * <span style="font-size:11px;color:var(--text3);font-weight:400">(série, modèle ou distributeur)</span></span>
-          <button type="button" class="btn sm" style="font-size:10px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>Créer</button>
+          <span>${L('Fauteuil *')} <span style="font-size:11px;color:var(--text3);font-weight:400">${L('(série, modèle ou distributeur)')}</span></span>
+          <button type="button" class="btn sm" style="font-size:10px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>${L('Créer')}</button>
         </label>
         <div style="position:relative">
           <input class="form-input" id="f-serie-search" autocomplete="off"
@@ -3351,26 +3351,26 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
         </div>
         <!-- Création inline -->
         <div id="new-fauteuil-inline" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-top:8px;border:1px dashed var(--border-s)">
-          <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">Nouveau fauteuil</div>
+          <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">${L('Nouveau fauteuil')}</div>
           <div class="grid-2" style="gap:6px">
-            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Modèle *</label>
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">${L('Modèle *')}</label>
               <select class="form-input" id="nf-modele">${['Eloflex L','Eloflex F','Eloflex D2','Eloflex X','Eloflex P','Eloflex H','Eloflex C','Eloflex C3','Eloflex K','Eloflex R','Eloflex S1','Eloflex M+'].map(m=>`<option>${m}</option>`).join('')}</select>
             </div>
             <div class="form-group" style="margin-bottom:4px">
               <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
-                <span>N° de série *</span>
+                <span>${L('N° de série *')}</span>
                 <label style="display:flex;align-items:center;gap:4px;font-weight:400;font-size:11px;cursor:pointer">
                   <input type="checkbox" id="nf-serie-absent" onchange="toggleSerieAbsent(this.checked)">Numéro absent
                 </label>
               </label>
               <input class="form-input mono" id="nf-serie" placeholder="ex: A06L2502011042">
-              <div id="nf-serie-absent-msg" style="display:none;font-size:11px;color:var(--warning);margin-top:3px"><i class="ti ti-alert-triangle" style="font-size:11px"></i> Numéro temporaire généré automatiquement</div>
+              <div id="nf-serie-absent-msg" style="display:none;font-size:11px;color:var(--warning);margin-top:3px"><i class="ti ti-alert-triangle" style="font-size:11px"></i> ${L('Numéro temporaire généré automatiquement')}</div>
             </div>
             <div class="form-group" style="margin-bottom:4px"><label class="form-label">Date d'achat</label><input class="form-input" id="nf-dateachat" type="date"></div>
-            <div class="form-group" style="margin-bottom:4px"><label class="form-label">Durée garantie (mois)</label><input class="form-input" id="nf-garduree" type="number" value="24"></div>
+            <div class="form-group" style="margin-bottom:4px"><label class="form-label">${L('Durée garantie (mois)')}</label><input class="form-input" id="nf-garduree" type="number" value="24"></div>
           </div>
           <div style="display:flex;gap:6px;margin-top:4px">
-            <button type="button" class="btn sm primary" onclick="createFauteuilInline()"><i class="ti ti-check"></i>Créer et sélectionner</button>
+            <button type="button" class="btn sm primary" onclick="createFauteuilInline()"><i class="ti ti-check"></i>${L('Créer et sélectionner')}</button>
             <button type="button" class="btn sm" onclick="toggleNewFauteuilInline()">${t('btn_annuler')}</button>
           </div>
         </div>
@@ -3379,7 +3379,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
       <!-- DISTRIBUTEUR — avec option "autre distributeur" -->
       <div class="form-group" style="grid-column:1/-1">
         <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
-          <span>Distributeur</span>
+          <span>${L('Distributeur')}</span>
           <label style="display:flex;align-items:center;gap:5px;font-weight:400;font-size:11px;cursor:pointer">
             <input type="checkbox" id="f-autre-distrib" ${autreDistrib?"checked":""} onchange="toggleAutreDistrib(this.checked)">
             <span>Intervention chez un autre distributeur</span>
@@ -3445,7 +3445,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
     </div>
   </div>
   <div class="modal-footer">
-    ${i?`<button class="btn danger" onclick="if(confirm('Supprimer ?'))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
+    ${i?`<button class="btn danger" onclick="if(confirm(L('Supprimer ?')))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>`:''}
     <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
     <button class="btn primary" onclick="saveIntervention(${i?i.id:'null'})"><i class="ti ti-check"></i>${i?'Mettre à jour':'Enregistrer'}</button>
   </div>`;}
@@ -3539,7 +3539,7 @@ window.ouvrirInterventionLiee = ouvrirInterventionLiee;
 
 async function saveIntervention(id){
   const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client')),num_sav:gv('f-num-sav')||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau')||undefined,produits:TMP_PRODUITS};
-  if(!data.fauteuil_id||!data.date){alert('Fauteuil et date requis');return;}
+  if(!data.fauteuil_id||!data.date){alert(L('Fauteuil et date requis'));return;}
   try{if(id)await API.updateIntervention(id,data);else await API.createIntervention(data);TMP_PRODUITS=[];toast(id?'Intervention mise à jour':'Intervention créée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}
 }
 
@@ -3549,9 +3549,9 @@ async function modalPiece(id){
   const p=id?CACHE.catalogue.find(x=>x.id===id)||await API.catalogue().then(l=>l.find(x=>x.id===id)):null;
   showModal(`<div class="modal-header"><i class="ti ti-box" style="font-size:18px;color:var(--accent)"></i><h2>${id?'Modifier pièce':'Nouvelle pièce'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="grid-2">
-      <div class="form-group"><label class="form-label">Référence *</label><input class="form-input mono" id="f-ref" value="${esc(p?.ref||'')}"></div>
-      <div class="form-group"><label class="form-label">Réf fournisseur</label><input class="form-input mono" id="f-reffou" value="${esc(p?.ref_fournisseur||'')}"></div>
-      <div class="form-group" style="grid-column:1/-1"><label class="form-label">Désignation *</label><input class="form-input" id="f-des" value="${esc(p?.designation||'')}"></div>
+      <div class="form-group"><label class="form-label">${L('Référence *')}</label><input class="form-input mono" id="f-ref" value="${esc(p?.ref||'')}"></div>
+      <div class="form-group"><label class="form-label">${L('Réf fournisseur')}</label><input class="form-input mono" id="f-reffou" value="${esc(p?.ref_fournisseur||'')}"></div>
+      <div class="form-group" style="grid-column:1/-1"><label class="form-label">${L('Désignation *')}</label><input class="form-input" id="f-des" value="${esc(p?.designation||'')}"></div>
       <div class="form-group"><label class="form-label">Fournisseur</label><input class="form-input" id="f-fou" value="${esc(p?.fournisseur||'Eloflex AB')}"></div>
       <div class="form-group"><label class="form-label">Prix HT (€)</label><input class="form-input" id="f-px" type="number" step="0.01" value="${p?.pxht||0}"></div>
       <div class="form-group"><label class="form-label">Stock</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}"></div>
@@ -3562,8 +3562,8 @@ async function modalPiece(id){
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);}
-async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2,vf_product_id:parseInt(gv('f-vfid'))||null};if(!data.ref||!data.designation){alert('Référence et désignation requises');return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
-async function deletePiece(id){if(!confirm('Supprimer ?'))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
+async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2,vf_product_id:parseInt(gv('f-vfid'))||null};if(!data.ref||!data.designation){alert(L('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+async function deletePiece(id){if(!confirm(L('Supprimer ?')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 
 // ── EXPORTS PDF ───────────────────────────────────────────────────
 
@@ -3581,9 +3581,9 @@ async function importerHistoriqueCommandes(file){
     const r = await API.importCommandesExcel(file);
     const annees = Object.entries(r.stats.par_annee||{}).map(([a,n])=>`${a} : ${n} nouvelles`).join(', ');
     el.innerHTML=`<div style="padding:10px 12px;background:var(--success-bg);border:0.5px solid var(--success);border-radius:var(--radius);font-size:12px">
-      <div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> Import terminé !</div>
-      <div>Onglets traités : <b>${r.annees?.join(', ')||'—'}</b></div>
-      <div>Nouvelles commandes : <b>${r.stats.inserees}</b> · Mises à jour : <b>${r.stats.maj}</b> · Nouveaux clients : <b>${r.stats.clients_crees}</b></div>
+      <div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> ${L('Import terminé !')}</div>
+      <div>${L('Onglets traités :')} <b>${r.annees?.join(', ')||'—'}</b></div>
+      <div>Nouvelles commandes : <b>${r.stats.inserees}</b> ${L('· Mises à jour :')} <b>${r.stats.maj}</b> · Nouveaux clients : <b>${r.stats.clients_crees}</b></div>
       ${annees?`<div style="margin-top:4px;color:var(--text2)">${annees}</div>`:''}
       ${r.stats.erreurs?`<div style="color:var(--danger);margin-top:4px">⚠ ${r.stats.erreurs} erreur(s)${r.stats.premiere_erreur?' — Première : '+r.stats.premiere_erreur:''}</div>`:''}
     </div>`;
@@ -3597,8 +3597,8 @@ async function importerHistoriqueCommandes(file){
 }
 
 async function genererFacturePennylaneModal(id){
-  if(!confirm('Créer un brouillon de facture dans Pennylane ?\n\nLa facture sera créée en brouillon — tu pourras la vérifier et la finaliser dans Pennylane.')) return;
-  toast('Création en cours dans Pennylane…','ti-loader-2');
+  if(!confirm(L('Créer un brouillon de facture dans Pennylane ?\n\nLa facture sera créée en brouillon — tu pourras la vérifier et la finaliser dans Pennylane.'))) return;
+  toast(L('Création en cours dans Pennylane…'),'ti-loader-2');
   try{
     const r = await API.pennylaneGenererFacture(id);
     if(r.ok){
@@ -3631,16 +3631,16 @@ async function loadPennylaneStatus(){
     if(s.configured){
       badge.innerHTML = `<span class="badge g" style="font-size:10px">✓ Connecté${s.account?.email?' — '+esc(s.account.email):''}</span>`;
     } else {
-      badge.innerHTML = `<span class="badge hg" style="font-size:10px">Non configuré</span>`;
+      badge.innerHTML = `<span class="badge hg" style="font-size:10px">${L('Non configuré')}</span>`;
     }
   } catch(_) {
-    badge.innerHTML = `<span class="badge hg" style="font-size:10px">Erreur</span>`;
+    badge.innerHTML = `<span class="badge hg" style="font-size:10px">${L('Erreur')}</span>`;
   }
 }
 
 async function syncVosFactures(){  const btn=$('btn-sync');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i>Sync…';
   try{const r=await API.vfSync();toast(`Sync OK — ${r.results.clients} clients, ${r.results.products} produits`,'ti-refresh');CACHE.catalogue=[];render();}
-  catch(e){toast('Erreur sync : '+e.message,'ti-alert-circle','var(--danger)');}
+  catch(e){toast(L('Erreur sync : ')+e.message,'ti-alert-circle','var(--danger)');}
   finally{btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>Sync VosFactures';loadVfStatus();}
 }
 async function loadVfStatus(){
@@ -3660,7 +3660,7 @@ async function envoyerEmailInter(id){
     const r=await API.sendEmailInter(id);
     if(r.ok) toast(`Email envoyé à ${r.to}`,'ti-mail');
     else toast(`Non envoyé : ${r.reason}`,'ti-mail-off');
-  }catch(e){alert('Erreur email : '+e.message);}
+  }catch(e){alert(L('Erreur email : ')+e.message);}
 }
 
 // ── RETOURS PIÈCES VERS SUÈDE ─────────────────────────────────────
@@ -3968,12 +3968,12 @@ function showQuickResults(res,q){
         <span class="badge ${f.nb_interventions>0?'attente':'g'}" style="font-size:10px">${f.nb_interventions} inter.</span>
       </div>
       <div style="display:flex;gap:6px;margin-top:6px;padding-left:28px;flex-wrap:wrap">
-        <button class="btn sm primary" onclick="quickNewInter(${f.id},${f.client_id})"><i class="ti ti-plus"></i>Nouvelle intervention</button>
+        <button class="btn sm primary" onclick="quickNewInter(${f.id},${f.client_id})"><i class="ti ti-plus"></i>${L('Nouvelle intervention')}</button>
         <button class="btn sm" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${f.client_id}});clearQuickSearch()"><i class="ti ti-eye"></i>Voir la fiche</button>
         <button class="btn sm" onclick="${f.commande_id
           ? `setView('commandes');clearQuickSearch();setTimeout(()=>modalCommande(${f.commande_id}),300)`
           : `CMD_FILTERS.q=${JSON.stringify(f.serie||'')};setView('commandes');clearQuickSearch()`
-        }"><i class="ti ti-clipboard-list"></i>Commande</button>
+        }"><i class="ti ti-clipboard-list"></i>${L('Commande')}</button>
       </div>
     </div>`).join('');
   }
@@ -4023,11 +4023,11 @@ async function importerExcel(file){
         <span>↻ ${s.doublons} mis à jour</span><span style="color:var(--text3)">— ${s.ignores} ignorés (accessoires)</span>
         ${s.erreurs?`<span style="color:var(--danger)">⚠ ${s.erreurs} erreurs</span>`:''}
       </div>
-      <button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none';render()"><i class="ti ti-x"></i>Fermer</button>
+      <button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none';render()"><i class="ti ti-x"></i>${L('Fermer')}</button>
     </div>`;}
     refreshBadges();
   }catch(e){
-    if(progress){progress.innerHTML=`<div class="card" style="padding:12px;background:var(--danger-bg);border-color:var(--danger)"><div style="color:var(--danger);font-weight:700"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div><button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>Fermer</button></div>`;}
+    if(progress){progress.innerHTML=`<div class="card" style="padding:12px;background:var(--danger-bg);border-color:var(--danger)"><div style="color:var(--danger);font-weight:700"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div><button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>${L('Fermer')}</button></div>`;}
   }
 }
 document.addEventListener('click',e=>{const qs=$('qs-results'),inp=$('qs-input');if(qs&&!qs.contains(e.target)&&e.target!==inp)clearQuickSearch();});
@@ -4114,7 +4114,7 @@ async function createFauteuilInline(){
     const inp=document.getElementById('f-serie-search');if(inp)inp.value=`${f.modele} — ${f.serie}`;
     const el=document.getElementById('new-fauteuil-inline');if(el)el.style.display='none';
     toast(f.already_exists?`Fauteuil (${f.serie}) déjà en base — sélectionné`:`Fauteuil ${f.modele} (${f.serie}) créé`,'ti-wheelchair');
-  }catch(e){alert('Erreur : '+e.message);}
+  }catch(e){alert(L('Erreur : ')+e.message);}
 }
 
 // ── RECHERCHE CLIENTS DANS FORMULAIRE ────────────────────────────
@@ -4162,8 +4162,8 @@ async function saveFactureInter(interId){
     const edit    = document.getElementById('facture-edit-'+interId);
     if(display){ display.innerHTML = val ? `<span class="mono" style="color:var(--accent)">${esc(val)}</span>` : '<span style="color:var(--text3)">—</span>'; display.style.display='block'; }
     if(edit)    edit.style.display = 'none';
-    toast('Numéro de facture mis à jour','ti-receipt');
-  } catch(e) { alert('Erreur : '+e.message); }
+    toast(L('Numéro de facture mis à jour'),'ti-receipt');
+  } catch(e) { alert(L('Erreur : ')+e.message); }
 }
 
 async function chargerFacturesVF(fauteuilId){
@@ -4172,8 +4172,8 @@ async function chargerFacturesVF(fauteuilId){
   try{
     const{factures,serie,configured}=await API.facturesVF(fauteuilId);
     if(!configured){el.innerHTML='<span style="color:var(--text3)">VosFactures non configuré.</span>';return;}
-    if(!factures.length){el.innerHTML=`<span style="color:var(--text3)">Aucune facture trouvée pour la série <span class="mono">${esc(serie||'?')}</span>.</span>`;return;}
-    el.innerHTML=`<table class="t"><thead><tr><th>Numéro</th><th>${t('col_date')}</th><th>Client VF</th><th>Montant TTC</th><th>${t('col_statut')}</th><th></th></tr></thead>
+    if(!factures.length){el.innerHTML=`<span style="color:var(--text3)">${L('Aucune facture trouvée pour la série')} <span class="mono">${esc(serie||'?')}</span>.</span>`;return;}
+    el.innerHTML=`<table class="t"><thead><tr><th>${L('Numéro')}</th><th>${t('col_date')}</th><th>Client VF</th><th>Montant TTC</th><th>${t('col_statut')}</th><th></th></tr></thead>
       <tbody>${factures.map(f=>`<tr>
         <td class="mono" style="color:var(--accent)">${esc(f.numero)}</td>
         <td>${f.date?fd(f.date.substring(0,10)):'—'}</td>
@@ -4190,7 +4190,7 @@ let SYNC_POLL_TIMER=null;
 async function syncHistorique(){
   const el=document.getElementById('historique-progress');if(!el)return;
   el.style.display='block';
-  el.innerHTML=`<div class="card" style="padding:10px;font-size:12px"><div style="font-weight:600;margin-bottom:4px"><i class="ti ti-loader-2"></i> Sync historique lancée en arrière-plan…</div><div id="sync-histo-msg" style="color:var(--text3)">Démarrage…</div><div style="font-size:11px;color:var(--text3);margin-top:4px">Cela peut prendre 10 à 20 min. Vous pouvez continuer à utiliser l'application.</div></div>`;
+  el.innerHTML=`<div class="card" style="padding:10px;font-size:12px"><div style="font-weight:600;margin-bottom:4px"><i class="ti ti-loader-2"></i> ${L('Sync historique lancée en arrière-plan…')}</div><div id="sync-histo-msg" style="color:var(--text3)">${L('Démarrage…')}</div><div style="font-size:11px;color:var(--text3);margin-top:4px">Cela peut prendre 10 à 20 min. Vous pouvez continuer à utiliser l'application.</div></div>`;
   try{await API.vfSyncHistorique();pollSyncHistorique();}catch(e){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:12px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div>`;}
 }
 function pollSyncHistorique(){
@@ -4204,8 +4204,8 @@ function pollSyncHistorique(){
       if(msg)msg.textContent=s.progress||'…';
       if(s.done){
         clearInterval(SYNC_POLL_TIMER);
-        if(s.error){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:12px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(s.error)}<button class="btn sm" style="display:block;margin-top:6px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>Fermer</button></div>`;}
-        else{el.innerHTML=`<div class="card" style="padding:10px;background:var(--success-bg);border-color:var(--success);font-size:12px"><div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> Sync historique terminée !</div><div>${esc(s.results?.clients||'—')}</div><div>${esc(s.results?.products||'—')}</div><div>${esc(s.results?.invoices||'—')}</div><button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none';render()"><i class="ti ti-x"></i>Fermer</button></div>`;toast('Sync historique terminée','ti-history');}
+        if(s.error){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:12px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(s.error)}<button class="btn sm" style="display:block;margin-top:6px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>${L('Fermer')}</button></div>`;}
+        else{el.innerHTML=`<div class="card" style="padding:10px;background:var(--success-bg);border-color:var(--success);font-size:12px"><div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> ${L('Sync historique terminée !')}</div><div>${esc(s.results?.clients||'—')}</div><div>${esc(s.results?.products||'—')}</div><div>${esc(s.results?.invoices||'—')}</div><button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none';render()"><i class="ti ti-x"></i>${L('Fermer')}</button></div>`;toast(L('Sync historique terminée'),'ti-history');}
       }
     }catch(e){}
   },5000);
@@ -4219,7 +4219,7 @@ async function modalFusionnerClient(idCible){
   window._FUSION_OUVERT=cible; // fiche depuis laquelle on a ouvert la modale
   window._FUSION_AUTRE=null;   // autre fiche (doublon) sélectionnée
   showModal(`<div style="width:min(92vw,640px)">
-    <div class="modal-header"><i class="ti ti-git-merge" style="font-size:18px;color:var(--accent)"></i><h2>Fusionner un doublon</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-header"><i class="ti ti-git-merge" style="font-size:18px;color:var(--accent)"></i><h2>${L('Fusionner un doublon')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="min-height:340px">
       <div class="form-group"><label class="form-label">Autre fiche (le doublon)</label>
         <div style="position:relative">
@@ -4247,13 +4247,13 @@ async function modalFusionnerClient(idCible){
       </div>
       <div class="form-group"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
         <input type="checkbox" id="fusion-vf-ignore" checked>
-        <span>Empêcher la sync VosFactures de recréer ce doublon</span>
+        <span>${L('Empêcher la sync VosFactures de recréer ce doublon')}</span>
       </label></div>
       <div id="fusion-apercu" style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--danger);display:none"></div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
-      <button class="btn danger" onclick="confirmerFusion()"><i class="ti ti-git-merge"></i>Fusionner et supprimer</button>
+      <button class="btn danger" onclick="confirmerFusion()"><i class="ti ti-git-merge"></i>${L('Fusionner et supprimer')}</button>
     </div>
   </div>`);
 }
@@ -4284,12 +4284,12 @@ function majApercuFusion(){
   const ap=document.getElementById('fusion-apercu');
   if(ap){
     ap.style.display='';
-    ap.innerHTML=`<i class="ti ti-alert-triangle"></i> Les fauteuils, interventions et commandes de <b>${esc(supprime.nom)}</b> seront transférés vers <b>${esc(conserve.nom)}</b>, puis <b>${esc(supprime.nom)}</b> sera supprimé définitivement.`;
+    ap.innerHTML=`<i class="ti ti-alert-triangle"></i> Les fauteuils, interventions et commandes de <b>${esc(supprime.nom)}</b> ${L('seront transférés vers')} <b>${esc(conserve.nom)}</b>, puis <b>${esc(supprime.nom)}</b> sera supprimé définitivement.`;
   }
 }
 async function confirmerFusion(){
   const ouvert=window._FUSION_OUVERT, autre=window._FUSION_AUTRE;
-  if(!ouvert||!autre){alert('Veuillez sélectionner une autre fiche.');return;}
+  if(!ouvert||!autre){alert(L('Veuillez sélectionner une autre fiche.'));return;}
   const garder=document.querySelector('input[name="fusion-garder"]:checked')?.value||'ouvert';
   const idCible  = garder==='autre' ? autre.id : ouvert.id;
   const idSource = garder==='autre' ? ouvert.id : autre.id;
@@ -4304,7 +4304,7 @@ async function confirmerFusion(){
     // Si on était sur une fiche client : aller sur la fiche conservée (idCible)
     if(STATE.view==='client'){ setView('client',{clientId:idCible}); }
     else { render(); }
-  }catch(e){alert('Erreur : '+e.message);}
+  }catch(e){alert(L('Erreur : ')+e.message);}
 }
 window.modalFusionnerClient = modalFusionnerClient;
 window.searchFusionClient = searchFusionClient;
@@ -4340,16 +4340,16 @@ applyNavTranslations();
 
 
 async function syncPaiementCommande(id){
-  toast('Vérification paiement VF…','ti-loader-2');
+  toast(L('Vérification paiement VF…'),'ti-loader-2');
   try{
     const resp = await fetch('/api/commandes/'+id+'/sync-paiement',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const r = await resp.json();
     if(r.ok){
       const label = r.statut==='payé'?'✅ Payé':r.statut==='impayé'?'⚠️ Impayé':'⏳ En attente';
-      toast('Statut paiement : '+label,'ti-check',r.statut==='payé'?'var(--success)':r.statut==='impayé'?'var(--danger)':'var(--warning)');
+      toast(L('Statut paiement : ')+label,'ti-check',r.statut==='payé'?'var(--success)':r.statut==='impayé'?'var(--danger)':'var(--warning)');
       console.log('[VF RAW]', JSON.stringify(r.raw,null,2));
       modalCommande(id);
-    } else toast('Erreur : '+(r.reason||r.error||'Inconnu'),'ti-alert-circle','var(--warning)');
+    } else toast(L('Erreur : ')+(r.reason||r.error||'Inconnu'),'ti-alert-circle','var(--warning)');
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.syncPaiementCommande = syncPaiementCommande;
@@ -4360,7 +4360,7 @@ window.syncPaiementCommande = syncPaiementCommande;
 // ══════════════════════════════════════════════════════════════════
 async function renderCommandeSuede(ttl, c, a) {
   ttl.textContent = t('nav_commande_suede') || 'Commande Suède';
-  a.innerHTML = `<button class="btn primary" onclick="modalNouvelleCommandeSuede()"><i class="ti ti-plus"></i>Nouvelle commande</button>`;
+  a.innerHTML = `<button class="btn primary" onclick="modalNouvelleCommandeSuede()"><i class="ti ti-plus"></i>${L('Nouvelle commande')}</button>`;
   c.innerHTML = `<div id="cs-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">${t('msg_chargement')||'Chargement…'}</div></div>`;
   chargerCommandesSuede();
 }
@@ -4371,11 +4371,11 @@ async function chargerCommandesSuede() {
   try {
     const list = await API.commandesSuede();
     if (!list.length) {
-      el.innerHTML = `<div class="empty"><i class="ti ti-truck-delivery"></i>Aucune commande Suède.<br><span style="font-size:12px;color:var(--text3)">Créez-en une pour réapprovisionner le stock de pièces depuis Eloflex AB.</span></div>`;
+      el.innerHTML = `<div class="empty"><i class="ti ti-truck-delivery"></i>${L('Aucune commande Suède.')}<br><span style="font-size:12px;color:var(--text3)">${L('Créez-en une pour réapprovisionner le stock de pièces depuis Eloflex AB.')}</span></div>`;
       return;
     }
     el.innerHTML = `<div class="table-wrap"><table class="t">
-      <thead><tr><th>Référence</th><th>Date</th><th>Transporteur</th><th>Suivi</th><th>Livraison</th><th>Lignes</th><th>Stock</th><th></th></tr></thead>
+      <thead><tr><th>${L('Référence')}</th><th>Date</th><th>Transporteur</th><th>Suivi</th><th>${L('Livraison')}</th><th>Lignes</th><th>Stock</th><th></th></tr></thead>
       <tbody>${list.map(cs => {
         const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
         const badgeStock = cs.stock_integre
@@ -4407,10 +4407,10 @@ let _csCatalogue = null;
 function modalNouvelleCommandeSuede() {
   _csLignes = [];
   showModal(`
-    <div class="modal-head"><h3><i class="ti ti-truck-delivery"></i>Nouvelle commande Suède</h3>
+    <div class="modal-head"><h3><i class="ti ti-truck-delivery"></i>${L('Nouvelle commande Suède')}</h3>
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <div class="form-group"><label class="form-label">Référence de la commande</label>
+      <div class="form-group"><label class="form-label">${L('Référence de la commande')}</label>
         <input class="form-input mono" id="cs-bc" placeholder="STOCK0241" style="max-width:220px">
         <div style="font-size:11px;color:var(--text3);margin-top:3px">Votre référence interne (ex. STOCK + numéro).</div>
       </div>
@@ -4421,11 +4421,11 @@ function modalNouvelleCommandeSuede() {
           <input class="form-input" id="cs-vf-url" placeholder="Collez l'URL ou l'ID du document VosFactures" style="flex:1">
           <button class="btn primary" type="button" onclick="importerDocVF()"><i class="ti ti-download"></i>Importer</button>
         </div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Ex. https://eloflex.vosfactures.fr/warehouse_documents/73745036 — ou le numéro du document.</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">${L('Ex. https://eloflex.vosfactures.fr/warehouse_documents/73745036 — ou le numéro du document.')}</div>
         <div id="cs-lookup" style="margin-top:8px"></div>
       </details>
 
-      <div class="section-title" style="margin-top:6px"><i class="ti ti-list"></i>Pièces commandées</div>
+      <div class="section-title" style="margin-top:6px"><i class="ti ti-list"></i>${L('Pièces commandées')}</div>
       <div style="position:relative;margin-bottom:8px">
         <input class="form-input" id="cs-piece-recherche" placeholder="Ajouter une pièce du catalogue (réf. ou désignation)…" oninput="rechercherPieceSuede(this.value)" autocomplete="off">
         <div id="cs-piece-suggest" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:200px;overflow:auto;display:none"></div>
@@ -4445,13 +4445,13 @@ function modalNouvelleCommandeSuede() {
       <div class="grid-2">
         <div class="form-group"><label class="form-label">Date de commande</label>
           <input class="form-input" id="cs-date" type="date"></div>
-        <div class="form-group"><label class="form-label">Date de livraison prévue</label>
+        <div class="form-group"><label class="form-label">${L('Date de livraison prévue')}</label>
           <input class="form-input" id="cs-livraison" type="date"></div>
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
-      <button class="btn primary" onclick="enregistrerCommandeSuede()"><i class="ti ti-check"></i>Créer</button>
+      <button class="btn primary" onclick="enregistrerCommandeSuede()"><i class="ti ti-check"></i>${L('Créer')}</button>
     </div>`);
   dessinerLignesSuede();
 }
@@ -4496,7 +4496,7 @@ function dessinerLignesSuede() {
     zone.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">Aucune pièce pour l\'instant. Ajoutez-les ci-dessus, ou importez un document VosFactures.</div>';
     return;
   }
-  zone.innerHTML = `<div class="table-wrap"><table class="t"><thead><tr><th>Réf.</th><th>Désignation</th><th style="width:90px">Qté</th><th></th></tr></thead>
+  zone.innerHTML = `<div class="table-wrap"><table class="t"><thead><tr><th>${L('Réf.')}</th><th>${L('Désignation')}</th><th style="width:90px">${L('Qté')}</th><th></th></tr></thead>
     <tbody>${_csLignes.map((l, i) => `<tr>
       <td class="mono">${esc(l.reference || '—')}${l.rapproche === false ? ' <span class="badge hg" title="Hors catalogue">?</span>' : ''}</td>
       <td>${esc(l.designation)}</td>
@@ -4581,7 +4581,7 @@ function fusionnerLignesImportees(lignes, dateDoc) {
 
 async function enregistrerCommandeSuede() {
   const numero_bc = document.getElementById('cs-bc')?.value.trim();
-  if (!numero_bc) { toast('Référence requise', 'ti-alert-circle'); return; }
+  if (!numero_bc) { toast(L('Référence requise'), 'ti-alert-circle'); return; }
   try {
     await API.createCommandeSuede({
       numero_bc,
@@ -4597,7 +4597,7 @@ async function enregistrerCommandeSuede() {
       }))
     });
     closeModal();
-    toast('Commande Suède créée', 'ti-check');
+    toast(L('Commande Suède créée'), 'ti-check');
     chargerCommandesSuede();
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
@@ -4613,7 +4613,7 @@ async function ouvrirCommandeSuede(id) {
         <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
         <div class="grid-2">
-          <div class="form-group"><label class="form-label">Référence</label>
+          <div class="form-group"><label class="form-label">${L('Référence')}</label>
             <input class="form-input mono" value="${esc(cs.numero_bc)}" readonly style="background:rgba(0,0,0,.03)"></div>
           <div class="form-group"><label class="form-label">Date de commande</label>
             <input class="form-input" id="cs-e-date" type="date" value="${cs.date_commande||''}"></div>
@@ -4631,7 +4631,7 @@ async function ouvrirCommandeSuede(id) {
           ${lien ? `<a href="${lien}" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);display:inline-block;margin-top:4px"><i class="ti ti-external-link"></i> Suivre le colis</a>` : ''}
         </div>
         <div class="section-title" style="margin-top:8px"><i class="ti ti-list"></i>Lignes (${cs.lignes.length})</div>
-        <div class="table-wrap"><table class="t"><thead><tr><th>Désignation</th><th>Réf.</th><th>Cmdé</th>${cs.stock_integre?'<th>Reçu</th><th>Reliquat</th>':''}</tr></thead>
+        <div class="table-wrap"><table class="t"><thead><tr><th>${L('Désignation')}</th><th>${L('Réf.')}</th><th>${L('Cmdé')}</th>${cs.stock_integre?'<th>Reçu</th><th>Reliquat</th>':''}</tr></thead>
           <tbody>${cs.lignes.map(l => `<tr>
             <td>${esc(l.designation)}${l.catalogue_id?'':' <span class="badge hg" title="Non rattaché au catalogue">?</span>'}</td>
             <td class="mono">${esc(l.reference||'—')}</td>
@@ -4641,10 +4641,10 @@ async function ouvrirCommandeSuede(id) {
         ${cs.stock_integre ? `<div style="font-size:12px;color:var(--success);margin-top:8px"><i class="ti ti-check"></i> Stock intégré${cs.integre_le?' le '+fd(String(cs.integre_le).slice(0,10)):''}</div>` : ''}
       </div>
       <div class="modal-foot" style="justify-content:space-between">
-        <div>${cs.stock_integre ? '' : `<button class="btn sm danger" onclick="supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i>Supprimer</button>`}</div>
+        <div>${cs.stock_integre ? '' : `<button class="btn sm danger" onclick="supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i>${L('Supprimer')}</button>`}</div>
         <div style="display:flex;gap:6px">
-          ${cs.stock_integre ? '' : `<button class="btn" onclick="sauverCommandeSuede(${cs.id})"><i class="ti ti-device-floppy"></i>Enregistrer</button>`}
-          ${peutIntegrer ? `<button class="btn primary" onclick="modalIntegrerStock(${cs.id})"><i class="ti ti-package-import"></i>Intégrer dans le stock</button>` : ''}
+          ${cs.stock_integre ? '' : `<button class="btn" onclick="sauverCommandeSuede(${cs.id})"><i class="ti ti-device-floppy"></i>${L('Enregistrer')}</button>`}
+          ${peutIntegrer ? `<button class="btn primary" onclick="modalIntegrerStock(${cs.id})"><i class="ti ti-package-import"></i>${L('Intégrer dans le stock')}</button>` : ''}
         </div>
       </div>`);
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
@@ -4660,7 +4660,7 @@ async function sauverCommandeSuede(id) {
       date_livraison: document.getElementById('cs-e-livraison')?.value || null
     });
     closeModal();
-    toast('Enregistré', 'ti-check');
+    toast(L('Enregistré'), 'ti-check');
     chargerCommandesSuede();
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
@@ -4678,12 +4678,12 @@ async function modalIntegrerStock(id) {
       <div class="modal-head"><h3><i class="ti ti-package-import"></i>Réception ${esc(cs.numero_bc)}</h3>
         <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Vérifiez la livraison. Ajustez la quantité reçue (un reliquat est calculé si elle est inférieure à la commande) et, au besoin, corrigez la référence ou reliez une ligne au catalogue pour que le stock soit mis à jour.</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px">${L('Vérifiez la livraison. Ajustez la quantité reçue (un reliquat est calculé si elle est inférieure à la commande) et, au besoin, corrigez la référence ou reliez une ligne au catalogue pour que le stock soit mis à jour.')}</div>
         <div id="cs-int-liste"></div>
       </div>
       <div class="modal-foot">
         <button class="btn" onclick="ouvrirCommandeSuede(${id})">${t('btn_annuler')||'Annuler'}</button>
-        <button class="btn primary" onclick="confirmerIntegrationStock(${id})"><i class="ti ti-check"></i>Valider et mettre à jour le stock</button>
+        <button class="btn primary" onclick="confirmerIntegrationStock(${id})"><i class="ti ti-check"></i>${L('Valider et mettre à jour le stock')}</button>
       </div>`);
     dessinerLignesIntegration();
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
@@ -4694,7 +4694,7 @@ function dessinerLignesIntegration() {
   if (!zone) return;
   const lignes = window._csIntLignes || [];
   zone.innerHTML = `<div class="table-wrap"><table class="t">
-    <thead><tr><th>Réf.</th><th>Désignation</th><th style="width:70px">Cmdé</th><th style="width:80px">Reçu</th><th style="width:70px">Reliquat</th></tr></thead>
+    <thead><tr><th>${L('Réf.')}</th><th>${L('Désignation')}</th><th style="width:70px">${L('Cmdé')}</th><th style="width:80px">${L('Reçu')}</th><th style="width:70px">Reliquat</th></tr></thead>
     <tbody>${lignes.map((l, i) => {
       const recu = (l._recu !== undefined) ? l._recu : l.quantite_commandee;
       const reliquat = Math.max(0, l.quantite_commandee - recu);
@@ -4736,10 +4736,10 @@ window.majIntLigne = majIntLigne;
 function relierLigneCatalogue(index) {
   const l = (window._csIntLignes || [])[index];
   if (!l) return;
-  const choix = prompt('Référence de la pièce du catalogue à relier :', l.reference || '');
+  const choix = prompt(L('Référence de la pièce du catalogue à relier :'), l.reference || '');
   if (!choix) return;
   const art = (_csCatalogue || []).find(c => String(c.ref).toLowerCase() === choix.trim().toLowerCase());
-  if (!art) { toast('Référence introuvable dans le catalogue', 'ti-alert-circle', 'var(--danger)'); return; }
+  if (!art) { toast(L('Référence introuvable dans le catalogue'), 'ti-alert-circle', 'var(--danger)'); return; }
   l.catalogue_id = art.id;
   l.reference = art.ref;
   if (!l.designation) l.designation = art.designation;
@@ -4758,17 +4758,17 @@ async function confirmerIntegrationStock(id) {
   try {
     await API.integrerStockSuede(id, lignes);
     closeModal();
-    toast('Stock mis à jour', 'ti-check', 'var(--success)');
+    toast(L('Stock mis à jour'), 'ti-check', 'var(--success)');
     chargerCommandesSuede();
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
 
 async function supprimerCommandeSuede(id) {
-  if (!confirm('Supprimer cette commande Suède ?')) return;
+  if (!confirm(L('Supprimer cette commande Suède ?'))) return;
   try {
     await API.deleteCommandeSuede(id);
     closeModal();
-    toast('Supprimé', 'ti-check');
+    toast(L('Supprimé'), 'ti-check');
     chargerCommandesSuede();
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
@@ -4968,7 +4968,7 @@ function enregistrerRattachements(btn) {
   var liens = Object.keys(_ratChoix)
     .filter(function(k){ return _ratChoix[k] != null; })
     .map(function(k){ return { point_id: parseInt(k), client_id: _ratChoix[k] }; });
-  if (!liens.length) { toast('Aucun rattachement sélectionné', 'ti-info-circle'); return; }
+  if (!liens.length) { toast(L('Aucun rattachement sélectionné'), 'ti-info-circle'); return; }
 
   var libelle = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>Enregistrement…'; }
@@ -5019,14 +5019,14 @@ function chargerResumeSauvegarde() {
 window.chargerResumeSauvegarde = chargerResumeSauvegarde;
 
 function envoyerSauvegardeMaintenant(btn) {
-  if (!confirm('Envoyer la sauvegarde complète à info@eloflex.fr maintenant ?')) return;
+  if (!confirm(L('Envoyer la sauvegarde complète à info@eloflex.fr maintenant ?'))) return;
   var libelle = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i>Envoi en cours…'; }
   fetch('/api/sauvegarde/envoyer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (d.ok) {
-        toast('Sauvegarde envoyée (' + d.poids_mo + ' Mo)' + (d.joint ? '' : ' — trop volumineuse pour être jointe'),
+        toast(L('Sauvegarde envoyée (') + d.poids_mo + ' Mo)' + (d.joint ? '' : ' — trop volumineuse pour être jointe'),
               'ti-check', 'var(--success)');
       } else {
         toast(d.erreur || d.ignore || 'Envoi impossible', 'ti-alert-circle', 'var(--danger)');
@@ -5067,11 +5067,11 @@ async function restaurerSauvegarde(btn){
     const lignes = Object.entries(r.rapport || {}).filter(([,n])=>n>0).sort((a,b)=>b[1]-a[1]);
     const total = lignes.reduce((s,[,n])=>s+n,0);
     if (zone) zone.innerHTML = '<span style="color:#16a34a">✓ Restauration réussie — '+total+' ligne(s) importée(s) sur '+lignes.length+' table(s).</span>';
-    toast('Sauvegarde restaurée', 'ti-check', 'var(--success)');
+    toast(L('Sauvegarde restaurée'), 'ti-check', 'var(--success)');
     setTimeout(function(){ chargerResumeSauvegarde(); }, 500);
   } catch(e) {
     if (zone) zone.innerHTML = '<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>';
-    toast('Échec de la restauration', 'ti-alert-circle', 'var(--danger)');
+    toast(L('Échec de la restauration'), 'ti-alert-circle', 'var(--danger)');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = libelle; }
   }
@@ -5224,16 +5224,16 @@ function repondreFil(id){
   var contenu = inp.value.trim(); if(!contenu) return;
   fetch('/api/discussions/fil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contenu:contenu, parent_id:id})})
     .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ chargerFil(); } else toast((d&&d.error)||'Erreur','ti-alert-circle','var(--danger)'); })
-    .catch(function(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); });
+    .catch(function(e){ toast(L('Erreur : ')+e.message,'ti-alert-circle','var(--danger)'); });
 }
 window.filReply = filReply; window.repondreFil = repondreFil;
 
 function publierFil(){
   var ta = document.getElementById('fil-nouveau'); if(!ta) return;
-  var contenu = ta.value.trim(); if(!contenu){ toast('Message vide','ti-alert-circle','var(--warning)'); return; }
+  var contenu = ta.value.trim(); if(!contenu){ toast(L('Message vide'),'ti-alert-circle','var(--warning)'); return; }
   fetch('/api/discussions/fil',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contenu:contenu})})
     .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ chargerFil(); } else toast((d&&d.error)||'Erreur','ti-alert-circle','var(--danger)'); })
-    .catch(function(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); });
+    .catch(function(e){ toast(L('Erreur : ')+e.message,'ti-alert-circle','var(--danger)'); });
 }
 window.publierFil = publierFil;
 
@@ -5248,18 +5248,18 @@ window.editFil = editFil;
 
 function sauverEditFil(id){
   var ta = document.getElementById('fil-edit-'+id); if(!ta) return;
-  var contenu = ta.value.trim(); if(!contenu){ toast('Message vide','ti-alert-circle','var(--warning)'); return; }
+  var contenu = ta.value.trim(); if(!contenu){ toast(L('Message vide'),'ti-alert-circle','var(--warning)'); return; }
   fetch('/api/discussions/fil/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({contenu:contenu})})
     .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ _DISC_EDIT=null; chargerFil(); } else toast((d&&d.error)||'Non autorisé','ti-alert-circle','var(--danger)'); })
-    .catch(function(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); });
+    .catch(function(e){ toast(L('Erreur : ')+e.message,'ti-alert-circle','var(--danger)'); });
 }
 window.sauverEditFil = sauverEditFil;
 
 function supprFil(id){
-  if(!confirm('Supprimer ce message ?')) return;
+  if(!confirm(L('Supprimer ce message ?'))) return;
   fetch('/api/discussions/fil/'+id,{method:'DELETE'})
     .then(function(r){return r.json();}).then(function(d){ if(d&&d.ok){ chargerFil(); } else toast((d&&d.error)||'Non autorisé','ti-alert-circle','var(--danger)'); })
-    .catch(function(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); });
+    .catch(function(e){ toast(L('Erreur : ')+e.message,'ti-alert-circle','var(--danger)'); });
 }
 window.supprFil = supprFil;
 
@@ -5331,8 +5331,8 @@ window.chargerDiscussions = chargerDiscussions;
 
 // Rapprochement automatique Catalogue <-> produits VosFactures
 async function importerVFIds() {
-  if (!confirm('Lancer la correspondance automatique VosFactures ↔ Catalogue ?\nCela peut prendre une à deux minutes.')) return;
-  if (typeof toast === 'function') toast('Correspondance en cours…', 'ti-loader-2');
+  if (!confirm(L('Lancer la correspondance automatique VosFactures ↔ Catalogue ?\nCela peut prendre une à deux minutes.'))) return;
+  if (typeof toast === 'function') toast(L('Correspondance en cours…'), 'ti-loader-2');
   try {
     const r = await API.post('/catalogue/import-vf-ids', {});
     if (r && r.ok) {
@@ -5789,7 +5789,7 @@ async function ajouterDistributeurCarte(clientId, nom){
       if (info) info.innerHTML = '<span style="color:#b45309">Non positionné : ' + esc(r.carte.reason || 'adresse introuvable') + '. Vous pouvez le placer manuellement via « Ajouter » sur la carte.</span>';
       return;
     }
-    toast('Ajouté à la carte', 'ti-map-pin', 'var(--success)');
+    toast(L('Ajouté à la carte'), 'ti-map-pin', 'var(--success)');
     // Recharger les points puis centrer sur le nouveau
     _cartePoints = [];
     chargerPoints();
@@ -6199,8 +6199,8 @@ function sauverNoteCarte(id) {
     var pt = _cartePoints.find(function(x){ return x.id === id; });
     if (pt) pt.note_interne = note;
     afficherMarkers();
-    if (typeof toast === 'function') toast('Note enregistrée', 'ti-check', 'var(--success)');
-  }).catch(function(e){ alert('Erreur : ' + e.message); });
+    if (typeof toast === 'function') toast(L('Note enregistrée'), 'ti-check', 'var(--success)');
+  }).catch(function(e){ alert(L('Erreur : ') + e.message); });
 }
 window.sauverNoteCarte = sauverNoteCarte;
 
@@ -6215,8 +6215,8 @@ function sauverCouvertureCarte(id) {
   }).then(function(r){ return r.json(); }).then(function(){
     var pt = _cartePoints.find(function(x){ return x.id === id; });
     if (pt) { pt.zone_chalandise = zone; pt.rayon_km = (rayon && rayon > 0) ? rayon : null; if (typeof dessinerCouverture === 'function') dessinerCouverture(pt); }
-    if (typeof toast === 'function') toast('Couverture enregistrée', 'ti-map-2', 'var(--success)');
-  }).catch(function(e){ alert('Erreur : ' + e.message); });
+    if (typeof toast === 'function') toast(L('Couverture enregistrée'), 'ti-map-2', 'var(--success)');
+  }).catch(function(e){ alert(L('Erreur : ') + e.message); });
 }
 window.sauverCouvertureCarte = sauverCouvertureCarte;
 
@@ -6230,8 +6230,8 @@ function sauverPrioriteCarte(id, prio) {
     var pt = _cartePoints.find(function(x){ return x.id === id; });
     if (pt) pt.priorite = prio || null;
     afficherMarkers();
-    if (typeof toast === 'function') toast('Priorité mise à jour', 'ti-flag', 'var(--success)');
-  }).catch(function(e){ alert('Erreur : ' + e.message); });
+    if (typeof toast === 'function') toast(L('Priorité mise à jour'), 'ti-flag', 'var(--success)');
+  }).catch(function(e){ alert(L('Erreur : ') + e.message); });
 }
 window.sauverPrioriteCarte = sauverPrioriteCarte;
 
@@ -6306,7 +6306,7 @@ async function lancerGeocodageCarte() {
     setInfo('Terminé : ' + tot + ' distributeur(s) positionné(s).', '#16a34a');
     _carteHorsPoints = [];
     if (_carteHorsCarte) basculerHorsCarte(true); // recharge les points hors carte affichés
-    if (typeof toast === 'function') toast('Géocodage terminé (' + tot + ')', 'ti-map-pin', 'var(--success)');
+    if (typeof toast === 'function') toast(L('Géocodage terminé (') + tot + ')', 'ti-map-pin', 'var(--success)');
   } catch (e) { setInfo('Erreur : ' + esc(e.message), '#dc2626'); }
 }
 window.lancerGeocodageCarte = lancerGeocodageCarte;
@@ -6364,8 +6364,8 @@ function corrigerVilleCarte(id, ville, btn) {
     .then(function(r){ return r.json(); }).then(function(res){
       if (res && res.error) { alert(res.error); return; }
       if (btn) { btn.textContent = '✓ Corrigé'; btn.disabled = true; btn.style.background = '#9ca3af'; }
-      if (typeof toast === 'function') toast('Ville corrigée', 'ti-check', 'var(--success)');
-    }).catch(function(e){ alert('Erreur : ' + e.message); });
+      if (typeof toast === 'function') toast(L('Ville corrigée'), 'ti-check', 'var(--success)');
+    }).catch(function(e){ alert(L('Erreur : ') + e.message); });
 }
 window.corrigerVilleCarte = corrigerVilleCarte;
 
@@ -6677,10 +6677,10 @@ function geocoderAdresse() {
       if (d.found) {
         document.getElementById('pc-lat').value = d.lat.toFixed(6);
         document.getElementById('pc-lng').value = d.lng.toFixed(6);
-        if (typeof toast === 'function') toast('Coordonnées trouvées', 'ti-check', 'var(--success)');
-      } else alert('Adresse introuvable. Saisissez les coordonnées manuellement.');
+        if (typeof toast === 'function') toast(L('Coordonnées trouvées'), 'ti-check', 'var(--success)');
+      } else alert(L('Adresse introuvable. Saisissez les coordonnées manuellement.'));
     })
-    .catch(function(e){ alert('Erreur : ' + e.message); });
+    .catch(function(e){ alert(L('Erreur : ') + e.message); });
 }
 window.geocoderAdresse = geocoderAdresse;
 
@@ -6715,7 +6715,7 @@ function sauverPointCarte(id) {
   fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
     .then(function(r){ return r.json(); })
     .then(function(d){
-      if (!d.ok) { alert('Erreur : ' + (d.error || 'inconnue')); return; }
+      if (!d.ok) { alert(L('Erreur : ') + (d.error || 'inconnue')); return; }
       var pid = id || (d && (d.id || (d.point && d.point.id)));
       var suites = [];
       if (pid) {
@@ -6731,7 +6731,7 @@ function sauverPointCarte(id) {
         if (typeof toast === 'function') toast(id ? 'Distributeur modifié' : 'Distributeur ajouté', 'ti-check', 'var(--success)');
       });
     })
-    .catch(function(e){ alert('Erreur : ' + e.message); });
+    .catch(function(e){ alert(L('Erreur : ') + e.message); });
 }
 window.sauverPointCarte = sauverPointCarte;
 
@@ -6742,9 +6742,9 @@ function supprimerPointCarte(id) {
     .then(function(r){ return r.json(); })
     .then(function(){
       rafraichirPointsCarte(); // conserve la vue actuelle
-      if (typeof toast === 'function') toast('Distributeur supprimé', 'ti-check', 'var(--success)');
+      if (typeof toast === 'function') toast(L('Distributeur supprimé'), 'ti-check', 'var(--success)');
     })
-    .catch(function(e){ alert('Erreur : ' + e.message); });
+    .catch(function(e){ alert(L('Erreur : ') + e.message); });
 }
 window.supprimerPointCarte = supprimerPointCarte;
 
@@ -6770,7 +6770,7 @@ function importerKML(files) {
     if (idx >= arr.length) {
       // Tout est importé
       var msg = resultats.map(function(r){ return r.label + ': ' + r.inserted; }).join(' — ');
-      if (typeof toast === 'function') toast('Import terminé : ' + msg, 'ti-check', 'var(--success)');
+      if (typeof toast === 'function') toast(L('Import terminé : ') + msg, 'ti-check', 'var(--success)');
       setTimeout(chargerPoints, 300);
       return;
     }
@@ -6858,18 +6858,18 @@ function _sendNote(cmdId) {
       var tab = document.getElementById('tab-notes');
       if (tab) renderNotesTab(cmdId).then(function(h) { tab.innerHTML = h; });
     })
-    .catch(function(e) { alert('Erreur : ' + e.message); });
+    .catch(function(e) { alert(L('Erreur : ') + e.message); });
 }
 window._sendNote = _sendNote;
 
 function _delNote(cmdId, noteId) {
-  if (!confirm('Supprimer cette note ?')) return;
+  if (!confirm(L('Supprimer cette note ?'))) return;
   fetch('/api/commandes/' + cmdId + '/notes/' + noteId, {method:'DELETE'})
     .then(function() {
       var tab = document.getElementById('tab-notes');
       if (tab) renderNotesTab(cmdId).then(function(h) { tab.innerHTML = h; });
     })
-    .catch(function(e) { alert('Erreur : ' + e.message); });
+    .catch(function(e) { alert(L('Erreur : ') + e.message); });
 }
 window._delNote = _delNote;
 
