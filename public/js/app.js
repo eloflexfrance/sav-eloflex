@@ -1354,15 +1354,18 @@ async function modalCommande(id, prefill){
               <div style="display:flex;gap:14px;flex-wrap:wrap">
                 ${['mail','vosfactures','fiche de mesure'].map(m=>`
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-                  <input type="radio" name="cmd-confirmation-mode" value="${m}" ${cm.confirmation_mode===m?'checked':''} style="accent-color:var(--accent)">
+                  <input type="radio" name="cmd-confirmation-mode" value="${m}" ${cm.confirmation_mode===m?'checked':''} onchange="toggleDateConfirmation(this)" style="accent-color:var(--accent)">
                   ${m==='mail'?t('cmd_mail')||'✉ Mail':m==='vosfactures'?'📋 VosFactures':`📐 ${t('cmd_fiche_mesure')||'Fiche de mesure'}`}
                 </label>`).join('')}
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text3)">
-                  <input type="radio" name="cmd-confirmation-mode" value="" ${!cm.confirmation_mode?'checked':''} style="accent-color:var(--text3)">
+                  <input type="radio" name="cmd-confirmation-mode" value="" ${!cm.confirmation_mode?'checked':''} onchange="toggleDateConfirmation(this)" style="accent-color:var(--text3)">
                   ${t('cmd_non_confirme')||'Non confirmé'}
                 </label>
               </div>
-              ${cm.date_confirmation?`<div style="font-size:11px;color:var(--text2);margin-top:4px">Confirmé le ${fd(cm.date_confirmation)}</div>`:''}
+              <div id="cmd-date-confirmation-wrap" style="margin-top:8px;${cm.confirmation_mode?'':'display:none'}">
+                <label class="form-label" style="font-size:11px;color:var(--text2);margin-bottom:2px;display:block">${t('cmd_date_confirmation')||'Date de confirmation'}</label>
+                <input class="form-input" id="cmd-date-confirmation" type="date" style="max-width:180px" value="${cm.date_confirmation||new Date().toISOString().slice(0,10)}">
+              </div>
             </div>
           </div>
         </div>
@@ -1577,6 +1580,19 @@ async function modalCommande(id, prefill){
   TMP_RETOUR_LIGNES = (cm.retour_lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
   setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majZonePreuveLivraison(); if(!id && cm.distributeur_nom) prefillGroupeDepuisDistrib(); }, 60);
 }
+
+function toggleDateConfirmation(el){
+  const wrap=document.getElementById('cmd-date-confirmation-wrap');
+  const inp=document.getElementById('cmd-date-confirmation');
+  if(!wrap) return;
+  if(el && el.value){
+    wrap.style.display='';
+    if(inp && !inp.value) inp.value=new Date().toISOString().slice(0,10);
+  } else {
+    wrap.style.display='none';
+  }
+}
+window.toggleDateConfirmation=toggleDateConfirmation;
 
 function switchCmdTab(tab){
   ['commande','expedition','facturation','notes'].forEach(k=>{
@@ -1985,7 +2001,7 @@ async function enregistrerCommande(id){
     confirmation_recue: !!(document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value),
     invoice_se: gv('cmd-invoice-se')||null,
     date_envoi_suede: gv('cmd-date-suede')||null,
-    date_confirmation: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value && !window._CMD_CONF_DATE ? new Date().toISOString().slice(0,10) : (window._CMD_CONF_DATE||null),
+    date_confirmation: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value ? (gv('cmd-date-confirmation') || window._CMD_CONF_DATE || new Date().toISOString().slice(0,10)) : null,
     num_avoir: gv('cmd-avoir')||null,
     num_facture_pennylane: gv('cmd-facture-pl')||null,
     pays: gv('cmd-pays')||CURRENT_USER.pays||'France',
