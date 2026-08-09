@@ -130,7 +130,7 @@ function appliquerNavRole(){
     <span style="font-size:11px;color:var(--text2);flex:1">${esc(CURRENT_USER.nom)}</span>
     ${CURRENT_USER.pays?`<span style="font-size:11px;padding:2px 7px;border-radius:10px;background:var(--accent-soft,rgba(59,130,246,.12));color:var(--accent);font-weight:600">${esc(CURRENT_USER.pays)}</span>`:''}
     <div id="pays-switcher" style="display:flex"></div>
-    <button class="btn sm" onclick="seDeconnecter()" title="Se déconnecter" style="padding:4px 8px"><i class="ti ti-logout"></i></button>`;
+    <button class="btn sm" onclick="seDeconnecter()" title="${TR("Se déconnecter")}" style="padding:4px 8px"><i class="ti ti-logout"></i></button>`;
 }
 
 function setView(v, extra={}){
@@ -313,7 +313,7 @@ async function chargerCommandesDashboard(){
         <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_facture_statut')||'Facturé'}</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
-        <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="Voir les commandes impayées"><div class="stat-label" style="color:var(--danger)">${TR('⚠️ Impayés')}</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
+        <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="${TR("Voir les commandes impayées")}"><div class="stat-label" style="color:var(--danger)">${TR('⚠️ Impayés')}</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
         <div class="stat-card"><div class="stat-label">🔄 ${t('cmd_demo_count')||'Démos'}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_probleme')||'Problème'}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
       </div>
@@ -394,7 +394,7 @@ function dessinerAdresses(r){
   if (!b) return;
   const lignes = window._ADR_LIGNES || [];
   if (!lignes.length) {
-    b.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--text2)"><i class="ti ti-circle-check" style="font-size:32px;color:#16a34a;display:block;margin-bottom:8px"></i>Tous les distributeurs ont déjà une adresse renseignée.</div>';
+    b.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--text2)"><i class="ti ti-circle-check" style="font-size:32px;color:#16a34a;display:block;margin-bottom:8px"></i>'+TR("Tous les distributeurs ont déjà une adresse renseignée.")+'</div>';
     return;
   }
   const infoVF = r.configured
@@ -492,7 +492,7 @@ async function renderClients(ttl,c,a){
   if(!window._clientsQ) window._clientsQ = '';
   a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
     <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(window._clientsQ)}" style="max-width:260px">
-    ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalCompleterAdresses()"><i class="ti ti-map-pin-cog"></i>Compléter les adresses</button>' : ''}
+    ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalCompleterAdresses()"><i class="ti ti-map-pin-cog"></i>'+TR("Compléter les adresses")+'</button>' : ''}
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
   </div>`;
   document.getElementById('clients-search')?.addEventListener('input', e => {
@@ -533,7 +533,7 @@ async function renderClient(ttl,c,a){
     <div class="breadcrumb"><span onclick="setView('clients')">Clients</span><i class="ti ti-chevron-right" style="font-size:11px"></i>${esc(cl.nom)}</div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="card">
-        <div class="section-title"><i class="ti ti-user"></i>Fiche distributeur</div>
+        <div class="section-title"><i class="ti ti-user"></i>${TR("Fiche distributeur")}</div>
         <table style="width:100%;font-size:12px">
           ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Portable',cl.portable],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
           ${(()=>{
@@ -543,9 +543,9 @@ async function renderClient(ttl,c,a){
             return `<tr><td style="color:var(--text3);padding:5px 0;width:100px;vertical-align:top">Adresse</td>
               <td style="font-weight:500;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}
                 <div style="margin-top:4px;display:flex;gap:8px;font-size:11px;font-weight:400">
-                  <span onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')" style="color:var(--accent);cursor:pointer"><i class="ti ti-map-pin" style="font-size:11px"></i> Voir sur la carte</span>
+                  <span onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')" style="color:var(--accent);cursor:pointer"><i class="ti ti-map-pin" style="font-size:11px"></i> ${TR("Voir sur la carte")}</span>
                   <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> OpenStreetMap</a>
-                  <span onclick="copierAdresse(this,'${esc(lignes.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> Copier</span>
+                  <span onclick="copierAdresse(this,'${esc(lignes.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> ${TR("Copier")}</span>
                 </div>
               </td></tr>`;
           })()}
@@ -590,7 +590,7 @@ async function renderClient(ttl,c,a){
         </div>`).join('')}
     </div>
     <div class="section-title" style="margin:16px 0 8px"><i class="ti ti-clipboard-list"></i>Commandes</div>
-    <div id="client-commandes-list" style="margin-bottom:20px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>`;
+    <div id="client-commandes-list" style="margin-bottom:20px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>`;
   chargerCommandesClient(cl.id);
 }
 
@@ -813,7 +813,7 @@ function renderCmdLignes(){
       </td>
       <td style="padding:4px 6px">
         <div style="position:relative">
-          <input class="form-input mono cmd-ligne-ref" style="font-size:11px;padding:4px 7px" value="${esc(l.reference||'')}" placeholder="Réf."
+          <input class="form-input mono cmd-ligne-ref" style="font-size:11px;padding:4px 7px" value="${esc(l.reference||'')}" placeholder="${TR("Réf.")}"
             oninput="TMP_CMD_LIGNES[${i}].reference=this.value;searchCmdPieces(${i},this.value,'ref')"
             onfocus="searchCmdPieces(${i},this.value,'ref')"
             onblur="setTimeout(()=>{const d=document.getElementById('cmd-piece-drop-ref-${i}');if(d)d.style.display='none'},150)">
@@ -922,7 +922,7 @@ async function renderCommandes(ttl,c,a){
       <div class="stat-card"><div class="stat-label">${TR('Expédié')}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
       <div class="stat-card"><div class="stat-label">${TR('Livré')}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
       <div class="stat-card"><div class="stat-label">${TR('Facturé')}</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
-      <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="Voir les commandes impayées"><div class="stat-label" style="color:var(--danger)">${TR('⚠️ Impayés')}</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
+      <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="${TR("Voir les commandes impayées")}"><div class="stat-label" style="color:var(--danger)">${TR('⚠️ Impayés')}</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
       <div class="stat-card"><div class="stat-label">${TR('🔄 Démos')}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
       <div class="stat-card"><div class="stat-label">${TR('Problème')}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
     </div>
@@ -964,7 +964,7 @@ async function renderCommandes(ttl,c,a){
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.edi?'checked':''} onchange="CMD_COLS.edi=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('💳 EDI (prélèvement)')}</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.pays?'checked':''} onchange="CMD_COLS.pays=this.checked;saveCmdCols();renderCommandesTable(1)"> 🌍 Pays</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.retour?'checked':''} onchange="CMD_COLS.retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('↩ Retour')}</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_retour?'checked':''} onchange="CMD_COLS.date_retour=this.checked;saveCmdCols();renderCommandesTable(1)"> 📅 Date retour</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="checkbox" ${CMD_COLS.date_retour?'checked':''} onchange="CMD_COLS.date_retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR("📅 Date retour")}</label>
       </div>
     </div>
       ${CMD_FILTERS.distributeur
@@ -1003,7 +1003,7 @@ async function renderCommandesTable(page=1){
   // Navigation pagination
   const nav = nbPages > 1 ? `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 14px;background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:12px;backdrop-filter:blur(8px);font-size:13px">
-      <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(1)" title="Première page"><i class="ti ti-chevron-left-pipe"></i></button>
+      <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(1)" title="${TR("Première page")}"><i class="ti ti-chevron-left-pipe"></i></button>
       <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(${page-1})"><i class="ti ti-chevron-left"></i></button>
       <span style="color:var(--text2);display:flex;align-items:center;gap:6px">
         Page <b>${page}</b> /
@@ -1015,7 +1015,7 @@ async function renderCommandesTable(page=1){
         <b>${nbPages}</b>
       </span>
       <button class="btn sm" ${page>=nbPages?'disabled':''} onclick="renderCommandesTable(${page+1})"><i class="ti ti-chevron-right"></i></button>
-      <button class="btn sm" ${page>=nbPages?'disabled':''} onclick="renderCommandesTable(${nbPages})" title="Dernière page"><i class="ti ti-chevron-right-pipe"></i></button>
+      <button class="btn sm" ${page>=nbPages?'disabled':''} onclick="renderCommandesTable(${nbPages})" title="${TR("Dernière page")}"><i class="ti ti-chevron-right-pipe"></i></button>
       <span style="color:var(--text3);font-size:12px">${total} résultat(s)</span>
     </div>` : `<div style="font-size:12px;color:var(--text2);margin-bottom:8px">${total} ${t('cmd_resultats')||'résultat(s)'}</div>`;
 
@@ -1026,15 +1026,15 @@ async function renderCommandesTable(page=1){
         <th>${t('col_date')||'Date'}</th><th style="width:75px">Groupe</th>
         ${CMD_COLS.pays&&!CURRENT_USER.pays?'<th style="width:80px">Pays</th>':''}
         <th>${t('col_client')||'Distributeur'}</th>
-        <th>${t('cmd_bdc')||'Bdc'}</th><th style="width:30px;text-align:center" title="Type : fauteuil roulant ou pièces détachées"><i class="ti ti-wheelchair"></i></th><th>Articles</th>
-        <th>${t('cmd_suivi')||'N° suivi'}</th><th>Date livraison</th><th>${t('cmd_serie')||'N° série'}</th>
+        <th>${t('cmd_bdc')||'Bdc'}</th><th style="width:30px;text-align:center" title="${TR("Type : fauteuil roulant ou pièces détachées")}"><i class="ti ti-wheelchair"></i></th><th>Articles</th>
+        <th>${t('cmd_suivi')||'N° suivi'}</th><th>${TR("Date livraison")}</th><th>${t('cmd_serie')||'N° série'}</th>
         ${CMD_COLS.facture?`<th>${t('cmd_facture')||'N° Facture'}</th>`:''}
         ${CMD_COLS.date_facture?'<th>Date facturation</th>':''}
-        ${CMD_COLS.demo_origine?'<th>🔄 Origine démo</th>':''}
+        ${CMD_COLS.demo_origine?'<th>'+TR("🔄 Origine démo")+'</th>':''}
         ${CMD_COLS.edi?'<th>💳 EDI</th>':''}
         ${CMD_COLS.paiement?'<th>Paiement</th>':''}
-        ${CMD_COLS.retour?'<th>↩ Retour</th>':''}
-        ${CMD_COLS.date_retour?'<th>Date retour</th>':''}
+        ${CMD_COLS.retour?'<th>'+TR("↩ Retour")+'</th>':''}
+        ${CMD_COLS.date_retour?'<th>'+TR("Date retour")+'</th>':''}
         <th>${t('col_statut')||'Statut'}</th><th></th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
@@ -1042,12 +1042,12 @@ async function renderCommandesTable(page=1){
         <td>${fd(cm.date_commande)}</td>
         <td><span style="font-size:11px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
         ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:11px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
-        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="Filtrer par ce distributeur">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="Ouvrir la fiche client" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button>`:`<span title="Commande non rattachée à une fiche client" style="color:var(--border-s);padding:1px 3px;font-size:11px"><i class="ti ti-user-off"></i></span>`}</td>
+        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="${TR("Filtrer par ce distributeur")}">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="${TR("Ouvrir la fiche client")}" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:11px"></i></button>`:`<span title="${TR("Commande non rattachée à une fiche client")}" style="color:var(--border-s);padding:1px 3px;font-size:11px"><i class="ti ti-user-off"></i></span>`}</td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:11px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td style="text-align:center">${estCmdFauteuil(cm)
           ? `<i class="ti ti-wheelchair" style="color:var(--accent);font-size:16px" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"></i>`
-          : `<i class="ti ti-box" style="color:var(--text3);font-size:13px" title="Pièces détachées"></i>`}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:10px" title="Cette commande porte un avoir (retour / remboursement) — voir le champ Informations">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:10px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
+          : `<i class="ti ti-box" style="color:var(--text3);font-size:13px" title="${TR("Pièces détachées")}"></i>`}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:10px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:10px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:10px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
           if(isRealTracking(cm.num_suivi)){
@@ -1060,7 +1060,7 @@ async function renderCommandesTable(page=1){
         <td class="mono">${esc(cm.num_serie||'')}</td>
         ${CMD_COLS.facture?`<td class="mono" style="font-size:11px">${esc(cm.num_facture||'')}</td>`:''}
         ${CMD_COLS.date_facture?`<td style="font-size:11px;color:var(--text2)">${cm.date_livraison&&cm.num_facture?fd(cm.date_livraison):'—'}</td>`:''}
-        ${CMD_COLS.demo_origine?`<td style="font-size:11px">${cm.demo_origine_nom?`<span class="badge hg" title="Origine démo">🔄 ${esc(cm.demo_origine_nom)}</span>`:'—'}</td>`:''}
+        ${CMD_COLS.demo_origine?`<td style="font-size:11px">${cm.demo_origine_nom?`<span class="badge hg" title="${TR("Origine démo")}">🔄 ${esc(cm.demo_origine_nom)}</span>`:'—'}</td>`:''}
         ${CMD_COLS.edi?`<td>${cm.client_edi?'<span class="badge ouvert" style="font-size:10px">💳 EDI</span>':'—'}</td>`:''}
         ${CMD_COLS.paiement?`<td>${cm.facture_paiement_statut?
   `<span class="badge ${(cm.facture_paiement_statut==='paye'||cm.facture_paiement_statut==='payé'||cm.facture_paiement_statut==='paid')?'g':(cm.facture_paiement_statut==='impaye'||cm.facture_paiement_statut==='impayé')?'urgent':cm.facture_paiement_statut==='partiel'?'hg':'attente'}" style="font-size:10px">${
@@ -1159,7 +1159,7 @@ function modalNouvelleCommande(){
       </div>
       <div>
         <label class="form-label">${TR('Numéro de commande (BDC / devis)')}</label>
-        <input class="form-input mono" id="nc-numero" placeholder="Numéro VosFactures ou Pennylane" onkeydown="if(event.key==='Enter')importerNouvelleCommande()" style="width:100%">
+        <input class="form-input mono" id="nc-numero" placeholder="${TR("Numéro VosFactures ou Pennylane")}" onkeydown="if(event.key==='Enter')importerNouvelleCommande()" style="width:100%">
       </div>
       <div id="nc-msg" style="font-size:12px;color:var(--text3);min-height:16px"></div>
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:4px">
@@ -1180,7 +1180,7 @@ async function importerNouvelleCommande(){
   var numero=(document.getElementById('nc-numero').value||'').trim();
   var src=window._NC_SOURCE||'vf';
   var msg=document.getElementById('nc-msg');
-  if(!numero){ if(msg) msg.innerHTML='<span style="color:var(--danger)">Indique d’abord un numéro.</span>'; return; }
+  if(!numero){ if(msg) msg.innerHTML='<span style="color:var(--danger)">'+TR("Indique d’abord un numéro.")+'</span>'; return; }
   if(msg) msg.innerHTML='<i class="ti ti-loader-2"></i> Recherche dans '+(src==='pennylane'?'Pennylane':'VosFactures')+'…';
   var today=new Date().toISOString().slice(0,10);
   try{
@@ -1256,8 +1256,8 @@ async function modalCommande(id, prefill){
       ${/avoir/i.test(cm.informations||'')?`<span class="badge urgent" style="font-size:11px;margin-right:4px" title="${esc((cm.informations||'').replace(/"/g,'&quot;').slice(0,140))}">${TR('↩ Avoir / Retour')}</span>`:''}
       ${id&&cm.origine==='sav'?`<span class="badge hg" style="font-size:11px;margin-right:4px" title="Commande issue d'un SAV facturé — exclue des stats de ventes et de la numérotation">${TR('🛠️ SAV facturé')}</span>`:''}
       ${id?(cm.intervention_id
-        ? `<button class="btn sm" onclick="ouvrirInterventionLiee(${cm.intervention_id})" title="Voir le SAV lié"><i class="ti ti-tool"></i> ${TR('SAV lié')}</button>`
-        : `<button class="btn sm" onclick="basculerCommandeVersSAV(${id})" title="Créer un SAV lié pour cette commande"><i class="ti ti-tool"></i> ${TR('Créer SAV')}</button>`):''}
+        ? `<button class="btn sm" onclick="ouvrirInterventionLiee(${cm.intervention_id})" title="${TR("Voir le SAV lié")}"><i class="ti ti-tool"></i> ${TR('SAV lié')}</button>`
+        : `<button class="btn sm" onclick="basculerCommandeVersSAV(${id})" title="${TR("Créer un SAV lié pour cette commande")}"><i class="ti ti-tool"></i> ${TR('Créer SAV')}</button>`):''}
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
     <div style="display:flex;border-bottom:0.5px solid var(--border-s)">
@@ -1301,7 +1301,7 @@ async function modalCommande(id, prefill){
           ${cm.facturation_nom?`<div class="form-group" style="grid-column:1/-1;margin:-2px 0 6px"><div style="font-size:12px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border-s);border-radius:6px;padding:7px 10px">${TR('🧾 Facturé à :')} <strong>${esc(cm.facturation_nom)}</strong> <span style="color:var(--text3)">${TR('— défini sur la fiche distributeur')}</span></div></div>`:''}
           <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
             <select class="form-input" id="cmd-groupe">
-              <option value="">— Choisir —</option>
+              <option value="">${TR("— Choisir —")}</option>
               ${['De base','Bastide','Providom','Distri club','Négocié','Particulier'].map(g=>`<option value="${g}" ${cm.groupe===g?'selected':''}>${g}</option>`).join('')}
             </select>
           </div>
@@ -1313,7 +1313,7 @@ async function modalCommande(id, prefill){
           <div class="form-group" style="margin:0"><label class="form-label">${TR('Quantité')}</label>
             <input class="form-input" id="cmd-quantite" type="number" min="1" value="${cm.quantite||1}">
           </div>
-          <div class="form-group" style="margin:0"><label class="form-label">Bdc / Devis</label>
+          <div class="form-group" style="margin:0"><label class="form-label">${TR("Bdc / Devis")}</label>
             <input type="hidden" id="cmd-bdc-source" value="${cm.bdc_source||(cm.vf_commande_id?'vf':'')}">
             <input type="hidden" id="cmd-bdc-docid" value="${cm.bdc_doc_id||cm.vf_commande_id||''}">
             <div style="display:flex;gap:5px">
@@ -1321,10 +1321,10 @@ async function modalCommande(id, prefill){
               ${cm.origine==='sav'
                 ? `<span title="Commande issue d'un SAV : le contenu (lignes, série, facture, suivi) est repris automatiquement du SAV lié — pas d'import VosFactures ici" style="color:var(--text3);font-size:11px;align-self:center;white-space:nowrap;padding:0 6px"><i class="ti ti-tool"></i> SAV</span>`
                 : `<button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>`}
-              <button class="btn sm" type="button" title="Ouvrir le bon de commande (VosFactures / Pennylane)" onclick="ouvrirBdcSource()"><i class="ti ti-external-link"></i></button>
+              <button class="btn sm" type="button" title="${TR("Ouvrir le bon de commande (VosFactures / Pennylane)")}" onclick="ouvrirBdcSource()"><i class="ti ti-external-link"></i></button>
             </div>
           </div>
-          <div class="form-group" style="margin:0"><label class="form-label">N° commande distributeur</label>
+          <div class="form-group" style="margin:0"><label class="form-label">${TR("N° commande distributeur")}</label>
             <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="${t('cmd_ref_interne')||'Réf. interne'}">
           </div>
         </div>
@@ -1404,7 +1404,7 @@ async function modalCommande(id, prefill){
       <div id="cmd-tab-expedition" style="${initTab!=='expedition'?'display:none':''}">
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${TR('Client final (bénéficiaire)')}</label>
-            <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="Nom du bénéficiaire">
+            <input class="form-input" id="cmd-clientfinal" value="${esc(cm.client_final||'')}" placeholder="${TR("Nom du bénéficiaire")}">
           </div>
           <div class="form-group"><label class="form-label">Type de destinataire</label>
             <select class="form-input" id="cmd-clientfinal-type" onchange="toggleClientFinalForm(this.value)">
@@ -1428,11 +1428,11 @@ async function modalCommande(id, prefill){
               </div>
               <div class="form-group" id="cf-prenom-group" style="${cm.client_final_type==='particulier'?'':'display:none'}">
                 <label class="form-label">${TR('Prénom')}</label>
-                <input class="form-input" id="cf-prenom" value="${esc(cm.cf_prenom||'')}" placeholder="Prénom">
+                <input class="form-input" id="cf-prenom" value="${esc(cm.cf_prenom||'')}" placeholder="${TR("Prénom")}">
               </div>
               <div class="form-group" style="grid-column:1/-1">
                 <label class="form-label">Adresse</label>
-                <input class="form-input" id="cf-adresse" value="${esc(cm.cf_adresse||'')}" placeholder="Numéro et nom de rue">
+                <input class="form-input" id="cf-adresse" value="${esc(cm.cf_adresse||'')}" placeholder="${TR("Numéro et nom de rue")}">
               </div>
               <div class="form-group">
                 <label class="form-label">Code postal</label>
@@ -1459,7 +1459,7 @@ async function modalCommande(id, prefill){
           </div>
           <div class="form-group"><label class="form-label">Transporteur</label>
             <select class="form-input" id="cmd-transporteur" onchange="majLienSuiviModal()">
-              <option value="">— Choisir —</option>
+              <option value="">${TR("— Choisir —")}</option>
               <option value="Chronopost" ${cm.transporteur==='Chronopost'?'selected':''}>Chronopost</option>
               <option value="Colissimo" ${cm.transporteur==='Colissimo'?'selected':''}>Colissimo (La Poste)</option>
               <option value="DB Schenker" ${cm.transporteur==='DB Schenker'?'selected':''}>DB Schenker</option>
@@ -1468,13 +1468,13 @@ async function modalCommande(id, prefill){
             </select>
           </div>
           <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-8px"></div>
-          <div class="form-group"><label class="form-label">Date livraison</label>
+          <div class="form-group"><label class="form-label">${TR("Date livraison")}</label>
             <input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison();majStatutBadge()">
           </div>
-          <div class="form-group"><label class="form-label">N° Bordereau de livraison</label>
+          <div class="form-group"><label class="form-label">${TR("N° Bordereau de livraison")}</label>
             <div style="display:flex;gap:5px">
               <input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="BL-2026-..." style="flex:1">
-              ${cm.num_bordereau?`<button class="btn sm" type="button" title="Ouvrir dans VosFactures" onclick="ouvrirDansVF(null,'${esc(cm.num_bordereau)}')"><i class="ti ti-external-link"></i></button>`:''}
+              ${cm.num_bordereau?`<button class="btn sm" type="button" title="${TR("Ouvrir dans VosFactures")}" onclick="ouvrirDansVF(null,'${esc(cm.num_bordereau)}')"><i class="ti ti-external-link"></i></button>`:''}
             </div>
           </div>
           <div class="form-group"><label class="form-label">${TR('N° série')}</label>
@@ -1492,7 +1492,7 @@ async function modalCommande(id, prefill){
             </div>
             <div class="form-group"><label class="form-label">${t('cmd_transporteur_retour')||'Transporteur retour'}</label>
               <select class="form-input" id="cmd-transporteur-retour">
-                <option value="">— Choisir —</option>
+                <option value="">${TR("— Choisir —")}</option>
                 ${['Chronopost','Colissimo','DB Schenker','UPS','TNT','DHL','Autre'].map(tr=>`<option value="${tr}" ${cm.transporteur_retour===tr?'selected':''}>${tr}</option>`).join('')}
               </select>
             </div>
@@ -1500,7 +1500,7 @@ async function modalCommande(id, prefill){
               <input class="form-input" id="cmd-date-retour" type="date" value="${cm.date_retour||''}">
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end">
-              ${cm.num_retour&&lienSuiviColis(cm.transporteur_retour,cm.num_retour)?`<a href="${lienSuiviColis(cm.transporteur_retour,cm.num_retour)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i> Suivre le retour</a>`:`<span style="font-size:12px;color:var(--text3)">${t('cmd_renseigne_suivi')||'Renseigne le N° pour suivre'}</span>`}
+              ${cm.num_retour&&lienSuiviColis(cm.transporteur_retour,cm.num_retour)?`<a href="${lienSuiviColis(cm.transporteur_retour,cm.num_retour)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i> ${TR("Suivre le retour")}</a>`:`<span style="font-size:12px;color:var(--text3)">${t('cmd_renseigne_suivi')||'Renseigne le N° pour suivre'}</span>`}
             </div>
           </div>
           <div style="margin-top:8px">
@@ -1519,15 +1519,15 @@ async function modalCommande(id, prefill){
             <input type="hidden" id="cmd-facture-vfid" value="${cm.facture_vf_id||''}">
             <div style="display:flex;gap:5px">
               <input class="form-input mono" id="cmd-facture" value="${esc(cm.num_facture||'')}" style="flex:1" placeholder="${t('cmd_num_facture_placeholder')||'Numéro de facture'}" oninput="majStatutBadge();var _v=document.getElementById('cmd-facture-vfid');if(_v)_v.value=''">
-              <button class="btn sm" type="button" title="Ouvrir la facture dans VosFactures" onclick="ouvrirDansVF((document.getElementById('cmd-facture-vfid')||{}).value||null, (document.getElementById('cmd-facture').value||'').trim())"><i class="ti ti-external-link"></i></button>
-              ${id&&cm.num_facture?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="Vérifier le paiement dans VosFactures"><i class="ti ti-refresh"></i></button>`:''}
+              <button class="btn sm" type="button" title="${TR("Ouvrir la facture dans VosFactures")}" onclick="ouvrirDansVF((document.getElementById('cmd-facture-vfid')||{}).value||null, (document.getElementById('cmd-facture').value||'').trim())"><i class="ti ti-external-link"></i></button>
+              ${id&&cm.num_facture?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="${TR("Vérifier le paiement dans VosFactures")}"><i class="ti ti-refresh"></i></button>`:''}
             </div>
           </div>
           ${cm.facture_paiement_statut?'<span class="badge '+(cm.facture_paiement_statut==="payé"?"g":cm.facture_paiement_statut==="impayé"?"urgent":"attente")+'" style="font-size:11px">'+(cm.facture_paiement_statut==="payé"?"✅ Payé":cm.facture_paiement_statut==="impayé"?"⚠️ Impayé":"⏳ En attente")+'</span>':''}
           <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
               <input class="form-input mono" id="cmd-facture-pl" value="${esc(cm.num_facture_pennylane||'')}" placeholder="FAC-2026-..." style="flex:1" oninput="majStatutBadge()">
-              ${id?`<button class="btn sm" type="button" onclick="genererFacturePennylaneModal(${id})" title="Créer la facture dans Pennylane (brouillon)"><i class="ti ti-brand-stripe"></i></button>`:''}
+              ${id?`<button class="btn sm" type="button" onclick="genererFacturePennylaneModal(${id})" title="${TR("Créer la facture dans Pennylane (brouillon)")}"><i class="ti ti-brand-stripe"></i></button>`:''}
             </div>
           </div>
           <div class="form-group" style="grid-column:1/-1"><label class="form-label">Informations</label>
@@ -1550,7 +1550,7 @@ async function modalCommande(id, prefill){
               <input class="form-input mono" id="cmd-avoir" value="${esc(cm.num_avoir||'')}" placeholder="AV-2026-...">
             </div>
             <div class="form-group" style="margin:0;display:flex;align-items:flex-end;gap:6px">
-              ${cm.num_avoir?`<button class="btn sm" type="button" onclick="ouvrirAvoirVF('${esc(cm.num_avoir)}')" title="Ouvrir l'avoir dans VosFactures"><i class="ti ti-external-link"></i> Ouvrir dans VosFactures</button>`:`<span style="font-size:12px;color:var(--text3)">${t('cmd_renseigne_avoir')||'Renseigne le N° pour accéder à l\'avoir'}</span>`}
+              ${cm.num_avoir?`<button class="btn sm" type="button" onclick="ouvrirAvoirVF('${esc(cm.num_avoir)}')" title="Ouvrir l'avoir dans VosFactures"><i class="ti ti-external-link"></i> ${TR("Ouvrir dans VosFactures")}</button>`:`<span style="font-size:12px;color:var(--text3)">${t('cmd_renseigne_avoir')||'Renseigne le N° pour accéder à l\'avoir'}</span>`}
             </div>
           </div>
         </div>
@@ -1564,7 +1564,7 @@ async function modalCommande(id, prefill){
       ${id?`<button class="btn danger" onclick="supprimerCommande(${id})"><i class="ti ti-trash"></i></button>`:''}
       ${id?`<button class="btn sm" onclick="envoyerEmailConfirmation(${id})" title="Demander confirmation BDC"><i class="ti ti-mail"></i> ${t('btn_confirmer_bdc')||'Confirmer'}</button>`:''}
       ${id&&cm.num_suivi&&isRealTracking(cm.num_suivi)?`<button class="btn sm" onclick="envoyerEmailExpedition(${id})" title="Email d'expédition"><i class="ti ti-mail"></i> ${t('btn_email_exped')||'Email expéd.'}</button>`:''}
-      ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="Créer la facture dans VosFactures"><i class="ti ti-receipt-2"></i> ${TR('Facture VF')}</button>`:''}
+      ${id&&(cm.statut_calc==='Livré'||cm.statut_calc==='Facturé')?`<button class="btn sm" onclick="genererFactureVF(${id})" title="${TR("Créer la facture dans VosFactures")}"><i class="ti ti-receipt-2"></i> ${TR('Facture VF')}</button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommande(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);
@@ -1622,7 +1622,7 @@ function switchCmdTab(tab){
       if(factPanel && factPanel.parentNode) factPanel.parentNode.appendChild(notesDiv);
     }
     notesDiv.style.display = '';
-    notesDiv.innerHTML = '<div style="padding:20px;color:#aaa;text-align:center">Chargement...</div>';
+    notesDiv.innerHTML = '<div style="padding:20px;color:#aaa;text-align:center">'+TR("Chargement...")+'</div>';
     if(cmdId) renderNotesTab(cmdId).then(function(h){ notesDiv.innerHTML = h; });
   } else {
     // Cacher le panel notes si on revient sur un autre onglet
@@ -1783,8 +1783,8 @@ function renderRetourLignes(){
       <th style="width:28px"></th>
     </tr></thead>
     <tbody>${TMP_RETOUR_LIGNES.map((l,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
-      <td style="padding:3px 6px"><input class="form-input" style="font-size:12px;padding:3px 7px" value="${esc(l.designation)}" oninput="TMP_RETOUR_LIGNES[${i}].designation=this.value" placeholder="Désignation *"></td>
-      <td style="padding:3px 6px"><input class="form-input mono" style="font-size:11px;padding:3px 7px" value="${esc(l.reference||'')}" oninput="TMP_RETOUR_LIGNES[${i}].reference=this.value" placeholder="Réf."></td>
+      <td style="padding:3px 6px"><input class="form-input" style="font-size:12px;padding:3px 7px" value="${esc(l.designation)}" oninput="TMP_RETOUR_LIGNES[${i}].designation=this.value" placeholder="${TR("Désignation *")}"></td>
+      <td style="padding:3px 6px"><input class="form-input mono" style="font-size:11px;padding:3px 7px" value="${esc(l.reference||'')}" oninput="TMP_RETOUR_LIGNES[${i}].reference=this.value" placeholder="${TR("Réf.")}"></td>
       <td style="padding:3px 6px"><input class="form-input" type="number" min="1" style="font-size:12px;padding:3px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_RETOUR_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
       <td style="padding:3px 2px"><button class="btn sm danger" onclick="TMP_RETOUR_LIGNES.splice(${i},1);renderRetourLignes()" style="padding:3px 5px"><i class="ti ti-x"></i></button></td>
     </tr>`).join('')}</tbody>
@@ -1796,11 +1796,11 @@ function addRetourLigne(){ TMP_RETOUR_LIGNES.push({designation:'',reference:'',q
 async function lookupBordereauVF(){
   const numero = gv('cmd-bordereau').trim();
   if(!numero){ toast('Indique d\u2019abord un N° de bordereau','ti-alert-circle','var(--danger)'); return; }
-  toast('Recherche dans VosFactures…','ti-loader-2');
+  toast(TR('Recherche dans VosFactures…'),'ti-loader-2');
   try{
     const r = await API.vfBdcLookup(numero);
     if(!r.configured){ toast(TR('VosFactures non configuré'),'ti-alert-circle','var(--danger)'); return; }
-    if(!r.found){ toast('Bordereau introuvable dans VosFactures','ti-alert-circle','var(--danger)'); return; }
+    if(!r.found){ toast(TR('Bordereau introuvable dans VosFactures'),'ti-alert-circle','var(--danger)'); return; }
     let remplis = [];
     if(r.lignes && r.lignes.length){
       TMP_CMD_LIGNES = r.lignes.map(l=>({designation:(LANG==='en'&&l.designation_en?l.designation_en:l.designation)||'',reference:l.reference||'',quantite:l.quantite||1}));
@@ -1851,7 +1851,7 @@ function saveCmdCols(){
 
 async function voirSuiviTracking(numero){
   const el = document.getElementById('tracking-widget');
-  if(el) el.innerHTML = '<span style="font-size:11px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement du suivi…</span>';
+  if(el) el.innerHTML = '<span style="font-size:11px;color:var(--text2)"><i class="ti ti-loader-2"></i> '+TR("Chargement du suivi…")+'</span>';
   try{
     const r = await API.tracking(numero);
     if(!el) return;
@@ -2077,7 +2077,7 @@ async function chargerListeCatalogue(){
       <td class="col-prix" style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>
       <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
       <td style="font-size:11px;color:var(--text3)">${p.stock_alerte}</td>
-      <td style="text-align:center">${p.vf_product_id?`<a href="https://eloflex.vosfactures.fr/products/${p.vf_product_id}" target="_blank" onclick="event.stopPropagation()" title="Voir sur VosFactures" style="color:var(--accent);font-size:13px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
+      <td style="text-align:center">${p.vf_product_id?`<a href="https://eloflex.vosfactures.fr/products/${p.vf_product_id}" target="_blank" onclick="event.stopPropagation()" title="${TR("Voir sur VosFactures")}" style="color:var(--accent);font-size:13px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -2149,9 +2149,9 @@ async function renderAlertes(ttl,c,a){
           <td style="font-size:12px">${esc(d.date_livraison||'—')}</td>
           <td><span class="badge ${d.du?'urgent':'hg'}" style="font-size:11px">${esc(d.demo_rappel_date)}${d.du?' ⚠':''}</span></td>
           <td style="white-space:nowrap">
-            <button class="btn sm" onclick="demoCloturer(${d.id},'retour')" title="Retour organisé"><i class="ti ti-truck-return"></i></button>
+            <button class="btn sm" onclick="demoCloturer(${d.id},'retour')" title="${TR("Retour organisé")}"><i class="ti ti-truck-return"></i></button>
             <button class="btn sm" onclick="demoProlonger(${d.id},'${d.demo_rappel_date}')" title="Prolonger le rappel"><i class="ti ti-calendar-plus"></i></button>
-            <button class="btn sm success" onclick="demoCloturer(${d.id},'facture')" title="Facturé / vendu"><i class="ti ti-file-euro"></i></button>
+            <button class="btn sm success" onclick="demoCloturer(${d.id},'facture')" title="${TR("Facturé / vendu")}"><i class="ti ti-file-euro"></i></button>
           </td></tr>`).join('')}</tbody>
       </table></div>
     </div>` : '';
@@ -2198,7 +2198,7 @@ async function renderParametres(ttl,c,a){
         Une sauvegarde compressée part automatiquement vers info@eloflex.fr chaque lundi.
         Les mots de passe n'y figurent pas.
       </div>
-      <div id="sauvegarde-resume" style="font-size:12px;color:var(--text3);margin-bottom:12px">Chargement…</div>
+      <div id="sauvegarde-resume" style="font-size:12px;color:var(--text3);margin-bottom:12px">${TR("Chargement…")}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn primary" href="/api/sauvegarde/export" download><i class="ti ti-download"></i>${TR('Télécharger la sauvegarde')}</a>
         <button class="btn" onclick="envoyerSauvegardeMaintenant(this)"><i class="ti ti-mail-forward"></i>${TR('Envoyer par courriel')}</button>
@@ -2236,7 +2236,7 @@ async function renderParametres(ttl,c,a){
         <div class="form-group"><label class="form-label">${t('param_smtp_pass')}</label><input class="form-input" id="p-smtp-pass" type="password" placeholder="••••••••" value="${esc(p.email_smtp_pass||'')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('param_email_from')}</label><input class="form-input" id="p-email-from" placeholder="SAV Eloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('CC — Emails SAV (confirmations, expéditions)')}</label><input class="form-input" id="p-email-cc-sav" placeholder="sav@eloflex.fr" value="${esc(p.email_cc_sav||'sav@eloflex.fr')}"></div>
-        <div class="form-group"><label class="form-label">CC — Emails relances devis & BDC</label><input class="form-input" id="p-email-cc-relance" placeholder="info@eloflex.fr" value="${esc(p.email_cc_relance||'info@eloflex.fr')}"></div>
+        <div class="form-group"><label class="form-label">${TR("CC — Emails relances devis & BDC")}</label><input class="form-input" id="p-email-cc-relance" placeholder="info@eloflex.fr" value="${esc(p.email_cc_relance||'info@eloflex.fr')}"></div>
       </div>
     </div>
     <div class="param-section">
@@ -2244,8 +2244,8 @@ async function renderParametres(ttl,c,a){
       <div style="font-size:12px;color:var(--text2);margin-bottom:10px">${TR('Utilisé pour les relances devis et BDC commercial. Laissez vide pour utiliser le même compte que SAV.')}</div>
       <div class="grid-2">
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Expéditeur relances')}</label><input class="form-input" id="p-email-from-relance" placeholder="info@eloflex.fr" value="${esc(p.email_from_relance||p.email_from||'')}"></div>
-        <div class="form-group"><label class="form-label">Utilisateur SMTP relances</label><input class="form-input" id="p-smtp-user-relance" placeholder="Même que SAV si vide" value="${esc(p.email_smtp_user_relance||'')}"></div>
-        <div class="form-group"><label class="form-label">Mot de passe SMTP relances</label><input class="form-input" type="password" autocomplete="new-password" id="p-smtp-pass-relance" placeholder="Même que SAV si vide" value="${esc(p.email_smtp_pass_relance||'')}"></div>
+        <div class="form-group"><label class="form-label">Utilisateur SMTP relances</label><input class="form-input" id="p-smtp-user-relance" placeholder="${TR("Même que SAV si vide")}" value="${esc(p.email_smtp_user_relance||'')}"></div>
+        <div class="form-group"><label class="form-label">Mot de passe SMTP relances</label><input class="form-input" type="password" autocomplete="new-password" id="p-smtp-pass-relance" placeholder="${TR("Même que SAV si vide")}" value="${esc(p.email_smtp_pass_relance||'')}"></div>
       </div>
     </div>
     <div class="param-section">
@@ -2295,7 +2295,7 @@ async function renderParametres(ttl,c,a){
       <h3><i class="ti ti-link"></i> Rattrapage VosFactures</h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
         Parcourt toutes les commandes ayant un n° de BDC ou de facture, retrouve le document VosFactures correspondant
-        (y compris les anciens, ex. 2021), puis enregistre le <b>lien</b>, le <b>statut de paiement</b> et les
+        (y compris les anciens, ex. 2021), puis enregistre le <b>lien</b>, le <b>${TR("statut de paiement")}</b> et les
         <b>infos manquantes</b> (série, modèle, date). Écritures sûres : rien n'est écrasé, seuls les champs vides sont
         complétés. À lancer par exemple après un gros import. Garde l'onglet ouvert pendant le traitement (quelques minutes).
       </p>
@@ -2310,7 +2310,7 @@ async function renderParametres(ttl,c,a){
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" onclick="syncPennylane(false)"><i class="ti ti-refresh"></i> Sync Pennylane (90j)</button>
-        <button class="btn" onclick="syncPennylane(true)"><i class="ti ti-history"></i> Sync historique complet</button>
+        <button class="btn" onclick="syncPennylane(true)"><i class="ti ti-history"></i> ${TR("Sync historique complet")}</button>
       </div>
       <div id="pl-sync-result" style="margin-top:8px"></div>
     </div>
@@ -2318,11 +2318,11 @@ async function renderParametres(ttl,c,a){
       <h3><i class="ti ti-copy"></i> Doublons de commandes</h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">${TR('Commandes ayant le même numéro de BDC ou devis pour le même distributeur.')}</p>
       <button class="btn danger" onclick="supprimerTousDoublons()" id="btn-suppr-doublons"><i class="ti ti-trash"></i> ${TR('Supprimer tous les doublons')}</button>
-      <div id="param-doublons-list" style="margin-top:10px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
+      <div id="param-doublons-list" style="margin-top:10px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-clock-exclamation"></i> ${TR('Commandes bloquées')}</h3>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Commandes "En préparation" sans numéro de suivi valide depuis plus de :</p>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">${TR("Commandes \"En préparation\" sans numéro de suivi valide depuis plus de :")}</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
         <select class="form-input" id="blocage-seuil" style="width:auto" onchange="chargerAlertesBlocage()">
           <option value="3">3 jours</option>
@@ -2332,20 +2332,20 @@ async function renderParametres(ttl,c,a){
         </select>
         <button class="btn sm" onclick="chargerAlertesBlocage()"><i class="ti ti-refresh"></i> Actualiser</button>
       </div>
-      <div id="alertes-blocage-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
+      <div id="alertes-blocage-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-receipt-2"></i> Migration facturation historique</h3>
+      <h3><i class="ti ti-receipt-2"></i> ${TR("Migration facturation historique")}</h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
         Passe toutes les commandes antérieures à juin 2026 (hors Annulé et déjà Facturé) au statut <b>${TR('Facturé')}</b>.<br>
-        <span style="color:var(--danger);font-size:11px">⚠ Action irréversible — à n'exécuter qu'une seule fois.</span>
+        <span style="color:var(--danger);font-size:11px">${TR("⚠ Action irréversible — à n'exécuter qu'une seule fois.")}</span>
       </p>
-      <button class="btn" onclick="lancerMigrationFacture()" id="btn-migration-facture"><i class="ti ti-check"></i> Passer l'historique en Facturé</button>
+      <button class="btn" onclick="lancerMigrationFacture()" id="btn-migration-facture"><i class="ti ti-check"></i> ${TR("Passer l'historique en Facturé")}</button>
       <div id="migration-facture-result" style="margin-top:8px"></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-database-export"></i> Nettoyage N° suivi</h3>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Migre les valeurs texte ("RETOUR BRICE", "SUÈDE", "ATTENTE VALIDATION"…) stockées dans le champ N° suivi vers les champs appropriés : retours → N° retour, autres → Informations.</p>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">${TR("Migre les valeurs texte (\"RETOUR BRICE\", \"SUÈDE\", \"ATTENTE VALIDATION\"…) stockées dans le champ N° suivi vers les champs appropriés : retours → N° retour, autres → Informations.")}</p>
       <button class="btn" onclick="lancerMigrationSuivi()"><i class="ti ti-arrow-merge"></i> Lancer la migration</button>
       <div id="migration-suivi-result" style="margin-top:8px"></div>
     </div>
@@ -2367,7 +2367,7 @@ async function renderParametres(ttl,c,a){
   usersSection.id = 'section-utilisateurs';
   usersSection.innerHTML = `
     <h3><i class="ti ti-users-group"></i> ${TR('Utilisateurs & accès')}</h3>
-    <div id="users-list-wrap" style="margin-bottom:14px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div></div>
+    <div id="users-list-wrap" style="margin-bottom:14px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
     <button class="btn primary" onclick="modalNouvelUtilisateur()"><i class="ti ti-user-plus"></i> ${TR('Ajouter un utilisateur')}</button>`;
   c.appendChild(usersSection);
   chargerListeUtilisateurs();
@@ -2378,7 +2378,7 @@ async function renderParametres(ttl,c,a){
 
 async function chargerListeUtilisateurs(){
   const wrap = $('users-list-wrap'); if(!wrap) return;
-  wrap.innerHTML = `<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div>`;
+  wrap.innerHTML = `<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div>`;
   try{
     const users = await API.users();
     if(!users.length){ wrap.innerHTML=`<div style="font-size:12px;color:var(--text2)">${TR('Aucun utilisateur.')}</div>`; return; }
@@ -2392,9 +2392,9 @@ async function chargerListeUtilisateurs(){
         <td><span class="badge ${u.actif?'g':'hg'}">${u.actif?'Actif':'Désactivé'}</span></td>
         <td style="font-size:11px;color:var(--text2)">${u.last_login?fd(u.last_login.slice(0,10)):'—'}</td>
         <td style="display:flex;gap:6px;justify-content:flex-end">
-          <button class="btn sm" onclick="modalEditerUtilisateur(${u.id})" title="Modifier"><i class="ti ti-edit"></i></button>
+          <button class="btn sm" onclick="modalEditerUtilisateur(${u.id})" title="${TR("Modifier")}"><i class="ti ti-edit"></i></button>
           <button class="btn sm" onclick="modalResetPassword(${u.id},'${esc(u.nom)}')" title="Changer le mot de passe"><i class="ti ti-key"></i></button>
-          ${u.id!==CURRENT_USER.id?`<button class="btn sm danger" onclick="supprimerUtilisateur(${u.id},'${esc(u.nom)}')" title="Supprimer"><i class="ti ti-trash"></i></button>`:''}
+          ${u.id!==CURRENT_USER.id?`<button class="btn sm danger" onclick="supprimerUtilisateur(${u.id},'${esc(u.nom)}')" title="${TR("Supprimer")}"><i class="ti ti-trash"></i></button>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table></div>`;
@@ -2440,7 +2440,7 @@ function modalNouvelUtilisateur(){
     <div class="modal-header"><i class="ti ti-user-plus" style="color:var(--accent)"></i><h2>Nouvel utilisateur</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto">
       <div class="grid-2">
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Prénom et nom *')}</label><input class="form-input" id="nu-nom" placeholder="Frédéric Dijd"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Prénom et nom *')}</label><input class="form-input" id="nu-nom" placeholder="${TR("Frédéric Dijd")}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse e-mail *</label><input class="form-input" id="nu-email" type="email" placeholder="frederic@eloflex.fr"></div>
         <div class="form-group"><label class="form-label">Mot de passe * <span style="font-size:10px;color:var(--text2)">(8 car. min.)</span></label><input class="form-input" id="nu-mdp" type="password" placeholder="••••••••"></div>
         <div class="form-group"><label class="form-label">Langue de l'interface</label>
@@ -2470,7 +2470,7 @@ function modalNouvelUtilisateur(){
         <label for="nu-admin" style="font-size:13px;font-weight:600;color:var(--danger);cursor:pointer">${TR('Administrateur — accès complet à tout (y compris Paramètres et exports)')}</label>
       </div>
       <div id="perm-grid">
-        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">Permissions par module (cocher une case par ligne, ou aucune pour bloquer l'accès) :</div>
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">${TR("Permissions par module (cocher une case par ligne, ou aucune pour bloquer l'accès) :")}</div>
         ${_permGrid()}
       </div>
     </div>
@@ -2484,7 +2484,7 @@ async function creerUtilisateur(){
   const nom=gv('nu-nom'), email=gv('nu-email'), mot_de_passe=gv('nu-mdp'), langue=gv('nu-langue')||'fr', pays=gv('nu-pays')||null;
   const admin=!!document.getElementById('nu-admin')?.checked;
   const permissions=admin?{}:_collectPerms();
-  if(!nom||!email||!mot_de_passe){ toast('Nom, email et mot de passe sont requis.','ti-alert-circle','var(--danger)'); return; }
+  if(!nom||!email||!mot_de_passe){ toast(TR('Nom, email et mot de passe sont requis.'),'ti-alert-circle','var(--danger)'); return; }
   try{
     await API.createUser({nom, email, mot_de_passe, admin, permissions, langue, pays});
     closeModal(); toast(`Compte créé pour ${nom}`); chargerListeUtilisateurs();
@@ -2497,7 +2497,7 @@ async function modalEditerUtilisateur(id){
   if(!user) return;
   const perms = user.permissions||{};
   showModal(`
-    <div class="modal-header"><i class="ti ti-edit" style="color:var(--accent)"></i><h2>Modifier l'utilisateur</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-header"><i class="ti ti-edit" style="color:var(--accent)"></i><h2>${TR("Modifier l'utilisateur")}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto">
       <div class="grid-2">
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Prénom et nom')}</label><input class="form-input" id="eu-nom" value="${esc(user.nom)}"></div>
@@ -2645,7 +2645,7 @@ async function ouvrirDansVF(vfId, bdc){
     window.open(`https://${account}.vosfactures.fr/invoices/${vfId}`, '_blank', 'noopener');
     return;
   }
-  if(!bdc){ toast('Renseigne d\'abord le numéro','ti-alert-circle','var(--warning)'); return; }
+  if(!bdc){ toast(TR('Renseigne d\'abord le numéro'),'ti-alert-circle','var(--warning)'); return; }
   // Pas d'ID connu : on retrouve le document via l'API (même recherche que l'import) pour
   // ouvrir la pièce EXACTE. La recherche web VosFactures (?search_text=) n'applique pas le
   // filtre → on l'évite si possible. L'onglet est ouvert tout de suite (geste du clic) pour
@@ -2678,7 +2678,7 @@ let CMD_VIEW = 'liste'; // 'liste' | 'kanban'
 
 async function renderCommandesKanban(){
   const wrap=$('cmd-table-wrap'); if(!wrap) return;
-  wrap.innerHTML=`<div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> Chargement…</div>`;
+  wrap.innerHTML=`<div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div>`;
   const reqId = ++_cmdReqId;
   const res = await API.commandes({ annee: CMD_FILTERS.annee, mois: CMD_FILTERS.mois, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
   const list = res.rows||[];
@@ -2715,7 +2715,7 @@ async function renderCommandesKanban(){
 }
 
 async function envoyerEmailExpedition(id){
-  if(!confirm('Envoyer la confirmation d\'expédition par email au distributeur ?')) return;
+  if(!confirm(TR('Envoyer la confirmation d\'expédition par email au distributeur ?'))) return;
   toast('Envoi en cours…','ti-loader-2');
   try{
     const r = await API.emailExpedition(id);
@@ -2760,7 +2760,7 @@ async function chargerDoublonsBanner(){
 
 async function chargerAlertesBlocage(){
   const el=$('alertes-blocage-list'); if(!el) return;
-  el.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> Chargement…</div>`;
+  el.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div>`;
   try{
     const jours = parseInt($('blocage-seuil')?.value)||7;
     const data = await API.commandesAlertesBlocage(jours);
@@ -2916,7 +2916,7 @@ async function lancerRattrapageVF(){
         '✓ Rattrapage terminé — '+S.total+' commandes · '+S.liens+' liens créés · '+S.paiements+' paiements · '+S.infos+' infos complétées.</div>'+
       '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'+S.introuvables.length+' introuvables ('+nbBdc+' BDC, '+nbFac+
         ' factures) — souvent des numéros internes distributeur ou des cases multi-documents, sans correspondance VosFactures.</div>'+
-      '<button class="btn sm" onclick="telechargerRapportRattrapage()"><i class="ti ti-download"></i> Télécharger le rapport des introuvables</button>';
+      '<button class="btn sm" onclick="telechargerRapportRattrapage()"><i class="ti ti-download"></i> '+TR("Télécharger le rapport des introuvables")+'</button>';
     toast(TR('Rattrapage VosFactures terminé'),'ti-check');
   }catch(e){
     if(out) out.innerHTML='<div style="color:var(--danger);font-size:13px">Erreur : '+esc(e.message)+
@@ -2937,14 +2937,14 @@ function telechargerRapportRattrapage(){
   let rows='';
   for(const g of groupes){
     rows+='<tr class="grp"><td colspan="3">'+e(g[0])+' <span class="cnt">'+g[1].length+'</span></td></tr>';
-    for(const x of g[1]){ const b=x.type==='facture'?'<span class="b b-fac">Facture</span>':'<span class="b b-bdc">BDC</span>';
+    for(const x of g[1]){ const b=x.type==='facture'?'<span class="b b-fac">'+TR("Facture")+'</span>':'<span class="b b-bdc">BDC</span>';
       rows+='<tr><td>'+b+'</td><td class="num">'+e(x.numero)+'</td><td class="id">#'+e(x.id)+'</td></tr>'; }
   }
   const html='<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Rattrapage VosFactures — introuvables</title><style>'+
     'body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f4f6f9;color:#1a2a3a}.wrap{max-width:900px;margin:0 auto;padding:24px}h1{font-size:22px;margin:0 0 4px}.sub{color:#667;margin:0 0 20px;font-size:13px}.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px}.card{background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08);flex:1;min-width:130px}.card .n{font-size:26px;font-weight:700}.card .l{font-size:12px;color:#667;text-transform:uppercase;letter-spacing:.04em}.g{color:#1b8a3a}.r{color:#b3261e}table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}td{padding:7px 12px;border-bottom:1px solid #eef1f4;font-size:13px}tr.grp td{background:#eef2f7;font-weight:700}.cnt{background:#b3261e;color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;margin-left:6px}.b{display:inline-block;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:600}.b-bdc{background:#e6effa;color:#1a56a0}.b-fac{background:#fdeaea;color:#b3261e}.num{font-family:ui-monospace,Menlo,monospace}.note{background:#fff8e6;border-left:4px solid #c47f00;padding:12px 16px;border-radius:6px;margin:18px 0;font-size:13px;line-height:1.5}'+
     '</style></head><body><div class="wrap"><h1>Rattrapage VosFactures — documents introuvables</h1><p class="sub">'+S.total+' commandes analysées</p><div class="cards">'+
-    '<div class="card"><div class="n g">'+S.liens+'</div><div class="l">Liens créés</div></div><div class="card"><div class="n g">'+S.paiements+'</div><div class="l">Paiements</div></div><div class="card"><div class="n g">'+S.infos+'</div><div class="l">Infos complétées</div></div><div class="card"><div class="n r">'+S.introuvables.length+'</div><div class="l">Introuvables</div></div></div>'+
-    '<div class="note"><b>À savoir :</b> '+nbBdc+' BDC et '+nbFac+' factures sans correspondance VosFactures — le plus souvent un numéro interne du distributeur, une case contenant deux documents, ou une annotation libre. Ce ne sont pas des erreurs de recherche.</div>'+
+    '<div class="card"><div class="n g">'+S.liens+'</div><div class="l">'+TR("Liens créés")+'</div></div><div class="card"><div class="n g">'+S.paiements+'</div><div class="l">Paiements</div></div><div class="card"><div class="n g">'+S.infos+'</div><div class="l">'+TR("Infos complétées")+'</div></div><div class="card"><div class="n r">'+S.introuvables.length+'</div><div class="l">Introuvables</div></div></div>'+
+    '<div class="note"><b>'+TR("À savoir :")+'</b> '+nbBdc+' BDC et '+nbFac+' factures sans correspondance VosFactures — le plus souvent un numéro interne du distributeur, une case contenant deux documents, ou une annotation libre. Ce ne sont pas des erreurs de recherche.</div>'+
     '<table><tbody>'+rows+'</tbody></table></div></body></html>';
   const blob=new Blob([html],{type:'text/html'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download='rattrapage-vosfactures-introuvables.html'; document.body.appendChild(a); a.click(); a.remove();
@@ -2990,24 +2990,24 @@ async function viewIntervention(id){
       <i class="ti ti-tool" style="font-size:18px;color:var(--accent)"></i>
       <h2>${esc(i.num_sav||'#'+i.id)} — ${traduireType(i.type)}</h2>
       <button class="btn sm success" onclick="exportInterventionPDF(${i.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
-      <button class="btn sm" onclick="envoyerEmailInter(${i.id})" title="Envoyer notification au distributeur"><i class="ti ti-mail"></i></button>
+      <button class="btn sm" onclick="envoyerEmailInter(${i.id})" title="${TR("Envoyer notification au distributeur")}"><i class="ti ti-mail"></i></button>
       <button class="btn sm" onclick="modalEditIntervention(${i.id})"><i class="ti ti-edit"></i></button>
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
     <div class="modal-body">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
         <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Sous garantie':'Hors garantie'}</span>
-        ${i.garantie_auto?'<span style="font-size:10px;color:var(--text3)">détecté auto</span>':''}
+        ${i.garantie_auto?'<span style="font-size:10px;color:var(--text3)">'+TR("détecté auto")+'</span>':''}
         <span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span>
         <span style="font-size:11px;color:var(--text3);margin-left:auto">${fd(i.date)}</span>
       </div>
       <div style="margin-bottom:12px">
         ${i.commande_id
           ? `<button class="btn sm" onclick="ouvrirCommandeLiee(${i.commande_id})"><i class="ti ti-clipboard-list"></i> ${TR('Voir la commande liée')}</button>`
-          : `<button class="btn sm" onclick="basculerSAVversCommande(${i.id})" title="Créer une commande liée « SAV facturé » dans Suivi commandes"><i class="ti ti-clipboard-plus"></i> Basculer en commande</button>`}
+          : `<button class="btn sm" onclick="basculerSAVversCommande(${i.id})" title="${TR("Créer une commande liée « SAV facturé » dans Suivi commandes")}"><i class="ti ti-clipboard-plus"></i> ${TR("Basculer en commande")}</button>`}
       </div>
       <div class="grid-2" style="font-size:12px;margin-bottom:12px">
-        <div><div class="stat-label">Client</div><div style="font-weight:600">${esc(i.client_nom||'')}</div></div>
+        <div><div class="stat-label">${TR("Client")}</div><div style="font-weight:600">${esc(i.client_nom||'')}</div></div>
         <div><div class="stat-label">${TR('Fauteuil')}</div><div style="font-weight:600">${esc(i.modele)} – <span class="mono">${esc(i.serie)}</span></div></div>
         <div>
           <div class="stat-label">Facture VosFactures
@@ -3028,16 +3028,16 @@ async function viewIntervention(id){
       ${i.notes?`<div class="form-group"><div class="form-label">${TR('Intervention réalisée')}</div><div style="font-size:12px;color:var(--text2)">${esc(i.notes)}</div></div>`:''}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-box"></i>${TR('Pièces')}</div>
-      ${(i.produits||[]).length===0?'<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>':`
+      ${(i.produits||[]).length===0?'<div style="font-size:12px;color:var(--text3)">'+TR("Aucune pièce")+'</div>':`
         <table class="t"><thead><tr><th>${t('col_designation')}</th><th>${TR('Réf')}</th><th>${t('col_qte')||'Qté'}</th><th>PU HT</th><th>Total HT</th></tr></thead>
         <tbody>${(i.produits||[]).map(p=>`<tr><td>${esc(p.designation)}</td><td class="mono">${esc(p.ref||'')}</td><td>${p.qte}</td><td>${parseFloat(p.pxht||0).toFixed(2)} €</td><td style="font-weight:700">${(parseFloat(p.pxht||0)*p.qte).toFixed(2)} €</td></tr>`).join('')}</tbody></table>
         <div style="text-align:right;padding-top:6px;font-weight:700;font-size:13px">Total HT : ${total.toFixed(2)} €</div>`}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-send"></i>${TR('Expédition')}</div>
-      ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Envoi</div><div style="font-size:12px">${esc(i.envoi_transporteur)} — <a href="${lienhSuiviInter(i.envoi_transporteur,i.envoi_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.envoi_numero)}</a> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun envoi</div>'}
+      ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Envoi</div><div style="font-size:12px">${esc(i.envoi_transporteur)} — <a href="${lienhSuiviInter(i.envoi_transporteur,i.envoi_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.envoi_numero)}</a> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">'+TR("Aucun envoi")+'</div>'}
       ${i.num_bordereau_vf?`<div style="margin-top:8px"><a href="#" data-bl="${esc(i.num_bordereau_vf)}" onclick="event.preventDefault();ouvrirBordereauVF(this.dataset.bl)" style="color:var(--accent);font-size:12px;text-decoration:none;cursor:pointer"><i class="ti ti-file-invoice" style="font-size:11px"></i> BL/Bordereau : ${esc(i.num_bordereau_vf)}</a></div>`:''}
       <div class="section-title" style="margin-top:10px"><i class="ti ti-arrow-back-up"></i>${TR('Retour')}</div>
-      ${i.retour_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">${TR('Retour')}</div><div style="font-size:12px">${esc(i.retour_transporteur)} — <a href="${lienhSuiviInter(i.retour_transporteur,i.retour_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.retour_numero)}</a> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">Aucun retour</div>'}
+      ${i.retour_numero?`<div class="tracking-block"><div style="font-size:11px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">${TR('Retour')}</div><div style="font-size:12px">${esc(i.retour_transporteur)} — <a href="${lienhSuiviInter(i.retour_transporteur,i.retour_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:10px"></i> ${esc(i.retour_numero)}</a> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:12px;color:var(--text3)">'+TR("Aucun retour")+'</div>'}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-photo"></i>Photos (${photos.length})</div>
       <div id="photo-gallery">${renderPhotoGallery(photos,i.id)}</div>
@@ -3045,13 +3045,13 @@ async function viewIntervention(id){
         <i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i>
         <div style="font-size:13px;color:var(--text2);margin-bottom:3px">${TR('Glisser-déposer des photos ici')}</div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div>
-        <label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir des fichiers<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${i.id})"></label>
+        <label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>${TR("Choisir des fichiers")}<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${i.id})"></label>
       </div>
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-message"></i>Commentaires (${(i.commentaires||[]).length})</div>
       <div id="commentaires-list">${renderCommentaires(i.commentaires||[],i.id)}</div>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <input class="form-input" id="new-comment" placeholder="Ajouter un commentaire…" style="flex:1">
+        <input class="form-input" id="new-comment" placeholder="${TR("Ajouter un commentaire…")}" style="flex:1">
         <button class="btn primary" onclick="addComment(${i.id})"><i class="ti ti-send"></i>${TR('Envoyer')}</button>
       </div>
       <div class="divider"></div>
@@ -3065,7 +3065,7 @@ async function viewIntervention(id){
 }
 
 function renderCommentaires(comms,interId){
-  if(!comms.length) return '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Aucun commentaire</div>';
+  if(!comms.length) return '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">'+TR("Aucun commentaire")+'</div>';
   return comms.map(cm=>`<div class="commentaire-bubble">
     <div class="meta"><span style="font-weight:600">${esc(cm.auteur)}</span><span>${cm.created_at?.slice(0,16).replace('T',' ')}</span></div>
     <div>${esc(cm.texte)}</div>
@@ -3083,7 +3083,7 @@ async function addComment(interId){
 }
 
 function renderHistorique(hist){
-  if(!hist.length) return '<div style="font-size:12px;color:var(--text3)">Aucune modification enregistrée</div>';
+  if(!hist.length) return '<div style="font-size:12px;color:var(--text3)">'+TR("Aucune modification enregistrée")+'</div>';
   return hist.map(h=>`<div class="historique-row">
     <span style="color:var(--text3);min-width:120px">${h.created_at?.slice(0,16).replace('T',' ')}</span>
     <span style="font-weight:600;min-width:80px">${esc(h.auteur)}</span>
@@ -3103,7 +3103,7 @@ function toggleHistorique(id){
 // ── PHOTOS ────────────────────────────────────────────────────────
 
 function renderPhotoGallery(photos,interId){
-  if(!photos.length) return '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Aucune photo</div>';
+  if(!photos.length) return '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+TR("Aucune photo")+'</div>';
   return `<div class="photo-grid">${photos.map((p,idx)=>`
     <div class="photo-thumb">
       <img src="/uploads/thumbs/${esc(p.filename_thumb||p.filename)}" alt="${esc(p.legende||'Photo')}"
@@ -3130,8 +3130,8 @@ async function handlePhotoFiles(files,interId){
   }catch(e){zone.innerHTML=uploadZoneHTML(interId);toast(TR('Erreur upload : ')+e.message,'ti-alert-circle','var(--danger)');}
 }
 function handlePhotoDrop(e,interId){e.preventDefault();$('photo-upload-zone').classList.remove('drag-over');if(e.dataTransfer.files.length)handlePhotoFiles(e.dataTransfer.files,interId);}
-function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:13px;color:var(--text2);margin-bottom:3px">${TR('Glisser-déposer des photos ici')}</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>Choisir des fichiers<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
-async function deletePhoto(interId,photoId){if(!confirm(TR('Supprimer ?')))return;await API.deletePhoto(interId,photoId);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);toast('Photo supprimée','ti-trash');}
+function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:26px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:13px;color:var(--text2);margin-bottom:3px">${TR('Glisser-déposer des photos ici')}</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>${TR("Choisir des fichiers")}<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
+async function deletePhoto(interId,photoId){if(!confirm(TR('Supprimer ?')))return;await API.deletePhoto(interId,photoId);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);toast(TR('Photo supprimée'),'ti-trash');}
 async function editPhotoLegende(interId,photoId,cur){const l=prompt(TR('Légende :'),cur);if(l===null)return;await API.updatePhotoLegende(interId,photoId,l);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);}
 
 let LB={filenames:[],idx:0};
@@ -3147,7 +3147,7 @@ function showLightbox(){
     ${LB.idx>0?`<button onclick="lbNav(-1)" style="position:absolute;left:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:24px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-left"></i></button>`:''}
     ${LB.idx<LB.filenames.length-1?`<button onclick="lbNav(1)" style="position:absolute;right:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:24px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-right"></i></button>`:''}
     <img src="/uploads/${fname}" style="max-width:90vw;max-height:82vh;object-fit:contain;border-radius:6px;">
-    <a href="/uploads/${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:12px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>Télécharger l'original</a>`;
+    <a href="/uploads/${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:12px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
   document.body.appendChild(el);
   el.addEventListener('click',e=>{if(e.target===el)closeLightbox();});
   document.addEventListener('keydown',lbKey);
@@ -3166,7 +3166,7 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
   <div class="form-group"><label class="form-label">Portable</label><input class="form-input" id="f-portable" value="${esc(d.portable||'')}"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse</label><input class="form-input" id="f-adresse" placeholder="12 rue des Lilas" value="${esc(d.adresse||'')}"></div>
-  <div class="form-group" style="grid-column:1/-1"><label class="form-label">Complément d'adresse</label><input class="form-input" id="f-adresse2" placeholder="Bâtiment B, ZI de la Plaine…" value="${esc(d.adresse2||'')}"></div>
+  <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR("Complément d'adresse")}</label><input class="form-input" id="f-adresse2" placeholder="${TR("Bâtiment B, ZI de la Plaine…")}" value="${esc(d.adresse2||'')}"></div>
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
   <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays">${optionsPays(d.pays||'France')}</select></div>
@@ -3185,7 +3185,7 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
     <select class="form-input" id="f-facturation-mode" onchange="toggleFacturation(this.value)">
       <option value="identique" ${!d.entite_facturation_id?'selected':''}>${TR('Identique (le distributeur se facture lui-même)')}</option>
-      <option value="autre" ${d.entite_facturation_id?'selected':''}>Autre distributeur…</option>
+      <option value="autre" ${d.entite_facturation_id?'selected':''}>${TR("Autre distributeur…")}</option>
     </select>
     <div id="f-entite-wrap" style="margin-top:8px;${d.entite_facturation_id?'':'display:none'}">
       <select class="form-input" id="f-entite">
@@ -3250,7 +3250,7 @@ async function saveClient(id){
       data.entite_facturation_id = null;
     }
   }
-  if(!data.nom){ alert('Nom requis'); return; }
+  if(!data.nom){ alert(TR('Nom requis')); return; }
   if(surCarte && !data.ville && !data.cp){ alert(TR('Renseignez au moins le code postal ou la ville : ils servent à positionner le point sur la carte.')); return; }
   try{
     const r = id ? await API.updateClient(id, data) : await API.createClient(data);
@@ -3269,18 +3269,18 @@ async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;aw
 async function modalPortail(id,token){
   const base=window.location.origin;
   const url=token?`${base}/portail.html?token=${token}`:'Non disponible';
-  showModal(`<div class="modal-header"><i class="ti ti-link" style="font-size:18px;color:var(--accent)"></i><h2>Lien portail client</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-link" style="font-size:18px;color:var(--accent)"></i><h2>${TR("Lien portail client")}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Ce lien permet au client de suivre ses interventions en lecture seule, sans accès à l'administration.</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">${TR("Ce lien permet au client de suivre ses interventions en lecture seule, sans accès à l'administration.")}</p>
       <div class="portail-link"><i class="ti ti-external-link"></i><span id="portail-url">${esc(url)}</span></div>
       <div style="display:flex;gap:8px;margin-top:12px">
-        <button class="btn primary" onclick="navigator.clipboard.writeText('${esc(url)}');toast(TR('Lien copié'),'ti-copy')"><i class="ti ti-copy"></i>Copier</button>
+        <button class="btn primary" onclick="navigator.clipboard.writeText('${esc(url)}');toast(TR('Lien copié'),'ti-copy')"><i class="ti ti-copy"></i>${TR("Copier")}</button>
         <button class="btn" onclick="regenererToken(${id})"><i class="ti ti-refresh"></i>${TR('Régénérer le lien')}</button>
       </div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Fermer')}</button></div>`);}
 
-async function regenererToken(id){if(!confirm('Régénérer invalide l\'ancien lien. Continuer ?'))return;const r=await API.regenererToken(id);const base=window.location.origin;const url=`${base}/portail.html?token=${r.token}`;$('portail-url').textContent=url;toast('Lien régénéré','ti-refresh');}
+async function regenererToken(id){if(!confirm(TR('Régénérer invalide l\'ancien lien. Continuer ?')))return;const r=await API.regenererToken(id);const base=window.location.origin;const url=`${base}/portail.html?token=${r.token}`;$('portail-url').textContent=url;toast(TR('Lien régénéré'),'ti-refresh');}
 
 // ── MODALES FAUTEUILS ─────────────────────────────────────────────
 
@@ -3294,7 +3294,7 @@ function fauteuilForm(d={}, clients=null){const mods=['Modèle L','Modèle F','M
   <div class="form-group"><label class="form-label">Couleur</label><input class="form-input" id="f-couleur" value="${esc(d.couleur||'')}"></div>
   <div class="form-group"><label class="form-label">Date d'achat</label><input class="form-input" id="f-dateachat" type="date" value="${d.date_achat||''}"></div>
   <div class="form-group"><label class="form-label">${TR('Durée garantie (mois)')}</label><input class="form-input" id="f-garduree" type="number" min="0" value="${d.duree_garantie_mois||24}"></div>
-  <div class="form-group" style="grid-column:1/-1"><label class="form-label">N° facture VosFactures</label><input class="form-input" id="f-facture" value="${esc(d.num_facture||'')}"></div>
+  <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR("N° facture VosFactures")}</label><input class="form-input" id="f-facture" value="${esc(d.num_facture||'')}"></div>
 </div>
 <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes">${esc(d.notes||'')}</textarea></div>`;}
 function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:18px;color:var(--accent)"></i><h2>${TR('Nouveau fauteuil')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
@@ -3382,7 +3382,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
           <span>${TR('Distributeur')}</span>
           <label style="display:flex;align-items:center;gap:5px;font-weight:400;font-size:11px;cursor:pointer">
             <input type="checkbox" id="f-autre-distrib" ${autreDistrib?"checked":""} onchange="toggleAutreDistrib(this.checked)">
-            <span>Intervention chez un autre distributeur</span>
+            <span>${TR("Intervention chez un autre distributeur")}</span>
           </label>
         </label>
         <!-- Champ affiché par défaut : distributeur du fauteuil (lecture seule si pas coché) -->
@@ -3394,7 +3394,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
         <!-- Champ de recherche : visible si "autre distributeur" coché -->
         <div id="distrib-search-wrap" style="display:${autreDistrib?'block':'none'};position:relative">
           <input class="form-input" id="f-client-search" autocomplete="off"
-            placeholder="Rechercher le distributeur…"
+            placeholder="${TR("Rechercher le distributeur…")}"
             value="${autreDistrib ? esc(clients.find(c=>c.id===clientId)?.nom||'') : ''}"
             oninput="document.getElementById('f-client').value='';searchClients(this.value,TMP_CLIENTS)"
             onfocus="searchClients(this.value,TMP_CLIENTS)"
@@ -3434,14 +3434,14 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
     <div class="tracking-block"><div class="grid-2">
       <div class="form-group" style="margin-bottom:0"><label class="form-label">${t('col_transporteur')}</label><select class="form-input" id="f-ret-trans"><option value="">${t('select_aucun')}</option><option ${d.retour_transporteur==='La Poste'?'selected':''}>La Poste</option><option ${d.retour_transporteur==='Chronopost'?'selected':''}>Chronopost</option></select></div>
       <div class="form-group" style="margin-bottom:0"><label class="form-label">${t('col_date')}</label><input class="form-input" id="f-ret-date" type="date" value="${d.retour_date||''}"></div>
-      <div class="form-group" style="margin-bottom:0;grid-column:1/-1"><label class="form-label">N° de suivi retour</label><input class="form-input" id="f-ret-num" value="${esc(d.retour_numero||'')}"></div>
+      <div class="form-group" style="margin-bottom:0;grid-column:1/-1"><label class="form-label">${TR("N° de suivi retour")}</label><input class="form-input" id="f-ret-num" value="${esc(d.retour_numero||'')}"></div>
     </div></div>
     <div class="divider"></div>
     <div class="section-title"><i class="ti ti-receipt"></i>Lien VosFactures</div>
     <div class="form-group" style="margin-bottom:4px">
-      <label class="form-label">N° bordereau / bon de livraison VosFactures</label>
+      <label class="form-label">${TR("N° bordereau / bon de livraison VosFactures")}</label>
       <input class="form-input mono" id="f-bordereau" placeholder="ex: BL-2026-0042" value="${esc(d.num_bordereau_vf||'')}">
-      <div style="font-size:11px;color:var(--text3);margin-top:3px">Permet d'accéder directement au document dans VosFactures depuis la fiche intervention.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">${TR("Permet d'accéder directement au document dans VosFactures depuis la fiche intervention.")}</div>
     </div>
   </div>
   <div class="modal-footer">
@@ -3490,7 +3490,7 @@ function searchPieces(idx,q){
 }
 function renderProduitsForm(){
   const el=$('produits-list');if(!el)return;
-  if(!TMP_PRODUITS.length){el.innerHTML='<div style="font-size:12px;color:var(--text3)">Aucune pièce</div>';return;}
+  if(!TMP_PRODUITS.length){el.innerHTML='<div style="font-size:12px;color:var(--text3)">'+TR("Aucune pièce")+'</div>';return;}
   el.innerHTML=TMP_PRODUITS.map((p,i)=>`
     <div style="display:grid;grid-template-columns:2fr 0.8fr 0.5fr 0.7fr auto;gap:5px;align-items:start;margin-bottom:8px">
       <div>
@@ -3504,7 +3504,7 @@ function renderProduitsForm(){
           <div id="piece-drop-${i}" class="piece-dropdown" style="display:none"></div>
         </div>
       </div>
-      <div>${i===0?'<div class="form-label">Réf</div>':''}<input class="form-input mono" style="font-size:11px" value="${esc(p.ref)}" oninput="TMP_PRODUITS[${i}].ref=this.value"></div>
+      <div>${i===0?'<div class="form-label">'+TR("Réf")+'</div>':''}<input class="form-input mono" style="font-size:11px" value="${esc(p.ref)}" oninput="TMP_PRODUITS[${i}].ref=this.value"></div>
       <div>${i===0?`<div class="form-label">${t('col_qte')||'Qté'}</div>`:''}<input class="form-input piece-qte" type="number" min="1" value="${p.qte}" oninput="TMP_PRODUITS[${i}].qte=parseInt(this.value)||1"></div>
       <div>${i===0?'<div class="form-label">PU HT</div>':''}<input class="form-input" type="number" step="0.01" value="${parseFloat(p.pxht||0).toFixed(2)}" oninput="TMP_PRODUITS[${i}].pxht=parseFloat(this.value)||0"></div>
       <div style="${i===0?'padding-top:18px':''}"><button class="btn sm danger" onclick="removeProduit(${i})"><i class="ti ti-x"></i></button></div>
@@ -3591,7 +3591,7 @@ async function importerHistoriqueCommandes(file){
   }catch(e){
     el.innerHTML=`<div style="padding:10px 12px;background:var(--danger-bg);border:0.5px solid var(--danger);border-radius:var(--radius);font-size:12px;color:var(--danger)">
       ❌ Erreur : <b>${esc(e.message)}</b><br>
-      <span style="font-size:11px;color:var(--text2)">Vérifie que tu as bien sélectionné le bon fichier Excel (Compta_Eloflex…) et recharge la page si l'erreur persiste.</span>
+      <span style="font-size:11px;color:var(--text2)">${TR("Vérifie que tu as bien sélectionné le bon fichier Excel (Compta_Eloflex…) et recharge la page si l'erreur persiste.")}</span>
     </div>`;
   }
 }
@@ -3749,7 +3749,7 @@ async function modalTransfert(id){
         <label class="form-label">${t('transferts_fauteuil')}</label>
         <div style="position:relative">
           <input class="form-input" id="tr-fauteuil-search" autocomplete="off"
-            placeholder="Taper n° de série, modèle ou distributeur…"
+            placeholder="${TR("Taper n° de série, modèle ou distributeur…")}"
             value="${d.modele?esc(d.modele+' — '+d.serie):''}"
             oninput="searchFauteuilTransfert(this.value)"
             onfocus="if(this.value.length>=2)searchFauteuilTransfert(this.value)"
@@ -3952,7 +3952,7 @@ function showQuickResults(res,q){
   const el=$('qs-results');if(!el)return;
   const{fauteuils=[],clients=[],commandes=[]}=res;
   if(!fauteuils.length&&!clients.length&&!commandes.length){
-    positionQsResults();el.innerHTML=`<div class="qs-empty"><i class="ti ti-search-off"></i> Aucun résultat pour "<b>${esc(q)}</b>"</div>`;
+    positionQsResults();el.innerHTML=`<div class="qs-empty"><i class="ti ti-search-off"></i> ${TR("Aucun résultat pour \"")}<b>${esc(q)}</b>"</div>`;
     el.style.display='block';return;
   }
   let html='';
@@ -3969,7 +3969,7 @@ function showQuickResults(res,q){
       </div>
       <div style="display:flex;gap:6px;margin-top:6px;padding-left:28px;flex-wrap:wrap">
         <button class="btn sm primary" onclick="quickNewInter(${f.id},${f.client_id})"><i class="ti ti-plus"></i>${TR('Nouvelle intervention')}</button>
-        <button class="btn sm" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${f.client_id}});clearQuickSearch()"><i class="ti ti-eye"></i>Voir la fiche</button>
+        <button class="btn sm" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${f.client_id}});clearQuickSearch()"><i class="ti ti-eye"></i>${TR("Voir la fiche")}</button>
         <button class="btn sm" onclick="${f.commande_id
           ? `setView('commandes');clearQuickSearch();setTimeout(()=>modalCommande(${f.commande_id}),300)`
           : `CMD_FILTERS.q=${JSON.stringify(f.serie||'')};setView('commandes');clearQuickSearch()`
@@ -4040,7 +4040,7 @@ async function searchFauteuilInter(q){
   try{
     const res=await API.recherche(q.trim());
     const fauteuils=res.fauteuils||[];
-    if(!fauteuils.length){drop.innerHTML=`<div class="qs-empty" style="padding:10px 12px;font-size:12px;color:var(--text3)">Aucun fauteuil — utilisez "+ Créer" pour en ajouter un</div>`;drop.style.display='block';return;}
+    if(!fauteuils.length){drop.innerHTML=`<div class="qs-empty" style="padding:10px 12px;font-size:12px;color:var(--text3)">${TR("Aucun fauteuil — utilisez \"+ Créer\" pour en ajouter un")}</div>`;drop.style.display='block';return;}
     drop.innerHTML=fauteuils.map(f=>`<div class="piece-option" onmousedown="event.preventDefault();selectFauteuilInter(${f.id},'${esc(f.modele||'')}','${esc(f.serie||'')}',${f.client_id||'null'},'${esc(f.client_nom||'')}')">
       <div style="font-size:13px;font-weight:700">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;font-size:12px;color:var(--accent)">${esc(f.serie)}</span></div>
       <div style="font-size:11px;color:var(--text3)">${esc(f.client_nom||'')}${f.date_achat?' — achat '+fd(f.date_achat):''}</div>
@@ -4171,9 +4171,9 @@ async function chargerFacturesVF(fauteuilId){
   el.innerHTML='<i class="ti ti-loader-2"></i> Chargement depuis VosFactures…';
   try{
     const{factures,serie,configured}=await API.facturesVF(fauteuilId);
-    if(!configured){el.innerHTML='<span style="color:var(--text3)">VosFactures non configuré.</span>';return;}
+    if(!configured){el.innerHTML='<span style="color:var(--text3)">'+TR("VosFactures non configuré.")+'</span>';return;}
     if(!factures.length){el.innerHTML=`<span style="color:var(--text3)">${TR('Aucune facture trouvée pour la série')} <span class="mono">${esc(serie||'?')}</span>.</span>`;return;}
-    el.innerHTML=`<table class="t"><thead><tr><th>${TR('Numéro')}</th><th>${t('col_date')}</th><th>Client VF</th><th>Montant TTC</th><th>${t('col_statut')}</th><th></th></tr></thead>
+    el.innerHTML=`<table class="t"><thead><tr><th>${TR('Numéro')}</th><th>${t('col_date')}</th><th>${TR("Client VF")}</th><th>Montant TTC</th><th>${t('col_statut')}</th><th></th></tr></thead>
       <tbody>${factures.map(f=>`<tr>
         <td class="mono" style="color:var(--accent)">${esc(f.numero)}</td>
         <td>${f.date?fd(f.date.substring(0,10)):'—'}</td>
@@ -4190,7 +4190,7 @@ let SYNC_POLL_TIMER=null;
 async function syncHistorique(){
   const el=document.getElementById('historique-progress');if(!el)return;
   el.style.display='block';
-  el.innerHTML=`<div class="card" style="padding:10px;font-size:12px"><div style="font-weight:600;margin-bottom:4px"><i class="ti ti-loader-2"></i> ${TR('Sync historique lancée en arrière-plan…')}</div><div id="sync-histo-msg" style="color:var(--text3)">${TR('Démarrage…')}</div><div style="font-size:11px;color:var(--text3);margin-top:4px">Cela peut prendre 10 à 20 min. Vous pouvez continuer à utiliser l'application.</div></div>`;
+  el.innerHTML=`<div class="card" style="padding:10px;font-size:12px"><div style="font-weight:600;margin-bottom:4px"><i class="ti ti-loader-2"></i> ${TR('Sync historique lancée en arrière-plan…')}</div><div id="sync-histo-msg" style="color:var(--text3)">${TR('Démarrage…')}</div><div style="font-size:11px;color:var(--text3);margin-top:4px">${TR("Cela peut prendre 10 à 20 min. Vous pouvez continuer à utiliser l'application.")}</div></div>`;
   try{await API.vfSyncHistorique();pollSyncHistorique();}catch(e){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:12px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div>`;}
 }
 function pollSyncHistorique(){
@@ -4221,7 +4221,7 @@ async function modalFusionnerClient(idCible){
   showModal(`<div style="width:min(92vw,640px)">
     <div class="modal-header"><i class="ti ti-git-merge" style="font-size:18px;color:var(--accent)"></i><h2>${TR('Fusionner un doublon')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="min-height:340px">
-      <div class="form-group"><label class="form-label">Autre fiche (le doublon)</label>
+      <div class="form-group"><label class="form-label">${TR("Autre fiche (le doublon)")}</label>
         <div style="position:relative">
           <input class="form-input" id="fusion-search" placeholder="Taper le nom de l'autre fiche…" autocomplete="off"
             oninput="searchFusionClient(this.value)" onfocus="searchFusionClient(this.value)"
@@ -4379,8 +4379,8 @@ async function chargerCommandesSuede() {
       <tbody>${list.map(cs => {
         const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
         const badgeStock = cs.stock_integre
-          ? '<span class="badge g">Intégré</span>'
-          : (cs.date_livraison ? '<span class="badge hg">À intégrer</span>' : '<span class="badge" style="opacity:.6">En attente</span>');
+          ? '<span class="badge g">'+TR("Intégré")+'</span>'
+          : (cs.date_livraison ? '<span class="badge hg">'+TR("À intégrer")+'</span>' : '<span class="badge" style="opacity:.6">En attente</span>');
         const reliquat = cs.total_reliquat > 0 ? ` <span class="badge hg" title="Reliquat">R:${cs.total_reliquat}</span>` : '';
         return `<tr onclick="ouvrirCommandeSuede(${cs.id})" style="cursor:pointer">
           <td style="font-weight:600" class="mono">${esc(cs.numero_bc)}</td>
@@ -4412,11 +4412,11 @@ function modalNouvelleCommandeSuede() {
     <div class="modal-body">
       <div class="form-group"><label class="form-label">${TR('Référence de la commande')}</label>
         <input class="form-input mono" id="cs-bc" placeholder="STOCK0241" style="max-width:220px">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">Votre référence interne (ex. STOCK + numéro).</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">${TR("Votre référence interne (ex. STOCK + numéro).")}</div>
       </div>
 
       <details open style="margin:10px 0;border:0.5px solid var(--border);border-radius:8px;padding:8px 12px">
-        <summary style="cursor:pointer;font-size:12px;color:var(--text2)">Importer depuis un bon de commande VosFactures</summary>
+        <summary style="cursor:pointer;font-size:12px;color:var(--text2)">${TR("Importer depuis un bon de commande VosFactures")}</summary>
         <div style="display:flex;gap:6px;margin-top:8px">
           <input class="form-input" id="cs-vf-url" placeholder="Collez l'URL ou l'ID du document VosFactures" style="flex:1">
           <button class="btn primary" type="button" onclick="importerDocVF()"><i class="ti ti-download"></i>Importer</button>
@@ -4427,7 +4427,7 @@ function modalNouvelleCommandeSuede() {
 
       <div class="section-title" style="margin-top:6px"><i class="ti ti-list"></i>${TR('Pièces commandées')}</div>
       <div style="position:relative;margin-bottom:8px">
-        <input class="form-input" id="cs-piece-recherche" placeholder="Ajouter une pièce du catalogue (réf. ou désignation)…" oninput="rechercherPieceSuede(this.value)" autocomplete="off">
+        <input class="form-input" id="cs-piece-recherche" placeholder="${TR("Ajouter une pièce du catalogue (réf. ou désignation)…")}" oninput="rechercherPieceSuede(this.value)" autocomplete="off">
         <div id="cs-piece-suggest" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:200px;overflow:auto;display:none"></div>
       </div>
       <div id="cs-lignes-liste"></div>
@@ -4443,7 +4443,7 @@ function modalNouvelleCommandeSuede() {
           <input class="form-input mono" id="cs-suivi" placeholder="1Z…"></div>
       </div>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">Date de commande</label>
+        <div class="form-group"><label class="form-label">${TR("Date de commande")}</label>
           <input class="form-input" id="cs-date" type="date"></div>
         <div class="form-group"><label class="form-label">${TR('Date de livraison prévue')}</label>
           <input class="form-input" id="cs-livraison" type="date"></div>
@@ -4493,7 +4493,7 @@ function dessinerLignesSuede() {
   const zone = document.getElementById('cs-lignes-liste');
   if (!zone) return;
   if (!_csLignes.length) {
-    zone.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">Aucune pièce pour l\'instant. Ajoutez-les ci-dessus, ou importez un document VosFactures.</div>';
+    zone.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:8px 0">'+TR("Aucune pièce pour l'instant. Ajoutez-les ci-dessus, ou importez un document VosFactures.")+'</div>';
     return;
   }
   zone.innerHTML = `<div class="table-wrap"><table class="t"><thead><tr><th>${TR('Réf.')}</th><th>${TR('Désignation')}</th><th style="width:90px">${TR('Qté')}</th><th></th></tr></thead>
@@ -4528,11 +4528,11 @@ async function importerDocVF() {
   else if (/^\d+$/.test(saisie)) id = saisie;
 
   if (id) {
-    if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">Chargement du document…</div>';
+    if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">'+TR("Chargement du document…")+'</div>';
     try {
       const r = await API.stockDoc(id, '', '1'); // warehouse=1
       if (!r.found || !Array.isArray(r.lignes) || !r.lignes.length) {
-        if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">Document trouvé mais sans lignes exploitables. Ajoutez les pièces manuellement.</div>';
+        if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">'+TR("Document trouvé mais sans lignes exploitables. Ajoutez les pièces manuellement.")+'</div>';
         return;
       }
       fusionnerLignesImportees(r.lignes, r.date);
@@ -4543,11 +4543,11 @@ async function importerDocVF() {
     return;
   }
   // Pas d'ID reconnaissable : recherche par numéro via stock-lookup
-  if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">Recherche par numéro…</div>';
+  if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--text2)">'+TR("Recherche par numéro…")+'</div>';
   try {
     const r = await API.stockLookup(saisie);
     if (!r.found || !Array.isArray(r.lignes) || !r.lignes.length) {
-      if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">Document introuvable. Ajoutez les pièces manuellement.</div>';
+      if (zone) zone.innerHTML = '<div style="font-size:12px;color:var(--warning)">'+TR("Document introuvable. Ajoutez les pièces manuellement.")+'</div>';
       return;
     }
     fusionnerLignesImportees(r.lignes, r.date);
@@ -4615,7 +4615,7 @@ async function ouvrirCommandeSuede(id) {
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${TR('Référence')}</label>
             <input class="form-input mono" value="${esc(cs.numero_bc)}" readonly style="background:rgba(0,0,0,.03)"></div>
-          <div class="form-group"><label class="form-label">Date de commande</label>
+          <div class="form-group"><label class="form-label">${TR("Date de commande")}</label>
             <input class="form-input" id="cs-e-date" type="date" value="${cs.date_commande||''}"></div>
           <div class="form-group"><label class="form-label">Transporteur</label>
             <select class="form-input" id="cs-e-transporteur">
@@ -4626,14 +4626,14 @@ async function ouvrirCommandeSuede(id) {
           <div class="form-group"><label class="form-label">N° de suivi</label>
             <input class="form-input mono" id="cs-e-suivi" value="${esc(cs.num_suivi||'')}"></div>
         </div>
-        <div class="form-group"><label class="form-label">Date de livraison</label>
+        <div class="form-group"><label class="form-label">${TR("Date de livraison")}</label>
           <input class="form-input" id="cs-e-livraison" type="date" value="${cs.date_livraison||''}">
           ${lien ? `<a href="${lien}" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);display:inline-block;margin-top:4px"><i class="ti ti-external-link"></i> Suivre le colis</a>` : ''}
         </div>
         <div class="section-title" style="margin-top:8px"><i class="ti ti-list"></i>Lignes (${cs.lignes.length})</div>
-        <div class="table-wrap"><table class="t"><thead><tr><th>${TR('Désignation')}</th><th>${TR('Réf.')}</th><th>${TR('Cmdé')}</th>${cs.stock_integre?'<th>Reçu</th><th>Reliquat</th>':''}</tr></thead>
+        <div class="table-wrap"><table class="t"><thead><tr><th>${TR('Désignation')}</th><th>${TR('Réf.')}</th><th>${TR('Cmdé')}</th>${cs.stock_integre?'<th>'+TR("Reçu")+'</th><th>Reliquat</th>':''}</tr></thead>
           <tbody>${cs.lignes.map(l => `<tr>
-            <td>${esc(l.designation)}${l.catalogue_id?'':' <span class="badge hg" title="Non rattaché au catalogue">?</span>'}</td>
+            <td>${esc(l.designation)}${l.catalogue_id?'':' <span class="badge hg" title="'+TR("Non rattaché au catalogue")+'">?</span>'}</td>
             <td class="mono">${esc(l.reference||'—')}</td>
             <td>${l.quantite_commandee}</td>
             ${cs.stock_integre?`<td>${l.quantite_recue==null?'—':l.quantite_recue}</td><td>${l.reliquat>0?`<span class="badge hg">${l.reliquat}</span>`:'0'}</td>`:''}
@@ -4701,7 +4701,7 @@ function dessinerLignesIntegration() {
       const rattache = !!l.catalogue_id;
       return `<tr>
         <td>
-          <input class="form-input mono" value="${esc(l.reference || '')}" onchange="majIntLigne(${i},'reference',this.value)" style="width:90px;padding:3px 6px;font-size:12px" placeholder="réf.">
+          <input class="form-input mono" value="${esc(l.reference || '')}" onchange="majIntLigne(${i},'reference',this.value)" style="width:90px;padding:3px 6px;font-size:12px" placeholder="${TR("réf.")}">
           ${rattache
             ? '<div style="font-size:10px;color:var(--success)"><i class="ti ti-link"></i> catalogue</div>'
             : `<div style="font-size:10px"><span onclick="relierLigneCatalogue(${i})" style="color:var(--accent);cursor:pointer"><i class="ti ti-link"></i> relier au stock</span></div>`}
@@ -4712,7 +4712,7 @@ function dessinerLignesIntegration() {
         <td id="cs-int-reliquat-${i}">${reliquat > 0 ? `<span class="badge hg">${reliquat}</span>` : '<span style="color:var(--text3)">0</span>'}</td>
       </tr>`;
     }).join('')}</tbody></table></div>
-    <div style="font-size:11px;color:var(--text3);margin-top:6px">Une ligne « relier au stock » non reliée n'incrémente aucun stock, mais la réception est enregistrée.</div>`;
+    <div style="font-size:11px;color:var(--text3);margin-top:6px">${TR("Une ligne « relier au stock » non reliée n'incrémente aucun stock, mais la réception est enregistrée.")}</div>`;
 }
 
 function majIntLigne(index, champ, valeur) {
@@ -4798,15 +4798,15 @@ function ouvrirRattachements() {
     '<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9998;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)fermerRattachements()">' +
       '<div style="background:#fff;border-radius:12px;width:820px;max-width:94vw;height:86vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">' +
         '<div style="padding:18px 22px 12px;border-bottom:0.5px solid var(--border)">' +
-          '<h3 style="margin:0 0 4px;font-size:16px">Rattacher les points aux fiches clients</h3>' +
-          '<div style="font-size:12px;color:var(--text2)">Un point relié à une fiche affiche les ventes de ce client, quelle que soit l\u2019orthographe employée dans les commandes.</div>' +
-          '<div id="rat-stats" style="font-size:12px;color:var(--text3);margin-top:8px">Chargement…</div>' +
+          '<h3 style="margin:0 0 4px;font-size:16px">'+TR("Rattacher les points aux fiches clients")+'</h3>' +
+          '<div style="font-size:12px;color:var(--text2)">'+TR("Un point relié à une fiche affiche les ventes de ce client, quelle que soit l\\u2019orthographe employée dans les commandes.")+'</div>' +
+          '<div id="rat-stats" style="font-size:12px;color:var(--text3);margin-top:8px">'+TR("Chargement…")+'</div>' +
         '</div>' +
         '<div id="rat-liste" style="flex:1;overflow:auto;padding:14px 22px"></div>' +
         '<div style="padding:14px 22px;border-top:0.5px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center">' +
           '<span id="rat-compteur" style="font-size:12px;color:var(--text3);margin-right:auto"></span>' +
-          '<button class="btn" onclick="fermerRattachements()">Fermer</button>' +
-          '<button class="btn primary" onclick="enregistrerRattachements(this)"><i class="ti ti-check"></i>Enregistrer</button>' +
+          '<button class="btn" onclick="fermerRattachements()">'+TR("Fermer")+'</button>' +
+          '<button class="btn primary" onclick="enregistrerRattachements(this)"><i class="ti ti-check"></i>'+TR("Enregistrer")+'</button>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -4840,7 +4840,7 @@ function ratSelect(pid, clientId, nom) {
   _ratChoixNom[pid] = nom;
   var drop = document.getElementById('rat-drop-' + pid); if (drop) drop.style.display = 'none';
   var inp = document.getElementById('rat-search-' + pid); if (inp) inp.value = '';
-  var disp = document.getElementById('rat-choix-' + pid); if (disp) disp.innerHTML = '<i class="ti ti-check"></i> Rattaché à : <strong>' + _esc(nom) + '</strong>';
+  var disp = document.getElementById('rat-choix-' + pid); if (disp) disp.innerHTML = '<i class="ti ti-check"></i> '+TR("Rattaché à :")+' <strong>' + _esc(nom) + '</strong>';
   // Décocher les radios de suggestion de ce point (le choix manuel prime)
   var radios = document.querySelectorAll('input[name="rat-' + pid + '"]');
   radios.forEach(function(r){ r.checked = false; });
@@ -4882,14 +4882,14 @@ function dessinerRattachements() {
   var sansRien = _ratDonnees.points.filter(function(p){ return p.etat === 'aucune'; });
 
   if (!aTraiter.length && !sansRien.length) {
-    l.innerHTML = '<div style="padding:30px;text-align:center;color:#16a34a"><i class="ti ti-check" style="font-size:26px"></i><br>Tous les points sont reliés à une fiche client.</div>';
+    l.innerHTML = '<div style="padding:30px;text-align:center;color:#16a34a"><i class="ti ti-check" style="font-size:26px"></i><br>'+TR("Tous les points sont reliés à une fiche client.")+'</div>';
     majCompteurRat();
     return;
   }
 
   var html = '';
   if (aTraiter.length) {
-    html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin-bottom:8px">Correspondances proposées</div>';
+    html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin-bottom:8px">'+TR("Correspondances proposées")+'</div>';
     html += aTraiter.map(function(p){
       var cfg = RESEAUX_CONFIG[p.reseau] || { color: '#888', label: p.reseau };
       var choix = _ratChoix[p.id];
@@ -4902,7 +4902,7 @@ function dessinerRattachements() {
           '<span style="flex:1;font-size:13px">' + _esc(s.nom) +
             (s.ville ? ' <span style="color:var(--text3)">— ' + _esc(s.ville) + '</span>' : '') + '</span>' +
           (s.commandes ? '<span style="font-size:11px;background:rgba(46,124,246,.1);color:#2e7cf6;padding:1px 6px;border-radius:99px">' + s.commandes + ' cmd</span>' : '') +
-          (s.deja_lie ? '<span style="font-size:11px;color:#d97706" title="Déjà relié à un autre point">déjà relié</span>' : '') +
+          (s.deja_lie ? '<span style="font-size:11px;color:#d97706" title="'+TR("Déjà relié à un autre point")+'">'+TR("déjà relié")+'</span>' : '') +
           '<span style="font-size:11px;color:var(--text3);width:34px;text-align:right">' + s.score + '%</span>' +
         '</label>';
       }).join('');
@@ -4916,12 +4916,12 @@ function dessinerRattachements() {
         '<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer">' +
           '<input type="radio" name="rat-' + p.id + '" ' + (choix === null ? 'checked' : '') +
             ' onchange="choisirRattachement(' + p.id + ',null)">' +
-          '<span style="font-size:12px;color:var(--text3)">Aucune de ces fiches</span>' +
+          '<span style="font-size:12px;color:var(--text3)">'+TR("Aucune de ces fiches")+'</span>' +
         '</label>' +
         '<div style="position:relative;margin-top:4px;padding-top:6px;border-top:0.5px dashed var(--border)">' +
           '<input id="rat-search-' + p.id + '" placeholder="🔎 Chercher une autre fiche…" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;background:var(--surface)">' +
           '<div id="rat-drop-' + p.id + '" class="piece-dropdown" style="display:none"></div>' +
-          '<div id="rat-choix-' + p.id + '" style="font-size:11px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> Rattaché à : <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
+          '<div id="rat-choix-' + p.id + '" style="font-size:11px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> '+TR("Rattaché à :")+' <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -4930,7 +4930,7 @@ function dessinerRattachements() {
   if (sansRien.length) {
     html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin:18px 0 8px">' +
             'Sans correspondance (' + sansRien.length + ')</div>' +
-            '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">Ces points n\u2019ont pas d\u2019équivalent parmi les fiches clients. Leurs ventes restent rapprochées par le nom.</div>' +
+            '<div style="font-size:12px;color:var(--text3);margin-bottom:8px">'+TR("Ces points n\\u2019ont pas d\\u2019équivalent parmi les fiches clients. Leurs ventes restent rapprochées par le nom.")+'</div>' +
             sansRien.map(function(p){
               var cfg = RESEAUX_CONFIG[p.reseau] || { color: '#888' };
               return '<div style="border:0.5px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">' +
@@ -4940,9 +4940,9 @@ function dessinerRattachements() {
                   '<span style="font-size:11px;color:var(--text3)">' + _esc([p.cp, p.ville].filter(Boolean).join(' ')) + '</span>' +
                 '</div>' +
                 '<div style="position:relative">' +
-                  '<input id="rat-search-' + p.id + '" placeholder="🔎 Chercher une fiche à relier…" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;background:var(--surface)">' +
+                  '<input id="rat-search-' + p.id + '" placeholder="'+TR("🔎 Chercher une fiche à relier…")+'" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;background:var(--surface)">' +
                   '<div id="rat-drop-' + p.id + '" class="piece-dropdown" style="display:none"></div>' +
-                  '<div id="rat-choix-' + p.id + '" style="font-size:11px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> Rattaché à : <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
+                  '<div id="rat-choix-' + p.id + '" style="font-size:11px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> '+TR("Rattaché à :")+' <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
                 '</div>' +
               '</div>';
             }).join('');
@@ -5043,8 +5043,8 @@ async function restaurerSauvegarde(btn){
   const input = document.getElementById('restore-file');
   const zone = document.getElementById('restore-result');
   const f = input && input.files && input.files[0];
-  if (!f) { toast('Choisissez d\'abord un fichier de sauvegarde', 'ti-alert-circle'); return; }
-  if (!confirm('Restaurer cette sauvegarde ?\n\nToutes les données actuelles seront REMPLACÉES par celles du fichier. Cette action n\'est pas annulable.')) return;
+  if (!f) { toast(TR('Choisissez d\'abord un fichier de sauvegarde'), 'ti-alert-circle'); return; }
+  if (!confirm(TR('Restaurer cette sauvegarde ?\n\nToutes les données actuelles seront REMPLACÉES par celles du fichier. Cette action n\'est pas annulable.'))) return;
 
   const libelle = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = 'Restauration…'; }
@@ -5116,7 +5116,7 @@ function renderDiscussions(ttl, c, a) {
       tab('fil','💬 Fil d\'équipe') + tab('notes','📦 Notes commandes') +
     '</div>' +
     '<div id="disc-fil"></div>' +
-    '<div id="disc-notes" style="display:none"><div id="disc-body" style="color:var(--text2);font-size:13px;padding:10px 0">Chargement…</div></div>';
+    '<div id="disc-notes" style="display:none"><div id="disc-body" style="color:var(--text2);font-size:13px;padding:10px 0">'+TR("Chargement…")+'</div></div>';
   switchDiscTab(_DISC_TAB);
 }
 window.renderDiscussions = renderDiscussions;
@@ -5139,13 +5139,13 @@ function chargerFil(){
   var host = document.getElementById('disc-fil'); if(!host) return;
   host.innerHTML =
     '<div class="card" style="padding:12px 14px;margin-bottom:14px">' +
-      '<textarea id="fil-nouveau" rows="2" placeholder="Écrire un message à l\'équipe…" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;font-family:inherit"></textarea>' +
+      '<textarea id="fil-nouveau" rows="2" placeholder="'+TR("Écrire un message à l'équipe…")+'" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;font-family:inherit"></textarea>' +
       '<div style="display:flex;align-items:center;gap:12px;margin-top:8px">' +
-        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;margin-left:auto"><input type="checkbox" id="fil-arch-toggle" ' + (_DISC_ARCH?'checked':'') + ' onchange="_DISC_ARCH=this.checked;chargerFil()"> Afficher les archivés</label>' +
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;margin-left:auto"><input type="checkbox" id="fil-arch-toggle" ' + (_DISC_ARCH?'checked':'') + ' onchange="_DISC_ARCH=this.checked;chargerFil()"> '+TR("Afficher les archivés")+'</label>' +
         '<button class="btn primary" onclick="publierFil()"><i class="ti ti-send"></i> Publier</button>' +
       '</div>' +
     '</div>' +
-    '<div id="fil-liste" style="color:var(--text2);font-size:13px">Chargement…</div>';
+    '<div id="fil-liste" style="color:var(--text2);font-size:13px">'+TR("Chargement…")+'</div>';
   fetch('/api/discussions/fil?archived=' + (_DISC_ARCH?'1':'0'))
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(list){
@@ -5170,20 +5170,20 @@ function filCarte(m){
   if (m.can_edit){
     actions += '<button onclick="pinFil('+m.id+','+(m.pinned?'false':'true')+')" title="'+(m.pinned?'Désépingler':'Épingler')+'" style="background:none;border:none;cursor:pointer;color:'+(m.pinned?'var(--accent)':'var(--text3)')+';padding:2px 4px"><i class="ti ti-pin'+(m.pinned?'-filled':'')+'"></i></button>';
     actions += '<button onclick="archiveFil('+m.id+','+(m.archived?'false':'true')+')" title="'+(m.archived?'Désarchiver':'Archiver')+'" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:2px 4px"><i class="ti ti-archive"></i></button>';
-    actions += '<button onclick="editFil('+m.id+')" title="Éditer" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:2px 4px"><i class="ti ti-pencil"></i></button>';
-    actions += '<button onclick="supprFil('+m.id+')" title="Supprimer" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:2px 4px"><i class="ti ti-trash"></i></button>';
+    actions += '<button onclick="editFil('+m.id+')" title="'+TR("Éditer")+'" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:2px 4px"><i class="ti ti-pencil"></i></button>';
+    actions += '<button onclick="supprFil('+m.id+')" title="'+TR("Supprimer")+'" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:2px 4px"><i class="ti ti-trash"></i></button>';
   }
   var corps = edit
     ? '<textarea id="fil-edit-'+m.id+'" rows="3" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;font-family:inherit">'+_esc(m.contenu)+'</textarea>' +
-      '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">Annuler</button><button class="btn sm primary" onclick="sauverEditFil('+m.id+')">Enregistrer</button></div>'
+      '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">'+TR("Annuler")+'</button><button class="btn sm primary" onclick="sauverEditFil('+m.id+')">'+TR("Enregistrer")+'</button></div>'
     : '<div style="font-size:13.5px;white-space:pre-wrap;line-height:1.5">'+_esc(m.contenu)+'</div>';
   var initiale = (m.user_nom||'?').trim().charAt(0).toUpperCase();
   return '<div class="card" style="padding:12px 14px;margin-bottom:10px;'+(m.pinned?'border-left:3px solid var(--accent)':'')+'">' +
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
       '<span style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">'+_esc(initiale)+'</span>' +
       '<span style="font-weight:700;font-size:13px">'+_esc(m.user_nom||'Utilisateur')+'</span>' +
-      (m.pinned?'<span class="badge ouvert" style="font-size:10px"><i class="ti ti-pin-filled" style="font-size:10px"></i> Épinglé</span>':'') +
-      (m.archived?'<span class="badge hg" style="font-size:10px">Archivé</span>':'') +
+      (m.pinned?'<span class="badge ouvert" style="font-size:10px"><i class="ti ti-pin-filled" style="font-size:10px"></i> '+TR("Épinglé")+'</span>':'') +
+      (m.archived?'<span class="badge hg" style="font-size:10px">'+TR("Archivé")+'</span>':'') +
       '<span style="font-size:11px;color:var(--text3)">'+_fd(m.created_at)+ (m.updated_at && m.updated_at!==m.created_at ? ' · modifié' : '') +'</span>' +
       '<span style="margin-left:auto;display:flex;gap:2px">'+actions+'</span>' +
     '</div>' +
@@ -5192,8 +5192,8 @@ function filCarte(m){
       '<div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap">'+reacts+'</div>' +
       ((m.replies||[]).length ? '<div style="margin-top:8px">'+(m.replies||[]).map(filReply).join('')+'</div>' : '') +
       '<div style="display:flex;gap:6px;margin-top:8px;padding-left:34px">' +
-        '<input id="reply-'+m.id+'" placeholder="Répondre…" onkeydown="if(event.key===\'Enter\'){event.preventDefault();repondreFil('+m.id+')}" style="flex:1;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 9px;font-size:12px">' +
-        '<button class="btn sm" onclick="repondreFil('+m.id+')"><i class="ti ti-corner-down-right"></i> Répondre</button>' +
+        '<input id="reply-'+m.id+'" placeholder="'+TR("Répondre…")+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();repondreFil('+m.id+')}" style="flex:1;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 9px;font-size:12px">' +
+        '<button class="btn sm" onclick="repondreFil('+m.id+')"><i class="ti ti-corner-down-right"></i> '+TR("Répondre")+'</button>' +
       '</div>'
     ) +
   '</div>';
@@ -5203,11 +5203,11 @@ function filCarte(m){
 function filReply(r){
   var edit = _DISC_EDIT === r.id;
   var actions = (r.can_edit && !edit)
-    ? '<button onclick="editFil('+r.id+')" title="Éditer" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 3px"><i class="ti ti-pencil" style="font-size:12px"></i></button>' +
-      '<button onclick="supprFil('+r.id+')" title="Supprimer" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:1px 3px"><i class="ti ti-trash" style="font-size:12px"></i></button>'
+    ? '<button onclick="editFil('+r.id+')" title="'+TR("Éditer")+'" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 3px"><i class="ti ti-pencil" style="font-size:12px"></i></button>' +
+      '<button onclick="supprFil('+r.id+')" title="'+TR("Supprimer")+'" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:1px 3px"><i class="ti ti-trash" style="font-size:12px"></i></button>'
     : '';
   var corps = edit
-    ? '<textarea id="fil-edit-'+r.id+'" rows="2" style="width:100%;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 8px;font-size:12px;resize:vertical;font-family:inherit">'+_esc(r.contenu)+'</textarea><div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">Annuler</button><button class="btn sm primary" onclick="sauverEditFil('+r.id+')">Enregistrer</button></div>'
+    ? '<textarea id="fil-edit-'+r.id+'" rows="2" style="width:100%;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 8px;font-size:12px;resize:vertical;font-family:inherit">'+_esc(r.contenu)+'</textarea><div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">'+TR("Annuler")+'</button><button class="btn sm primary" onclick="sauverEditFil('+r.id+')">'+TR("Enregistrer")+'</button></div>'
     : '<div style="font-size:12px;white-space:pre-wrap;line-height:1.45;color:var(--text)">'+_esc(r.contenu)+'</div>';
   var ini = (r.user_nom||'?').trim().charAt(0).toUpperCase();
   return '<div style="display:flex;gap:7px;padding:6px 0 6px 10px;border-left:2px solid var(--border-s);margin-left:22px;margin-top:6px">' +
@@ -5286,7 +5286,7 @@ function chargerDiscussions() {
       var el = document.getElementById('disc-body');
       if (!el) return;
       if (!Array.isArray(notes) || !notes.length) {
-        el.innerHTML = '<div class="empty"><i class="ti ti-messages"></i>Aucune note pour le moment.<br><span style="font-size:12px;color:var(--text3)">Les notes ajoutées depuis l\'onglet Notes d\'une commande apparaîtront ici.</span></div>';
+        el.innerHTML = '<div class="empty"><i class="ti ti-messages"></i>'+TR("Aucune note pour le moment.")+'<br><span style="font-size:12px;color:var(--text3)">'+TR("Les notes ajoutées depuis l'onglet Notes d'une commande apparaîtront ici.")+'</span></div>';
         return;
       }
       // Regroupement par commande, en conservant l'ordre d'arrivée
@@ -5561,8 +5561,9 @@ window.labelReseauTraduit = labelReseauTraduit;
 
 function legendeAnnees(){
   var actuelle = new Date().getFullYear();
-  var html = '<div class="card" style="padding:13px;margin-bottom:10px">' +
-    '<div class="section-title"><i class="ti ti-calendar"></i>Année</div>' +
+  var html = '<details class="card carte-collapse" style="padding:0;margin-bottom:10px">' +
+    '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-calendar"></i>'+TR("Année")+'</summary>' +
+    '<div style="padding:0 13px 13px">' +
     '<label style="display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text)">' +
       '<input type="checkbox" ' + (_carteToutesAnnees?'checked':'') + ' onchange="basculerToutesAnnees(this.checked)"> ' + (t('carte_toutes_annees')||'Toutes les années') +
     '</label>' +
@@ -5577,7 +5578,7 @@ function legendeAnnees(){
     '<input type="checkbox" ' + (_carteSansAnnee?'checked':'') + ' onchange="basculerSansAnnee(this.checked)"> ' + (t('carte_sans_commande')||'Sans commande / avant 2019') +
     '<span id="cnt-annee-sans" style="margin-left:auto;font-size:11px;color:var(--text3)">0</span>' +
     '</label>';
-  html += '</div></div>';
+  html += '</div></div></details>';
   return html;
 }
 function basculerSansAnnee(actif){
@@ -5603,8 +5604,9 @@ window.basculerAnnee = basculerAnnee;
 function legendePriorites(){
   var libelles = { T1:'T1 — Priorité absolue', T2:'T2 — Priorité moyenne', T3:'T3 — Priorité basse' };
   var couleurs = { T1:'#dc2626', T2:'#d97706', T3:'#65a30d' };
-  var html = '<div class="card" style="padding:13px;margin-bottom:10px">' +
-    '<div class="section-title"><i class="ti ti-flag"></i>' + (t('carte_priorite')||'Priorité') + '</div>';
+  var html = '<details class="card carte-collapse" style="padding:0;margin-bottom:10px">' +
+    '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-flag"></i>' + (t('carte_priorite')||'Priorité') + '</summary>' +
+    '<div style="padding:0 13px 13px">';
   ['T1','T2','T3'].forEach(function(p){
     html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:12px">' +
       '<input type="checkbox" ' + (_cartePriorites[p]?'checked':'') + ' onchange="basculerPriorite(\'' + p + '\',this.checked)">' +
@@ -5617,7 +5619,7 @@ function legendePriorites(){
     '<input type="checkbox" ' + (_cartePrioriteSans?'checked':'') + ' onchange="basculerPrioriteSans(this.checked)"> ' + (t('carte_priorite_sans')||'Sans priorité') +
     '<span id="cnt-prio-sans" style="margin-left:auto;font-size:11px;color:var(--text3)">0</span>' +
     '</label>';
-  html += '</div>';
+  html += '</div></details>';
   return html;
 }
 function basculerPriorite(p, actif){
@@ -5643,10 +5645,10 @@ function renderCarte(ttl, c, a) {
       return '<option value="'+y+'"'+(y===_carteAnnee?' selected':'')+'>'+y+'</option>';
     }).join('') + '</select>' +
     '<button onclick="cadrerFrance()" title="Recentrer sur la France" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-focus-centered"></i> Recentrer</button>' +
-    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-plus"></i> Ajouter</button>' : '') +
-    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="ouvrirRattachements()" title="Relier les points aux fiches clients" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-link"></i> Rattacher</button>' : '') +
-    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="lancerGeocodageCarte()" title="Positionner les distributeurs dont l\'adresse a été complétée" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-pin-search"></i> Géocoder</button>' : '') +
-    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="controleVillesCarte()" title="Repérer les villes ne correspondant pas au code postal" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-check"></i> Contrôle villes</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-plus"></i> '+TR("Ajouter")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="ouvrirRattachements()" title="Relier les points aux fiches clients" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-link"></i> '+TR("Rattacher")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="lancerGeocodageCarte()" title="'+TR("Positionner les distributeurs dont l'adresse a été complétée")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-pin-search"></i> '+TR("Géocoder")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="controleVillesCarte()" title="'+TR("Repérer les villes ne correspondant pas au code postal")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-check"></i> '+TR("Contrôle villes")+'</button>' : '') +
     (typeof isAdmin==='function' && isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
 
@@ -5671,7 +5673,7 @@ function renderCarte(ttl, c, a) {
         '</div>' +
         '<div id="carte-nom-result" style="font-size:11px;color:var(--text3);margin-bottom:8px;min-height:14px"></div>' +
         '<div style="display:flex;gap:6px">' +
-          '<input id="carte-geo" class="form-input" placeholder="Ville, code postal ou n° de département (ex : 83)" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;padding:6px 9px;font-size:13px">' +
+          '<input id="carte-geo" class="form-input" placeholder="'+TR("Ville, code postal ou n° de département (ex : 83)")+'" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;padding:6px 9px;font-size:13px">' +
           '<button onclick="rechercheGeo()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-search"></i></button>' +
         '</div>' +
         '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:12px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
@@ -5680,18 +5682,21 @@ function renderCarte(ttl, c, a) {
       '</div>';
 
   // Conteneur en position absolue pour garantir une hauteur
-  c.innerHTML = '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
+  c.innerHTML = '<style>.carte-collapse>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none}.carte-collapse>summary::-webkit-details-marker{display:none}.carte-collapse>summary::after{content:"+";margin-left:auto;font-size:17px;line-height:1;color:var(--text3);font-weight:400}.carte-collapse[open]>summary::after{content:"\\2212"}</style>' +
+    '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
     '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
       rechercheCard +
-      '<div class="card" style="padding:13px;margin-bottom:10px">' +
-        '<div class="section-title"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</div>' +
+      '<details class="card carte-collapse" style="padding:0;margin-bottom:10px">' +
+        '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</summary>' +
+        '<div style="padding:0 13px 13px">' +
         legende +
         '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:12px;color:var(--text2)">' +
           '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
           '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
           '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
         '</label>' +
-      '</div>' +
+        '</div>' +
+      '</details>' +
       legendeAnnees() +
       legendePriorites() +
     '</div>' +
@@ -5759,7 +5764,7 @@ function voirDistributeurSurCarte(clientId, nom){
       // Pas de point pour ce distributeur : proposer de l'ajouter directement
       if (info) {
         info.innerHTML = '<div style="color:#b45309;margin-bottom:6px">' + esc(nom || 'Ce distributeur') + ' n\'a pas encore de point sur la carte.</div>' +
-          '<button onclick="ajouterDistributeurCarte(' + clientId + ',\'' + String(nom||'').replace(/'/g,'&#39;') + '\')" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer"><i class="ti ti-map-pin-plus"></i> Ajouter à la carte maintenant</button>';
+          '<button onclick="ajouterDistributeurCarte(' + clientId + ',\'' + String(nom||'').replace(/'/g,'&#39;') + '\')" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer"><i class="ti ti-map-pin-plus"></i> '+TR("Ajouter à la carte maintenant")+'</button>';
       }
     }
   }, 150);
@@ -5774,7 +5779,7 @@ async function ajouterDistributeurCarte(clientId, nom){
     // Récupérer la fiche complète pour ne pas écraser ses autres champs au PUT
     var cl = await API.client(clientId);
     if (!cl.ville && !cl.cp) {
-      if (info) info.innerHTML = '<span style="color:#b45309">Impossible : ce distributeur n\'a ni ville ni code postal. Complétez son adresse dans sa fiche.</span>';
+      if (info) info.innerHTML = '<span style="color:#b45309">'+TR("Impossible : ce distributeur n'a ni ville ni code postal. Complétez son adresse dans sa fiche.")+'</span>';
       return;
     }
     var data = {
@@ -5819,7 +5824,7 @@ window.rafraichirPointsCarte = rafraichirPointsCarte;
 function chargerPoints() {
   if (typeof L === 'undefined') {
     var cc = document.getElementById('carte-leaflet');
-    if (cc) cc.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626">Leaflet non chargé.</div>';
+    if (cc) cc.innerHTML = '<div style="padding:40px;text-align:center;color:#dc2626">'+TR("Leaflet non chargé.")+'</div>';
     return;
   }
   // Garantir une hauteur explicite sur le conteneur leaflet
@@ -5887,7 +5892,7 @@ function chargerPoints() {
     })
     .catch(function(e){
       var c = document.getElementById('carte-leaflet');
-      if (c) c.innerHTML = '<div style="padding:40px;text-align:center;color:#888">Aucun point pour le moment.<br>' + (typeof isAdmin==='function'&&isAdmin() ? 'Importez vos fichiers KML via le bouton en haut.' : '') + '</div>';
+      if (c) c.innerHTML = '<div style="padding:40px;text-align:center;color:#888">'+TR("Aucun point pour le moment.")+'<br>' + (typeof isAdmin==='function'&&isAdmin() ? 'Importez vos fichiers KML via le bouton en haut.' : '') + '</div>';
     });
 }
 window.chargerPoints = chargerPoints;
@@ -6026,13 +6031,13 @@ function afficherMarkers(recadrer) {
     // Un seul résultat : on zoome dessus et on ouvre sa fiche
     _carteMap.setView(bounds[0], 13, { animate: true });
     if (_carteMarkers[0]) ouvrirPopupMarkerCarte(_carteMarkers[0]);
-    if (info) info.innerHTML = '<span style="color:#16a34a">1 distributeur trouvé</span>';
+    if (info) info.innerHTML = '<span style="color:#16a34a">'+TR("1 distributeur trouvé")+'</span>';
   } else if (bounds.length > 1) {
     // Plusieurs résultats : on cadre sur l'ensemble
     _carteMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 12, animate: true });
     if (info) info.innerHTML = bounds.length + ' distributeurs trouvés';
   } else {
-    if (info) info.innerHTML = '<span style="color:#dc2626">Aucun résultat</span>';
+    if (info) info.innerHTML = '<span style="color:#dc2626">'+TR("Aucun résultat")+'</span>';
   }
 }
 window.afficherMarkers = afficherMarkers;
@@ -6052,7 +6057,7 @@ function prioSelectCarte(p) {
     return '<option value="' + v + '"' + ((p.priorite||'')===v?' selected':'') + '>' + libs[v] + '</option>';
   }).join('');
   return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
-    '<span style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em">Priorité</span>' +
+    '<span style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.03em">'+TR("Priorité")+'</span>' +
     '<select onchange="sauverPrioriteCarte(' + p.id + ',this.value)" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:4px 7px;font-size:12px;cursor:pointer">' + opts + '</select>' +
     '</div>';
 }
@@ -6061,8 +6066,8 @@ function popupCarte(p) {
   var cfg = RESEAUX_CONFIG[p.reseau] || { label:'?', color:'#888' };
   var statutTxt = p.impayes > 0 ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:99px;font-size:11px">⚠️ ' + p.impayes + ' impayé' + (p.impayes>1?'s':'') + '</span>'
     : p.en_cours > 0 ? '<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:99px;font-size:11px">' + p.en_cours + ' en cours</span>'
-    : p.nb_commandes > 0 ? '<span style="background:#f0fdf4;color:#16a34a;padding:2px 7px;border-radius:99px;font-size:11px">à jour</span>'
-    : '<span style="background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;font-size:11px">aucune commande</span>';
+    : p.nb_commandes > 0 ? '<span style="background:#f0fdf4;color:#16a34a;padding:2px 7px;border-radius:99px;font-size:11px">'+TR("à jour")+'</span>'
+    : '<span style="background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;font-size:11px">'+TR("aucune commande")+'</span>';
 
   var prioCoul = {T1:'#dc2626',T2:'#d97706',T3:'#65a30d'}[p.priorite] || '#888';
   var prioLib  = {T1:'T1 — Priorité absolue',T2:'T2 — Priorité moyenne',T3:'T3 — Priorité basse'}[p.priorite] || '';
@@ -6089,16 +6094,16 @@ function popupCarte(p) {
     '</div>' +
     '<div style="font-size:11px;color:#999;margin-bottom:10px">' +
       (p.lien_type === 'client'
-        ? '<span style="color:#16a34a">🔗 Lié au client</span>'
+        ? '<span style="color:#16a34a">'+TR("🔗 Lié au client")+'</span>'
         : p.lien_type === 'nom'
           ? 'Rapproché par nom : ' + _esc((p.noms_rattaches||[]).join(', '))
-          : '<span style="color:#d97706">⚠ Aucune commande rattachée — liez ce point à un client pour fiabiliser</span>') +
+          : '<span style="color:#d97706">'+TR("⚠ Aucune commande rattachée — liez ce point à un client pour fiabiliser")+'</span>') +
     '</div>' +
     (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:11px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:11px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
     (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:11px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
-    (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> Voir la fiche complète →</button>' : '') +
-    (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px">Voir ses commandes →</button>' : '') +
-    (typeof isAdmin==='function' && isAdmin() ? '<div style="margin-top:6px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer"><i class="ti ti-edit"></i> Modifier</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
+    (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> '+TR("Voir la fiche complète →")+'</button>' : '') +
+    (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px">'+TR("Voir ses commandes →")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<div style="margin-top:6px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer"><i class="ti ti-edit"></i> '+TR("Modifier")+'</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
     '</div>';
 }
 
@@ -6241,13 +6246,13 @@ function basculerHorsCarte(actif) {
   if (!actif) { (_carteHorsMarkers || []).forEach(function(m){ if (_carteMap) _carteMap.removeLayer(m); }); _carteHorsMarkers = []; return; }
   if (_carteHorsPoints.length) { afficherHorsMarkers(); return; }
   var info = document.getElementById('carte-nom-result');
-  if (info) info.innerHTML = '<span style="color:#666">Chargement des distributeurs hors carte…</span>';
+  if (info) info.innerHTML = '<span style="color:#666">'+TR("Chargement des distributeurs hors carte…")+'</span>';
   fetch('/api/carte/hors-carte').then(function(r){ return r.json(); }).then(function(rows){
     _carteHorsPoints = Array.isArray(rows) ? rows : [];
     afficherHorsMarkers();
     if (info) info.innerHTML = _carteHorsPoints.length
       ? '<span style="color:#16a34a">' + _carteHorsPoints.length + ' distributeur(s) hors carte affiché(s)</span>'
-      : '<span style="color:#b45309">Aucun distributeur hors carte géocodé pour l\'instant.</span>';
+      : '<span style="color:#b45309">'+TR("Aucun distributeur hors carte géocodé pour l'instant.")+'</span>';
   }).catch(function(e){ if (info) info.innerHTML = '<span style="color:#dc2626">Erreur : ' + esc(e.message) + '</span>'; });
 }
 window.basculerHorsCarte = basculerHorsCarte;
@@ -6273,8 +6278,8 @@ function popupHorsCarte(c) {
     '<div style="color:#666;line-height:1.5;margin-bottom:8px">' +
       ((c.adresse && c.adresse.trim().toLowerCase() !== String(c.nom||'').trim().toLowerCase()) ? _esc(c.adresse) + '<br>' : '') +
       ((c.cp || c.ville) ? _esc((c.cp||'') + ' ' + (c.ville||'')) : '') + '</div>' +
-    '<button onclick="ajouterDistributeurCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:6px"><i class="ti ti-map-pin-plus"></i> Ajouter à la carte</button>' +
-    '<button onclick="ouvrirFicheDistrib(' + c.id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer">Voir la fiche →</button>' +
+    '<button onclick="ajouterDistributeurCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:6px"><i class="ti ti-map-pin-plus"></i> '+TR("Ajouter à la carte")+'</button>' +
+    '<button onclick="ouvrirFicheDistrib(' + c.id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer">'+TR("Voir la fiche →")+'</button>' +
     '</div>';
 }
 window.afficherHorsMarkers = afficherHorsMarkers;
@@ -6290,7 +6295,7 @@ window.setDeptFiltre = setDeptFiltre;
 
 // ── Bouton "Géocoder" : enrichissement VosFactures + positionnement des adresses manquantes ──
 async function lancerGeocodageCarte() {
-  if (!confirm('Positionner les distributeurs dont l\'adresse est renseignée ?\n\nÉtapes : complément d\'adresse depuis VosFactures, puis géocodage par code postal. Cela peut prendre quelques minutes.')) return;
+  if (!confirm(TR('Positionner les distributeurs dont l\'adresse est renseignée ?\n\nÉtapes : complément d\'adresse depuis VosFactures, puis géocodage par code postal. Cela peut prendre quelques minutes.'))) return;
   var info = document.getElementById('carte-nom-result');
   var setInfo = function(t, col) { if (info) info.innerHTML = '<span style="color:' + (col || '#666') + '">' + t + '</span>'; };
   try {
@@ -6350,12 +6355,12 @@ function afficherModalControleVilles(mism) {
       '<td style="padding:6px 8px;color:#16a34a">' + esc(m.suggestion) + '</td>' +
       '<td style="padding:6px 8px;text-align:right"><button onclick="corrigerVilleCarte(' + m.id + ',\'' + String(m.suggestion).replace(/'/g,'&#39;') + '\',this)" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">Corriger</button></td>' +
     '</tr>';
-  }).join('') : '<tr><td colspan="5" style="padding:14px;text-align:center;color:var(--text3)">Aucune incohérence détectée 🎉</td></tr>';
+  }).join('') : '<tr><td colspan="5" style="padding:14px;text-align:center;color:var(--text3)">'+TR("Aucune incohérence détectée 🎉")+'</td></tr>';
   var html = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">' +
     '<div style="background:var(--surface);border-radius:12px;padding:20px;width:760px;max-width:94vw;max-height:86vh;overflow:auto" onclick="event.stopPropagation()">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><h3 style="margin:0;font-size:16px">Contrôle ville ↔ code postal — ' + mism.length + ' à vérifier</h3><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer"><i class="ti ti-x"></i></button></div>' +
-      '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">La ville de la fiche ne correspond pas à la commune officielle du code postal. « Corriger » remplace la ville par la commune officielle proposée.</div>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg)"><th style="padding:6px 8px;text-align:left">Distributeur</th><th style="padding:6px 8px;text-align:left">Ville (fiche)</th><th style="padding:6px 8px">CP</th><th style="padding:6px 8px;text-align:left">Commune officielle</th><th></th></tr></thead><tbody>' + lignes + '</tbody></table>' +
+      '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">'+TR("La ville de la fiche ne correspond pas à la commune officielle du code postal. « Corriger » remplace la ville par la commune officielle proposée.")+'</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:var(--bg)"><th style="padding:6px 8px;text-align:left">'+TR("Distributeur")+'</th><th style="padding:6px 8px;text-align:left">Ville (fiche)</th><th style="padding:6px 8px">CP</th><th style="padding:6px 8px;text-align:left">Commune officielle</th><th></th></tr></thead><tbody>' + lignes + '</tbody></table>' +
     '</div></div>';
   var div = document.createElement('div'); div.innerHTML = html; document.body.appendChild(div.firstChild);
 }
@@ -6457,7 +6462,7 @@ function rechercheGeo() {
     return;
   }
   _carteDeptGeo = '';
-  if (resultEl) resultEl.innerHTML = '<span style="color:#999">Recherche…</span>';
+  if (resultEl) resultEl.innerHTML = '<span style="color:#999">'+TR("Recherche…")+'</span>';
 
   // Chercher d'abord dans nos propres points (CP ou ville exacte)
   var qLow = q.toLowerCase();
@@ -6477,10 +6482,10 @@ function rechercheGeo() {
       if (d.found) {
         centrerSurGeo(d.lat, d.lng, q);
       } else {
-        if (resultEl) resultEl.innerHTML = '<span style="color:#dc2626">Lieu introuvable</span>';
+        if (resultEl) resultEl.innerHTML = '<span style="color:#dc2626">'+TR("Lieu introuvable")+'</span>';
       }
     })
-    .catch(function(e){ if (resultEl) resultEl.innerHTML = '<span style="color:#dc2626">Erreur</span>'; });
+    .catch(function(e){ if (resultEl) resultEl.innerHTML = '<span style="color:#dc2626">'+TR("Erreur")+'</span>'; });
 }
 window.rechercheGeo = rechercheGeo;
 
@@ -6545,7 +6550,7 @@ function centrerSurGeo(lat, lng, label) {
         }).join('') +
         (proches.length > 15 ? '<div style="font-size:11px;color:#999;margin-top:4px">… et ' + (proches.length - 15) + ' autres</div>' : '');
     } else {
-      resultEl.innerHTML = '<span style="color:#999">Aucun distributeur dans ce rayon.</span>';
+      resultEl.innerHTML = '<span style="color:#999">'+TR("Aucun distributeur dans ce rayon.")+'</span>';
     }
   }
 }
@@ -6575,42 +6580,42 @@ function modalPointCarte(id) {
     '<div style="background:#fff;border-radius:12px;padding:24px;width:440px;max-width:92vw;max-height:88vh;overflow:auto" onclick="event.stopPropagation()">' +
       '<h3 style="margin:0 0 16px;font-size:16px">' + titre + '</h3>' +
       '<div style="display:flex;flex-direction:column;gap:10px">' +
-        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Réseau</label><select id="pc-reseau" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + reseauOpts + '</select></div>' +
-        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Nom du distributeur *</label><input id="pc-nom" value="' + (p?_esc(p.nom):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
-        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Client rattaché <span style="color:#999">(recommandé)</span></label>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Réseau")+'</label><select id="pc-reseau" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + reseauOpts + '</select></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Nom du distributeur *")+'</label><input id="pc-nom" value="' + (p?_esc(p.nom):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Client rattaché")+' <span style="color:#999">'+TR("(recommandé)")+'</span></label>' +
           '<div style="position:relative">' +
-            '<input id="pc-client-search" autocomplete="off" placeholder="Taper le nom du client…" oninput="pcClientInput(this.value)" onfocus="searchPcClient(this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'pc-client-drop\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
+            '<input id="pc-client-search" autocomplete="off" placeholder="'+TR("Taper le nom du client…")+'" oninput="pcClientInput(this.value)" onfocus="searchPcClient(this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'pc-client-drop\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
             '<input type="hidden" id="pc-client" value="' + (p&&p.client_id?p.client_id:'') + '">' +
             '<div id="pc-client-drop" class="piece-dropdown" style="display:none"></div>' +
           '</div>' +
-          '<div style="font-size:11px;color:#999;margin-top:3px">Lier au client garantit que ses ventes s\'affichent, même si l\'orthographe diffère. Laisser vide = rattachement par nom.</div></div>' +
+          '<div style="font-size:11px;color:#999;margin-top:3px">'+TR("Lier au client garantit que ses ventes s'affichent, même si l'orthographe diffère. Laisser vide = rattachement par nom.")+'</div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Adresse</label><input id="pc-adresse" value="' + (p&&p.adresse?_esc(p.adresse):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="display:flex;gap:8px"><div style="width:110px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Code postal</label><input id="pc-cp" value="' + (p&&p.cp?_esc(p.cp):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Pays</label><select id="pc-pays" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + optionsPays(p ? p.pays : 'France') + '</select></div>' +
-        '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Téléphone</label><input id="pc-tel" value="' + (p&&p.tel?_esc(p.tel):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Téléphone")+'</label><input id="pc-tel" value="' + (p&&p.tel?_esc(p.tel):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Portable</label><input id="pc-portable" value="' + (p&&p.portable?_esc(p.portable):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="display:flex;gap:8px">' +
-          '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Priorité</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
+          '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Priorité")+'</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
             ['','T1','T2','T3'].map(function(v){ var lib={'':'— Aucune —',T1:'T1 — absolue',T2:'T2 — moyenne',T3:'T3 — basse'}[v]; return '<option value="'+v+'"'+(p&&(p.priorite||'')===v?' selected':'')+'>'+lib+'</option>'; }).join('') +
           '</select></div>' +
           '<div style="width:130px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Rayon (km)</label><input id="pc-rayon" type="number" min="0" step="5" value="' + (p&&p.rayon_km!=null?_esc(String(p.rayon_km)):'') + '" placeholder="optionnel" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '</div>' +
-        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Zone de chalandise / départements</label><textarea id="pc-zone" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px;resize:vertical;font-family:inherit">' + (p&&p.zone_chalandise?_esc(p.zone_chalandise):'') + '</textarea></div>' +
-        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Note interne</label><textarea id="pc-note" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px;resize:vertical;font-family:inherit">' + (p&&p.note_interne?_esc(p.note_interne):'') + '</textarea></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Zone de chalandise / départements")+'</label><textarea id="pc-zone" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px;resize:vertical;font-family:inherit">' + (p&&p.zone_chalandise?_esc(p.zone_chalandise):'') + '</textarea></div>' +
+        '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Note interne")+'</label><textarea id="pc-note" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px;resize:vertical;font-family:inherit">' + (p&&p.note_interne?_esc(p.note_interne):'') + '</textarea></div>' +
         '<div style="background:#f8f9fa;border-radius:8px;padding:10px 12px">' +
           '<div style="display:flex;gap:8px;align-items:flex-end">' +
             '<div style="width:120px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Latitude *</label><input id="pc-lat" value="' + (p?p.lat:'') + '" placeholder="48.85" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
             '<div style="width:120px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Longitude *</label><input id="pc-lng" value="' + (p?p.lng:'') + '" placeholder="2.35" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
             '<button onclick="geocoderAdresse()" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:12px;cursor:pointer;white-space:nowrap"><i class="ti ti-map-pin"></i> Trouver</button>' +
           '</div>' +
-          '<div style="font-size:11px;color:#999;margin-top:5px">Cliquez "Trouver" pour localiser depuis l\'adresse, ou saisissez les coordonnées manuellement.</div>' +
+          '<div style="font-size:11px;color:#999;margin-top:5px">'+TR("Cliquez \"Trouver\" pour localiser depuis l'adresse, ou saisissez les coordonnées manuellement.")+'</div>' +
         '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end">' +
-        '<button onclick="fermerModalPoint()" style="background:var(--surface);border:0.5px solid #cfcfca;border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer">Annuler</button>' +
-        '<button onclick="sauverPointCarte(' + (id||'null') + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer">Enregistrer</button>' +
+        '<button onclick="fermerModalPoint()" style="background:var(--surface);border:0.5px solid #cfcfca;border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer">'+TR("Annuler")+'</button>' +
+        '<button onclick="sauverPointCarte(' + (id||'null') + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:13px;cursor:pointer">'+TR("Enregistrer")+'</button>' +
       '</div>' +
     '</div></div>';
 
@@ -6811,7 +6816,7 @@ window._ouvrirCmd = _ouvrirCmd;
 
 // Onglet Notes dans fiche commande
 function renderNotesTab(cmdId) {
-  if (!cmdId) return Promise.resolve('<div style="padding:20px;color:#aaa;text-align:center">Enregistrez d\'abord la commande.</div>');
+  if (!cmdId) return Promise.resolve('<div style="padding:20px;color:#aaa;text-align:center">'+TR("Enregistrez d'abord la commande.")+'</div>');
   return fetch('/api/commandes/' + cmdId + '/notes')
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(notes) {
@@ -6833,11 +6838,11 @@ function renderNotesTab(cmdId) {
           html += '</div>';
         }
       } else {
-        html += '<div style="padding:24px;text-align:center;color:#aaa;font-size:12px">Aucune note — ajoutez un commentaire ci-dessous.</div>';
+        html += '<div style="padding:24px;text-align:center;color:#aaa;font-size:12px">'+TR("Aucune note — ajoutez un commentaire ci-dessous.")+'</div>';
       }
       html += '</div>';
       html += '<div style="padding:10px 12px;border-top:0.5px solid #dde3ef;display:flex;gap:8px">';
-      html += '<textarea id="ni-' + cmdId + '" placeholder="Ajouter une note..." rows="2" style="flex:1;border:0.5px solid #c0c8d8;border-radius:7px;padding:6px 9px;font-size:12px;resize:none;background:rgba(255,255,255,.8)"></textarea>';
+      html += '<textarea id="ni-' + cmdId + '" placeholder="'+TR("Ajouter une note...")+'" rows="2" style="flex:1;border:0.5px solid #c0c8d8;border-radius:7px;padding:6px 9px;font-size:12px;resize:none;background:rgba(255,255,255,.8)"></textarea>';
       html += '<button onclick="_sendNote(' + cmdId + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:7px 12px;cursor:pointer;font-size:12px">&#10148;</button>';
       html += '</div>';
       html += '</div>';

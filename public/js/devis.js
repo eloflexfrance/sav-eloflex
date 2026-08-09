@@ -19,7 +19,7 @@ async function renderDevis(ttl, c, a){
         <button onclick="DEVIS_FILTRE='${s}';renderDevis(document.querySelector('.topbar-title'),document.querySelector('.content'),document.querySelector('.topbar-actions'))"
           class="btn${DEVIS_FILTRE===s?' primary':''}" style="font-size:12px">${s==='ouvert'?(t('devis_ouverts')||'📋 Ouverts'):s==='converti'?(t('devis_convertis')||'✅ Convertis'):(t('devis_ignores')||(t('devis_ignores')||'🚫 Ignorés'))}</button>`).join('')}
     </div>
-    <div id="devis-list"><div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> Chargement…</div></div>`;
+    <div id="devis-list"><div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>`;
   
   await chargerDevis();
 }
@@ -91,7 +91,7 @@ function modalRelanceDevis(id, email, nom){
     <div class="modal-header"><i class="ti ti-mail" style="color:var(--accent)"></i><h2>${t('devis_modal_relance')||'Relance devis'} — ${esc(nom)}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">${t('devis_email_dest')||'Email destinataire'}</label>
-        <input class="form-input" id="relance-email" value="${esc(email)}" placeholder="email@distributeur.fr">
+        <input class="form-input" id="relance-email" value="${esc(email)}" placeholder="${TR("email@distributeur.fr")}">
       </div>
       <div class="form-group"><label class="form-label">${t('devis_note_interne')||'Note interne (facultatif)'}</label>
         <textarea class="form-input" id="relance-notes" rows="2" placeholder="${t('devis_note_hint')||'Raison de la relance, contexte…'}"></textarea>
@@ -101,8 +101,8 @@ function modalRelanceDevis(id, email, nom){
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn" onclick="closeModal()">Annuler</button>
-      <button class="btn primary" onclick="envoyerRelanceDevis(${id})"><i class="ti ti-send"></i> Envoyer la relance</button>
+      <button class="btn" onclick="closeModal()">${TR("Annuler")}</button>
+      <button class="btn primary" onclick="envoyerRelanceDevis(${id})"><i class="ti ti-send"></i> ${TR("Envoyer la relance")}</button>
     </div>`);
 }
 
@@ -111,7 +111,7 @@ async function envoyerRelanceDevis(id){
   const notesEl = document.getElementById('relance-notes');
   const email = emailEl?.value?.trim();
   const notes = notesEl?.value?.trim();
-  if(!email){ toast('Email requis','ti-alert-circle','var(--warning)'); return; }
+  if(!email){ toast(TR('Email requis'),'ti-alert-circle','var(--warning)'); return; }
   toast('Envoi en cours…','ti-loader-2');
   try{
     // Fetch direct pour diagnostic complet
@@ -125,18 +125,18 @@ async function envoyerRelanceDevis(id){
     let r;
     try { r = JSON.parse(rawText); }
     catch(_) {
-      toast('Erreur serveur ('+resp.status+'): '+rawText.slice(0,80), 'ti-alert-circle', 'var(--danger)');
+      toast(TR('Erreur serveur (')+resp.status+'): '+rawText.slice(0,80), 'ti-alert-circle', 'var(--danger)');
       return;
     }
     if(r.ok){
-      toast('✅ Relance envoyée à '+r.to,'ti-check','var(--success)');
+      toast(TR('✅ Relance envoyée à ')+r.to,'ti-check','var(--success)');
       closeModal();
       chargerDevis();
     } else {
-      toast('Erreur : '+(r.reason||r.error||JSON.stringify(r)),'ti-alert-circle','var(--danger)');
+      toast(TR('Erreur : ')+(r.reason||r.error||JSON.stringify(r)),'ti-alert-circle','var(--danger)');
     }
   }catch(e){
-    toast('Erreur réseau : '+e.message,'ti-alert-circle','var(--danger)');
+    toast(TR('Erreur réseau : ')+e.message,'ti-alert-circle','var(--danger)');
     console.error('[RELANCE] Exception:', e);
   }
 }
@@ -155,5 +155,5 @@ async function voirRelancesDevis(id){
         <td style="font-size:11px;color:var(--text2)">${esc(r.notes||'—')}</td>
       </tr>`).join('')}</tbody></table>
     </div>
-    <div class="modal-footer"><button class="btn" onclick="closeModal()">Fermer</button></div>`);
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR("Fermer")}</button></div>`);
 }

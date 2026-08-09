@@ -20,7 +20,7 @@ function renderDoublonsVF(ttl, c, a) {
   c.innerHTML = `
     <div class="card">
       <div class="section-title"><i class="ti ti-copy"></i>Doublons VosFactures</div>
-      <p style="color:var(--text2);margin:6px 0 12px">Détecte les fiches distributeurs en double (même nom) et les adresses incomplètes, directement sur ton compte VosFactures.</p>
+      <p style="color:var(--text2);margin:6px 0 12px">${TR("Détecte les fiches distributeurs en double (même nom) et les adresses incomplètes, directement sur ton compte VosFactures.")}</p>
       <button id="btn-detecter-doublons" class="btn"><i class="ti ti-search"></i> Analyser VosFactures</button>
       <div id="doublons-vf-resultats" style="margin-top:16px;"></div>
     </div>
@@ -47,24 +47,24 @@ function afficherResultatsDoublonsVF(data) {
 
   let html = `<p><strong>${data.total_contacts}</strong> contacts analysés — 
     <strong>${data.nb_groupes_doublons}</strong> groupe(s) de doublons — 
-    <strong>${data.nb_adresses_incompletes}</strong> adresse(s) incomplète(s).</p>`;
+    <strong>${data.nb_adresses_incompletes}</strong> ${TR("adresse(s) incomplète(s).")}</p>`;
 
   // --- Section Doublons ---
   html += `<h3>Doublons (${data.nb_groupes_doublons})</h3>`;
   if (data.doublons.length === 0) {
-    html += '<p>Aucun doublon détecté.</p>';
+    html += '<p>'+TR("Aucun doublon détecté.")+'</p>';
   } else {
     data.doublons.forEach((groupe, gi) => {
       html += `<div class="carte-doublon" style="border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:12px;">
         <strong>${_escVf(groupe.nom)}</strong> (${groupe.contacts.length} fiches)
         <table class="t" style="width:100%;margin-top:8px;">
-          <thead><tr><th>Conserver</th><th>ID</th><th>Adresse</th><th>Email</th><th>Tél.</th></tr></thead>
+          <thead><tr><th>Conserver</th><th>ID</th><th>Adresse</th><th>Email</th><th>${TR("Tél.")}</th></tr></thead>
           <tbody>`;
       groupe.contacts.forEach((c, ci) => {
         const coche = c.id === groupe.principal_suggere ? 'checked' : '';
         const adresseTxt = c.complet
           ? `${c.street}, ${c.post_code} ${c.city}`
-          : `<span style="color:#c00;">incomplète</span>`;
+          : `<span style="color:#c00;">${TR("incomplète")}</span>`;
         html += `<tr>
           <td><input type="radio" name="principal-${gi}" value="${c.id}" ${coche}></td>
           <td>${c.id}</td>
@@ -82,7 +82,7 @@ function afficherResultatsDoublonsVF(data) {
   // --- Section Adresses incomplètes ---
   html += `<h3>Adresses incomplètes (${data.nb_adresses_incompletes})</h3>`;
   if (data.adresses_incompletes.length === 0) {
-    html += '<p>Toutes les fiches ont une adresse complète.</p>';
+    html += '<p>'+TR("Toutes les fiches ont une adresse complète.")+'</p>';
   } else {
     html += `<table class="t" style="width:100%;">
       <thead><tr><th>Nom</th><th>Rue</th><th>Code postal</th><th>Ville</th><th></th></tr></thead>
@@ -93,7 +93,7 @@ function afficherResultatsDoublonsVF(data) {
         <td><input type="text" class="champ-rue" value="${_escVf(c.street)}" placeholder="N° et rue"></td>
         <td><input type="text" class="champ-cp" value="${_escVf(c.post_code)}" placeholder="CP" style="width:70px;"></td>
         <td><input type="text" class="champ-ville" value="${_escVf(c.city)}" placeholder="Ville"></td>
-        <td><button class="btn btn-sauver-adresse" data-id="${c.id}">Enregistrer</button></td>
+        <td><button class="btn btn-sauver-adresse" data-id="${c.id}">${TR("Enregistrer")}</button></td>
       </tr>`;
     });
     html += '</tbody></table>';
@@ -132,7 +132,7 @@ async function fusionnerGroupeVF(gi) {
     alert(`Fusion effectuée. ${data.reattribution_locale ? 'Réattribution locale : ' + data.reattribution_locale : ''}`);
     chargerDoublonsVF(); // rafraîchir
   } catch (err) {
-    alert('Erreur lors de la fusion : ' + err.message);
+    alert(TR('Erreur lors de la fusion : ') + err.message);
   }
 }
 
@@ -156,7 +156,7 @@ async function sauverAdresseVF(btn) {
     ligne.style.background = '#e6ffe6';
     btn.textContent = 'Enregistré ✓';
   } catch (err) {
-    alert('Erreur : ' + err.message);
+    alert(TR('Erreur : ') + err.message);
     btn.textContent = 'Enregistrer';
   } finally {
     btn.disabled = false;
