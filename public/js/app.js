@@ -6279,9 +6279,29 @@ function popupHorsCarte(c) {
       ((c.adresse && c.adresse.trim().toLowerCase() !== String(c.nom||'').trim().toLowerCase()) ? _esc(c.adresse) + '<br>' : '') +
       ((c.cp || c.ville) ? _esc((c.cp||'') + ' ' + (c.ville||'')) : '') + '</div>' +
     '<button onclick="ajouterDistributeurCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:6px"><i class="ti ti-map-pin-plus"></i> '+TR("Ajouter à la carte")+'</button>' +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="passerParticulierCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\',this)" style="width:100%;background:#d97706;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:6px"><i class="ti ti-user"></i> '+TR("Passer en particulier")+'</button>' : '') +
     '<button onclick="ouvrirFicheDistrib(' + c.id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer">'+TR("Voir la fiche →")+'</button>' +
     '</div>';
 }
+// Passe une fiche "hors carte" directement en Particulier (la retire de la carte), sans ouvrir la fiche.
+async function passerParticulierCarte(id, nom, btn) {
+  var libelle = String(nom || '').replace(/&#39;/g, "'");
+  if (!confirm(libelle + ' → ' + TR('passer en Particulier ? La fiche sera retirée de la carte.'))) return;
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  try {
+    await API.setClientType(id, 'Particulier');
+    _carteHorsPoints = (_carteHorsPoints || []).filter(function(p){ return p.id !== id; });
+    if (_carteMap && typeof _carteMap.closePopup === 'function') _carteMap.closePopup();
+    afficherHorsMarkers();
+    var info = document.getElementById('carte-nom-result');
+    if (info) info.innerHTML = '<span style="color:#16a34a">' + _esc(libelle) + TR(' — passé en Particulier, retiré de la carte.') + '</span>';
+    if (typeof toast === 'function') toast(TR('Fiche passée en Particulier'), 'ti-user', 'var(--success)');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    alert('Erreur : ' + e.message);
+  }
+}
+window.passerParticulierCarte = passerParticulierCarte;
 window.afficherHorsMarkers = afficherHorsMarkers;
 
 // ── Filtre strict "département couvert" ──

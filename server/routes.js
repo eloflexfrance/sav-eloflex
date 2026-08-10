@@ -476,6 +476,18 @@ router.post('/admin/client-set-vfid', adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Change UNIQUEMENT le Type d'une fiche (ex. passage rapide en "Particulier"
+// depuis la carte), sans toucher aux autres champs. ─────────────────────────
+router.post('/clients/:id/type', async (req, res) => {
+  try {
+    const type = (req.body && req.body.type) ? String(req.body.type).trim() : '';
+    if (!type) return res.status(400).json({ error: 'type requis' });
+    const row = await db.run('UPDATE clients SET type=$1, updated_at=NOW() WHERE id=$2 RETURNING id, nom, type', [type, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Fiche introuvable' });
+    res.json({ ok: true, client: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/clients/:id/regenerer-token', async (req, res) => {
   try {
     const token = crypto.randomBytes(20).toString('hex');

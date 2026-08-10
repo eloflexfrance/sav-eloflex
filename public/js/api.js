@@ -39,6 +39,7 @@ const API = {
   client:(id)=>API.get(`/clients/${id}`),
   createClient:(d)=>API.post('/clients',d),
   updateClient:(id,d)=>API.put(`/clients/${id}`,d),
+  setClientType:(id,type)=>API.post(`/clients/${id}/type`,{type}),
   deleteClient:(id)=>API.del(`/clients/${id}`),
   regenererToken:(id)=>API.post(`/clients/${id}/regenerer-token`,{}),
   fusionnerClients:(idCible,idSource,vfIgnore)=>API.post(`/clients/${idCible}/fusionner`,{client_source_id:idSource,vf_ignore_source:vfIgnore}),

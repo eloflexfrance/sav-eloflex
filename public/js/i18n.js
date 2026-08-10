@@ -1594,7 +1594,11 @@ const EN_STR = {
  "Tél.": "Tel.",
  "incomplète": "incomplete",
  "Toutes les fiches ont une adresse complète.": "All records have a complete address.",
- "Erreur lors de la fusion : ": "Error during merge:"
+ "Erreur lors de la fusion : ": "Error during merge:",
+ "Passer en particulier": "Set as individual",
+ "passer en Particulier ? La fiche sera retirée de la carte.": "set as individual? The record will be removed from the map.",
+ "Fiche passée en Particulier": "Record set as individual",
+ " — passé en Particulier, retiré de la carte.": " — set as individual, removed from the map."
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;
