@@ -6917,17 +6917,21 @@ async function renderPrets(ttl,c,a){
   a.innerHTML = `<button class="btn sm primary" onclick="modalPret()"><i class="ti ti-plus"></i>${TR('Nouveau bon de prêt')}</button>`;
   let rows=[]; try{ rows = await API.prets(); }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
   if(!rows.length){ c.innerHTML=`<div class="empty"><i class="ti ti-file-certificate"></i>${TR('Aucun bon de prêt pour le moment.')}<br><span style="font-size:12px;color:var(--text3)">${TR('Créez-en un depuis une fiche distributeur ou avec « Nouveau bon de prêt ».')}</span></div>`; return; }
+  const fdate = d => d ? fd((''+d).slice(0,10)) : '—';
   const lignes = rows.map(p=>{
+    const arts = pretArticlesOf(p);
     const nom = esc(p.client_nom_actuel || p.distributeur_nom || '—');
-    const mat = esc([p.designation, p.num_serie].filter(Boolean).join(' · ')||'—');
-    const sign = p.signed_at ? `<span title="Signé le ${fd((p.signed_at||'').slice(0,10))}" style="color:#16a34a"><i class="ti ti-writing-sign"></i></span>` : '';
+    const mat = esc(arts.map(a=>a.designation).filter(Boolean).join(', ') || p.designation || '—');
+    const serie = esc(arts.map(a=>a.num_serie).filter(Boolean).join(', ') || p.num_serie || '—');
+    const sign = p.signed_at ? `<span title="Signé le ${fdate(p.signed_at)}" style="color:#16a34a;margin-left:4px"><i class="ti ti-writing-sign"></i></span>` : '';
     return `<tr>
       <td>${nom}</td>
       <td>${mat}</td>
+      <td class="mono" style="white-space:nowrap">${serie}</td>
       <td style="font-size:12px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
-      <td>${fd(p.date_remise)}</td>
-      <td>${fd(p.date_retour_prevue)}</td>
-      <td>${pretBadge(p.statut)} ${sign}</td>
+      <td style="white-space:nowrap">${fdate(p.date_remise)}</td>
+      <td style="white-space:nowrap">${fdate(p.date_retour_prevue)}</td>
+      <td style="white-space:nowrap">${pretBadge(p.statut)}${sign}</td>
       <td style="text-align:right;white-space:nowrap">
         <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
         <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
@@ -6937,9 +6941,10 @@ async function renderPrets(ttl,c,a){
         <button class="btn sm danger" title="Supprimer" onclick="supprPret(${p.id})"><i class="ti ti-trash"></i></button>
       </td></tr>`;
   }).join('');
-  c.innerHTML = `<div class="card" style="padding:0;overflow:auto">
-    <table class="table"><thead><tr>
-      <th>${TR('Distributeur')}</th><th>${TR('Matériel')}</th><th>${TR('Formule')}</th>
+  c.innerHTML = `<style>#prets-tbl th,#prets-tbl td{padding:13px 18px;vertical-align:middle}#prets-tbl tbody tr{border-top:0.5px solid var(--border-s,#e8eaed)}#prets-tbl tbody tr:hover{background:var(--surface-2,rgba(0,0,0,.02))}</style>
+    <div class="card" style="padding:0;overflow:auto">
+    <table class="table" id="prets-tbl"><thead><tr>
+      <th>${TR('Distributeur')}</th><th>${TR('Matériel')}</th><th>${TR('N° de série')}</th><th>${TR('Formule')}</th>
       <th>${TR('Remise')}</th><th>${TR('Retour prévu')}</th><th>${TR('Statut')}</th><th></th>
     </tr></thead><tbody>${lignes}</tbody></table></div>`;
 }

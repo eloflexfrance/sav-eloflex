@@ -5966,6 +5966,49 @@ router.post('/carte/rattachements', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 const PRET_STATUTS = ['brouillon','envoye','signe','en_cours','retard','prolonge','cloture','rachete'];
 
+// Signature e-mail Éloflex (Service Commercial) — ajoutée aux e-mails de demande de signature
+const SIGNATURE_EMAIL_HTML = `
+<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse; font-family:Arial, Helvetica, sans-serif; margin-top:24px;">
+  <tr><td style="padding-bottom:16px;">
+    <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;"><tr>
+      <td valign="middle" style="padding-right:20px; border-right:2px solid #E1E6EB;">
+        <img src="https://sensode.com/eloflex/wp-content/uploads/logo-signature.png" alt="Éloflex" width="185" style="display:block; border:0; outline:none;">
+      </td>
+      <td valign="middle" style="padding-left:20px; color:#333333;">
+        <div style="font-size:17px; font-weight:bold; color:#1F3A5F; margin-bottom:2px;">Service Commercial</div>
+        <div style="font-size:14px; font-weight:bold; color:#2B7DC7; line-height:19px; margin-bottom:8px;">Eloflex France</div>
+        <div style="font-size:14px; color:#333333; line-height:22px;">
+          <a href="mailto:info@eloflex.fr" style="color:#2B7DC7; text-decoration:none;">info@eloflex.fr</a>
+          &nbsp;&nbsp;&#183;&nbsp;&nbsp;
+          <a href="https://eloflex.fr" style="color:#2B7DC7; text-decoration:none;">eloflex.fr</a>
+        </div>
+        <div style="font-size:14px; color:#333333; line-height:22px;">Tél. : <span style="color:#2B7DC7;">09&nbsp;67&nbsp;66&nbsp;51&nbsp;29</span></div>
+        <div style="font-size:14px; color:#333333; line-height:22px;">Mob : <span style="color:#2B7DC7;">06&nbsp;87&nbsp;04&nbsp;69&nbsp;19</span></div>
+      </td>
+    </tr></table>
+  </td></tr>
+  <tr><td>
+    <table cellpadding="0" cellspacing="0" border="0" role="presentation" width="580" bgcolor="#FFF4C2" style="width:580px; border-collapse:collapse; border-left:4px solid #F2C200;"><tr><td style="padding:16px 22px;">
+      <div style="font-size:15px; font-weight:bold; color:#1F5FA6; letter-spacing:0.3px; margin-bottom:3px;">INFORMATION IMPORTANTE &ndash; NOUVEAUX CODES LPP</div>
+      <div style="font-size:13px; color:#555555; margin-bottom:14px;">Nos codes LPP fabricant ont &eacute;t&eacute; mis &agrave; jour.</div>
+      <table cellpadding="0" cellspacing="0" border="0" role="presentation" width="100%" style="width:100%; border-collapse:collapse;">
+        <tr>
+          <td valign="top" style="padding:9px 0; border-top:1px solid #EAD98A; font-size:13px; color:#222222; line-height:17px;"><strong style="color:#111111;">Mod&egrave;les L &#183; F &#183; D2 &#183; P &#183; R</strong><br><span style="font-size:11px; color:#777777;">4545512 &ndash; VPH, achat neuf, FRE-B, modulaire &agrave; propulsion par moteur &eacute;lectrique &ndash; classe B</span></td>
+          <td valign="top" align="right" style="padding:9px 0 9px 18px; border-top:1px solid #EAD98A; white-space:nowrap;"><span style="font-size:10px; color:#777777; text-transform:uppercase; letter-spacing:0.3px;">Nouveau LPPR</span><br><strong style="font-size:16px; color:#1F5FA6;">9570265</strong></td>
+        </tr>
+        <tr>
+          <td valign="top" style="padding:9px 0; border-top:1px solid #EAD98A; font-size:13px; color:#222222; line-height:17px;"><strong style="color:#111111;">Coussins EASE ONE &#183; EASE WEDGE</strong><br><span style="font-size:11px; color:#777777;">4947601 &ndash; VPH, adjonction, PAP forfait B adjonctions membre inf&eacute;rieur</span></td>
+          <td valign="top" align="right" style="padding:9px 0 9px 18px; border-top:1px solid #EAD98A; white-space:nowrap;"><span style="font-size:10px; color:#777777; text-transform:uppercase; letter-spacing:0.3px;">Nouveau LPPR</span><br><strong style="font-size:16px; color:#1F5FA6;">9903695</strong></td>
+        </tr>
+        <tr>
+          <td valign="top" style="padding:9px 0; border-top:1px solid #EAD98A; font-size:13px; color:#222222; line-height:17px;"><strong style="color:#111111;">Commande tierce personne KIT A</strong><br><span style="font-size:11px; color:#777777;">4965183 &ndash; VPH, adjonction, bo&icirc;tier de commande personnalis&eacute; pour FRE, FREP et FREV</span></td>
+          <td valign="top" align="right" style="padding:9px 0 9px 18px; border-top:1px solid #EAD98A; white-space:nowrap;"><span style="font-size:10px; color:#777777; text-transform:uppercase; letter-spacing:0.3px;">Nouveau LPPR</span><br><strong style="font-size:16px; color:#1F5FA6;">9948893</strong></td>
+        </tr>
+      </table>
+    </td></tr></table>
+  </td></tr>
+</table>`;
+
 // Envoi d'e-mail lié à un prêt — via l'API Brevo (le SMTP est bloqué par Render)
 async function envoyerEmailPret({ to, cc, subject, html, attachments }) {
   const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
@@ -6082,8 +6125,7 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
           <p>Vous trouverez ci-dessous votre bon de prêt de fauteuil roulant électrique. Merci de le relire et de le <b>signer en ligne</b> :</p>
           <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le bon de prêt</a></p>
           <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>
-          <p style="font-size:12px;color:#888">Eloflex France</p>
-        </div></div>`
+        </div></div>${SIGNATURE_EMAIL_HTML}`
     });
     const updated = await db.run("UPDATE prets SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END, updated_at=NOW() WHERE id=$1 RETURNING id, statut", [p.id]);
     res.json({ ok: true, to: dest, statut: updated.statut });

@@ -224,7 +224,7 @@ const PDF = {
     band('5 · CONDITIONS FINANCIÈRES EN CAS DE DOMMAGE OU PERTE');
     doc.setFontSize(8);
     const cf = [
-      ['Perte / destruction totale', "Prix catalogue HT − décote vétusté (5 %/mois, plafonnée à 30 %)"],
+      ['Perte / destruction totale', "Prix catalogue HT - décote vétusté (5 %/mois, plafonnée à 30 %)"],
       ['Dommages partiels / reconditionnement', "Frais réels de remise en état (pièces + main-d'œuvre) sur devis ELOFLEX"],
       ['Emballage / mousses manquants', "40 € HT supplémentaires, soit 90 € HT au total des frais de retour"],
     ];
