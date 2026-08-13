@@ -6201,14 +6201,23 @@ router.post('/pret-public/:token/signer', async (req, res) => {
         ? [{ filename: `Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
              content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' }]
         : [];
+      let modele = p.designation || '';
+      if (!modele && p.articles) { try { const a = typeof p.articles === 'string' ? JSON.parse(p.articles) : p.articles; if (Array.isArray(a) && a[0]) modele = a[0].designation || ''; } catch(e){} }
       await envoyerEmailPret({
         to: p.email || 'sav@eloflex.fr',
         cc: p.email ? 'sav@eloflex.fr' : undefined,
-        subject: `Bon de prêt Eloflex — signé par ${d.signataire_nom}`,
-        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
-          <p>Le bon de prêt du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> a été signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
-          ${attachments.length ? '<p>Le document signé est joint à cet e-mail (PDF).</p>' : ''}
-          <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
+        subject: `Eloflex — Réception de votre bon de prêt signé`,
+        html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
+          <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Bon de prêt signé</h2></div>
+          <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px;line-height:1.55">
+            <p>Bonjour,</p>
+            <p>Nous confirmons la bonne réception de votre bon de prêt du fauteuil <b>${modele || '—'}</b>.</p>
+            <p>Vous trouverez ci-joint votre bon de commande de prêt signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
+            <p>Nous revenons rapidement vers vous afin de vous indiquer le numéro de suivi de votre commande de fauteuil roulant électrique Eloflex.</p>
+            <p>Bien cordialement,</p>
+          </div>
+          <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
+        </div>`,
         attachments
       });
     } catch (mailErr) { console.error('[PRET] e-mail signature:', mailErr.message); }
