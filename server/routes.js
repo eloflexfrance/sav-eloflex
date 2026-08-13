@@ -5968,7 +5968,7 @@ const PRET_STATUTS = ['brouillon','envoye','signe','en_cours','retard','prolonge
 
 // Signature e-mail Éloflex (Service Commercial) — ajoutée aux e-mails de demande de signature
 const SIGNATURE_EMAIL_HTML = `
-<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse; font-family:Arial, Helvetica, sans-serif; margin-top:24px;">
+<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse; font-family:Arial, Helvetica, sans-serif;">
   <tr><td style="padding-bottom:16px;">
     <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse;"><tr>
       <td valign="middle" style="padding-right:20px; border-right:2px solid #E1E6EB;">
@@ -6118,14 +6118,16 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
     await envoyerEmailPret({
       to: dest,
       subject: `Bon de prêt Eloflex — à signer en ligne`,
-      html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
         <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Bon de prêt à signer</h2></div>
         <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px">
           <p>Bonjour,</p>
           <p>Vous trouverez ci-dessous votre bon de prêt de fauteuil roulant électrique. Merci de le relire et de le <b>signer en ligne</b> :</p>
           <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le bon de prêt</a></p>
           <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>
-        </div></div>${SIGNATURE_EMAIL_HTML}`
+        </div>
+        <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
+      </div>`
     });
     const updated = await db.run("UPDATE prets SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END, updated_at=NOW() WHERE id=$1 RETURNING id, statut", [p.id]);
     res.json({ ok: true, to: dest, statut: updated.statut });
