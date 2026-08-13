@@ -23,6 +23,8 @@
   .msg{padding:12px 14px;border-radius:8px;font-size:14px;margin-top:12px}
   .ok{background:#e7f6ec;color:#1a7a3a}.err{background:#fdecec;color:#b42318}
   .muted{color:#888;font-size:12px}
+  .req{color:#b42318;font-weight:700}
+  #btnSign:disabled{background:#9db4c7}
 </style>
 </head>
 <body>
@@ -32,13 +34,14 @@
   <div class="card" id="signcard" style="display:none">
     <h1>Signature du bon de prêt</h1>
     <div class="sub">Merci de relire le document ci-dessus, puis de le signer.</div>
-    <label for="signame">Nom du signataire</label>
-    <input type="text" id="signame" placeholder="Prénom et nom">
-    <label>Signature (tracez ci-dessous)</label>
+    <label for="signame">Nom du signataire <span class="req">*</span> <span class="muted">(obligatoire)</span></label>
+    <input type="text" id="signame" placeholder="Prénom et nom" oninput="refresh()">
+    <label>Signature <span class="req">*</span> <span class="muted">(tracez ci-dessous)</span></label>
     <canvas id="pad" width="420" height="150"></canvas>
     <div class="btns" style="margin-top:8px"><button class="ghost" type="button" onclick="clearPad()">Effacer la signature</button></div>
-    <div class="chk"><input type="checkbox" id="accept"><label for="accept" style="margin:0;font-weight:400">J'ai lu et j'approuve le contenu du bon de prêt — « Lu et approuvé, bon pour accord ».</label></div>
-    <div class="btns"><button class="primary" id="btnSign" onclick="signer()" disabled>Signer le bon de prêt</button></div>
+    <div class="chk"><input type="checkbox" id="accept"><label for="accept" style="margin:0;font-weight:400">J'ai lu et j'approuve le contenu du bon de prêt — « Lu et approuvé, bon pour accord ». <span class="req">*</span></label></div>
+    <div class="btns"><button class="primary" id="btnSign" onclick="signer()" disabled title="Renseignez votre nom, tracez votre signature et cochez la case">Signer le bon de prêt</button></div>
+    <div id="signhint" style="margin-top:8px"></div>
     <div id="msg"></div>
   </div>
 
@@ -141,11 +144,21 @@ function initPad(){
   pad.addEventListener('touchstart',start,{passive:false}); pad.addEventListener('touchmove',move,{passive:false}); pad.addEventListener('touchend',end);
   document.getElementById('accept').addEventListener('change',refresh);
   document.getElementById('signame').addEventListener('input',refresh);
+  refresh();
 }
 function clearPad(){ if(ctx){ctx.clearRect(0,0,pad.width,pad.height);} hasSig=false; refresh(); }
 function refresh(){
-  var ok = hasSig && document.getElementById('accept').checked && document.getElementById('signame').value.trim().length>1;
-  document.getElementById('btnSign').disabled = !ok;
+  var name = (document.getElementById('signame').value||'').trim();
+  var checked = document.getElementById('accept').checked;
+  var miss = [];
+  if(!name || name.length<2) miss.push('votre nom');
+  if(!hasSig) miss.push('votre signature');
+  if(!checked) miss.push('cocher la case d\'approbation');
+  var btn = document.getElementById('btnSign');
+  btn.disabled = miss.length > 0;
+  btn.title = miss.length ? ('Obligatoire : ' + miss.join(', ')) : 'Signer le bon de prêt';
+  var hint = document.getElementById('signhint');
+  if(hint) hint.innerHTML = miss.length ? ('<span class="muted">Pour signer, il reste à renseigner : <b>' + miss.join('</b>, <b>') + '</b>.</span>') : '';
 }
 var SIGNED_PDF=null;
 function signer(){
