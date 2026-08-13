@@ -6936,6 +6936,8 @@ async function renderPrets(ttl,c,a){
         <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
         <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
         <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
+        <button class="btn sm ${p.statut==='signe'?'success':''}" title="Offre de prêt signée par mail" onclick="modalPretSigneMail(${p.id})"><i class="ti ti-mail-check"></i></button>
+        ${p.has_pdf?`<button class="btn sm" title="Télécharger le PDF signé / preuve" onclick="window.open('/api/prets/${p.id}/pdf','_blank')"><i class="ti ti-paperclip"></i></button>`:''}
         <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
         <button class="btn sm" title="Statut" onclick="menuPretStatut(${p.id})"><i class="ti ti-adjustments"></i></button>
         <button class="btn sm danger" title="Supprimer" onclick="supprPret(${p.id})"><i class="ti ti-trash"></i></button>
@@ -7193,13 +7195,22 @@ function modalPretSigneMail(id){
     <div class="modal-body">
       <p style="font-size:13px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.')}</p>
       <div class="form-group"><label class="form-label">${TR('Date de signature')}</label><input class="form-input" id="pret-signe-date" type="date" value="${today}" style="max-width:200px"></div>
+      <div class="form-group"><label class="form-label">${TR('PDF signé (preuve) — optionnel')}</label>
+        <input class="form-input" id="pret-signe-pdf" type="file" accept="application/pdf">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">${TR('Joignez le PDF signé et scanné renvoyé par le distributeur.')}</div></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="validerSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
 }
 window.modalPretSigneMail = modalPretSigneMail;
 async function validerSigneMail(id){
   const d = gv('pret-signe-date'); if(!d){ toast(TR('Date requise'),'ti-alert-circle','var(--warning)'); return; }
-  try{ await API.signePretMail(id, d); closeModal(); toast(TR('Offre de prêt signée par mail'),'ti-check','var(--success)'); if(STATE.view==='prets') render(); }
+  const f = ($('pret-signe-pdf')||{}).files ? $('pret-signe-pdf').files[0] : null;
+  let pdf = null;
+  if(f){
+    if(f.type && f.type.indexOf('pdf')<0){ toast(TR('Le fichier doit être un PDF'),'ti-alert-circle','var(--warning)'); return; }
+    try{ pdf = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); }); }catch(e){}
+  }
+  try{ await API.signePretMail(id, d, pdf); closeModal(); toast(TR('Offre de prêt signée par mail'),'ti-check','var(--success)'); if(STATE.view==='prets') render(); }
   catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.validerSigneMail = validerSigneMail;

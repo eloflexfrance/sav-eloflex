@@ -49,7 +49,7 @@ const API = {
   setPretStatut:(id,statut,extra)=>API.post(`/prets/${id}/statut`,Object.assign({statut},extra||{})),
   deletePret:(id)=>API.del(`/prets/${id}`),
   envoyerPret:(id,email,pdf)=>API.post(`/prets/${id}/envoyer`,{...(email?{email}:{}),...(pdf?{pdf_data:pdf}:{})}),
-  signePretMail:(id,date)=>API.post(`/prets/${id}/signe-mail`,{date}),
+  signePretMail:(id,date,pdf)=>API.post(`/prets/${id}/signe-mail`,{date,...(pdf?{pdf_data:pdf}:{})}),
   fusionnerClients:(idCible,idSource,vfIgnore)=>API.post(`/clients/${idCible}/fusionner`,{client_source_id:idSource,vf_ignore_source:vfIgnore}),
   adressesIncompletes:()=>API.get('/clients/adresses-incompletes'),
   reseauParNom:(nom)=>API.get('/clients/reseau-par-nom?nom='+encodeURIComponent(nom||'')),

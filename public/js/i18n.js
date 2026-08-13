@@ -1644,7 +1644,10 @@ const EN_STR = {
  "Offre de prêt signée par mail": "Loan offer signed by email",
  "Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.": "The distributor returned the signed form by email. Enter the signature date.",
  "Date de signature": "Signature date",
- "Date requise": "Date required"
+ "Date requise": "Date required",
+ "PDF signé (preuve) — optionnel": "Signed PDF (proof) — optional",
+ "Joignez le PDF signé et scanné renvoyé par le distributeur.": "Attach the signed, scanned PDF returned by the distributor.",
+ "Le fichier doit être un PDF": "The file must be a PDF"
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;

@@ -6030,7 +6030,8 @@ router.get('/prets', requireAuth, async (req, res) => {
       `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
        FROM prets p LEFT JOIN clients c ON c.id = p.client_id
        ORDER BY p.created_at DESC`);
-    res.json(rows);
+    // allège la charge : on n'envoie pas les gros champs (PDF/signature) dans la liste
+    res.json(rows.map(r => { const { pdf_data, signature_data, ...rest } = r; return { ...rest, has_pdf: !!pdf_data }; }));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -6103,15 +6104,31 @@ router.post('/prets/:id/statut', requireAuth, async (req, res) => {
 router.post('/prets/:id/signe-mail', requireAuth, async (req, res) => {
   try {
     const date = (req.body && req.body.date) ? String(req.body.date).slice(0, 10) : null;
+    // PDF signé scanné (optionnel) — stocké comme preuve dans pdf_data
+    const pdf = (req.body && req.body.pdf_data) ? String(req.body.pdf_data) : null;
     const row = await db.run(
       `UPDATE prets SET statut='signe',
          signed_at = COALESCE($1::date::timestamptz, NOW()),
          signataire_nom = COALESCE(NULLIF(signataire_nom, ''), 'Signé par e-mail'),
+         pdf_data = COALESCE($2, pdf_data),
          updated_at = NOW()
-       WHERE id=$2 RETURNING id, statut, signed_at`,
-      [date, req.params.id]);
+       WHERE id=$3 RETURNING id, statut, signed_at`,
+      [date, pdf, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
     res.json({ ok: true, pret: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Téléchargement du PDF signé / preuve stocké (en ligne ou scan uploadé)
+router.get('/prets/:id/pdf', requireAuth, async (req, res) => {
+  try {
+    const p = await db.get('SELECT distributeur_nom, pdf_data FROM prets WHERE id=$1', [req.params.id]);
+    if (!p || !p.pdf_data) return res.status(404).json({ error: 'Aucun PDF pour ce prêt' });
+    const b64 = String(p.pdf_data).replace(/^data:application\/pdf;base64,/, '');
+    const buf = Buffer.from(b64, 'base64');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Bon_de_pret_signe_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf"`);
+    res.send(buf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
