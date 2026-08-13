@@ -141,6 +141,40 @@ async function initDB() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
 
+    // Table des bons de prêt (offres de prêt / essai de fauteuils aux distributeurs)
+    await client.query(`CREATE TABLE IF NOT EXISTS prets (
+      id SERIAL PRIMARY KEY,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      distributeur_nom TEXT,
+      contact TEXT,
+      email TEXT,
+      tel TEXT,
+      adresse TEXT,
+      formule TEXT DEFAULT 'essai_court',
+      designation TEXT,
+      num_serie TEXT,
+      valeur_ht NUMERIC,
+      date_remise DATE,
+      date_retour_prevue DATE,
+      prorogation_date DATE,
+      observations TEXT,
+      statut TEXT DEFAULT 'brouillon',
+      token_signature TEXT UNIQUE,
+      signataire_nom TEXT,
+      signature_data TEXT,
+      signed_at TIMESTAMPTZ,
+      sign_ip TEXT,
+      sign_ua TEXT,
+      pdf_data TEXT,
+      rappel_envoye BOOLEAN DEFAULT FALSE,
+      cree_par INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_prets_client ON prets(client_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_prets_statut ON prets(statut)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_prets_token ON prets(token_signature)`);
+
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (
       id SERIAL PRIMARY KEY,

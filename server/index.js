@@ -69,6 +69,11 @@ app.get('/setup', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'setup.html'));
 });
 
+// ── Page publique de signature d'un bon de prêt (sans auth) ──────────
+app.get('/pret/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'pret.html'));
+});
+
 // ── Routes API ───────────────────────────────────────────────────────
 app.use('/api', require('./routes'));
 

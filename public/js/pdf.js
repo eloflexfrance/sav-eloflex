@@ -146,5 +146,69 @@ const PDF = {
       doc.text(`${fi.length} intervention(s) — ${fi.filter(i=>i.garantie).length} garantie`, 17, y); y += 9;
     });
     doc.save(`client_${(cl.nom||'client').replace(/[^a-zA-Z0-9]/g,'_')}.pdf`);
-  }
+  },
+
+  pretDoc(p) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const L = 15, R = 195, W = R - L;
+    const FORM = { essai_court:'Essai court (15 à 30 jours)', long_terme:'Prêt long terme (≥ 3 mois, renouvelable)' };
+    let y = 18;
+    doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(31,92,140);
+    doc.text('BON DE PRÊT — FAUTEUIL ROULANT ÉLECTRIQUE', 105, y, { align:'center' }); y += 5;
+    doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(110,110,110);
+    doc.text('ELOFLEX SAS — Offre de prêt / essai (non valable sur les accessoires)', 105, y, { align:'center' });
+    doc.setDrawColor(31,92,140); doc.setLineWidth(0.5); y += 3; doc.line(L, y, R, y); y += 8;
+    doc.setTextColor(0,0,0);
+    const band = (txt) => { doc.setFillColor(31,92,140); doc.rect(L, y-4, W, 6, 'F'); doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.text(txt, L+2, y); doc.setTextColor(0,0,0); y += 7; };
+    const line2 = (label, val) => { doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text(label, L, y); doc.setFont('helvetica','normal'); doc.text(String(val||'—'), L+52, y); y += 5.5; };
+
+    band('1 · PARTIES');
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.text('Prêteur : ', L, y); doc.setFont('helvetica','normal'); doc.text('ELOFLEX SAS', L+22, y); y += 5.5;
+    line2('Distributeur', p.distributeur_nom || p.client_nom_actuel || '—');
+    line2('Adresse', p.adresse || '—');
+    line2('Contact', [p.contact, p.tel, p.email].filter(Boolean).join(' — ') || '—');
+    y += 2;
+
+    band('2 · FORMULE & DURÉE');
+    line2('Formule', FORM[p.formule] || p.formule || '—');
+    line2('Date de remise', this.fd((p.date_remise||'').slice(0,10)));
+    line2('Retour prévu', this.fd((p.date_retour_prevue||'').slice(0,10)));
+    if (p.prorogation_date) line2('Prorogation', this.fd((p.prorogation_date||'').slice(0,10)));
+    y += 2;
+
+    band('3 · MATÉRIEL PRÊTÉ');
+    line2('Désignation', p.designation || '—');
+    line2('N° de série', p.num_serie || '—');
+    line2('Valeur cat. HT', p.valeur_ht != null ? (p.valeur_ht + ' € HT') : '—');
+    if (p.observations) { doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(90,90,90);
+      doc.text(doc.splitTextToSize('Observations : ' + p.observations, W), L, y); y += 5 + Math.min(20, doc.splitTextToSize(p.observations, W).length*4); doc.setTextColor(0,0,0); }
+    y += 2;
+
+    band("4 · ENGAGEMENTS DE L'EMPRUNTEUR");
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(60,60,60);
+    const eng = "Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions : utilisation supervisée par un ergothérapeute, essai patient 7 jours maximum, conservation de l'emballage et des mousses, signalement immédiat de tout incident, frais de retour 50 € HT / fauteuil, retour dans le carton d'origine propre et fonctionnel. En cas de perte/destruction : prix catalogue HT moins décote vétusté (5 %/mois, plafond 30 %). Dommages : frais réels sur devis ELOFLEX.";
+    doc.text(doc.splitTextToSize(eng, W), L, y); y += doc.splitTextToSize(eng, W).length*3.6 + 4;
+    doc.setTextColor(0,0,0);
+
+    band('5 · SIGNATURES');
+    const colW = W/2 - 3;
+    const yTop = y;
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.text('ELOFLEX', L, y+4);
+    doc.setFont('helvetica','normal'); doc.text('Nom : ' + ( (window.CURRENT_USER && window.CURRENT_USER.nom) || ''), L, y+10);
+    doc.setFont('helvetica','bold'); doc.text('Distributeur', L+colW+6, y+4);
+    doc.setFont('helvetica','normal');
+    if (p.signataire_nom) {
+      doc.text('Signé par : ' + p.signataire_nom, L+colW+6, y+10);
+      if (p.signed_at) doc.text('le ' + this.fd((''+p.signed_at).slice(0,10)), L+colW+6, y+15);
+      if (p.signature_data) { try { doc.addImage(p.signature_data, 'PNG', L+colW+6, y+17, 55, 20); } catch(e){} }
+    } else {
+      doc.text('Nom : ______________________', L+colW+6, y+10);
+      doc.setFontSize(7); doc.setTextColor(120,120,120);
+      doc.text('« Lu et approuvé, bon pour accord »', L+colW+6, y+15); doc.setTextColor(0,0,0); doc.setFontSize(9);
+    }
+    doc.setDrawColor(200,200,200); doc.rect(L, yTop, colW, 40); doc.rect(L+colW+6, yTop, colW, 40);
+    return doc;
+  },
+  pret(p) { this.pretDoc(p).save(`Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^a-zA-Z0-9]/g,'_')}.pdf`); }
 };

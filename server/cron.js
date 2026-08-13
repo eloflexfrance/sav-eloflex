@@ -96,10 +96,57 @@ async function runDailyChecks() {
     }
     if (demosDues.length) await envoyerEmailDemos(demosDues);
 
-    if (enAttente.length + expSansRetour.length + expirent.length + demosDues.length > 0)
-      console.log(`[CRON] ${new Date().toISOString()} — ${enAttente.length} relance(s), ${expSansRetour.length} retour(s) manquant(s), ${expirent.length} garantie(s), ${demosDues.length} démo(s)`);
+    // 6. Bons de prêt : relance automatique 3 semaines (21 j) après la date de remise
+    let pretsDus = [];
+    try {
+      pretsDus = await db.all(
+        `SELECT p.id, p.distributeur_nom, p.email, p.designation, p.num_serie, p.date_remise,
+                p.date_retour_prevue, c.nom AS client_nom, c.email AS client_email
+         FROM prets p LEFT JOIN clients c ON c.id=p.client_id
+         WHERE p.date_remise IS NOT NULL AND p.rappel_envoye = FALSE
+           AND p.statut IN ('envoye','signe','en_cours','prolonge','retard')
+           AND p.date_remise + INTERVAL '21 days' <= NOW()`
+      );
+      for (const p of pretsDus) {
+        await addAlerte('pret_rappel', p.id,
+          `📄 Prêt à relancer : ${p.client_nom || p.distributeur_nom} — ${p.designation || ''} ${p.num_serie || ''} (remis le ${p.date_remise}). 3 semaines écoulées : relancer le distributeur.`);
+        await db.run("UPDATE prets SET rappel_envoye=TRUE, statut=CASE WHEN statut='signe' THEN 'en_cours' ELSE statut END, updated_at=NOW() WHERE id=$1", [p.id]);
+      }
+      if (pretsDus.length) await envoyerEmailPretsRappel(pretsDus);
+    } catch (e) { console.error('[CRON] prêts :', e.message); }
+
+    if (enAttente.length + expSansRetour.length + expirent.length + demosDues.length + pretsDus.length > 0)
+      console.log(`[CRON] ${new Date().toISOString()} — ${enAttente.length} relance(s), ${expSansRetour.length} retour(s) manquant(s), ${expirent.length} garantie(s), ${demosDues.length} démo(s), ${pretsDus.length} prêt(s)`);
 
   } catch(e) { console.error('[CRON] Erreur :', e.message); }
+}
+
+// Email de relance des bons de prêt (au distributeur + copie interne)
+async function envoyerEmailPretsRappel(prets) {
+  try {
+    const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
+    if (p.email_notifications !== '1') return;
+    if (!p.email_smtp_host || !p.email_smtp_user || !p.email_smtp_pass) return;
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: p.email_smtp_host, port: parseInt(p.email_smtp_port) || 587, secure: parseInt(p.email_smtp_port) === 465,
+      auth: { user: p.email_smtp_user, pass: p.email_smtp_pass }
+    });
+    for (const pr of prets) {
+      const dest = pr.email || pr.client_email;
+      if (!dest) continue;
+      await transporter.sendMail({
+        from: p.email_from || p.email_smtp_user, to: dest, cc: p.email_cc_sav || 'sav@eloflex.fr',
+        subject: `Eloflex — Suivi de votre prêt de fauteuil (${pr.designation || ''} ${pr.num_serie || ''})`,
+        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
+          <p>Bonjour,</p>
+          <p>Votre prêt du fauteuil <b>${pr.designation || ''} ${pr.num_serie || ''}</b> (remis le ${pr.date_remise}) arrive à 3 semaines.</p>
+          <p>Pourriez-vous nous indiquer où en est l'essai${pr.date_retour_prevue ? ` (retour prévu le ${pr.date_retour_prevue})` : ''} : retour à organiser, prolongation souhaitée, ou rachat ?</p>
+          <p style="font-size:12px;color:#888">Eloflex France</p></div>`
+      });
+    }
+    console.log(`[CRON] Email relance prêts envoyé (${prets.length})`);
+  } catch (e) { console.error('[CRON] Email prêts err:', e.message); }
 }
 
 // Email de rappel des démos à suivre (si notifications email activées)

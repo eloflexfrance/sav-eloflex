@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bon de prêt Eloflex — signature</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="/js/pdf.js"></script>
+<style>
+  body{font-family:Calibri,Arial,Helvetica,sans-serif;background:#eef2f6;color:#222;margin:0;padding:20px}
+  .wrap{max-width:820px;margin:0 auto}
+  .card{background:#fff;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:20px;margin-bottom:16px}
+  h1{color:#1F5C8C;font-size:20px;margin:0 0 4px}
+  .sub{color:#666;font-style:italic;font-size:13px;margin:0 0 12px;border-bottom:2px solid #1F5C8C;padding-bottom:8px}
+  label{display:block;font-weight:600;font-size:13px;margin:10px 0 4px}
+  input[type=text]{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #ccd3da;border-radius:7px;font-size:14px}
+  .chk{display:flex;align-items:flex-start;gap:8px;font-weight:400;font-size:13px;margin:12px 0}
+  canvas{border:1px dashed #9fb3c6;border-radius:8px;background:#fbfdff;touch-action:none;width:100%;max-width:420px;height:150px;display:block}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  button{border:none;border-radius:7px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
+  .primary{background:#1F5C8C;color:#fff}.ghost{background:#eef2f6;color:#334}
+  .primary:disabled{opacity:.5;cursor:not-allowed}
+  .msg{padding:12px 14px;border-radius:8px;font-size:14px;margin-top:12px}
+  .ok{background:#e7f6ec;color:#1a7a3a}.err{background:#fdecec;color:#b42318}
+  .muted{color:#888;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="doc"><p class="muted">Chargement du bon de prêt…</p></div>
+
+  <div class="card" id="signcard" style="display:none">
+    <h1>Signature du bon de prêt</h1>
+    <div class="sub">Merci de relire le document ci-dessus, puis de le signer.</div>
+    <label for="signame">Nom du signataire</label>
+    <input type="text" id="signame" placeholder="Prénom et nom">
+    <label>Signature (tracez ci-dessous)</label>
+    <canvas id="pad" width="420" height="150"></canvas>
+    <div class="btns" style="margin-top:8px"><button class="ghost" type="button" onclick="clearPad()">Effacer la signature</button></div>
+    <div class="chk"><input type="checkbox" id="accept"><label for="accept" style="margin:0;font-weight:400">J'ai lu et j'approuve le contenu du bon de prêt — « Lu et approuvé, bon pour accord ».</label></div>
+    <div class="btns"><button class="primary" id="btnSign" onclick="signer()" disabled>Signer le bon de prêt</button></div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="card" id="done" style="display:none">
+    <div class="msg ok">✔ Merci, votre signature a bien été enregistrée. Une copie du bon signé a été envoyée par e-mail. Vous pouvez fermer cette page.</div>
+    <div class="btns"><button class="ghost" type="button" onclick="telechargerPDF()">Télécharger le PDF signé</button></div>
+  </div>
+</div>
+
+<script>
+var TOKEN = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+var PRET = null;
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function fd(d){ if(!d) return '___ / ___ / ______'; var v=(''+d).slice(0,10).split('-'); return v.length===3? v[2]+' / '+v[1]+' / '+v[0] : d; }
+var FORM={essai_court:'Essai court (15 à 30 jours)',long_terme:'Prêt long terme (≥ 3 mois, renouvelable)'};
+
+function bonHTML(p){
+  var bx='&#9744;';
+  return '<h1>BON DE PRÊT — FAUTEUIL ROULANT ÉLECTRIQUE</h1>'+
+    '<div class="sub">ELOFLEX SAS — Offre de prêt / essai (non valable sur les accessoires)</div>'+
+    '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px"><tr>'+
+      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top;width:50%"><b style="color:#1F5C8C">PRÊTEUR</b><br><b>ELOFLEX SAS</b></td>'+
+      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top"><b style="color:#1F5C8C">DISTRIBUTEUR EMPRUNTEUR</b><br><b>'+esc(p.distributeur_nom||'—')+'</b><br>'+esc(p.adresse||'')+'<br>'+esc(p.contact||'')+' '+esc(p.tel||'')+'<br>'+esc(p.email||'')+'</td>'+
+    '</tr></table>'+
+    '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px"><tr>'+
+      '<td style="border:1px solid #ccc;padding:7px;background:#F2F5F8;font-weight:bold;color:#1F5C8C;width:50%">FORMULE : '+esc(FORM[p.formule]||p.formule||'')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:7px;background:#F2F5F8;font-weight:bold;color:#1F5C8C">DURÉE</td></tr>'+
+    '<tr><td style="border:1px solid #ccc;padding:7px;vertical-align:top">'+(p.formule==='long_terme'?bx+' Prêt Long Terme (≥ 3 mois)':bx+' Essai Court (15 à 30 j)')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top">Date de remise : '+fd(p.date_remise)+'<br>Retour prévu : '+fd(p.date_retour_prevue)+'</td></tr></table>'+
+    '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px"><tr>'+
+      '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">Désignation / Modèle</td>'+
+      '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">N° de série</td>'+
+      '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">Valeur cat. HT</td></tr>'+
+    '<tr><td style="border:1px solid #ccc;padding:7px">'+esc(p.designation||'')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:7px">'+esc(p.num_serie||'')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:7px">'+(p.valeur_ht!=null?esc(p.valeur_ht)+' € HT':'')+'</td></tr></table>'+
+    (p.observations?'<p style="font-style:italic;color:#555;font-size:12px">Observations : '+esc(p.observations)+'</p>':'')+
+    '<div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:13px;padding:5px 9px">ENGAGEMENTS DE L\'EMPRUNTEUR</div>'+
+    '<p style="font-size:12px;color:#444;margin:8px 0 0">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions : utilisation supervisée, essai patient 7 jours maximum, conservation de l\'emballage, signalement immédiat de tout incident, frais de retour 50 € HT / fauteuil, retour dans le carton d\'origine. En cas de perte/destruction : prix catalogue HT moins décote vétusté (5 %/mois, plafond 30 %). Dommages : frais réels sur devis ELOFLEX.</p>';
+}
+
+fetch('/api/pret-public/'+encodeURIComponent(TOKEN)).then(function(r){
+  if(!r.ok) return r.json().then(function(j){ throw new Error(j.error||'Lien invalide'); });
+  return r.json();
+}).then(function(p){
+  PRET=p;
+  document.getElementById('doc').innerHTML = bonHTML(p);
+  if(p.signed_at){
+    document.getElementById('signcard').style.display='none';
+    var d=document.getElementById('done'); d.style.display='block';
+    d.querySelector('.msg').textContent='Ce bon de prêt a déjà été signé'+(p.signataire_nom?(' par '+p.signataire_nom):'')+'.';
+  } else {
+    document.getElementById('signcard').style.display='block';
+    initPad();
+  }
+}).catch(function(e){
+  document.getElementById('doc').innerHTML = '<div class="msg err">'+esc(e.message)+'</div>';
+});
+
+// ── Canvas signature ──
+var pad, ctx, drawing=false, hasSig=false;
+function initPad(){
+  pad=document.getElementById('pad'); ctx=pad.getContext('2d');
+  ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.strokeStyle='#12395c';
+  function pos(e){ var r=pad.getBoundingClientRect(); var t=e.touches?e.touches[0]:e; return {x:(t.clientX-r.left)*(pad.width/r.width), y:(t.clientY-r.top)*(pad.height/r.height)}; }
+  function start(e){ drawing=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
+  function move(e){ if(!drawing)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasSig=true; refresh(); e.preventDefault(); }
+  function end(){ drawing=false; }
+  pad.addEventListener('mousedown',start); pad.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
+  pad.addEventListener('touchstart',start,{passive:false}); pad.addEventListener('touchmove',move,{passive:false}); pad.addEventListener('touchend',end);
+  document.getElementById('accept').addEventListener('change',refresh);
+  document.getElementById('signame').addEventListener('input',refresh);
+}
+function clearPad(){ if(ctx){ctx.clearRect(0,0,pad.width,pad.height);} hasSig=false; refresh(); }
+function refresh(){
+  var ok = hasSig && document.getElementById('accept').checked && document.getElementById('signame').value.trim().length>1;
+  document.getElementById('btnSign').disabled = !ok;
+}
+var SIGNED_PDF=null;
+function signer(){
+  var name=document.getElementById('signame').value.trim();
+  var sig=pad.toDataURL('image/png');
+  var p=Object.assign({}, PRET, {signataire_nom:name, signature_data:sig, signed_at:new Date().toISOString().slice(0,10)});
+  var pdfData=null;
+  try{ if(window.PDF&&PDF.pretDoc){ pdfData=PDF.pretDoc(p).output('datauristring'); SIGNED_PDF=pdfData; } }catch(e){}
+  var btn=document.getElementById('btnSign'); btn.disabled=true; btn.textContent='Envoi…';
+  fetch('/api/pret-public/'+encodeURIComponent(TOKEN)+'/signer',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({signataire_nom:name, signature_data:sig, pdf_data:pdfData})
+  }).then(function(r){ if(!r.ok) return r.json().then(function(j){throw new Error(j.error||'Erreur');}); return r.json(); })
+    .then(function(){ document.getElementById('signcard').style.display='none'; document.getElementById('done').style.display='block'; })
+    .catch(function(e){ btn.disabled=false; btn.textContent='Signer le bon de prêt'; document.getElementById('msg').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; });
+}
+function telechargerPDF(){
+  if(SIGNED_PDF){ var a=document.createElement('a'); a.href=SIGNED_PDF; a.download='Bon_de_pret_signe.pdf'; a.click(); }
+  else if(window.PDF&&PDF.pret&&PRET){ PDF.pret(Object.assign({},PRET)); }
+}
+</script>
+</body>
+</html>

@@ -173,6 +173,7 @@ async function render(){
     else if(STATE.view==='parametres')    await renderParametres(ttl,c,a);
     else if(STATE.view==='retours-suede')  await renderRetoursSuede(ttl,c,a);
     else if(STATE.view==='transferts')     await renderTransferts(ttl,c,a);
+    else if(STATE.view==='prets')          await renderPrets(ttl,c,a);
   }catch(e){c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`;}
 }
 
@@ -527,6 +528,7 @@ async function renderClient(ttl,c,a){
     <button class="btn sm success" onclick="exportClientPDF(${cl.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
     <button class="btn sm" onclick="modalPortail(${cl.id},'${cl.token_portail||''}')"><i class="ti ti-link"></i>Portail</button>
     <button class="btn sm" onclick="modalNewFauteuil(${cl.id})"><i class="ti ti-plus"></i>${TR('Fauteuil')}</button>
+    <button class="btn sm" onclick="modalPret(null,${cl.id})"><i class="ti ti-file-certificate"></i>${TR('Bon de prêt')}</button>
     <button class="btn sm primary" onclick="modalNewIntervention(null,${cl.id})"><i class="ti ti-plus"></i>Intervention</button>`;
   const s=cl.stats||{};
   c.innerHTML=`
@@ -6898,3 +6900,220 @@ function _delNote(cmdId, noteId) {
 }
 window._delNote = _delNote;
 
+
+// ══════════════════════════════════════════════════════════════════
+// MODULE PRÊTS — bons de prêt / essai de fauteuils aux distributeurs
+// ══════════════════════════════════════════════════════════════════
+const PRET_STATUTS_UI = {
+  brouillon:{l:'Brouillon',c:'#6b7280'}, envoye:{l:'Envoyé',c:'#2563eb'}, signe:{l:'Signé',c:'#16a34a'},
+  en_cours:{l:'En cours',c:'#0d9488'}, retard:{l:'En retard',c:'#dc2626'}, prolonge:{l:'Prolongé',c:'#d97706'},
+  cloture:{l:'Clôturé',c:'#374151'}, rachete:{l:'Racheté',c:'#7c3aed'}
+};
+const PRET_FORMULES = { essai_court:'Essai court (15–30 j)', long_terme:'Prêt long terme (≥ 3 mois)' };
+function pretBadge(s){ const u=PRET_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c}">${u.l}</span>`; }
+
+async function renderPrets(ttl,c,a){
+  ttl.textContent = TR('Prêts') || 'Prêts';
+  a.innerHTML = `<button class="btn sm primary" onclick="modalPret()"><i class="ti ti-plus"></i>${TR('Nouveau bon de prêt')}</button>`;
+  let rows=[]; try{ rows = await API.prets(); }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
+  if(!rows.length){ c.innerHTML=`<div class="empty"><i class="ti ti-file-certificate"></i>${TR('Aucun bon de prêt pour le moment.')}<br><span style="font-size:12px;color:var(--text3)">${TR('Créez-en un depuis une fiche distributeur ou avec « Nouveau bon de prêt ».')}</span></div>`; return; }
+  const lignes = rows.map(p=>{
+    const nom = esc(p.client_nom_actuel || p.distributeur_nom || '—');
+    const mat = esc([p.designation, p.num_serie].filter(Boolean).join(' · ')||'—');
+    const sign = p.signed_at ? `<span title="Signé le ${fd((p.signed_at||'').slice(0,10))}" style="color:#16a34a"><i class="ti ti-writing-sign"></i></span>` : '';
+    return `<tr>
+      <td>${nom}</td>
+      <td>${mat}</td>
+      <td style="font-size:12px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
+      <td>${fd(p.date_remise)}</td>
+      <td>${fd(p.date_retour_prevue)}</td>
+      <td>${pretBadge(p.statut)} ${sign}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
+        <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
+        <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
+        <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
+        <button class="btn sm" title="Statut" onclick="menuPretStatut(${p.id})"><i class="ti ti-adjustments"></i></button>
+        <button class="btn sm danger" title="Supprimer" onclick="supprPret(${p.id})"><i class="ti ti-trash"></i></button>
+      </td></tr>`;
+  }).join('');
+  c.innerHTML = `<div class="card" style="padding:0;overflow:auto">
+    <table class="table"><thead><tr>
+      <th>${TR('Distributeur')}</th><th>${TR('Matériel')}</th><th>${TR('Formule')}</th>
+      <th>${TR('Remise')}</th><th>${TR('Retour prévu')}</th><th>${TR('Statut')}</th><th></th>
+    </tr></thead><tbody>${lignes}</tbody></table></div>`;
+}
+window.renderPrets = renderPrets;
+
+async function modalPret(id, prefillClientId){
+  await ensureClientsCache();
+  let p = { formule:'essai_court', statut:'brouillon' };
+  if(id){ try{ p = await API.pret(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; } }
+  else if(prefillClientId){
+    try{ const cl = await API.client(prefillClientId);
+      p.client_id = cl.id; p.distributeur_nom = cl.nom; p.contact = cl.contact||''; p.email = cl.email||'';
+      p.tel = cl.tel||cl.portable||''; p.adresse = [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(' ');
+    }catch(e){}
+  }
+  const opts = (window._clientsCache||[]).map(c=>`<option value="${c.id}" ${String(p.client_id)===String(c.id)?'selected':''}>${esc(c.nom)}</option>`).join('');
+  const today = new Date().toISOString().slice(0,10);
+  showModal(`
+    <div class="modal-header"><i class="ti ti-file-certificate" style="color:var(--accent)"></i><h2>${id?TR('Modifier le bon de prêt'):TR('Nouveau bon de prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="pret-id" value="${id||''}">
+      <div class="form-group"><label class="form-label">${TR('Distributeur emprunteur')}</label>
+        <select class="form-input" id="pret-client" onchange="pretRemplirClient()"><option value="">— ${TR('Choisir')} —</option>${opts}</select></div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">${TR('Contact')}</label><input class="form-input" id="pret-contact" value="${esc(p.contact||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Email')}</label><input class="form-input" id="pret-email" type="email" value="${esc(p.email||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="pret-tel" value="${esc(p.tel||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Formule')}</label>
+          <select class="form-input" id="pret-formule">
+            <option value="essai_court" ${p.formule!=='long_terme'?'selected':''}>${PRET_FORMULES.essai_court}</option>
+            <option value="long_terme" ${p.formule==='long_terme'?'selected':''}>${PRET_FORMULES.long_terme}</option>
+          </select></div>
+      </div>
+      <div class="form-group"><label class="form-label">${TR('Adresse de livraison')}</label><input class="form-input" id="pret-adresse" value="${esc(p.adresse||'')}"></div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">${TR('Désignation / Modèle')}</label><input class="form-input" id="pret-designation" value="${esc(p.designation||'')}" placeholder="Eloflex …"></div>
+        <div class="form-group"><label class="form-label">${TR('N° de série')}</label><input class="form-input mono" id="pret-serie" value="${esc(p.num_serie||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Valeur catalogue HT (€)')}</label><input class="form-input" id="pret-valeur" type="number" step="0.01" value="${p.valeur_ht!=null?p.valeur_ht:''}"></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">${TR('Date de remise')}</label><input class="form-input" id="pret-remise" type="date" value="${(p.date_remise||'').slice(0,10)||today}"></div>
+        <div class="form-group"><label class="form-label">${TR('Date de retour prévue')}</label><input class="form-input" id="pret-retour" type="date" value="${(p.date_retour_prevue||'').slice(0,10)}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">${TR('Observations sur l\'état initial')}</label><textarea class="form-input" id="pret-obs" rows="2">${esc(p.observations||'')}</textarea></div>
+      <p style="font-size:11px;color:var(--text3);margin:0">${TR('Le rappel automatique de relance est envoyé 3 semaines après la date de remise.')}</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
+      <button class="btn primary" onclick="savePret()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
+    </div>`);
+}
+window.modalPret = modalPret;
+
+function pretRemplirClient(){
+  const id = gv('pret-client'); if(!id) return;
+  API.client(id).then(cl=>{
+    if(!gv('pret-contact')) $('pret-contact').value = cl.contact||'';
+    if(!gv('pret-email'))   $('pret-email').value   = cl.email||'';
+    if(!gv('pret-tel'))     $('pret-tel').value     = cl.tel||cl.portable||'';
+    if(!gv('pret-adresse')) $('pret-adresse').value = [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(' ');
+  }).catch(()=>{});
+}
+window.pretRemplirClient = pretRemplirClient;
+
+async function savePret(){
+  const cid = gv('pret-client');
+  const nom = cid ? ((window._clientsCache||[]).find(c=>String(c.id)===String(cid))||{}).nom : '';
+  const data = {
+    client_id: cid||null, distributeur_nom: nom||null,
+    contact: gv('pret-contact')||null, email: gv('pret-email')||null, tel: gv('pret-tel')||null,
+    adresse: gv('pret-adresse')||null, formule: gv('pret-formule')||'essai_court',
+    designation: gv('pret-designation')||null, num_serie: gv('pret-serie')||null,
+    valeur_ht: gv('pret-valeur')||null,
+    date_remise: gv('pret-remise')||null, date_retour_prevue: gv('pret-retour')||null,
+    observations: gv('pret-obs')||null
+  };
+  const id = gv('pret-id');
+  try{
+    if(id){ await API.updatePret(id, data); } else { await API.createPret(data); }
+    closeModal(); toast(TR('Bon de prêt enregistré'),'ti-check','var(--success)');
+    if(STATE.view==='prets') render();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.savePret = savePret;
+
+function menuPretStatut(id){
+  showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut du prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:7px">
+      <button class="btn" onclick="pretStatut(${id},'en_cours')">${PRET_STATUTS_UI.en_cours.l}</button>
+      <button class="btn" onclick="pretStatut(${id},'prolonge')">${PRET_STATUTS_UI.prolonge.l} (${TR('choisir une date')})</button>
+      <button class="btn success" onclick="pretStatut(${id},'cloture')">${PRET_STATUTS_UI.cloture.l} — ${TR('retour effectué')}</button>
+      <button class="btn" onclick="pretStatut(${id},'rachete')">${PRET_STATUTS_UI.rachete.l}</button>
+      <button class="btn danger" onclick="pretStatut(${id},'retard')">${PRET_STATUTS_UI.retard.l}</button>
+    </div>`);
+}
+window.menuPretStatut = menuPretStatut;
+
+async function pretStatut(id, statut){
+  let extra=null;
+  if(statut==='prolonge'){ const d = prompt(TR('Prorogation accordée jusqu\'au (AAAA-MM-JJ) :')); if(!d) return; extra={prorogation_date:d}; }
+  try{ await API.setPretStatut(id, statut, extra); closeModal(); toast(TR('Statut mis à jour'),'ti-check','var(--success)');
+    if(STATE.view==='prets') render();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.pretStatut = pretStatut;
+
+async function envoyerPretLien(id){
+  let p; try{ p = await API.pret(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const dest = p.email || p.client_email_actuel || '';
+  const email = prompt(TR('Envoyer le lien de signature à :'), dest);
+  if(!email) return;
+  try{ const r = await API.envoyerPret(id, email); toast(TR('Lien de signature envoyé à ')+r.to,'ti-mail','var(--success)');
+    if(STATE.view==='prets') render();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.envoyerPretLien = envoyerPretLien;
+
+async function supprPret(id){
+  if(!confirm(TR('Supprimer ce bon de prêt ?'))) return;
+  try{ await API.deletePret(id); toast(TR('Supprimé'),'ti-trash');
+    if(STATE.view==='prets') render();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.supprPret = supprPret;
+
+async function apercuPret(id){
+  let p; try{ p = await API.pret(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  showModal(`<div class="modal-header"><i class="ti ti-file-certificate" style="color:var(--accent)"></i><h2>${TR('Aperçu du bon de prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="max-height:70vh;overflow:auto;background:#fff">${pretBonHTML(p)}</div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Fermer')}</button><button class="btn primary" onclick="exportPretPDF(${id})"><i class="ti ti-file-type-pdf"></i>PDF</button></div>`);
+}
+window.apercuPret = apercuPret;
+
+async function exportPretPDF(id){
+  let p; try{ p = await API.pret(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  if(window.PDF && PDF.pret){ PDF.pret(p); } else { toast('Générateur PDF indisponible','ti-alert-circle','var(--danger)'); }
+}
+window.exportPretPDF = exportPretPDF;
+
+// Gabarit HTML du bon (aperçu) — repris du modèle Eloflex
+function pretBonHTML(p){
+  const bx='&#9744;'; const fdi=d=>d?fd((''+d).slice(0,10)):'___ / ___ / ______';
+  const formuleTxt = PRET_FORMULES[p.formule]||p.formule||'';
+  return `<div style="font-family:Calibri,Arial,sans-serif;color:#222;font-size:12px;line-height:1.45;max-width:760px;margin:0 auto">
+    <div style="text-align:center;color:#1F5C8C;font-size:18px;font-weight:bold;margin:0 0 3px">BON DE PRÊT — FAUTEUIL ROULANT ÉLECTRIQUE</div>
+    <div style="text-align:center;font-style:italic;color:#666;font-size:12px;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid #1F5C8C">ELOFLEX SAS — Offre de prêt / essai (non valable sur les accessoires)</div>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top;width:50%"><b style="color:#1F5C8C">PRÊTEUR</b><br><b>ELOFLEX SAS</b><br>Contact SAV : ${esc(CURRENT_USER&&CURRENT_USER.nom||'')}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top;width:50%"><b style="color:#1F5C8C">DISTRIBUTEUR EMPRUNTEUR</b><br><b>${esc(p.distributeur_nom||'—')}</b><br>${esc(p.adresse||'')}<br>${esc(p.contact||'')} ${esc(p.tel||'')}<br>${esc(p.email||'')}</td>
+    </tr></table>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
+      <td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;color:#1F5C8C;font-weight:bold;width:50%">FORMULE : ${esc(formuleTxt)}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;color:#1F5C8C;font-weight:bold;width:50%">DURÉE</td>
+    </tr><tr>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.formule==='long_terme'?bx+' Prêt Long Terme (&ge; 3 mois)':bx+' Essai Court (15 à 30 j)'}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">Date de remise : ${fdi(p.date_remise)}<br>Date de retour prévue : ${fdi(p.date_retour_prevue)}<br>Prorogation jusqu'au : ${fdi(p.prorogation_date)}</td>
+    </tr></table>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
+      <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Désignation / Modèle</td>
+      <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">N° de série</td>
+      <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Valeur catalogue HT</td>
+    </tr><tr>
+      <td style="border:1px solid #CCC;padding:6px 7px">${esc(p.designation||'')}</td>
+      <td style="border:1px solid #CCC;padding:6px 7px">${esc(p.num_serie||'')}</td>
+      <td style="border:1px solid #CCC;padding:6px 7px">${p.valeur_ht!=null?esc(p.valeur_ht)+' € HT':''}</td>
+    </tr></table>
+    ${p.observations?`<p style="margin:0 0 8px;font-style:italic;color:#555;font-size:11px">Observations sur l'état initial : ${esc(p.observations)}</p>`:''}
+    <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">ENGAGEMENTS DE L'EMPRUNTEUR</div>
+    <p style="font-size:11px;color:#444;margin:6px 0 8px">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions (utilisation supervisée, essai patient 7 j max, conservation de l'emballage, signalement immédiat de tout incident, frais de retour 50 € HT, retour dans le carton d'origine, etc.).</p>
+    <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">SIGNATURES</div>
+    <table style="width:100%;border-collapse:collapse;margin:8px 0 0"><tr>
+      <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>ELOFLEX</b><br>Nom : ${esc(CURRENT_USER&&CURRENT_USER.nom||'')}<br><br>&nbsp;</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>Distributeur</b><br>${p.signataire_nom?('Signé par : '+esc(p.signataire_nom)+(p.signed_at?' le '+fd((''+p.signed_at).slice(0,10)):'')):'Nom : _______________  « Lu et approuvé, bon pour accord »'}<br>${p.signature_data?`<img src="${p.signature_data}" style="max-height:60px;max-width:220px;margin-top:4px">`:'&nbsp;'}</td>
+    </tr></table>
+  </div>`;
+}
+window.pretBonHTML = pretBonHTML;

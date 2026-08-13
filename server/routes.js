@@ -5957,6 +5957,181 @@ router.post('/carte/rattachements', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// BONS DE PRÊT (offres de prêt / essai de fauteuils aux distributeurs)
+// ══════════════════════════════════════════════════════════════════
+const PRET_STATUTS = ['brouillon','envoye','signe','en_cours','retard','prolonge','cloture','rachete'];
+
+// Envoi d'e-mail lié à un prêt (réutilise la config SMTP des paramètres)
+async function envoyerEmailPret({ to, subject, html, attachments }) {
+  const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
+  if (!p.email_smtp_host || !p.email_smtp_user || !p.email_smtp_pass) throw new Error('SMTP non configuré');
+  const nodemailer = require('nodemailer');
+  const transporter = nodemailer.createTransport({
+    host: p.email_smtp_host, port: parseInt(p.email_smtp_port) || 587,
+    secure: parseInt(p.email_smtp_port) === 465,
+    auth: { user: p.email_smtp_user, pass: p.email_smtp_pass }
+  });
+  await transporter.sendMail({
+    from: p.email_from || p.email_smtp_user, to,
+    cc: p.email_cc_sav || 'sav@eloflex.fr',
+    subject, html, attachments: attachments || []
+  });
+}
+
+// Liste des prêts (avec nom distributeur à jour)
+router.get('/prets', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(
+      `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
+       FROM prets p LEFT JOIN clients c ON c.id = p.client_id
+       ORDER BY p.created_at DESC`);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/prets/:id', requireAuth, async (req, res) => {
+  try {
+    const p = await db.get(
+      `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
+       FROM prets p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id=$1`, [req.params.id]);
+    if (!p) return res.status(404).json({ error: 'Prêt introuvable' });
+    res.json(p);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/prets', requireAuth, async (req, res) => {
+  try {
+    const d = req.body || {};
+    const token = crypto.randomBytes(20).toString('hex');
+    const row = await db.run(
+      `INSERT INTO prets (client_id, distributeur_nom, contact, email, tel, adresse, formule,
+        designation, num_serie, valeur_ht, date_remise, date_retour_prevue, prorogation_date,
+        observations, statut, token_signature, cree_par)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, d.tel || null,
+       d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
+       d.valeur_ht || null, d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
+       d.observations || null, d.statut || 'brouillon', token,
+       (req.session.user && req.session.user.id) || null]);
+    res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/prets/:id', requireAuth, async (req, res) => {
+  try {
+    const d = req.body || {};
+    const row = await db.run(
+      `UPDATE prets SET client_id=$1, distributeur_nom=$2, contact=$3, email=$4, tel=$5, adresse=$6,
+        formule=$7, designation=$8, num_serie=$9, valeur_ht=$10, date_remise=$11, date_retour_prevue=$12,
+        prorogation_date=$13, observations=$14, statut=$15, updated_at=NOW() WHERE id=$16 RETURNING *`,
+      [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, d.tel || null,
+       d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
+       d.valeur_ht || null, d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
+       d.observations || null, d.statut || 'brouillon', req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
+    res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Changer uniquement le statut (retour, prolongation, clôture, rachat…)
+router.post('/prets/:id/statut', requireAuth, async (req, res) => {
+  try {
+    const statut = String((req.body && req.body.statut) || '').trim();
+    if (!PRET_STATUTS.includes(statut)) return res.status(400).json({ error: 'Statut invalide' });
+    const extra = (req.body && req.body.prorogation_date) ? req.body.prorogation_date : null;
+    const row = extra
+      ? await db.run('UPDATE prets SET statut=$1, prorogation_date=$2, updated_at=NOW() WHERE id=$3 RETURNING id, statut', [statut, extra, req.params.id])
+      : await db.run('UPDATE prets SET statut=$1, updated_at=NOW() WHERE id=$2 RETURNING id, statut', [statut, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
+    res.json({ ok: true, pret: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/prets/:id', requireAuth, async (req, res) => {
+  try {
+    await db.run('DELETE FROM prets WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Envoyer au distributeur le lien de signature en ligne (statut → envoyé)
+router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
+  try {
+    const p = await db.get('SELECT * FROM prets WHERE id=$1', [req.params.id]);
+    if (!p) return res.status(404).json({ error: 'Prêt introuvable' });
+    const dest = (req.body && req.body.email) || p.email;
+    if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail pour ce distributeur' });
+    const base = process.env.APP_URL || (req.protocol + '://' + req.get('host'));
+    const lien = `${base}/pret/${p.token_signature}`;
+    await envoyerEmailPret({
+      to: dest,
+      subject: `Bon de prêt Eloflex — à signer en ligne`,
+      html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
+        <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Bon de prêt à signer</h2></div>
+        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px">
+          <p>Bonjour,</p>
+          <p>Vous trouverez ci-dessous votre bon de prêt de fauteuil roulant électrique. Merci de le relire et de le <b>signer en ligne</b> :</p>
+          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le bon de prêt</a></p>
+          <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>
+          <p style="font-size:12px;color:#888">Eloflex France</p>
+        </div></div>`
+    });
+    const updated = await db.run("UPDATE prets SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END, updated_at=NOW() WHERE id=$1 RETURNING id, statut", [p.id]);
+    res.json({ ok: true, to: dest, statut: updated.statut });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Public (sans authentification) : consultation + signature du bon ──
+router.get('/pret-public/:token', async (req, res) => {
+  try {
+    const p = await db.get('SELECT * FROM prets WHERE token_signature=$1', [req.params.token]);
+    if (!p) return res.status(404).json({ error: 'Lien invalide ou expiré' });
+    // on n'expose pas les champs sensibles internes
+    res.json({
+      id: p.id, distributeur_nom: p.distributeur_nom, contact: p.contact, email: p.email, tel: p.tel,
+      adresse: p.adresse, formule: p.formule, designation: p.designation, num_serie: p.num_serie,
+      valeur_ht: p.valeur_ht, date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
+      prorogation_date: p.prorogation_date, observations: p.observations, statut: p.statut,
+      signataire_nom: p.signataire_nom, signed_at: p.signed_at
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/pret-public/:token/signer', async (req, res) => {
+  try {
+    const p = await db.get('SELECT * FROM prets WHERE token_signature=$1', [req.params.token]);
+    if (!p) return res.status(404).json({ error: 'Lien invalide ou expiré' });
+    if (p.signed_at) return res.status(409).json({ error: 'Ce bon a déjà été signé.' });
+    const d = req.body || {};
+    if (!d.signataire_nom || !d.signature_data) return res.status(400).json({ error: 'Nom et signature requis' });
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
+    const ua = (req.headers['user-agent'] || '').toString().slice(0, 250);
+    await db.run(
+      `UPDATE prets SET signataire_nom=$1, signature_data=$2, pdf_data=$3, sign_ip=$4, sign_ua=$5,
+        signed_at=NOW(), statut='signe', updated_at=NOW() WHERE id=$6`,
+      [String(d.signataire_nom).slice(0,120), d.signature_data, d.pdf_data || null, ip, ua, p.id]);
+    // e-mail aux deux parties avec le PDF signé en pièce jointe (si fourni)
+    try {
+      const attachments = d.pdf_data
+        ? [{ filename: `Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
+             content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' }]
+        : [];
+      const dest = [p.email, 'sav@eloflex.fr'].filter(Boolean).join(',');
+      await envoyerEmailPret({
+        to: dest,
+        subject: `Bon de prêt Eloflex — signé par ${d.signataire_nom}`,
+        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
+          <p>Le bon de prêt du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> a été signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
+          ${attachments.length ? '<p>Le document signé est joint à cet e-mail (PDF).</p>' : ''}
+          <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
+        attachments
+      });
+    } catch (mailErr) { console.error('[PRET] e-mail signature:', mailErr.message); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
 module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;

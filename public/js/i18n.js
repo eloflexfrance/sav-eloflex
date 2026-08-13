@@ -18,6 +18,7 @@ const TRANSLATIONS = {
     nav_carte: 'Carte',
     nav_discussions: 'Discussions',
     nav_retours_suede: 'Retours Suède',
+    nav_prets: 'Prêts',
     nav_dark: 'Mode sombre',
 
     // Carte distributeurs
@@ -600,6 +601,7 @@ const TRANSLATIONS = {
     nav_carte: 'Map',
     nav_discussions: 'Discussions',
     nav_retours_suede: 'Sweden returns',
+    nav_prets: 'Loans',
     nav_dark: 'Dark mode',
 
     // Distributor map
@@ -1598,7 +1600,35 @@ const EN_STR = {
  "Passer en particulier": "Set as individual",
  "passer en Particulier ? La fiche sera retirée de la carte.": "set as individual? The record will be removed from the map.",
  "Fiche passée en Particulier": "Record set as individual",
- " — passé en Particulier, retiré de la carte.": " — set as individual, removed from the map."
+ " — passé en Particulier, retiré de la carte.": " — set as individual, removed from the map.",
+ "Prêts": "Loans",
+ "Nouveau bon de prêt": "New loan form",
+ "Bon de prêt": "Loan form",
+ "Aucun bon de prêt pour le moment.": "No loan forms yet.",
+ "Créez-en un depuis une fiche distributeur ou avec « Nouveau bon de prêt ».": "Create one from a distributor record or with \"New loan form\".",
+ "Matériel": "Equipment",
+ "Formule": "Type",
+ "Remise": "Handover",
+ "Retour prévu": "Expected return",
+ "Modifier le bon de prêt": "Edit loan form",
+ "Distributeur emprunteur": "Borrowing distributor",
+ "Adresse de livraison": "Delivery address",
+ "Désignation / Modèle": "Description / Model",
+ "Valeur catalogue HT (€)": "Catalogue value excl. VAT (€)",
+ "Date de remise": "Handover date",
+ "Date de retour prévue": "Expected return date",
+ "Observations sur l'état initial": "Notes on initial condition",
+ "Le rappel automatique de relance est envoyé 3 semaines après la date de remise.": "The automatic follow-up reminder is sent 3 weeks after the handover date.",
+ "Bon de prêt enregistré": "Loan form saved",
+ "Statut du prêt": "Loan status",
+ "choisir une date": "choose a date",
+ "retour effectué": "returned",
+ "Prorogation accordée jusqu'au (AAAA-MM-JJ) :": "Extension granted until (YYYY-MM-DD):",
+ "Statut mis à jour": "Status updated",
+ "Envoyer le lien de signature à :": "Send the signing link to:",
+ "Lien de signature envoyé à ": "Signing link sent to ",
+ "Supprimer ce bon de prêt ?": "Delete this loan form?",
+ "Aperçu du bon de prêt": "Loan form preview"
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;
