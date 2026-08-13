@@ -1647,7 +1647,8 @@ const EN_STR = {
  "Date requise": "Date required",
  "PDF signé (preuve) — optionnel": "Signed PDF (proof) — optional",
  "Joignez le PDF signé et scanné renvoyé par le distributeur.": "Attach the signed, scanned PDF returned by the distributor.",
- "Le fichier doit être un PDF": "The file must be a PDF"
+ "Le fichier doit être un PDF": "The file must be a PDF",
+ "N° commande": "Order no."
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;

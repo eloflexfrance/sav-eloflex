@@ -6924,8 +6924,12 @@ async function renderPrets(ttl,c,a){
     const mat = esc(arts.map(a=>a.designation).filter(Boolean).join(', ') || p.designation || '—');
     const serie = esc(arts.map(a=>a.num_serie).filter(Boolean).join(', ') || p.num_serie || '—');
     const sign = p.signed_at ? `<span title="Signé le ${fdate(p.signed_at)}" style="color:#16a34a;margin-left:4px"><i class="ti ti-writing-sign"></i></span>` : '';
+    const bdc = p.bdc_vf ? (p.bdc_vf_id
+      ? `<a href="#" onclick="event.preventDefault();ouvrirDansVF(this.dataset.vfid||null,this.dataset.bdc)" data-vfid="${esc(p.bdc_vf_id)}" data-bdc="${esc(p.bdc_vf)}" style="color:var(--accent)">${esc(p.bdc_vf)}</a>`
+      : esc(p.bdc_vf)) : '—';
     return `<tr>
       <td>${nom}</td>
+      <td class="mono" style="white-space:nowrap">${bdc}</td>
       <td>${mat}</td>
       <td class="mono" style="white-space:nowrap">${serie}</td>
       <td style="font-size:12px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
@@ -6946,7 +6950,7 @@ async function renderPrets(ttl,c,a){
   c.innerHTML = `<style>#prets-tbl th,#prets-tbl td{padding:13px 18px;vertical-align:middle}#prets-tbl tbody tr{border-top:0.5px solid var(--border-s,#e8eaed)}#prets-tbl tbody tr:hover{background:var(--surface-2,rgba(0,0,0,.02))}</style>
     <div class="card" style="padding:0;overflow:auto">
     <table class="table" id="prets-tbl"><thead><tr>
-      <th>${TR('Distributeur')}</th><th>${TR('Matériel')}</th><th>${TR('N° de série')}</th><th>${TR('Formule')}</th>
+      <th>${TR('Distributeur')}</th><th>${TR('N° commande')}</th><th>${TR('Matériel')}</th><th>${TR('N° de série')}</th><th>${TR('Formule')}</th>
       <th>${TR('Remise')}</th><th>${TR('Retour prévu')}</th><th>${TR('Statut')}</th><th></th>
     </tr></thead><tbody>${lignes}</tbody></table></div>`;
 }
