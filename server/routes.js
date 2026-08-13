@@ -3857,11 +3857,13 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
     // Lignes structurées : chaque position = {designation, reference, quantite}
     const lignes = [];
     // Ligne fauteuil en premier si trouvée
+    const prixLigne = (p) => parseFloat(p.total_price_net != null ? p.total_price_net : ((parseFloat(p.price_net || p.price || 0)) * (parseInt(p.quantity) || 1))) || 0;
     if (ligneFauteuil) {
       lignes.push({
         designation: ligneFauteuil.name?.trim() || '',
         reference: ligneFauteuil.product_code || ligneFauteuil.code || null,
         quantite: parseInt(ligneFauteuil.quantity) || 1,
+        prix: prixLigne(ligneFauteuil),
       });
     }
     for (const p of positions) {
@@ -3873,8 +3875,10 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
         designation_en: (p.supplier_code || '').trim() || nom, // Réf. fournisseur pour mode EN
         reference: p.product_code || p.code || null,
         quantite: parseInt(p.quantity) || 1,
+        prix: prixLigne(p),
       });
     }
+    const total_ht = parseFloat(detail.price_net != null ? detail.price_net : lignes.reduce((s, l) => s + (l.prix || 0), 0)) || 0;
 
     const texteComplet = [detail.description || '', ...positions.map(p => [p.name || '', p.description || ''].join(' '))].join(' ');
     const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/gi;
@@ -3889,7 +3893,7 @@ router.get('/vosfactures/bdc-lookup', async (req, res) => {
       numero:        detail.number || inv.number,  // numéro exact tel que dans VosFactures
       date_commande: (detail.issue_date || detail.sell_date || '').slice(0, 10) || null,
       distributeur:  detail.buyer_name || inv.buyer_name || null,
-      modele, quantite, lignes,
+      modele, quantite, lignes, total_ht,
       num_serie: mSerie ? mSerie[0].trim() : null,
       kind: detail.kind || inv.kind,
       modele_demo: modeleDemo,
@@ -6006,12 +6010,13 @@ router.post('/prets', requireAuth, async (req, res) => {
     const token = crypto.randomBytes(20).toString('hex');
     const row = await db.run(
       `INSERT INTO prets (client_id, distributeur_nom, contact, email, tel, adresse, formule,
-        designation, num_serie, valeur_ht, date_remise, date_retour_prevue, prorogation_date,
-        observations, statut, token_signature, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+        designation, num_serie, valeur_ht, bdc_vf, bdc_vf_id, articles, date_remise, date_retour_prevue,
+        prorogation_date, observations, statut, token_signature, cree_par)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
       [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, d.tel || null,
        d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
-       d.valeur_ht || null, d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
+       d.valeur_ht || null, d.bdc_vf || null, d.bdc_vf_id || null, d.articles ? JSON.stringify(d.articles) : null,
+       d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
        d.observations || null, d.statut || 'brouillon', token,
        (req.session.user && req.session.user.id) || null]);
     res.json(row);
@@ -6023,11 +6028,13 @@ router.put('/prets/:id', requireAuth, async (req, res) => {
     const d = req.body || {};
     const row = await db.run(
       `UPDATE prets SET client_id=$1, distributeur_nom=$2, contact=$3, email=$4, tel=$5, adresse=$6,
-        formule=$7, designation=$8, num_serie=$9, valeur_ht=$10, date_remise=$11, date_retour_prevue=$12,
-        prorogation_date=$13, observations=$14, statut=$15, updated_at=NOW() WHERE id=$16 RETURNING *`,
+        formule=$7, designation=$8, num_serie=$9, valeur_ht=$10, bdc_vf=$11, bdc_vf_id=$12, articles=$13,
+        date_remise=$14, date_retour_prevue=$15, prorogation_date=$16, observations=$17, statut=$18,
+        updated_at=NOW() WHERE id=$19 RETURNING *`,
       [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, d.tel || null,
        d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
-       d.valeur_ht || null, d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
+       d.valeur_ht || null, d.bdc_vf || null, d.bdc_vf_id || null, d.articles ? JSON.stringify(d.articles) : null,
+       d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
        d.observations || null, d.statut || 'brouillon', req.params.id]);
     if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
     res.json(row);
@@ -6091,7 +6098,7 @@ router.get('/pret-public/:token', async (req, res) => {
     res.json({
       id: p.id, distributeur_nom: p.distributeur_nom, contact: p.contact, email: p.email, tel: p.tel,
       adresse: p.adresse, formule: p.formule, designation: p.designation, num_serie: p.num_serie,
-      valeur_ht: p.valeur_ht, date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
+      valeur_ht: p.valeur_ht, articles: p.articles, date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
       prorogation_date: p.prorogation_date, observations: p.observations, statut: p.statut,
       signataire_nom: p.signataire_nom, signed_at: p.signed_at
     });

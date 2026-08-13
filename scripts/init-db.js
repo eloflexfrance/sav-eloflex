@@ -154,6 +154,9 @@ async function initDB() {
       designation TEXT,
       num_serie TEXT,
       valeur_ht NUMERIC,
+      bdc_vf TEXT,
+      bdc_vf_id TEXT,
+      articles JSONB,
       date_remise DATE,
       date_retour_prevue DATE,
       prorogation_date DATE,
@@ -174,6 +177,10 @@ async function initDB() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_prets_client ON prets(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_prets_statut ON prets(statut)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_prets_token ON prets(token_signature)`);
+    // Colonnes ajoutées après coup (numéro BDC VosFactures + lignes articles)
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS bdc_vf TEXT`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS bdc_vf_id TEXT`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS articles JSONB`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (

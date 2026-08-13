@@ -1628,7 +1628,15 @@ const EN_STR = {
  "Envoyer le lien de signature à :": "Send the signing link to:",
  "Lien de signature envoyé à ": "Signing link sent to ",
  "Supprimer ce bon de prêt ?": "Delete this loan form?",
- "Aperçu du bon de prêt": "Loan form preview"
+ "Aperçu du bon de prêt": "Loan form preview",
+ "N° de commande VosFactures": "VosFactures order no.",
+ "Importer": "Import",
+ "Matériel prêté": "Loaned equipment",
+ "Prix HT (€)": "Price excl. VAT (€)",
+ "Total HT": "Total excl. VAT",
+ "Taper le nom du distributeur…": "Type the distributor name…",
+ "ligne(s) importée(s)": "line(s) imported",
+ "total": "total"
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;

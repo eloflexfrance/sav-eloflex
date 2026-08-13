@@ -178,9 +178,21 @@ const PDF = {
     y += 2;
 
     band('3 · MATÉRIEL PRÊTÉ');
-    line2('Désignation', p.designation || '—');
-    line2('N° de série', p.num_serie || '—');
-    line2('Valeur cat. HT', p.valeur_ht != null ? (p.valeur_ht + ' € HT') : '—');
+    let arts = p.articles;
+    if (typeof arts === 'string') { try { arts = JSON.parse(arts); } catch(e){ arts = null; } }
+    if (!Array.isArray(arts) || !arts.length) arts = (p.designation||p.num_serie||p.valeur_ht!=null) ? [{designation:p.designation||'', reference:'', num_serie:p.num_serie||'', prix:p.valeur_ht}] : [];
+    doc.setFontSize(8); doc.setFont('helvetica','bold');
+    doc.text('Désignation', L, y); doc.text('Réf.', L+95, y); doc.text('N° série', L+120, y); doc.text('Prix HT', L+160, y); y += 4.5;
+    doc.setFont('helvetica','normal'); let totArt = 0;
+    arts.forEach(a => {
+      const prix = parseFloat(a.prix)||0; totArt += prix;
+      doc.text(doc.splitTextToSize(String(a.designation||''), 78)[0] || '', L, y);
+      doc.text(String(a.reference||''), L+95, y);
+      doc.text(String(a.num_serie||''), L+120, y);
+      doc.text(a.prix!=null&&a.prix!==''?(prix.toFixed(2)+' €'):'', L+160, y);
+      y += 4.5;
+    });
+    doc.setFont('helvetica','bold'); doc.text('Total HT : ' + totArt.toFixed(2) + ' €', L+120, y+1); doc.setFont('helvetica','normal'); y += 6;
     if (p.observations) { doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(90,90,90);
       doc.text(doc.splitTextToSize('Observations : ' + p.observations, W), L, y); y += 5 + Math.min(20, doc.splitTextToSize(p.observations, W).length*4); doc.setTextColor(0,0,0); }
     y += 2;

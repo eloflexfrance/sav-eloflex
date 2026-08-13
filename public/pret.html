@@ -54,6 +54,7 @@ var PRET = null;
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function fd(d){ if(!d) return '___ / ___ / ______'; var v=(''+d).slice(0,10).split('-'); return v.length===3? v[2]+' / '+v[1]+' / '+v[0] : d; }
 var FORM={essai_court:'Essai court (15 à 30 jours)',long_terme:'Prêt long terme (≥ 3 mois, renouvelable)'};
+function artsOf(p){ var a=p.articles; if(typeof a==='string'){ try{a=JSON.parse(a);}catch(e){a=null;} } if(!Array.isArray(a)||!a.length){ return (p.designation||p.num_serie||p.valeur_ht!=null)?[{designation:p.designation||'',reference:'',num_serie:p.num_serie||'',prix:p.valeur_ht}]:[]; } return a; }
 
 function bonHTML(p){
   var bx='&#9744;';
@@ -70,11 +71,15 @@ function bonHTML(p){
       '<td style="border:1px solid #ccc;padding:7px;vertical-align:top">Date de remise : '+fd(p.date_remise)+'<br>Retour prévu : '+fd(p.date_retour_prevue)+'</td></tr></table>'+
     '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px"><tr>'+
       '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">Désignation / Modèle</td>'+
+      '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">Réf.</td>'+
       '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">N° de série</td>'+
-      '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">Valeur cat. HT</td></tr>'+
-    '<tr><td style="border:1px solid #ccc;padding:7px">'+esc(p.designation||'')+'</td>'+
-      '<td style="border:1px solid #ccc;padding:7px">'+esc(p.num_serie||'')+'</td>'+
-      '<td style="border:1px solid #ccc;padding:7px">'+(p.valeur_ht!=null?esc(p.valeur_ht)+' € HT':'')+'</td></tr></table>'+
+      '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">Valeur HT</td></tr>'+
+    artsOf(p).map(function(a){return '<tr><td style="border:1px solid #ccc;padding:7px">'+esc(a.designation||'')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:7px">'+esc(a.reference||'')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:7px">'+esc(a.num_serie||'')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:7px">'+(a.prix!=null&&a.prix!==''?esc(Number(a.prix).toFixed(2))+' € HT':'')+'</td></tr>';}).join('')+
+    '<tr><td colspan="3" style="border:1px solid #ccc;padding:6px;text-align:right;font-weight:bold">Total HT</td>'+
+      '<td style="border:1px solid #ccc;padding:6px;font-weight:bold">'+esc(artsOf(p).reduce(function(s,a){return s+(parseFloat(a.prix)||0);},0).toFixed(2))+' € HT</td></tr></table>'+
     (p.observations?'<p style="font-style:italic;color:#555;font-size:12px">Observations : '+esc(p.observations)+'</p>':'')+
     '<div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:13px;padding:5px 9px">ENGAGEMENTS DE L\'EMPRUNTEUR</div>'+
     '<p style="font-size:12px;color:#444;margin:8px 0 0">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions : utilisation supervisée, essai patient 7 jours maximum, conservation de l\'emballage, signalement immédiat de tout incident, frais de retour 50 € HT / fauteuil, retour dans le carton d\'origine. En cas de perte/destruction : prix catalogue HT moins décote vétusté (5 %/mois, plafond 30 %). Dommages : frais réels sur devis ELOFLEX.</p>';
