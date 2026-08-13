@@ -6099,6 +6099,22 @@ router.post('/prets/:id/statut', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Marquer une offre de prêt comme signée par e-mail (signature hors ligne) avec une date choisie
+router.post('/prets/:id/signe-mail', requireAuth, async (req, res) => {
+  try {
+    const date = (req.body && req.body.date) ? String(req.body.date).slice(0, 10) : null;
+    const row = await db.run(
+      `UPDATE prets SET statut='signe',
+         signed_at = COALESCE($1::date::timestamptz, NOW()),
+         signataire_nom = COALESCE(NULLIF(signataire_nom, ''), 'Signé par e-mail'),
+         updated_at = NOW()
+       WHERE id=$2 RETURNING id, statut, signed_at`,
+      [date, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
+    res.json({ ok: true, pret: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/prets/:id', requireAuth, async (req, res) => {
   try {
     await db.run('DELETE FROM prets WHERE id=$1', [req.params.id]);
@@ -6115,9 +6131,22 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
     if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail pour ce distributeur' });
     const base = process.env.APP_URL || (req.protocol + '://' + req.get('host'));
     const lien = `${base}/pret/${p.token_signature}`;
+    const pdfData = req.body && req.body.pdf_data;
+    const attachments = pdfData
+      ? [{ filename: `Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
+           content: String(pdfData).replace(/^data:application\/pdf;base64,/, '') }]
+      : [];
+    const blocManuel = pdfData
+      ? `<div style="border:1px dashed #cbd5e1;border-radius:8px;padding:14px 16px;margin-top:16px;background:#f8fafc;font-size:13px;color:#334">
+           <b>Vous préférez signer à la main ?</b><br>
+           Vous pouvez télécharger le PDF ci-joint, le signer et le renvoyer scanné à l'adresse :
+           <a href="mailto:info@eloflex.fr" style="color:#1F5C8C;font-weight:600">info@eloflex.fr</a>.
+         </div>`
+      : '';
     await envoyerEmailPret({
       to: dest,
       subject: `Bon de prêt Eloflex — à signer en ligne`,
+      attachments,
       html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
         <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Bon de prêt à signer</h2></div>
         <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px">
@@ -6125,6 +6154,7 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
           <p>Vous trouverez ci-dessous votre bon de prêt de fauteuil roulant électrique. Merci de le relire et de le <b>signer en ligne</b> :</p>
           <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le bon de prêt</a></p>
           <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>
+          ${blocManuel}
         </div>
         <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
       </div>`

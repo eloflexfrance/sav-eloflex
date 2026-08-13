@@ -1640,7 +1640,11 @@ const EN_STR = {
  "Adresse du distributeur": "Distributor address",
  "Autre adresse de livraison": "Different delivery address",
  "Distributeur / destinataire de livraison": "Delivery distributor / recipient",
- "Distributeur enregistré, ou saisie manuelle…": "Registered distributor, or manual entry…"
+ "Distributeur enregistré, ou saisie manuelle…": "Registered distributor, or manual entry…",
+ "Offre de prêt signée par mail": "Loan offer signed by email",
+ "Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.": "The distributor returned the signed form by email. Enter the signature date.",
+ "Date de signature": "Signature date",
+ "Date requise": "Date required"
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;

@@ -7176,6 +7176,7 @@ window.savePret = savePret;
 function menuPretStatut(id){
   showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut du prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:7px">
+      <button class="btn primary" onclick="modalPretSigneMail(${id})"><i class="ti ti-mail-check"></i> ${TR('Offre de prêt signée par mail')}</button>
       <button class="btn" onclick="pretStatut(${id},'en_cours')">${PRET_STATUTS_UI.en_cours.l}</button>
       <button class="btn" onclick="pretStatut(${id},'prolonge')">${PRET_STATUTS_UI.prolonge.l} (${TR('choisir une date')})</button>
       <button class="btn success" onclick="pretStatut(${id},'cloture')">${PRET_STATUTS_UI.cloture.l} — ${TR('retour effectué')}</button>
@@ -7184,6 +7185,24 @@ function menuPretStatut(id){
     </div>`);
 }
 window.menuPretStatut = menuPretStatut;
+
+// Enregistre une signature reçue par e-mail (hors ligne), avec la date choisie
+function modalPretSigneMail(id){
+  const today = new Date().toISOString().slice(0,10);
+  showModal(`<div class="modal-header"><i class="ti ti-mail-check" style="color:var(--accent)"></i><h2>${TR('Offre de prêt signée par mail')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.')}</p>
+      <div class="form-group"><label class="form-label">${TR('Date de signature')}</label><input class="form-input" id="pret-signe-date" type="date" value="${today}" style="max-width:200px"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="validerSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
+}
+window.modalPretSigneMail = modalPretSigneMail;
+async function validerSigneMail(id){
+  const d = gv('pret-signe-date'); if(!d){ toast(TR('Date requise'),'ti-alert-circle','var(--warning)'); return; }
+  try{ await API.signePretMail(id, d); closeModal(); toast(TR('Offre de prêt signée par mail'),'ti-check','var(--success)'); if(STATE.view==='prets') render(); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.validerSigneMail = validerSigneMail;
 
 async function pretStatut(id, statut){
   let extra=null;
@@ -7199,7 +7218,10 @@ async function envoyerPretLien(id){
   const dest = p.email || p.client_email_actuel || '';
   const email = prompt(TR('Envoyer le lien de signature à :'), dest);
   if(!email) return;
-  try{ const r = await API.envoyerPret(id, email); toast(TR('Lien de signature envoyé à ')+r.to,'ti-mail','var(--success)');
+  // génère le PDF (pour le joindre au mail : option signature manuelle)
+  let pdfData=null;
+  try{ if(typeof PDF!=='undefined' && PDF.pretDoc) pdfData = PDF.pretDoc(p).output('datauristring'); }catch(e){}
+  try{ const r = await API.envoyerPret(id, email, pdfData); toast(TR('Lien de signature envoyé à ')+r.to,'ti-mail','var(--success)');
     if(STATE.view==='prets') render();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
