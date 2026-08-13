@@ -62,7 +62,7 @@ function bonHTML(p){
     '<div class="sub">ELOFLEX SAS — Offre de prêt / essai (non valable sur les accessoires)</div>'+
     '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px"><tr>'+
       '<td style="border:1px solid #ccc;padding:7px;vertical-align:top;width:50%"><b style="color:#1F5C8C">PRÊTEUR</b><br><b>ELOFLEX SAS</b></td>'+
-      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top"><b style="color:#1F5C8C">DISTRIBUTEUR EMPRUNTEUR</b><br><b>'+esc(p.distributeur_nom||'—')+'</b><br>'+esc(p.adresse||'')+'<br>'+esc(p.contact||'')+' '+esc(p.tel||'')+'<br>'+esc(p.email||'')+'</td>'+
+      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top"><b style="color:#1F5C8C">DISTRIBUTEUR EMPRUNTEUR</b><br><b>'+esc(p.distributeur_nom||'—')+'</b><br>'+esc(p.adresse||'')+'<br>'+esc(p.contact||'')+' '+esc(p.tel||'')+'<br>'+esc(p.email||'')+(p.livraison_autre?('<br><span style="color:#1F5C8C">📦 Livraison : '+esc(p.livraison_nom||'')+(p.livraison_adresse?' — '+esc(p.livraison_adresse):'')+'</span>'):'')+'</td>'+
     '</tr></table>'+
     '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px"><tr>'+
       '<td style="border:1px solid #ccc;padding:7px;background:#F2F5F8;font-weight:bold;color:#1F5C8C;width:50%">FORMULE : '+esc(FORM[p.formule]||p.formule||'')+'</td>'+
@@ -82,7 +82,32 @@ function bonHTML(p){
       '<td style="border:1px solid #ccc;padding:6px;font-weight:bold">'+esc(artsOf(p).reduce(function(s,a){return s+(parseFloat(a.prix)||0);},0).toFixed(2))+' € HT</td></tr></table>'+
     (p.observations?'<p style="font-style:italic;color:#555;font-size:12px">Observations : '+esc(p.observations)+'</p>':'')+
     '<div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:13px;padding:5px 9px">ENGAGEMENTS DE L\'EMPRUNTEUR</div>'+
-    '<p style="font-size:12px;color:#444;margin:8px 0 0">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions : utilisation supervisée, essai patient 7 jours maximum, conservation de l\'emballage, signalement immédiat de tout incident, frais de retour 50 € HT / fauteuil, retour dans le carton d\'origine. En cas de perte/destruction : prix catalogue HT moins décote vétusté (5 %/mois, plafond 30 %). Dommages : frais réels sur devis ELOFLEX.</p>';
+    '<p style="font-style:italic;color:#555;font-size:12px;margin:8px 0 6px">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions. Il confirme notamment :</p>'+
+    '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 8px"><tr>'+
+      '<td style="padding:0 12px 0 0;vertical-align:top;width:50%;font-size:12px;line-height:1.5">'+
+        '<span style="color:#1F5C8C">&#9679;</span> Veiller au bon fonctionnement et à une utilisation dans un environnement convenable<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Utiliser le matériel uniquement pour des essais patients supervisés par un ergothérapeute<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Laisser le fauteuil au client final 7 jours maximum par essai<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Faire signer une décharge de responsabilité à chaque patient et la retourner à ELOFLEX<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Conserver l\'emballage et les mousses de protection<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Signaler immédiatement tout incident ou dommage à ELOFLEX'+
+      '</td>'+
+      '<td style="padding:0 0 0 12px;vertical-align:top;width:50%;font-size:12px;line-height:1.5">'+
+        '<span style="color:#1F5C8C">&#9679;</span> Maintenir le matériel en état quasi-neuf (Prêt Long Terme)<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Assurer au moins 1 essai / mois (Prêt Long Terme)<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Confirmer par e-mail le bon état du fauteuil avant retour<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Prendre en charge les frais de retour (50 € HT / fauteuil)<br>'+
+        '<span style="color:#1F5C8C">&#9679;</span> Retourner le fauteuil dans son carton d\'origine, propre et fonctionnel'+
+      '</td></tr></table>'+
+    '<div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:13px;padding:5px 9px">CONDITIONS FINANCIÈRES EN CAS DE DOMMAGE OU PERTE</div>'+
+    '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin:6px 0 6px;font-size:12px">'+
+      '<tr><td style="border:1px solid #ccc;padding:6px 9px;background:#F2F5F8;font-weight:bold;width:36%">Perte / destruction totale</td>'+
+        '<td style="border:1px solid #ccc;padding:6px 9px">Prix catalogue HT − décote vétusté (5 % / mois, plafonnée à 30 %)</td></tr>'+
+      '<tr><td style="border:1px solid #ccc;padding:6px 9px;background:#F2F5F8;font-weight:bold">Dommages partiels / reconditionnement</td>'+
+        '<td style="border:1px solid #ccc;padding:6px 9px">Frais réels de remise en état (pièces détachées + main-d\'œuvre) sur devis ELOFLEX</td></tr>'+
+      '<tr><td style="border:1px solid #ccc;padding:6px 9px;background:#F2F5F8;font-weight:bold">Emballage / mousses manquants</td>'+
+        '<td style="border:1px solid #ccc;padding:6px 9px">40 € HT supplémentaires, soit 90 € HT au total des frais de retour</td></tr></table>'+
+    '<p style="font-size:12px;margin:0"><b>Option d\'achat :</b> <span style="font-style:italic;color:#555">l\'emprunteur peut proposer le rachat du matériel à tout moment. Prix fixé d\'un commun accord, formalisé par une facture de vente distincte.</span></p>';
 }
 
 fetch('/api/pret-public/'+encodeURIComponent(TOKEN)).then(function(r){
@@ -128,7 +153,7 @@ function signer(){
   var sig=pad.toDataURL('image/png');
   var p=Object.assign({}, PRET, {signataire_nom:name, signature_data:sig, signed_at:new Date().toISOString().slice(0,10)});
   var pdfData=null;
-  try{ if(window.PDF&&PDF.pretDoc){ pdfData=PDF.pretDoc(p).output('datauristring'); SIGNED_PDF=pdfData; } }catch(e){}
+  try{ if(typeof PDF!=='undefined'&&PDF.pretDoc){ pdfData=PDF.pretDoc(p).output('datauristring'); SIGNED_PDF=pdfData; } }catch(e){}
   var btn=document.getElementById('btnSign'); btn.disabled=true; btn.textContent='Envoi…';
   fetch('/api/pret-public/'+encodeURIComponent(TOKEN)+'/signer',{
     method:'POST', headers:{'Content-Type':'application/json'},
@@ -139,7 +164,7 @@ function signer(){
 }
 function telechargerPDF(){
   if(SIGNED_PDF){ var a=document.createElement('a'); a.href=SIGNED_PDF; a.download='Bon_de_pret_signe.pdf'; a.click(); }
-  else if(window.PDF&&PDF.pret&&PRET){ PDF.pret(Object.assign({},PRET)); }
+  else if(typeof PDF!=='undefined'&&PDF.pret&&PRET){ PDF.pret(Object.assign({},PRET)); }
 }
 </script>
 </body>

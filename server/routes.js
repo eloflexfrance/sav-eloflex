@@ -5966,20 +5966,17 @@ router.post('/carte/rattachements', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 const PRET_STATUTS = ['brouillon','envoye','signe','en_cours','retard','prolonge','cloture','rachete'];
 
-// Envoi d'e-mail lié à un prêt (réutilise la config SMTP des paramètres)
-async function envoyerEmailPret({ to, subject, html, attachments }) {
+// Envoi d'e-mail lié à un prêt — via l'API Brevo (le SMTP est bloqué par Render)
+async function envoyerEmailPret({ to, cc, subject, html, attachments }) {
   const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
-  if (!p.email_smtp_host || !p.email_smtp_user || !p.email_smtp_pass) throw new Error('SMTP non configuré');
-  const nodemailer = require('nodemailer');
-  const transporter = nodemailer.createTransport({
-    host: p.email_smtp_host, port: parseInt(p.email_smtp_port) || 587,
-    secure: parseInt(p.email_smtp_port) === 465,
-    auth: { user: p.email_smtp_user, pass: p.email_smtp_pass }
-  });
-  await transporter.sendMail({
-    from: p.email_from || p.email_smtp_user, to,
-    cc: p.email_cc_sav || 'sav@eloflex.fr',
-    subject, html, attachments: attachments || []
+  const att = (attachments || []).map(a => ({
+    name: a.filename || a.name || 'document.pdf',
+    content: (a.content || '').replace(/^data:.*?;base64,/, '')
+  }));
+  await sendBrevoMail({
+    from: p.email_from || 'sav@eloflex.fr', fromName: 'Eloflex France',
+    to, cc: cc !== undefined ? cc : (p.email_cc_sav || 'sav@eloflex.fr'),
+    subject, html, attachments: att
   });
 }
 
@@ -6010,12 +6007,14 @@ router.post('/prets', requireAuth, async (req, res) => {
     const token = crypto.randomBytes(20).toString('hex');
     const row = await db.run(
       `INSERT INTO prets (client_id, distributeur_nom, contact, email, tel, adresse, formule,
-        designation, num_serie, valeur_ht, bdc_vf, bdc_vf_id, articles, date_remise, date_retour_prevue,
-        prorogation_date, observations, statut, token_signature, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
+        designation, num_serie, valeur_ht, bdc_vf, bdc_vf_id, articles,
+        livraison_autre, livraison_client_id, livraison_nom, livraison_adresse,
+        date_remise, date_retour_prevue, prorogation_date, observations, statut, token_signature, cree_par)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
       [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, d.tel || null,
        d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
        d.valeur_ht || null, d.bdc_vf || null, d.bdc_vf_id || null, d.articles ? JSON.stringify(d.articles) : null,
+       !!d.livraison_autre, d.livraison_client_id || null, d.livraison_nom || null, d.livraison_adresse || null,
        d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
        d.observations || null, d.statut || 'brouillon', token,
        (req.session.user && req.session.user.id) || null]);
@@ -6029,11 +6028,13 @@ router.put('/prets/:id', requireAuth, async (req, res) => {
     const row = await db.run(
       `UPDATE prets SET client_id=$1, distributeur_nom=$2, contact=$3, email=$4, tel=$5, adresse=$6,
         formule=$7, designation=$8, num_serie=$9, valeur_ht=$10, bdc_vf=$11, bdc_vf_id=$12, articles=$13,
-        date_remise=$14, date_retour_prevue=$15, prorogation_date=$16, observations=$17, statut=$18,
-        updated_at=NOW() WHERE id=$19 RETURNING *`,
+        livraison_autre=$14, livraison_client_id=$15, livraison_nom=$16, livraison_adresse=$17,
+        date_remise=$18, date_retour_prevue=$19, prorogation_date=$20, observations=$21, statut=$22,
+        updated_at=NOW() WHERE id=$23 RETURNING *`,
       [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, d.tel || null,
        d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
        d.valeur_ht || null, d.bdc_vf || null, d.bdc_vf_id || null, d.articles ? JSON.stringify(d.articles) : null,
+       !!d.livraison_autre, d.livraison_client_id || null, d.livraison_nom || null, d.livraison_adresse || null,
        d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
        d.observations || null, d.statut || 'brouillon', req.params.id]);
     if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
@@ -6098,7 +6099,9 @@ router.get('/pret-public/:token', async (req, res) => {
     res.json({
       id: p.id, distributeur_nom: p.distributeur_nom, contact: p.contact, email: p.email, tel: p.tel,
       adresse: p.adresse, formule: p.formule, designation: p.designation, num_serie: p.num_serie,
-      valeur_ht: p.valeur_ht, articles: p.articles, date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
+      valeur_ht: p.valeur_ht, articles: p.articles,
+      livraison_autre: p.livraison_autre, livraison_nom: p.livraison_nom, livraison_adresse: p.livraison_adresse,
+      date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
       prorogation_date: p.prorogation_date, observations: p.observations, statut: p.statut,
       signataire_nom: p.signataire_nom, signed_at: p.signed_at
     });
@@ -6124,9 +6127,9 @@ router.post('/pret-public/:token/signer', async (req, res) => {
         ? [{ filename: `Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
              content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' }]
         : [];
-      const dest = [p.email, 'sav@eloflex.fr'].filter(Boolean).join(',');
       await envoyerEmailPret({
-        to: dest,
+        to: p.email || 'sav@eloflex.fr',
+        cc: p.email ? 'sav@eloflex.fr' : undefined,
         subject: `Bon de prêt Eloflex — signé par ${d.signataire_nom}`,
         html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
           <p>Le bon de prêt du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> a été signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>

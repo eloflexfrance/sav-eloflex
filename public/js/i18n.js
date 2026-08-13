@@ -1636,7 +1636,11 @@ const EN_STR = {
  "Total HT": "Total excl. VAT",
  "Taper le nom du distributeur…": "Type the distributor name…",
  "ligne(s) importée(s)": "line(s) imported",
- "total": "total"
+ "total": "total",
+ "Adresse du distributeur": "Distributor address",
+ "Autre adresse de livraison": "Different delivery address",
+ "Distributeur / destinataire de livraison": "Delivery distributor / recipient",
+ "Distributeur enregistré, ou saisie manuelle…": "Registered distributor, or manual entry…"
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;

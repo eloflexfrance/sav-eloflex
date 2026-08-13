@@ -168,6 +168,7 @@ const PDF = {
     line2('Distributeur', p.distributeur_nom || p.client_nom_actuel || '—');
     line2('Adresse', p.adresse || '—');
     line2('Contact', [p.contact, p.tel, p.email].filter(Boolean).join(' — ') || '—');
+    if (p.livraison_autre) line2('Livraison', [p.livraison_nom, p.livraison_adresse].filter(Boolean).join(' — ') || '—');
     y += 2;
 
     band('2 · FORMULE & DURÉE');
@@ -197,13 +198,44 @@ const PDF = {
       doc.text(doc.splitTextToSize('Observations : ' + p.observations, W), L, y); y += 5 + Math.min(20, doc.splitTextToSize(p.observations, W).length*4); doc.setTextColor(0,0,0); }
     y += 2;
 
-    band("4 · ENGAGEMENTS DE L'EMPRUNTEUR");
-    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(60,60,60);
-    const eng = "Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions : utilisation supervisée par un ergothérapeute, essai patient 7 jours maximum, conservation de l'emballage et des mousses, signalement immédiat de tout incident, frais de retour 50 € HT / fauteuil, retour dans le carton d'origine propre et fonctionnel. En cas de perte/destruction : prix catalogue HT moins décote vétusté (5 %/mois, plafond 30 %). Dommages : frais réels sur devis ELOFLEX.";
-    doc.text(doc.splitTextToSize(eng, W), L, y); y += doc.splitTextToSize(eng, W).length*3.6 + 4;
-    doc.setTextColor(0,0,0);
+    const ensure = (h) => { if (y + h > 285) { doc.addPage(); y = 18; } };
 
-    band('5 · SIGNATURES');
+    ensure(60);
+    band("4 · ENGAGEMENTS DE L'EMPRUNTEUR");
+    doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(90,90,90);
+    doc.text("Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions. Il confirme notamment :", L, y); y += 5;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(45,45,45);
+    const engs = [
+      "Veiller au bon fonctionnement et à une utilisation dans un environnement convenable",
+      "Utiliser le matériel uniquement pour des essais patients supervisés par un ergothérapeute",
+      "Laisser le fauteuil au client final 7 jours maximum par essai",
+      "Faire signer une décharge de responsabilité à chaque patient et la retourner à ELOFLEX",
+      "Conserver l'emballage et les mousses de protection",
+      "Signaler immédiatement tout incident ou dommage à ELOFLEX",
+      "Maintenir le matériel en état quasi-neuf et assurer au moins 1 essai / mois (Prêt Long Terme)",
+      "Confirmer par e-mail le bon état du fauteuil avant retour",
+      "Prendre en charge les frais de retour (50 € HT / fauteuil)",
+      "Retourner le fauteuil dans son carton d'origine, propre et fonctionnel",
+    ];
+    engs.forEach((t) => { ensure(6); const lines = doc.splitTextToSize('•  ' + t, W - 2); doc.text(lines, L + 1, y); y += lines.length * 3.8; });
+    y += 3; doc.setTextColor(0,0,0);
+
+    ensure(34);
+    band('5 · CONDITIONS FINANCIÈRES EN CAS DE DOMMAGE OU PERTE');
+    doc.setFontSize(8);
+    const cf = [
+      ['Perte / destruction totale', "Prix catalogue HT − décote vétusté (5 %/mois, plafonnée à 30 %)"],
+      ['Dommages partiels / reconditionnement', "Frais réels de remise en état (pièces + main-d'œuvre) sur devis ELOFLEX"],
+      ['Emballage / mousses manquants', "40 € HT supplémentaires, soit 90 € HT au total des frais de retour"],
+    ];
+    cf.forEach((r) => { ensure(6); doc.setFont('helvetica','bold'); const lab = doc.splitTextToSize(r[0], 58); doc.text(lab, L, y); doc.setFont('helvetica','normal'); const val = doc.splitTextToSize(r[1], W - 62); doc.text(val, L + 62, y); y += Math.max(lab.length, val.length) * 3.8 + 1.5; });
+    doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(80,80,80);
+    const opt = doc.splitTextToSize("Option d'achat : l'emprunteur peut proposer le rachat du matériel à tout moment. Prix fixé d'un commun accord, formalisé par une facture de vente distincte.", W);
+    ensure(opt.length * 3.6 + 4); doc.text(opt, L, y); y += opt.length * 3.6 + 4;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(0,0,0);
+
+    ensure(48);
+    band('6 · SIGNATURES');
     const colW = W/2 - 3;
     const yTop = y;
     doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.text('ELOFLEX', L, y+4);

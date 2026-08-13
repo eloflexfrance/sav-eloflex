@@ -6967,11 +6967,12 @@ async function modalPret(id, prefillClientId){
     <div class="modal-header"><i class="ti ti-file-certificate" style="color:var(--accent)"></i><h2>${id?TR('Modifier le bon de prêt'):TR('Nouveau bon de prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <input type="hidden" id="pret-id" value="${id||''}">
-      <input type="hidden" id="pret-client" value="${p.client_id||''}">
+      <input type="hidden" id="pret-client-id" value="${p.client_id||''}">
+      <input type="hidden" id="pret-liv-id" value="${p.livraison_client_id||''}">
       <input type="hidden" id="pret-bdc-vfid" value="${esc(p.bdc_vf_id||'')}">
-      <div class="form-group"><label class="form-label">${TR('Distributeur emprunteur')}</label>
-        <input class="form-input" id="pret-client-search" list="pret-client-list" autocomplete="off" placeholder="${TR('Taper le nom du distributeur…')}" value="${esc(p.distributeur_nom||'')}" oninput="pretClientInput()">
-        <datalist id="pret-client-list">${dl}</datalist></div>
+      <div class="form-group" style="position:relative"><label class="form-label">${TR('Distributeur emprunteur')}</label>
+        <input class="form-input" id="pret-client-search" autocomplete="off" placeholder="${TR('Taper le nom du distributeur…')}" value="${esc(p.distributeur_nom||'')}" oninput="pretDistribInput('pret-client')" onfocus="pretDistribSearch('pret-client',this.value)" onblur="setTimeout(function(){var d=document.getElementById('pret-client-drop');if(d)d.style.display='none'},150)">
+        <div id="pret-client-drop" class="piece-dropdown" style="display:none"></div></div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Contact')}</label><input class="form-input" id="pret-contact" value="${esc(p.contact||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Email')}</label><input class="form-input" id="pret-email" type="email" value="${esc(p.email||'')}"></div>
@@ -6982,7 +6983,18 @@ async function modalPret(id, prefillClientId){
             <option value="long_terme" ${p.formule==='long_terme'?'selected':''}>${PRET_FORMULES.long_terme}</option>
           </select></div>
       </div>
-      <div class="form-group"><label class="form-label">${TR('Adresse de livraison')}</label><input class="form-input" id="pret-adresse" value="${esc(p.adresse||'')}"></div>
+      <div class="form-group"><label class="form-label">${TR('Adresse du distributeur')}</label><input class="form-input" id="pret-adresse" value="${esc(p.adresse||'')}"></div>
+      <div class="form-group" style="margin-bottom:6px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;font-weight:500">
+          <input type="checkbox" id="pret-liv-autre" ${p.livraison_autre?'checked':''} onchange="pretToggleLivraison()" style="accent-color:var(--accent)">
+          ${TR('Autre adresse de livraison')}</label>
+      </div>
+      <div id="pret-liv-block" style="${p.livraison_autre?'':'display:none'};border-left:2px solid var(--border);padding-left:12px;margin-bottom:10px">
+        <div class="form-group" style="position:relative"><label class="form-label">${TR('Distributeur / destinataire de livraison')}</label>
+          <input class="form-input" id="pret-liv-search" autocomplete="off" placeholder="${TR('Distributeur enregistré, ou saisie manuelle…')}" value="${esc(p.livraison_nom||'')}" oninput="pretDistribInput('pret-liv')" onfocus="pretDistribSearch('pret-liv',this.value)" onblur="setTimeout(function(){var d=document.getElementById('pret-liv-drop');if(d)d.style.display='none'},150)">
+          <div id="pret-liv-drop" class="piece-dropdown" style="display:none"></div></div>
+        <div class="form-group"><label class="form-label">${TR('Adresse de livraison')}</label><input class="form-input" id="pret-liv-adresse" value="${esc(p.livraison_adresse||'')}"></div>
+      </div>
       <div class="form-group"><label class="form-label">${TR('N° de commande VosFactures')}</label>
         <div style="display:flex;gap:6px">
           <input class="form-input mono" id="pret-bdc-vf" value="${esc(p.bdc_vf||'')}" placeholder="ex. D0931" style="flex:1">
@@ -7040,18 +7052,42 @@ function pretMajTotal(){
 }
 window.pretMajTotal = pretMajTotal;
 
-// Autocomplétion distributeur : dès qu'un nom correspond, on (re)remplit les coordonnées
-function pretClientInput(){
-  const v = (gv('pret-client-search')||'').trim();
-  const match = (window._clientsCache||[]).find(c=> (c.nom||'').toLowerCase() === v.toLowerCase());
-  if(match){ $('pret-client').value = match.id; pretRemplirClient(match.id); }
-  else { $('pret-client').value = ''; }
+// ── Autocomplétion distributeur (même composant déroulant que le reste de l'app) ──
+// prefix = 'pret-client' (emprunteur) ou 'pret-liv' (livraison)
+function pretDistribInput(prefix){
+  const hid = $(prefix+'-id'); if(hid) hid.value=''; // saisie manuelle → plus de fiche liée
+  pretDistribSearch(prefix, gv(prefix+'-search'));
 }
-window.pretClientInput = pretClientInput;
+window.pretDistribInput = pretDistribInput;
+function pretDistribSearch(prefix, q){
+  const drop = $(prefix+'-drop'); if(!drop) return;
+  const src = window._clientsCache || [];
+  const query = (q||'').toLowerCase().trim();
+  const res = (query ? src.filter(c=> (c.nom&&c.nom.toLowerCase().includes(query)) || (c.ville&&c.ville.toLowerCase().includes(query))) : src).slice(0,25);
+  if(!res.length){ drop.style.display='none'; return; }
+  drop.innerHTML = res.map(c=>'<div class="piece-option" onmousedown="event.preventDefault();pretDistribSelect(\''+prefix+'\','+c.id+',\''+String(c.nom||'').replace(/\x27/g,'&#39;')+'\')">'+
+    '<div style="font-size:12px;font-weight:600">'+esc(c.nom)+'</div>'+
+    (c.ville?'<div style="font-size:11px;color:var(--text3)">'+esc(c.ville)+'</div>':'')+'</div>').join('');
+  drop.style.display='block';
+}
+window.pretDistribSearch = pretDistribSearch;
+function pretDistribSelect(prefix, id, nom){
+  const inp=$(prefix+'-search'), hid=$(prefix+'-id'); if(inp) inp.value=nom; if(hid) hid.value=id;
+  const drop=$(prefix+'-drop'); if(drop) drop.style.display='none';
+  if(prefix==='pret-client') pretRemplirClient(id); else pretRemplirLivraison(id);
+}
+window.pretDistribSelect = pretDistribSelect;
+// Renseigne le champ distributeur depuis un nom (import BDC) : lie la fiche si le nom correspond
+function pretSetDistrib(prefix, nom){
+  const inp=$(prefix+'-search'); if(inp) inp.value = nom||'';
+  const m = (window._clientsCache||[]).find(c=> (c.nom||'').toLowerCase() === (nom||'').toLowerCase());
+  if(m){ pretDistribSelect(prefix, m.id, m.nom); } else { const hid=$(prefix+'-id'); if(hid) hid.value=''; }
+}
+window.pretSetDistrib = pretSetDistrib;
 
-// Remplit (écrase toujours) contact / email / tél / adresse depuis la fiche choisie
+// Remplit (écrase toujours) contact / email / tél / adresse de l'emprunteur depuis la fiche
 function pretRemplirClient(id){
-  id = id || gv('pret-client'); if(!id) return;
+  id = id || gv('pret-client-id'); if(!id) return;
   API.client(id).then(cl=>{
     $('pret-contact').value = cl.contact||'';
     $('pret-email').value   = cl.email||'';
@@ -7060,6 +7096,16 @@ function pretRemplirClient(id){
   }).catch(()=>{});
 }
 window.pretRemplirClient = pretRemplirClient;
+function pretRemplirLivraison(id){
+  if(!id) return;
+  API.client(id).then(cl=>{ $('pret-liv-adresse').value = [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(' '); }).catch(()=>{});
+}
+window.pretRemplirLivraison = pretRemplirLivraison;
+function pretToggleLivraison(){
+  const on = $('pret-liv-autre') && $('pret-liv-autre').checked;
+  const b = $('pret-liv-block'); if(b) b.style.display = on ? '' : 'none';
+}
+window.pretToggleLivraison = pretToggleLivraison;
 
 function ouvrirPretVF(){
   const num = (gv('pret-bdc-vf')||'').trim();
@@ -7080,7 +7126,7 @@ async function importerPretVF(){
     if(!r || !r.found){ if(msg) msg.innerHTML='<span style="color:var(--warning)">'+TR('Bordereau introuvable dans VosFactures')+'</span>'; return; }
     if(r.vf_id!=null) $('pret-bdc-vfid').value = String(r.vf_id);
     if(r.numero) $('pret-bdc-vf').value = r.numero;
-    if(r.distributeur && !gv('pret-client-search')){ $('pret-client-search').value = r.distributeur; pretClientInput(); }
+    if(r.distributeur){ pretSetDistrib('pret-client', r.distributeur); }
     // remplace les lignes articles par celles du BDC
     const cont = $('pret-articles'); if(cont) cont.innerHTML='';
     (r.lignes||[]).forEach(l=>addPretArticle({designation:l.designation||'', reference:l.reference||'', num_serie:(l.num_serie||''), prix:(l.prix!=null?l.prix:'')}));
@@ -7094,16 +7140,21 @@ async function importerPretVF(){
 window.importerPretVF = importerPretVF;
 
 async function savePret(){
-  const cid = gv('pret-client');
+  const cid = gv('pret-client-id');
   const nom = (gv('pret-client-search')||'').trim() || (cid ? ((window._clientsCache||[]).find(c=>String(c.id)===String(cid))||{}).nom : '');
   const articles = lirePretArticles();
   const total = articles.reduce((s,a)=>s+(a.prix||0),0);
+  const livAutre = !!($('pret-liv-autre') && $('pret-liv-autre').checked);
   const data = {
     client_id: cid||null, distributeur_nom: nom||null,
     contact: gv('pret-contact')||null, email: gv('pret-email')||null, tel: gv('pret-tel')||null,
     adresse: gv('pret-adresse')||null, formule: gv('pret-formule')||'essai_court',
     bdc_vf: gv('pret-bdc-vf')||null, bdc_vf_id: gv('pret-bdc-vfid')||null,
     articles, valeur_ht: total||null,
+    livraison_autre: livAutre,
+    livraison_client_id: livAutre ? (gv('pret-liv-id')||null) : null,
+    livraison_nom: livAutre ? (gv('pret-liv-search')||null) : null,
+    livraison_adresse: livAutre ? (gv('pret-liv-adresse')||null) : null,
     designation: (articles[0]&&articles[0].designation)||null, num_serie: (articles[0]&&articles[0].num_serie)||null,
     date_remise: gv('pret-remise')||null, date_retour_prevue: gv('pret-retour')||null,
     observations: gv('pret-obs')||null
@@ -7167,7 +7218,7 @@ window.apercuPret = apercuPret;
 
 async function exportPretPDF(id){
   let p; try{ p = await API.pret(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
-  if(window.PDF && PDF.pret){ PDF.pret(p); } else { toast('Générateur PDF indisponible','ti-alert-circle','var(--danger)'); }
+  if(typeof PDF!=='undefined' && PDF.pret){ PDF.pret(p); } else { toast('Générateur PDF indisponible','ti-alert-circle','var(--danger)'); }
 }
 window.exportPretPDF = exportPretPDF;
 
@@ -7192,7 +7243,7 @@ function pretBonHTML(p){
     <div style="text-align:center;font-style:italic;color:#666;font-size:12px;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid #1F5C8C">ELOFLEX SAS — Offre de prêt / essai (non valable sur les accessoires)</div>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
       <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top;width:50%"><b style="color:#1F5C8C">PRÊTEUR</b><br><b>ELOFLEX SAS</b><br>Contact SAV : ${esc(CURRENT_USER&&CURRENT_USER.nom||'')}</td>
-      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top;width:50%"><b style="color:#1F5C8C">DISTRIBUTEUR EMPRUNTEUR</b><br><b>${esc(p.distributeur_nom||'—')}</b><br>${esc(p.adresse||'')}<br>${esc(p.contact||'')} ${esc(p.tel||'')}<br>${esc(p.email||'')}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top;width:50%"><b style="color:#1F5C8C">DISTRIBUTEUR EMPRUNTEUR</b><br><b>${esc(p.distributeur_nom||'—')}</b><br>${esc(p.adresse||'')}<br>${esc(p.contact||'')} ${esc(p.tel||'')}<br>${esc(p.email||'')}${p.livraison_autre?`<br><span style="color:#1F5C8C">📦 Livraison : ${esc(p.livraison_nom||'')}${p.livraison_adresse?' — '+esc(p.livraison_adresse):''}</span>`:''}</td>
     </tr></table>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
       <td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;color:#1F5C8C;font-weight:bold;width:50%">FORMULE : ${esc(formuleTxt)}</td>
@@ -7217,7 +7268,34 @@ function pretBonHTML(p){
       <td style="border:1px solid #CCC;padding:5px 7px;font-weight:bold">${esc(Number(pretArticlesOf(p).reduce((s,a)=>s+(parseFloat(a.prix)||0),0)).toFixed(2))} € HT</td></tr></table>
     ${p.observations?`<p style="margin:0 0 8px;font-style:italic;color:#555;font-size:11px">Observations sur l'état initial : ${esc(p.observations)}</p>`:''}
     <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">ENGAGEMENTS DE L'EMPRUNTEUR</div>
-    <p style="font-size:11px;color:#444;margin:6px 0 8px">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions (utilisation supervisée, essai patient 7 j max, conservation de l'emballage, signalement immédiat de tout incident, frais de retour 50 € HT, retour dans le carton d'origine, etc.).</p>
+    <p style="margin:6px 0 6px;font-style:italic;color:#555;font-size:11px">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions. Il confirme notamment :</p>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 8px;table-layout:fixed"><tr>
+      <td style="padding:0 12px 0 0;vertical-align:top;width:50%;font-size:11px;line-height:1.5">
+        <span style="color:#1F5C8C">&#9679;</span> Veiller au bon fonctionnement et à une utilisation dans un environnement convenable<br>
+        <span style="color:#1F5C8C">&#9679;</span> Utiliser le matériel uniquement pour des essais patients supervisés par un ergothérapeute<br>
+        <span style="color:#1F5C8C">&#9679;</span> Laisser le fauteuil au client final 7 jours maximum par essai<br>
+        <span style="color:#1F5C8C">&#9679;</span> Faire signer une décharge de responsabilité à chaque patient et la retourner à ELOFLEX<br>
+        <span style="color:#1F5C8C">&#9679;</span> Conserver l'emballage et les mousses de protection<br>
+        <span style="color:#1F5C8C">&#9679;</span> Signaler immédiatement tout incident ou dommage à ELOFLEX
+      </td>
+      <td style="padding:0 0 0 12px;vertical-align:top;width:50%;font-size:11px;line-height:1.5">
+        <span style="color:#1F5C8C">&#9679;</span> Maintenir le matériel en état quasi-neuf (Prêt Long Terme)<br>
+        <span style="color:#1F5C8C">&#9679;</span> Assurer au moins 1 essai / mois (Prêt Long Terme)<br>
+        <span style="color:#1F5C8C">&#9679;</span> Confirmer par e-mail le bon état du fauteuil avant retour<br>
+        <span style="color:#1F5C8C">&#9679;</span> Prendre en charge les frais de retour (50 € HT / fauteuil)<br>
+        <span style="color:#1F5C8C">&#9679;</span> Retourner le fauteuil dans son carton d'origine, propre et fonctionnel
+      </td>
+    </tr></table>
+    <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">CONDITIONS FINANCIÈRES EN CAS DE DOMMAGE OU PERTE</div>
+    <table style="width:100%;border-collapse:collapse;margin:6px 0 6px;table-layout:fixed">
+      <tr><td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;font-weight:bold;width:36%">Perte / destruction totale</td>
+        <td style="border:1px solid #CCC;padding:6px 9px">Prix catalogue HT &minus; décote vétusté (5 % / mois, plafonnée à 30 %)</td></tr>
+      <tr><td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;font-weight:bold">Dommages partiels / reconditionnement</td>
+        <td style="border:1px solid #CCC;padding:6px 9px">Frais réels de remise en état (pièces détachées + main-d'œuvre) sur devis ELOFLEX</td></tr>
+      <tr><td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;font-weight:bold">Emballage / mousses manquants</td>
+        <td style="border:1px solid #CCC;padding:6px 9px">40 € HT supplémentaires, soit 90 € HT au total des frais de retour</td></tr>
+    </table>
+    <p style="margin:0 0 8px;font-size:11px"><strong>Option d'achat :</strong> <span style="font-style:italic;color:#555">l'emprunteur peut proposer le rachat du matériel à tout moment. Prix fixé d'un commun accord, formalisé par une facture de vente distincte.</span></p>
     <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">SIGNATURES</div>
     <table style="width:100%;border-collapse:collapse;margin:8px 0 0"><tr>
       <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>ELOFLEX</b><br>Nom : ${esc(CURRENT_USER&&CURRENT_USER.nom||'')}<br><br>&nbsp;</td>

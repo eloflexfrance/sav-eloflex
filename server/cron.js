@@ -126,26 +126,24 @@ async function envoyerEmailPretsRappel(prets) {
   try {
     const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
     if (p.email_notifications !== '1') return;
-    if (!p.email_smtp_host || !p.email_smtp_user || !p.email_smtp_pass) return;
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: p.email_smtp_host, port: parseInt(p.email_smtp_port) || 587, secure: parseInt(p.email_smtp_port) === 465,
-      auth: { user: p.email_smtp_user, pass: p.email_smtp_pass }
-    });
+    const key = process.env.BREVO_API_KEY;
+    if (!key) { console.warn('[CRON] BREVO_API_KEY manquante — relance prêts non envoyée'); return; }
+    const axios = require('axios');
     for (const pr of prets) {
       const dest = pr.email || pr.client_email;
       if (!dest) continue;
-      await transporter.sendMail({
-        from: p.email_from || p.email_smtp_user, to: dest, cc: p.email_cc_sav || 'sav@eloflex.fr',
+      await axios.post('https://api.brevo.com/v3/smtp/email', {
+        sender: { name: 'Eloflex France', email: p.email_from || 'sav@eloflex.fr' },
+        to: [{ email: dest }], cc: [{ email: p.email_cc_sav || 'sav@eloflex.fr' }],
         subject: `Eloflex — Suivi de votre prêt de fauteuil (${pr.designation || ''} ${pr.num_serie || ''})`,
-        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
+        htmlContent: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
           <p>Bonjour,</p>
           <p>Votre prêt du fauteuil <b>${pr.designation || ''} ${pr.num_serie || ''}</b> (remis le ${pr.date_remise}) arrive à 3 semaines.</p>
           <p>Pourriez-vous nous indiquer où en est l'essai${pr.date_retour_prevue ? ` (retour prévu le ${pr.date_retour_prevue})` : ''} : retour à organiser, prolongation souhaitée, ou rachat ?</p>
           <p style="font-size:12px;color:#888">Eloflex France</p></div>`
-      });
+      }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
     }
-    console.log(`[CRON] Email relance prêts envoyé (${prets.length})`);
+    console.log(`[CRON] Email relance prêts (Brevo) envoyé (${prets.length})`);
   } catch (e) { console.error('[CRON] Email prêts err:', e.message); }
 }
 

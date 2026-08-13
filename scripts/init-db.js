@@ -157,6 +157,10 @@ async function initDB() {
       bdc_vf TEXT,
       bdc_vf_id TEXT,
       articles JSONB,
+      livraison_autre BOOLEAN DEFAULT FALSE,
+      livraison_client_id INTEGER,
+      livraison_nom TEXT,
+      livraison_adresse TEXT,
       date_remise DATE,
       date_retour_prevue DATE,
       prorogation_date DATE,
@@ -181,6 +185,10 @@ async function initDB() {
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS bdc_vf TEXT`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS bdc_vf_id TEXT`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS articles JSONB`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_autre BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_client_id INTEGER`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_nom TEXT`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_adresse TEXT`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (
