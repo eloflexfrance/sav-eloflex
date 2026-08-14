@@ -540,6 +540,12 @@ function ouvrirClientPennylane(nom){
   window.open('https://app.pennylane.com/','_blank','noopener');
 }
 window.ouvrirClientPennylane = ouvrirClientPennylane;
+async function envoyerEmailSiret(id){
+  if(!confirm(TR('Envoyer au distributeur un e-mail de confirmation SIRET / TVA ?'))) return;
+  try{ const r = await API.emailSiret(id); toast(TR('E-mail envoyé à ')+r.to,'ti-mail','var(--success)'); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.envoyerEmailSiret = envoyerEmailSiret;
 
 // N° TVA intracommunautaire FR calculé depuis le SIREN
 function tvaFromSiren(siren){
@@ -692,6 +698,7 @@ async function renderClient(ttl,c,a){
           <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>${TR('Fusionner')}</button>
           <button class="btn sm" onclick="ouvrirClientVF(${cl.vf_id||'null'})" title="Consulter la fiche dans VosFactures"><i class="ti ti-external-link"></i> VosFactures</button>
           <button class="btn sm" onclick="ouvrirClientPennylane('${nomJs}')" title="Consulter dans Pennylane"><i class="ti ti-external-link"></i> Pennylane</button>
+          <button class="btn sm" onclick="envoyerEmailSiret(${cl.id})" title="Demander confirmation SIRET / TVA par e-mail"><i class="ti ti-mail"></i> ${TR('Confirmer SIRET/TVA')}</button>
         </div>
       </div>
       <div class="card">

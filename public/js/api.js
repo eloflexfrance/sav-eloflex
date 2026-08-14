@@ -42,6 +42,7 @@ const API = {
   setClientType:(id,type)=>API.post(`/clients/${id}/type`,{type}),
   setClientPriorite:(id,priorite)=>API.post(`/clients/${id}/priorite`,{priorite}),
   setClientSirene:(id,d)=>API.post(`/clients/${id}/sirene`,d),
+  emailSiret:(id)=>API.post(`/clients/${id}/email-siret`,{}),
   deleteClient:(id)=>API.del(`/clients/${id}`),
   regenererToken:(id)=>API.post(`/clients/${id}/regenerer-token`,{}),
   prets:()=>API.get('/prets'),

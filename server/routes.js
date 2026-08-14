@@ -508,6 +508,42 @@ router.post('/clients/:id/sirene', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// E-mail de confirmation SIRET / TVA (facturation électronique) au distributeur
+router.post('/clients/:id/email-siret', requireAuth, async (req, res) => {
+  try {
+    const c = await db.get('SELECT id, nom, email, siren, siret, tva FROM clients WHERE id=$1', [req.params.id]);
+    if (!c) return res.status(404).json({ error: 'Fiche introuvable' });
+    const emails = String(c.email || '').split(/[;,]/).map(e => e.trim()).filter(Boolean);
+    if (!emails.length) return res.status(400).json({ error: "Aucune adresse e-mail sur la fiche" });
+    const key = process.env.BREVO_API_KEY;
+    if (!key) return res.status(503).json({ error: 'BREVO_API_KEY manquante' });
+    const p = {}; (await db.all('SELECT cle,valeur FROM parametres')).forEach(r => p[r.cle] = r.valeur);
+    const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
+      <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Facturation électronique</h2></div>
+      <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px;line-height:1.55">
+        <p>Bonjour,</p>
+        <p>Suite au passage à la facturation électronique, pouvez-vous nous confirmer votre numéro <b>SIRET</b> et <b>TVA intracommunautaire</b>.</p>
+        <table style="border-collapse:collapse;margin:14px 0;font-size:14px">
+          <tr><td style="padding:6px 14px;background:#f5f7fa;font-weight:600;border:1px solid #e5e7eb">SIRET</td><td style="padding:6px 14px;border:1px solid #e5e7eb;font-family:monospace">${c.siret || '—'}</td></tr>
+          <tr><td style="padding:6px 14px;background:#f5f7fa;font-weight:600;border:1px solid #e5e7eb">N° TVA intracommunautaire</td><td style="padding:6px 14px;border:1px solid #e5e7eb;font-family:monospace">${c.tva || '—'}</td></tr>
+        </table>
+        <p>Si ce ne sont pas ceux mentionnés, merci de nous indiquer par retour de mail lesquels utiliser.</p>
+        <p>Bien cordialement,</p>
+      </div>
+      <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
+    </div>`;
+    const axios = require('axios');
+    await axios.post('https://api.brevo.com/v3/smtp/email', {
+      sender: { name: 'Eloflex France', email: p.email_from || 'sav@eloflex.fr' },
+      to: emails.map(e => ({ email: e })),
+      cc: [{ email: p.email_cc_sav || 'sav@eloflex.fr' }],
+      subject: 'Eloflex — Confirmation de votre SIRET et TVA intracommunautaire',
+      htmlContent: html
+    }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
+    res.json({ ok: true, to: emails.join(', ') });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Changer uniquement la priorité (T1/T2/T3 ou vide) depuis la fiche
 router.post('/clients/:id/priorite', async (req, res) => {
   try {

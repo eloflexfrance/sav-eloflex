@@ -1651,7 +1651,10 @@ const EN_STR = {
  "Rapprochement entreprises": "Company matching (SIRENE)",
  "Rapprochement en cours…": "Matching in progress…",
  "Tous les distributeurs ont déjà un SIREN.": "All distributors already have a SIREN.",
- "Aucune correspondance sélectionnée": "No match selected"
+ "Aucune correspondance sélectionnée": "No match selected",
+ "Confirmer SIRET/TVA": "Confirm SIRET/VAT",
+ "Envoyer au distributeur un e-mail de confirmation SIRET / TVA ?": "Send the distributor a SIRET / VAT confirmation email?",
+ "E-mail envoyé à ": "Email sent to "
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;
