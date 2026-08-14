@@ -1644,27 +1644,7 @@ const EN_STR = {
  "Offre de prêt signée par mail": "Loan offer signed by email",
  "Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.": "The distributor returned the signed form by email. Enter the signature date.",
  "Date de signature": "Signature date",
- "Date requise": "Date required",
- "Mode de règlement par défaut": "Default payment method",
- "Date limite de règlement (jours)": "Default payment term (days)",
- "— Non défini —": "— Not set —",
- "Rapprochement entreprises": "Company matching (SIRENE)",
- "Rapprochement en cours…": "Matching in progress…",
- "Tous les distributeurs ont déjà un SIREN.": "All distributors already have a SIREN.",
- "Aucune correspondance sélectionnée": "No match selected",
- "Confirmer SIRET/TVA": "Confirm SIRET/VAT",
- "Envoyer au distributeur un e-mail de confirmation SIRET / TVA ?": "Send the distributor a SIRET / VAT confirmation email?",
- "E-mail envoyé à ": "Email sent to ",
- "Rapprochement (fichier)": "Matching (file)",
- "Rapprochement depuis un fichier": "Matching from a file",
- "Déposez un fichier CSV (ex. export Pennylane) avec au minimum les colonnes Nom, Code postal, Ville. Le navigateur interroge l'Annuaire des entreprises et enrichit chaque ligne (SIREN, SIRET, TVA, lien). Un fichier enrichi est ensuite téléchargé, avec une colonne « à vérifier » pour les cas incertains.": "Drop a CSV file (e.g. Pennylane export) with at least Name, Postal code, City columns. The browser queries the company directory and enriches each row (SIREN, SIRET, VAT, link). An enriched file is then downloaded, with a \"to check\" column for uncertain cases.",
- "Ne retenir que les établissements actifs": "Keep only active establishments",
- "Lancer": "Start",
- "Traitement…": "Processing…",
- "Choisissez un fichier": "Choose a file",
- "Fichier vide ou illisible": "Empty or unreadable file",
- "Colonne « Nom » introuvable dans le fichier": "\"Name\" column not found in the file",
- "Fichier enrichi téléchargé": "Enriched file downloaded"
+ "Date requise": "Date required"
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;

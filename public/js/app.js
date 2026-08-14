@@ -494,8 +494,6 @@ async function renderClients(ttl,c,a){
   a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
     <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(window._clientsQ)}" style="max-width:260px">
     ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalCompleterAdresses()"><i class="ti ti-map-pin-cog"></i>'+TR("Compléter les adresses")+'</button>' : ''}
-    ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="rapprochementSirene()"><i class="ti ti-building-bank"></i>'+TR("Rapprochement entreprises")+'</button>' : ''}
-    ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalRapprochementFichier()"><i class="ti ti-file-spreadsheet"></i>'+TR("Rapprochement (fichier)")+'</button>' : ''}
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
   </div>`;
   document.getElementById('clients-search')?.addEventListener('input', e => {
@@ -523,220 +521,6 @@ async function chargerListeClients(){
   </table></div>`;
 }
 
-const MODE_REGLEMENT_LABELS = { virement:'Virement bancaire', edi:'EDI', cheque:'Chèque' };
-async function setClientPriorite(id, prio){
-  try{ await API.setClientPriorite(id, prio); if(STATE.view==='client') render(); toast(TR('Priorité mise à jour'),'ti-flag','var(--success)'); }
-  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
-}
-window.setClientPriorite = setClientPriorite;
-function ouvrirClientVF(vfId){
-  const account = window._VF_ACCOUNT;
-  if(!account){ toast(TR('Compte VosFactures non configuré'),'ti-alert-circle','var(--warning)'); return; }
-  if(vfId){ window.open(`https://${account}.vosfactures.fr/clients/${vfId}`,'_blank','noopener'); }
-  else { toast(TR("Pas d'identifiant VosFactures sur cette fiche"),'ti-alert-circle','var(--warning)'); window.open(`https://${account}.vosfactures.fr/clients`,'_blank','noopener'); }
-}
-window.ouvrirClientVF = ouvrirClientVF;
-function ouvrirClientPennylane(nom){
-  // Pas d'identifiant client Pennylane stocké sur la fiche → ouverture de Pennylane (recherche manuelle)
-  window.open('https://app.pennylane.com/','_blank','noopener');
-}
-window.ouvrirClientPennylane = ouvrirClientPennylane;
-async function envoyerEmailSiret(id){
-  if(!confirm(TR('Envoyer au distributeur un e-mail de confirmation SIRET / TVA ?'))) return;
-  try{ const r = await API.emailSiret(id); toast(TR('E-mail envoyé à ')+r.to,'ti-mail','var(--success)'); }
-  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
-}
-window.envoyerEmailSiret = envoyerEmailSiret;
-
-// N° TVA intracommunautaire FR calculé depuis le SIREN
-function tvaFromSiren(siren){
-  const s = String(siren||'').replace(/\D/g,'');
-  if(s.length!==9) return '';
-  const cle = (12 + 3 * (parseInt(s,10) % 97)) % 97;
-  return 'FR' + String(cle).padStart(2,'0') + s;
-}
-window.tvaFromSiren = tvaFromSiren;
-function majTvaDepuisSiren(){
-  const tvaEl = $('f-tva'); if(!tvaEl) return;
-  if(!tvaEl.value){ const t = tvaFromSiren(gv('f-siren')); if(t) tvaEl.value = t; }
-}
-window.majTvaDepuisSiren = majTvaDepuisSiren;
-
-// ── Rapprochement des distributeurs avec l'Annuaire des entreprises (SIRENE) ──
-async function rapprochementSirene(){
-  toast(TR('Rapprochement en cours…'),'ti-loader-2');
-  let clients=[]; try{ clients = await API.clients(); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
-  const sansSiren = (clients||[]).filter(c=> c.type!=='Particulier' && !c.siren && c.nom);
-  if(!sansSiren.length){ toast(TR('Tous les distributeurs ont déjà un SIREN.'),'ti-check','var(--success)'); return; }
-  const cibles = sansSiren.slice(0, 40);
-  const props=[];
-  for(let i=0;i<cibles.length;i++){
-    const c=cibles[i];
-    try{
-      const cp = String(c.cp||'').trim();
-      const url='https://recherche-entreprises.api.gouv.fr/search?per_page=3&q='+encodeURIComponent(c.nom)+(/^\d{5}$/.test(cp)?('&code_postal='+cp):'');
-      const r = await fetch(url).then(x=>x.json());
-      const cands=(r.results||[]).map(e=>({siren:e.siren, siret:(e.siege&&e.siege.siret)||'', nom:e.nom_complet||e.nom_raison_sociale||'', adresse:(e.siege&&e.siege.adresse)||'', cp:(e.siege&&e.siege.code_postal)||'', etat:e.etat_administratif}));
-      props.push({client:c, candidates:cands});
-    }catch(e){ props.push({client:c, candidates:[]}); }
-    await new Promise(res=>setTimeout(res,160));
-  }
-  window._SIRENE_PROPS = props;
-  afficherModalSirene(props, cibles.length, sansSiren.length);
-}
-window.rapprochementSirene = rapprochementSirene;
-
-function afficherModalSirene(props, traites, totalRestants){
-  const lignes = props.map((p,idx)=>{
-    const c=p.client;
-    const opts = p.candidates.map((cd,j)=>`<option value="${j}">${esc(cd.nom)} — ${esc(cd.siren)} (${esc(cd.cp)}) ${cd.etat==='A'?'✅':'⛔'}</option>`).join('');
-    return `<tr style="border-bottom:0.5px solid var(--border)">
-      <td style="padding:6px 8px;vertical-align:top"><b>${esc(c.nom)}</b><br><span style="font-size:11px;color:var(--text3)">${esc([c.cp,c.ville].filter(Boolean).join(' '))}</span></td>
-      <td style="padding:6px 8px;vertical-align:top">${p.candidates.length?`<select id="sirene-sel-${idx}" class="form-input" style="font-size:12px;padding:5px">${opts}</select>`:'<span style="color:var(--text3);font-size:12px">Aucun résultat</span>'}</td>
-      <td style="padding:6px 8px;text-align:right;white-space:nowrap;vertical-align:top">
-        <a href="https://annuaire-entreprises.data.gouv.fr/rechercher?terme=${encodeURIComponent(c.nom+' '+(c.ville||''))}" target="_blank" rel="noopener" title="Vérifier sur l'Annuaire" style="color:var(--accent);margin-right:8px"><i class="ti ti-external-link"></i></a>
-        ${p.candidates.length?`<button class="btn sm success" id="sirene-btn-${idx}" onclick="appliquerSirene(${idx})"><i class="ti ti-check"></i></button>`:''}
-      </td></tr>`;
-  }).join('');
-  const reste = totalRestants>traites ? ` · ${totalRestants-traites} restant(s) — relancez pour continuer` : '';
-  const html = `<div id="modal-sirene" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
-    <div style="background:var(--surface);border-radius:12px;padding:20px;width:840px;max-width:95vw;max-height:88vh;overflow:auto" onclick="event.stopPropagation()">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <h3 style="margin:0;font-size:16px"><i class="ti ti-building-bank"></i> Rapprochement entreprises — ${traites} distributeur(s) analysé(s)${reste}</h3>
-        <button class="btn sm" onclick="document.getElementById('modal-sirene').remove()"><i class="ti ti-x"></i></button>
-      </div>
-      <p style="font-size:12px;color:var(--text2);margin:0 0 12px">Vérifiez chaque proposition avant d'appliquer (l'API peut proposer une entité voisine ou une association). Le n° de TVA est calculé automatiquement à partir du SIREN. ✅ = établissement actif.</p>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr style="text-align:left;color:var(--text3);font-size:11px">
-          <th style="padding:6px 8px">Distributeur</th><th style="padding:6px 8px">Proposition (Annuaire)</th><th style="padding:6px 8px;text-align:right">Action</th>
-        </tr></thead>
-        <tbody>${lignes}</tbody>
-      </table>
-    </div></div>`;
-  const wrap=document.createElement('div'); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
-}
-window.afficherModalSirene = afficherModalSirene;
-
-function appliquerSirene(idx){
-  const p = (window._SIRENE_PROPS||[])[idx]; if(!p) return;
-  const sel = $('sirene-sel-'+idx); const j = sel ? parseInt(sel.value) : 0;
-  const cd = p.candidates[j]; if(!cd || !cd.siren){ toast(TR('Aucune correspondance sélectionnée'),'ti-alert-circle','var(--warning)'); return; }
-  const tva = tvaFromSiren(cd.siren);
-  API.setClientSirene(p.client.id, {siren:cd.siren, siret:cd.siret, tva}).then(()=>{
-    const btn=$('sirene-btn-'+idx); if(btn) btn.outerHTML='<span style="color:#16a34a;font-size:12px;font-weight:600"><i class="ti ti-check"></i> Appliqué</span>';
-  }).catch(e=>toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'));
-}
-window.appliquerSirene = appliquerSirene;
-
-// ── Rapprochement depuis un fichier CSV (ex. export Pennylane) → export enrichi ──
-function cleanNom(n){ n=String(n||''); n=n.replace(/\(.*?\)/g,''); n=n.replace(/\s*-\s*EDI\b/ig,''); n=n.replace(/\bchez\s+m[r|me]?\b.*/i,''); return n.replace(/\s+/g,' ').trim(); }
-function normA(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim(); }
-function scoreCand(qnom, qcp, cand){
-  const q = normA(qnom).split(' ').filter(w=>w.length>2);
-  const cn = normA(cand.nom);
-  const shared = q.filter(w=>cn.indexOf(w)>=0).length;
-  let sc = q.length ? shared/q.length : 0;
-  if(cand.etat==='A') sc+=0.25; else sc-=0.35;
-  if(cand.cp && qcp && String(cand.cp)===String(qcp)) sc+=0.2;
-  return sc;
-}
-function parseCsvSimple(text, delim){
-  const rows=[]; let field='', row=[], i=0, inq=false; const n=text.length;
-  while(i<n){ const c=text[i];
-    if(inq){ if(c==='"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} inq=false;i++;continue;} field+=c;i++;continue; }
-    if(c==='"'){ inq=true;i++;continue; }
-    if(c===delim){ row.push(field); field=''; i++; continue; }
-    if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
-    if(c==='\r'){ i++; continue; }
-    field+=c; i++;
-  }
-  if(field.length||row.length){ row.push(field); rows.push(row); }
-  return rows;
-}
-function telechargerCsv(filename, rows){
-  const esc=v=>{ v=(v==null?'':String(v)); return /[;"\n\r]/.test(v)? '"'+v.replace(/"/g,'""')+'"' : v; };
-  const content='﻿'+rows.map(r=>r.map(esc).join(';')).join('\r\n');
-  const blob=new Blob([content],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
-}
-async function fetchSirene(url){
-  let res = await fetch(url);
-  if(res.status===429){ await new Promise(r=>setTimeout(r,1300)); res = await fetch(url); }
-  if(!res.ok) return { results:[] };
-  return res.json();
-}
-function modalRapprochementFichier(){
-  showModal(`<div class="modal-header"><i class="ti ti-file-spreadsheet" style="color:var(--accent)"></i><h2>${TR('Rapprochement depuis un fichier')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-    <div class="modal-body">
-      <p style="font-size:13px;color:var(--text2);margin-top:0">${TR('Déposez un fichier CSV (ex. export Pennylane) avec au minimum les colonnes Nom, Code postal, Ville. Le navigateur interroge l\'Annuaire des entreprises et enrichit chaque ligne (SIREN, SIRET, TVA, lien). Un fichier enrichi est ensuite téléchargé, avec une colonne « à vérifier » pour les cas incertains.')}</p>
-      <input class="form-input" id="rf-file" type="file" accept=".csv,text/csv">
-      <div style="margin-top:8px"><label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="rf-actifs" checked> ${TR('Ne retenir que les établissements actifs')}</label></div>
-      <div id="rf-progress" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
-    </div>
-    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" id="rf-go" onclick="lancerRapprochementFichier()"><i class="ti ti-player-play"></i> ${TR('Lancer')}</button></div>`);
-}
-window.modalRapprochementFichier = modalRapprochementFichier;
-async function lancerRapprochementFichier(){
-  const inp=$('rf-file'); const f=inp && inp.files ? inp.files[0] : null;
-  if(!f){ toast(TR('Choisissez un fichier'),'ti-alert-circle','var(--warning)'); return; }
-  const seulActifs = !!($('rf-actifs') && $('rf-actifs').checked);
-  const text = await f.text();
-  const l0 = (text.split('\n')[0]||'');
-  const delim = (l0.split(';').length >= l0.split(',').length) ? ';' : ',';
-  const rows = parseCsvSimple(text, delim);
-  if(rows.length<2){ toast(TR('Fichier vide ou illisible'),'ti-alert-circle','var(--danger)'); return; }
-  const headers = rows[0].map(h=>String(h||'').trim());
-  const low = headers.map(h=>h.toLowerCase());
-  const findIdx=(...names)=>{ for(const nm of names){ const i=low.findIndex(h=>h.indexOf(nm)>=0); if(i>=0) return i; } return -1; };
-  const iNom=findIdx('nom'), iCp=findIdx('code postal','cp','postal'), iVille=findIdx('ville'), iSiren=findIdx('siren'), iTva=findIdx('tva');
-  if(iNom<0){ toast(TR('Colonne « Nom » introuvable dans le fichier'),'ti-alert-circle','var(--danger)'); return; }
-  const data = rows.slice(1).filter(r=>r.length && String(r[iNom]||'').trim());
-  const go=$('rf-go'); if(go){ go.disabled=true; go.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Traitement…'); }
-  const prog=$('rf-progress');
-  const outHeaders=[...headers,'SIRET (siège)','Nom officiel INSEE','Statut','Lien Annuaire','À vérifier'];
-  const out=[outHeaders];
-  let done=0, matched=0, verif=0, none=0;
-  for(const r of data){
-    const nom=String(r[iNom]||'').trim();
-    const cp=(iCp>=0?String(r[iCp]||''):'').trim();
-    const ville=(iVille>=0?String(r[iVille]||''):'').trim();
-    const cp5=/^\d{4}$/.test(cp)?('0'+cp):cp;
-    let cands=[];
-    try{
-      const url='https://recherche-entreprises.api.gouv.fr/search?per_page=5&q='+encodeURIComponent(cleanNom(nom))+(/^\d{5}$/.test(cp5)?('&code_postal='+cp5):'');
-      const j=await fetchSirene(url);
-      cands=(j.results||[]).map(e=>({siren:e.siren,siret:(e.siege&&e.siege.siret)||'',nom:e.nom_complet||e.nom_raison_sociale||'',cp:(e.siege&&e.siege.code_postal)||'',etat:e.etat_administratif}));
-    }catch(e){}
-    let pool = seulActifs ? cands.filter(c=>c.etat==='A') : cands;
-    if(!pool.length) pool = cands; // fallback si tout est fermé
-    let best=null, bestSc=-99;
-    for(const cd of pool){ const sc=scoreCand(nom,cp5,cd); if(sc>bestSc){bestSc=sc;best=cd;} }
-    const outRow=r.slice(); while(outRow.length<headers.length) outRow.push('');
-    let siret='',off='',stat='',aVer='',siren='';
-    if(!best){ none++; aVer='Aucun résultat — à compléter manuellement'; }
-    else {
-      off=best.nom; stat=best.etat==='A'?'Actif':(best.etat==='C'?'Fermé':(best.etat||''));
-      if(best.etat==='A' && bestSc>=0.3){
-        siren=best.siren; siret=best.siret;
-        const nbA=cands.filter(c=>c.etat==='A').length;
-        if(bestSc<0.6 || nbA>1){ aVer='À vérifier'+(nbA>1?' (plusieurs candidats)':' (nom différent)'); verif++; } else matched++;
-      } else { aVer='Candidat fermé ou incertain — à vérifier'; verif++; }
-    }
-    if(siren){ if(iSiren>=0) outRow[iSiren]=siren; const tv=tvaFromSiren(siren); if(iTva>=0 && tv) outRow[iTva]=tv; }
-    const lien = siren?('https://annuaire-entreprises.data.gouv.fr/entreprise/'+siren):('https://annuaire-entreprises.data.gouv.fr/rechercher?terme='+encodeURIComponent(nom+' '+ville));
-    out.push([...outRow, siret, off, stat, lien, aVer]);
-    done++;
-    if(prog && (done%5===0 || done===data.length)) prog.innerHTML=`<b>${done}/${data.length}</b> traité(s) — ${matched} rapprochés, ${verif} à vérifier, ${none} sans résultat.`;
-    await new Promise(res=>setTimeout(res,160));
-  }
-  if(prog) prog.innerHTML=`<b>Terminé : ${done} ligne(s)</b> — ${matched} rapprochés, ${verif} à vérifier, ${none} sans résultat. Téléchargement…`;
-  telechargerCsv('Distributeurs_enrichis_SIRENE.csv', out);
-  if(go){ go.disabled=false; go.innerHTML='<i class="ti ti-player-play"></i> '+TR('Lancer'); }
-  toast(TR('Fichier enrichi téléchargé'),'ti-download','var(--success)');
-}
-window.lancerRapprochementFichier = lancerRapprochementFichier;
-
 async function renderClient(ttl,c,a){
   const cl=await API.client(STATE.clientId);
   ttl.textContent=cl.nom;
@@ -747,68 +531,35 @@ async function renderClient(ttl,c,a){
     <button class="btn sm" onclick="modalPret(null,${cl.id})"><i class="ti ti-file-certificate"></i>${TR('Bon de prêt')}</button>
     <button class="btn sm primary" onclick="modalNewIntervention(null,${cl.id})"><i class="ti ti-plus"></i>Intervention</button>`;
   const s=cl.stats||{};
-  const nomJs = esc(cl.nom).replace(/'/g,'&#39;');
-  const lignesAdr = [cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
-  const telH  = cl.tel ? `<a href="tel:${esc(String(cl.tel).replace(/[^\d+]/g,''))}" style="color:var(--accent);text-decoration:none">${esc(cl.tel)}</a>` : '—';
-  const portH = cl.portable ? `<a href="tel:${esc(String(cl.portable).replace(/[^\d+]/g,''))}" style="color:var(--accent);text-decoration:none">${esc(cl.portable)}</a>` : '—';
-  const mailH = cl.email ? String(cl.email).split(/[;,]/).map(e=>e.trim()).filter(Boolean).map(e=>`<a href="mailto:${esc(e)}" style="color:var(--accent);text-decoration:none">${esc(e)}</a>`).join(', ') : '—';
-  const PRIO_C = {T1:'#dc2626',T2:'#d97706',T3:'#65a30d'};
-  const prioBtns = [['T1','T1'],['T2','T2'],['T3','T3'],['','Aucune']].map(([v,lbl])=>{
-    const on = (cl.priorite||'')===v; const col = PRIO_C[v]||'#94a3b8';
-    return `<button onclick="setClientPriorite(${cl.id},'${v}')" style="border:1px solid ${on?col:'var(--border)'};background:${on?col:'transparent'};color:${on?'#fff':'var(--text2)'};border-radius:99px;padding:2px 10px;font-size:11px;font-weight:600;cursor:pointer">${lbl}</button>`;
-  }).join(' ');
-  const row = (label,val)=>`<tr><td style="color:var(--text3);padding:4px 0;width:150px;vertical-align:top">${label}</td><td style="font-weight:500">${val}</td></tr>`;
-  const rglt = MODE_REGLEMENT_LABELS[cl.mode_reglement]||cl.mode_reglement||'—';
-  const annuaireUrl = cl.siren
-    ? `https://annuaire-entreprises.data.gouv.fr/entreprise/${encodeURIComponent(cl.siren)}`
-    : `https://annuaire-entreprises.data.gouv.fr/rechercher?terme=${encodeURIComponent([cl.nom,cl.ville].filter(Boolean).join(' '))}`;
-  const annuaireLink = `<a href="${annuaireUrl}" target="_blank" rel="noopener" title="Annuaire des entreprises (data.gouv.fr)" style="color:var(--accent);margin-left:6px;text-decoration:none"><i class="ti ti-building-bank"></i></a>`;
-  const sirenDisp = (cl.siren || cl.siret)
-    ? `${esc(cl.siren||'')}${cl.siret?` <span style="color:var(--text3);font-size:11px">· SIRET ${esc(cl.siret)}</span>`:''}`
-    : `<span style="color:var(--text3)">—</span>`;
   c.innerHTML=`
     <div class="breadcrumb"><span onclick="setView('clients')">Clients</span><i class="ti ti-chevron-right" style="font-size:11px"></i>${esc(cl.nom)}</div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="card">
         <div class="section-title"><i class="ti ti-user"></i>${TR("Fiche distributeur")}</div>
-        <table style="width:100%;font-size:13px;border-collapse:collapse">
-          ${row('Nom de la compagnie', `<b>${esc(cl.nom)}</b>`)}
+        <table style="width:100%;font-size:12px">
+          ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Portable',cl.portable],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
           ${(()=>{
-            if(!lignesAdr.length) return row('Adresse', `<span style="color:var(--text3)">— <span style="font-size:11px">${TR('(à compléter)')}</span></span>`);
-            const q=encodeURIComponent(lignesAdr.join(', '));
-            return row('Adresse', `${lignesAdr.map(l=>esc(l)).join('<br>')}
-              <div style="margin-top:5px;display:flex;gap:10px;font-size:11px;font-weight:400;flex-wrap:wrap">
-                <span onclick="voirDistributeurSurCarte(${cl.id},'${nomJs}')" style="color:var(--accent);cursor:pointer"><i class="ti ti-map-pin" style="font-size:11px"></i> ${TR("Voir sur la carte")}</span>
-                <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> OpenStreetMap</a>
-                <span onclick="copierAdresse(this,'${esc(lignesAdr.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> ${TR("Copier")}</span>
-              </div>`);
+            const lignes=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
+            if(!lignes.length) return `<tr><td style="color:var(--text3);padding:3px 0;width:100px">Adresse</td><td style="color:var(--text3)">— <span style="font-size:11px">${TR('(à compléter)')}</span></td></tr>`;
+            const q=encodeURIComponent(lignes.join(', '));
+            return `<tr><td style="color:var(--text3);padding:5px 0;width:100px;vertical-align:top">Adresse</td>
+              <td style="font-weight:500;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}
+                <div style="margin-top:4px;display:flex;gap:8px;font-size:11px;font-weight:400">
+                  <span onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')" style="color:var(--accent);cursor:pointer"><i class="ti ti-map-pin" style="font-size:11px"></i> ${TR("Voir sur la carte")}</span>
+                  <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> OpenStreetMap</a>
+                  <span onclick="copierAdresse(this,'${esc(lignes.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> ${TR("Copier")}</span>
+                </div>
+              </td></tr>`;
           })()}
-          ${row('Téléphone', telH)}
-          ${row('Tel. portable', portH)}
-          ${row('E-mail(s)', mailH)}
-          ${row('Type', esc(cl.type||'—'))}
-          ${row('SIREN / SIRET', `${sirenDisp}${annuaireLink}`)}
-          ${row('N° TVA', esc(cl.tva||'—'))}
-          ${row(TR('Priorité'), `<div style="display:flex;gap:5px;flex-wrap:wrap">${prioBtns}</div>`)}
+          ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">${TR('💳 EDI — Prélèvement')}</span></td></tr>`:''}
+          ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')">${TR('🗺️ Affiché sur la carte distributeurs')}</span></td></tr>`:''}
+          ${cl.public_site?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Site public</td><td><span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span></td></tr>`:''}
+          ${cl.priorite?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${TR('Priorité')}</td><td><span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${cl.priorite}</span></td></tr>`:''}
+          ${cl.entite_facturation_id?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Facturation</td><td><span class="badge ouvert">🧾 Facturé à ${esc(cl.entite_facturation_nom||'—')}</span></td></tr>`:''}
         </table>
-        <div class="section-title" style="font-size:12px;margin-top:12px;color:var(--text2)"><i class="ti ti-settings-2"></i>Options additionnelles</div>
-        <table style="width:100%;font-size:13px;border-collapse:collapse">
-          ${row('Personne à contacter', esc(cl.contact||'—'))}
-          ${row('Date limite de règlement', cl.delai_reglement!=null?`${cl.delai_reglement} jours`:'—')}
-          ${row('Mode de règlement', esc(rglt))}
-        </table>
-        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-          ${cl.edi?`<span class="badge ouvert">${TR('💳 EDI — Prélèvement')}</span>`:''}
-          ${cl.sur_carte?`<span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${nomJs}')">${TR('🗺️ Affiché sur la carte distributeurs')}</span>`:''}
-          ${cl.public_site?`<span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span>`:''}
-          ${cl.entite_facturation_id?`<span class="badge ouvert">🧾 Facturé à ${esc(cl.entite_facturation_nom||'—')}</span>`:''}
-        </div>
-        <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
+        <div style="margin-top:10px;display:flex;gap:6px">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
           <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>${TR('Fusionner')}</button>
-          <button class="btn sm" onclick="ouvrirClientVF(${cl.vf_id||'null'})" title="Consulter la fiche dans VosFactures"><i class="ti ti-external-link"></i> VosFactures</button>
-          <button class="btn sm" onclick="ouvrirClientPennylane('${nomJs}')" title="Consulter dans Pennylane"><i class="ti ti-external-link"></i> Pennylane</button>
-          <button class="btn sm" onclick="envoyerEmailSiret(${cl.id})" title="Demander confirmation SIRET / TVA par e-mail"><i class="ti ti-mail"></i> ${TR('Confirmer SIRET/TVA')}</button>
         </div>
       </div>
       <div class="card">
@@ -3357,9 +3108,9 @@ function renderPhotoGallery(photos,interId){
   if(!photos.length) return '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+TR("Aucune photo")+'</div>';
   return `<div class="photo-grid">${photos.map((p,idx)=>`
     <div class="photo-thumb">
-      <img src="/uploads/thumbs/${esc(p.filename_thumb||p.filename)}" alt="${esc(p.legende||'Photo')}"
-        onclick="openLightbox(${interId},${idx},[${photos.map(x=>`'${x.filename}'`).join(',')}])"
-        onerror="this.src='/uploads/${esc(p.filename)}'">
+      <img src="${esc(p.url_thumb||('/uploads/thumbs/'+(p.filename_thumb||p.filename)))}" alt="${esc(p.legende||'Photo')}"
+        onclick="openLightbox(${interId},${idx},[${photos.map(x=>`'${esc(x.url||('/uploads/'+x.filename)).replace(/'/g,'&#39;')}'`).join(',')}])"
+        onerror="this.src='${esc(p.url||('/uploads/'+p.filename))}'">
       <div class="photo-thumb-actions">
         <button class="photo-btn" onclick="editPhotoLegende(${interId},${p.id},'${esc(p.legende||'')}')"><i class="ti ti-pencil"></i></button>
         <button class="photo-btn danger" onclick="deletePhoto(${interId},${p.id})"><i class="ti ti-trash"></i></button>
@@ -3397,8 +3148,8 @@ function showLightbox(){
     <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5);font-size:12px">${LB.idx+1} / ${LB.filenames.length}</div>
     ${LB.idx>0?`<button onclick="lbNav(-1)" style="position:absolute;left:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:24px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-left"></i></button>`:''}
     ${LB.idx<LB.filenames.length-1?`<button onclick="lbNav(1)" style="position:absolute;right:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:24px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-right"></i></button>`:''}
-    <img src="/uploads/${fname}" style="max-width:90vw;max-height:82vh;object-fit:contain;border-radius:6px;">
-    <a href="/uploads/${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:12px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
+    <img src="${fname}" style="max-width:90vw;max-height:82vh;object-fit:contain;border-radius:6px;">
+    <a href="${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:12px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
   document.body.appendChild(el);
   el.addEventListener('click',e=>{if(e.target===el)closeLightbox();});
   document.addEventListener('keydown',lbKey);
@@ -3433,18 +3184,6 @@ function clientForm(d={}){return `<div class="grid-2">
       ${[['T1','T1 — Priorité absolue'],['T2','T2 — Priorité moyenne'],['T3','T3 — Priorité basse']].map(p=>`<option value="${p[0]}" ${d.priorite===p[0]?'selected':''}>${p[1]}</option>`).join('')}
     </select>
   </div>
-  <div class="form-group"><label class="form-label">${TR('Mode de règlement par défaut')}</label>
-    <select class="form-input" id="f-mode-reglement">
-      <option value="">${TR('— Non défini —')}</option>
-      ${[['virement','Virement bancaire'],['edi','EDI'],['cheque','Chèque']].map(m=>`<option value="${m[0]}" ${d.mode_reglement===m[0]?'selected':''}>${m[1]}</option>`).join('')}
-    </select>
-  </div>
-  <div class="form-group"><label class="form-label">${TR('Date limite de règlement (jours)')}</label>
-    <input class="form-input" id="f-delai-reglement" type="number" min="0" step="1" placeholder="30" value="${d.delai_reglement!=null?d.delai_reglement:''}">
-  </div>
-  <div class="form-group"><label class="form-label">SIREN</label><input class="form-input mono" id="f-siren" value="${esc(d.siren||'')}" placeholder="123456789" oninput="majTvaDepuisSiren()"></div>
-  <div class="form-group"><label class="form-label">SIRET (siège)</label><input class="form-input mono" id="f-siret" value="${esc(d.siret||'')}" placeholder="12345678900012"></div>
-  <div class="form-group"><label class="form-label">N° TVA</label><input class="form-input mono" id="f-tva" value="${esc(d.tva||'')}" placeholder="FR..."></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
     <select class="form-input" id="f-facturation-mode" onchange="toggleFacturation(this.value)">
       <option value="identique" ${!d.entite_facturation_id?'selected':''}>${TR('Identique (le distributeur se facture lui-même)')}</option>
@@ -3500,11 +3239,6 @@ async function saveClient(id){
     sur_carte: surCarte,
     public_site: !!document.getElementById('f-public-site')?.checked,
     priorite: gv('f-priorite') || null,
-    mode_reglement: gv('f-mode-reglement') || null,
-    delai_reglement: gv('f-delai-reglement') || null,
-    siren: gv('f-siren') || null,
-    siret: gv('f-siret') || null,
-    tva: gv('f-tva') || null,
     reseau_carte: reseau
   };
   // Facturation : Identique (=null) ou Autre (id d'un distributeur existant)

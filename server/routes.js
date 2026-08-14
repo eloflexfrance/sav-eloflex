@@ -4,7 +4,7 @@ const crypto   = require('crypto');
 const XLSX     = require('xlsx');
 const bcrypt   = require('bcryptjs');
 const db       = require('./db');
-const { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, savePreuveLivraison, deletePreuveLivraisonFile } = require('./uploads');
+const { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, savePreuveLivraison, deletePreuveLivraisonFile, savePhoto, getPhotoUrl } = require('./uploads');
 const router   = express.Router();
 
 // ── Auth : routes publiques (login/logout/me) ──────────────────────
@@ -420,19 +420,16 @@ router.get('/clients/:id', async (req, res) => {
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite,
-            mode_reglement, delai_reglement, siren, siret, tva } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
       `INSERT INTO clients (nom,contact,email,tel,portable,ville,type,token_portail,edi,sur_carte,reseau_carte,
-                            adresse,adresse2,cp,pays,entite_facturation_id,public_site,priorite,mode_reglement,delai_reglement,siren,siret,tva)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING *`,
+                            adresse,adresse2,cp,pays,entite_facturation_id,public_site,priorite)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [nom, contact||null, email||null, tel||null, portable||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null,
-       mode_reglement||null, (delai_reglement!==undefined&&delai_reglement!==''&&delai_reglement!==null)?parseInt(delai_reglement):null,
-       siren||null, siret||null, tva||null]
+       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null]
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
@@ -443,20 +440,16 @@ router.post('/clients', async (req, res) => {
 router.put('/clients/:id', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite,
-            mode_reglement, delai_reglement, siren, siret, tva } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite } = req.body;
     const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
       `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,portable=$5,ville=$6,type=$7,
        edi=$8,sur_carte=$9,reseau_carte=$10,
-       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,priorite=$17,
-       mode_reglement=$18,delai_reglement=$19,siren=$20,siret=$21,tva=$22,updated_at=NOW() WHERE id=$23 RETURNING *`,
+       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,priorite=$17,updated_at=NOW() WHERE id=$18 RETURNING *`,
       [nom, contact, email, tel, portable||null, ville, type, !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null,
        (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
        !!public_site, priorite||null,
-       mode_reglement||null, (delai_reglement!==undefined&&delai_reglement!==''&&delai_reglement!==null)?parseInt(delai_reglement):null,
-       siren||null, siret||null, tva||null,
        req.params.id]
     );
     // Adresse modifiée : les anciennes coordonnées ne valent plus rien
@@ -490,66 +483,6 @@ router.post('/clients/:id/type', async (req, res) => {
     const type = (req.body && req.body.type) ? String(req.body.type).trim() : '';
     if (!type) return res.status(400).json({ error: 'type requis' });
     const row = await db.run('UPDATE clients SET type=$1, updated_at=NOW() WHERE id=$2 RETURNING id, nom, type', [type, req.params.id]);
-    if (!row) return res.status(404).json({ error: 'Fiche introuvable' });
-    res.json({ ok: true, client: row });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Enregistrer SIREN / SIRET / TVA (rapprochement Annuaire des entreprises)
-router.post('/clients/:id/sirene', async (req, res) => {
-  try {
-    const siren = (req.body && req.body.siren) ? String(req.body.siren).replace(/\s/g,'') : null;
-    const siret = (req.body && req.body.siret) ? String(req.body.siret).replace(/\s/g,'') : null;
-    const tva   = (req.body && req.body.tva) ? String(req.body.tva).replace(/\s/g,'') : null;
-    const row = await db.run('UPDATE clients SET siren=$1, siret=$2, tva=$3, updated_at=NOW() WHERE id=$4 RETURNING id, nom, siren, siret, tva',
-      [siren, siret, tva, req.params.id]);
-    if (!row) return res.status(404).json({ error: 'Fiche introuvable' });
-    res.json({ ok: true, client: row });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// E-mail de confirmation SIRET / TVA (facturation électronique) au distributeur
-router.post('/clients/:id/email-siret', requireAuth, async (req, res) => {
-  try {
-    const c = await db.get('SELECT id, nom, email, siren, siret, tva FROM clients WHERE id=$1', [req.params.id]);
-    if (!c) return res.status(404).json({ error: 'Fiche introuvable' });
-    const emails = String(c.email || '').split(/[;,]/).map(e => e.trim()).filter(Boolean);
-    if (!emails.length) return res.status(400).json({ error: "Aucune adresse e-mail sur la fiche" });
-    const key = process.env.BREVO_API_KEY;
-    if (!key) return res.status(503).json({ error: 'BREVO_API_KEY manquante' });
-    const p = {}; (await db.all('SELECT cle,valeur FROM parametres')).forEach(r => p[r.cle] = r.valeur);
-    const html = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
-      <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Facturation électronique</h2></div>
-      <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px;line-height:1.55">
-        <p>Bonjour,</p>
-        <p>Suite au passage à la facturation électronique, pouvez-vous nous confirmer votre numéro <b>SIRET</b> et <b>TVA intracommunautaire</b>.</p>
-        <table style="border-collapse:collapse;margin:14px 0;font-size:14px">
-          <tr><td style="padding:6px 14px;background:#f5f7fa;font-weight:600;border:1px solid #e5e7eb">SIRET</td><td style="padding:6px 14px;border:1px solid #e5e7eb;font-family:monospace">${c.siret || '—'}</td></tr>
-          <tr><td style="padding:6px 14px;background:#f5f7fa;font-weight:600;border:1px solid #e5e7eb">N° TVA intracommunautaire</td><td style="padding:6px 14px;border:1px solid #e5e7eb;font-family:monospace">${c.tva || '—'}</td></tr>
-        </table>
-        <p>Si ce ne sont pas ceux mentionnés, merci de nous indiquer par retour de mail lesquels utiliser.</p>
-        <p>Bien cordialement,</p>
-      </div>
-      <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
-    </div>`;
-    const axios = require('axios');
-    await axios.post('https://api.brevo.com/v3/smtp/email', {
-      sender: { name: 'Eloflex France', email: p.email_from || 'sav@eloflex.fr' },
-      to: emails.map(e => ({ email: e })),
-      cc: [{ email: p.email_cc_sav || 'sav@eloflex.fr' }],
-      subject: 'Eloflex — Confirmation de votre SIRET et TVA intracommunautaire',
-      htmlContent: html
-    }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
-    res.json({ ok: true, to: emails.join(', ') });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Changer uniquement la priorité (T1/T2/T3 ou vide) depuis la fiche
-router.post('/clients/:id/priorite', async (req, res) => {
-  try {
-    const prio = (req.body && req.body.priorite) ? String(req.body.priorite).trim() : null;
-    if (prio && !['T1','T2','T3'].includes(prio)) return res.status(400).json({ error: 'priorité invalide' });
-    const row = await db.run('UPDATE clients SET priorite=$1, updated_at=NOW() WHERE id=$2 RETURNING id, nom, priorite', [prio || null, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Fiche introuvable' });
     res.json({ ok: true, client: row });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -860,7 +793,15 @@ router.get('/interventions/:id/historique', async (req, res) => {
 
 // ── PHOTOS ────────────────────────────────────────────────────────
 router.get('/interventions/:id/photos', async (req, res) => {
-  try { res.json(await db.all('SELECT * FROM intervention_photos WHERE intervention_id=$1 ORDER BY created_at', [req.params.id])); }
+  try {
+    const rows = await db.all('SELECT * FROM intervention_photos WHERE intervention_id=$1 ORDER BY created_at', [req.params.id]);
+    // URLs résolues côté serveur (Cloudinary ou disque local) pour un affichage fiable
+    res.json(rows.map(p => ({
+      ...p,
+      url: getPhotoUrl(p.filename, false),
+      url_thumb: getPhotoUrl(p.filename_thumb || p.filename, true)
+    })));
+  }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.post('/interventions/:id/photos', upload.array('photos', 20), async (req, res) => {
@@ -870,9 +811,10 @@ router.post('/interventions/:id/photos', upload.array('photos', 20), async (req,
     if (!req.files?.length) return res.status(400).json({ error: 'Aucun fichier' });
     const results = [];
     for (const file of req.files) {
-      const thumb = await makeThumb(file.filename);
+      // savePhoto gère Cloudinary (buffer) et le disque local (sharp) et renvoie filename + filename_thumb
+      const saved = await savePhoto(file, interId);
       const r = await db.run('INSERT INTO intervention_photos (intervention_id,filename,filename_thumb,legende,taille,mime) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-        [interId, file.filename, thumb, req.body.legende||null, file.size, file.mimetype]);
+        [interId, saved.filename, saved.filename_thumb || saved.filename, req.body.legende||null, saved.taille, saved.mime]);
       results.push(r);
     }
     await logHistorique(interId, 'Système', 'photos', '', `${req.files.length} photo(s) ajoutée(s)`);

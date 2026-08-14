@@ -100,11 +100,6 @@ async function initDB() {
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_actif BOOLEAN DEFAULT TRUE`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS vf_ignore BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS edi BOOLEAN DEFAULT FALSE`);
-      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS mode_reglement TEXT`);
-      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS delai_reglement INTEGER`);
-      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS siren TEXT`);
-      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS siret TEXT`);
-      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tva TEXT`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_bordereau_vf TEXT`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_sav TEXT`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_facture TEXT`);
