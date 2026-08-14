@@ -725,14 +725,22 @@ router.put('/interventions/:id', async (req, res) => {
     const pgClient = await db.pool.connect();
     try {
       await pgClient.query('BEGIN');
-      await pgClient.query(
-        `UPDATE interventions SET type=COALESCE($1,type),garantie=COALESCE($2,garantie),statut=COALESCE($3,statut),description=COALESCE($4,description),notes=COALESCE($5,notes),technicien=COALESCE($6,technicien),
-          envoi_transporteur=$7,envoi_numero=$8,envoi_date=$9,retour_transporteur=$10,retour_numero=$11,retour_date=$12,
-          num_bordereau_vf=$13,num_sav=$14,num_facture=COALESCE($15,num_facture),updated_at=NOW() WHERE id=$16`,
-        [type, !!garantie, statut, description, notes, technicien,
-         envoi_transporteur||null, envoi_numero||null, envoi_date||null,
-         retour_transporteur||null, retour_numero||null, retour_date||null, num_bordereau_vf||null, num_sav||null, num_facture!==undefined?num_facture:undefined, req.params.id]
-      );
+      // Mise à jour DYNAMIQUE : on ne touche qu'aux champs réellement fournis dans la requête.
+      // Évite d'effacer num_sav / num_bordereau_vf / envoi… lors d'une mise à jour partielle
+      // (ex. édition du seul numéro de facture depuis la fiche, qui remettait ces champs à NULL).
+      const CHAMPS_INTER = ['type','garantie','statut','description','notes','technicien',
+        'envoi_transporteur','envoi_numero','envoi_date','retour_transporteur','retour_numero','retour_date',
+        'num_bordereau_vf','num_sav','num_facture'];
+      const sets = [], vals = []; let np = 1;
+      for (const ch of CHAMPS_INTER) {
+        if (req.body[ch] === undefined) continue;
+        if (ch === 'garantie') { sets.push(`garantie=$${np++}`); vals.push(!!req.body[ch]); }
+        else { sets.push(`${ch}=$${np++}`); vals.push(req.body[ch] === '' ? null : req.body[ch]); }
+      }
+      if (sets.length) {
+        sets.push('updated_at=NOW()'); vals.push(req.params.id);
+        await pgClient.query(`UPDATE interventions SET ${sets.join(',')} WHERE id=$${np}`, vals);
+      }
       for (const [champ, anc, nouv] of [
         ['statut', old.statut, statut],
         ['garantie', old.garantie?'Oui':'Non', garantie?'Oui':'Non'],
@@ -740,7 +748,7 @@ router.put('/interventions/:id', async (req, res) => {
         ['envoi_numero', old.envoi_numero, envoi_numero],
         ['retour_numero', old.retour_numero, retour_numero],
       ]) {
-        if (String(anc) !== String(nouv))
+        if (req.body[champ] !== undefined && String(anc) !== String(nouv))
           await pgClient.query('INSERT INTO intervention_historique (intervention_id,auteur,champ,ancienne_valeur,nouvelle_valeur) VALUES ($1,$2,$3,$4,$5)',
             [req.params.id, technicien||'Système', champ, String(anc??''), String(nouv??'')]);
       }
