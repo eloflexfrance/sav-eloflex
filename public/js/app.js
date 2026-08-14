@@ -521,6 +521,25 @@ async function chargerListeClients(){
   </table></div>`;
 }
 
+const MODE_REGLEMENT_LABELS = { virement:'Virement bancaire', edi:'EDI', cheque:'Chèque' };
+async function setClientPriorite(id, prio){
+  try{ await API.setClientPriorite(id, prio); if(STATE.view==='client') render(); toast(TR('Priorité mise à jour'),'ti-flag','var(--success)'); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.setClientPriorite = setClientPriorite;
+function ouvrirClientVF(vfId){
+  const account = window._VF_ACCOUNT;
+  if(!account){ toast(TR('Compte VosFactures non configuré'),'ti-alert-circle','var(--warning)'); return; }
+  if(vfId){ window.open(`https://${account}.vosfactures.fr/clients/${vfId}`,'_blank','noopener'); }
+  else { toast(TR("Pas d'identifiant VosFactures sur cette fiche"),'ti-alert-circle','var(--warning)'); window.open(`https://${account}.vosfactures.fr/clients`,'_blank','noopener'); }
+}
+window.ouvrirClientVF = ouvrirClientVF;
+function ouvrirClientPennylane(nom){
+  // Pas d'identifiant client Pennylane stocké sur la fiche → ouverture de Pennylane (recherche manuelle)
+  window.open('https://app.pennylane.com/','_blank','noopener');
+}
+window.ouvrirClientPennylane = ouvrirClientPennylane;
+
 async function renderClient(ttl,c,a){
   const cl=await API.client(STATE.clientId);
   ttl.textContent=cl.nom;
@@ -531,35 +550,58 @@ async function renderClient(ttl,c,a){
     <button class="btn sm" onclick="modalPret(null,${cl.id})"><i class="ti ti-file-certificate"></i>${TR('Bon de prêt')}</button>
     <button class="btn sm primary" onclick="modalNewIntervention(null,${cl.id})"><i class="ti ti-plus"></i>Intervention</button>`;
   const s=cl.stats||{};
+  const nomJs = esc(cl.nom).replace(/'/g,'&#39;');
+  const lignesAdr = [cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
+  const telH  = cl.tel ? `<a href="tel:${esc(String(cl.tel).replace(/[^\d+]/g,''))}" style="color:var(--accent);text-decoration:none">${esc(cl.tel)}</a>` : '—';
+  const portH = cl.portable ? `<a href="tel:${esc(String(cl.portable).replace(/[^\d+]/g,''))}" style="color:var(--accent);text-decoration:none">${esc(cl.portable)}</a>` : '—';
+  const mailH = cl.email ? String(cl.email).split(/[;,]/).map(e=>e.trim()).filter(Boolean).map(e=>`<a href="mailto:${esc(e)}" style="color:var(--accent);text-decoration:none">${esc(e)}</a>`).join(', ') : '—';
+  const PRIO_C = {T1:'#dc2626',T2:'#d97706',T3:'#65a30d'};
+  const prioBtns = [['T1','T1'],['T2','T2'],['T3','T3'],['','Aucune']].map(([v,lbl])=>{
+    const on = (cl.priorite||'')===v; const col = PRIO_C[v]||'#94a3b8';
+    return `<button onclick="setClientPriorite(${cl.id},'${v}')" style="border:1px solid ${on?col:'var(--border)'};background:${on?col:'transparent'};color:${on?'#fff':'var(--text2)'};border-radius:99px;padding:2px 10px;font-size:11px;font-weight:600;cursor:pointer">${lbl}</button>`;
+  }).join(' ');
+  const row = (label,val)=>`<tr><td style="color:var(--text3);padding:4px 0;width:150px;vertical-align:top">${label}</td><td style="font-weight:500">${val}</td></tr>`;
+  const rglt = MODE_REGLEMENT_LABELS[cl.mode_reglement]||cl.mode_reglement||'—';
   c.innerHTML=`
     <div class="breadcrumb"><span onclick="setView('clients')">Clients</span><i class="ti ti-chevron-right" style="font-size:11px"></i>${esc(cl.nom)}</div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="card">
         <div class="section-title"><i class="ti ti-user"></i>${TR("Fiche distributeur")}</div>
-        <table style="width:100%;font-size:12px">
-          ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Portable',cl.portable],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          ${row('Nom de la compagnie', `<b>${esc(cl.nom)}</b>`)}
           ${(()=>{
-            const lignes=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
-            if(!lignes.length) return `<tr><td style="color:var(--text3);padding:3px 0;width:100px">Adresse</td><td style="color:var(--text3)">— <span style="font-size:11px">${TR('(à compléter)')}</span></td></tr>`;
-            const q=encodeURIComponent(lignes.join(', '));
-            return `<tr><td style="color:var(--text3);padding:5px 0;width:100px;vertical-align:top">Adresse</td>
-              <td style="font-weight:500;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}
-                <div style="margin-top:4px;display:flex;gap:8px;font-size:11px;font-weight:400">
-                  <span onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')" style="color:var(--accent);cursor:pointer"><i class="ti ti-map-pin" style="font-size:11px"></i> ${TR("Voir sur la carte")}</span>
-                  <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> OpenStreetMap</a>
-                  <span onclick="copierAdresse(this,'${esc(lignes.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> ${TR("Copier")}</span>
-                </div>
-              </td></tr>`;
+            if(!lignesAdr.length) return row('Adresse', `<span style="color:var(--text3)">— <span style="font-size:11px">${TR('(à compléter)')}</span></span>`);
+            const q=encodeURIComponent(lignesAdr.join(', '));
+            return row('Adresse', `${lignesAdr.map(l=>esc(l)).join('<br>')}
+              <div style="margin-top:5px;display:flex;gap:10px;font-size:11px;font-weight:400;flex-wrap:wrap">
+                <span onclick="voirDistributeurSurCarte(${cl.id},'${nomJs}')" style="color:var(--accent);cursor:pointer"><i class="ti ti-map-pin" style="font-size:11px"></i> ${TR("Voir sur la carte")}</span>
+                <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> OpenStreetMap</a>
+                <span onclick="copierAdresse(this,'${esc(lignesAdr.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> ${TR("Copier")}</span>
+              </div>`);
           })()}
-          ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">${TR('💳 EDI — Prélèvement')}</span></td></tr>`:''}
-          ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')">${TR('🗺️ Affiché sur la carte distributeurs')}</span></td></tr>`:''}
-          ${cl.public_site?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Site public</td><td><span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span></td></tr>`:''}
-          ${cl.priorite?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${TR('Priorité')}</td><td><span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${cl.priorite}</span></td></tr>`:''}
-          ${cl.entite_facturation_id?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Facturation</td><td><span class="badge ouvert">🧾 Facturé à ${esc(cl.entite_facturation_nom||'—')}</span></td></tr>`:''}
+          ${row('Téléphone', telH)}
+          ${row('Tel. portable', portH)}
+          ${row('E-mail(s)', mailH)}
+          ${row('Type', esc(cl.type||'—'))}
+          ${row(TR('Priorité'), `<div style="display:flex;gap:5px;flex-wrap:wrap">${prioBtns}</div>`)}
         </table>
-        <div style="margin-top:10px;display:flex;gap:6px">
+        <div class="section-title" style="font-size:12px;margin-top:12px;color:var(--text2)"><i class="ti ti-settings-2"></i>Options additionnelles</div>
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          ${row('Personne à contacter', esc(cl.contact||'—'))}
+          ${row('Date limite de règlement', cl.delai_reglement!=null?`${cl.delai_reglement} jours`:'—')}
+          ${row('Mode de règlement', esc(rglt))}
+        </table>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          ${cl.edi?`<span class="badge ouvert">${TR('💳 EDI — Prélèvement')}</span>`:''}
+          ${cl.sur_carte?`<span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${nomJs}')">${TR('🗺️ Affiché sur la carte distributeurs')}</span>`:''}
+          ${cl.public_site?`<span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span>`:''}
+          ${cl.entite_facturation_id?`<span class="badge ouvert">🧾 Facturé à ${esc(cl.entite_facturation_nom||'—')}</span>`:''}
+        </div>
+        <div style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">
           <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
           <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>${TR('Fusionner')}</button>
+          <button class="btn sm" onclick="ouvrirClientVF(${cl.vf_id||'null'})" title="Consulter la fiche dans VosFactures"><i class="ti ti-external-link"></i> VosFactures</button>
+          <button class="btn sm" onclick="ouvrirClientPennylane('${nomJs}')" title="Consulter dans Pennylane"><i class="ti ti-external-link"></i> Pennylane</button>
         </div>
       </div>
       <div class="card">
@@ -3184,6 +3226,15 @@ function clientForm(d={}){return `<div class="grid-2">
       ${[['T1','T1 — Priorité absolue'],['T2','T2 — Priorité moyenne'],['T3','T3 — Priorité basse']].map(p=>`<option value="${p[0]}" ${d.priorite===p[0]?'selected':''}>${p[1]}</option>`).join('')}
     </select>
   </div>
+  <div class="form-group"><label class="form-label">${TR('Mode de règlement par défaut')}</label>
+    <select class="form-input" id="f-mode-reglement">
+      <option value="">${TR('— Non défini —')}</option>
+      ${[['virement','Virement bancaire'],['edi','EDI'],['cheque','Chèque']].map(m=>`<option value="${m[0]}" ${d.mode_reglement===m[0]?'selected':''}>${m[1]}</option>`).join('')}
+    </select>
+  </div>
+  <div class="form-group"><label class="form-label">${TR('Date limite de règlement (jours)')}</label>
+    <input class="form-input" id="f-delai-reglement" type="number" min="0" step="1" placeholder="30" value="${d.delai_reglement!=null?d.delai_reglement:''}">
+  </div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
     <select class="form-input" id="f-facturation-mode" onchange="toggleFacturation(this.value)">
       <option value="identique" ${!d.entite_facturation_id?'selected':''}>${TR('Identique (le distributeur se facture lui-même)')}</option>
@@ -3239,6 +3290,8 @@ async function saveClient(id){
     sur_carte: surCarte,
     public_site: !!document.getElementById('f-public-site')?.checked,
     priorite: gv('f-priorite') || null,
+    mode_reglement: gv('f-mode-reglement') || null,
+    delai_reglement: gv('f-delai-reglement') || null,
     reseau_carte: reseau
   };
   // Facturation : Identique (=null) ou Autre (id d'un distributeur existant)
@@ -6924,12 +6977,8 @@ async function renderPrets(ttl,c,a){
     const mat = esc(arts.map(a=>a.designation).filter(Boolean).join(', ') || p.designation || '—');
     const serie = esc(arts.map(a=>a.num_serie).filter(Boolean).join(', ') || p.num_serie || '—');
     const sign = p.signed_at ? `<span title="Signé le ${fdate(p.signed_at)}" style="color:#16a34a;margin-left:4px"><i class="ti ti-writing-sign"></i></span>` : '';
-    const bdc = p.bdc_vf ? (p.bdc_vf_id
-      ? `<a href="#" onclick="event.preventDefault();ouvrirDansVF(this.dataset.vfid||null,this.dataset.bdc)" data-vfid="${esc(p.bdc_vf_id)}" data-bdc="${esc(p.bdc_vf)}" style="color:var(--accent)">${esc(p.bdc_vf)}</a>`
-      : esc(p.bdc_vf)) : '—';
     return `<tr>
       <td>${nom}</td>
-      <td class="mono" style="white-space:nowrap">${bdc}</td>
       <td>${mat}</td>
       <td class="mono" style="white-space:nowrap">${serie}</td>
       <td style="font-size:12px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
@@ -6940,8 +6989,6 @@ async function renderPrets(ttl,c,a){
         <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
         <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
         <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
-        <button class="btn sm ${p.statut==='signe'?'success':''}" title="Offre de prêt signée par mail" onclick="modalPretSigneMail(${p.id})"><i class="ti ti-mail-check"></i></button>
-        ${p.has_pdf?`<button class="btn sm" title="Télécharger le PDF signé / preuve" onclick="window.open('/api/prets/${p.id}/pdf','_blank')"><i class="ti ti-paperclip"></i></button>`:''}
         <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
         <button class="btn sm" title="Statut" onclick="menuPretStatut(${p.id})"><i class="ti ti-adjustments"></i></button>
         <button class="btn sm danger" title="Supprimer" onclick="supprPret(${p.id})"><i class="ti ti-trash"></i></button>
@@ -6950,7 +6997,7 @@ async function renderPrets(ttl,c,a){
   c.innerHTML = `<style>#prets-tbl th,#prets-tbl td{padding:13px 18px;vertical-align:middle}#prets-tbl tbody tr{border-top:0.5px solid var(--border-s,#e8eaed)}#prets-tbl tbody tr:hover{background:var(--surface-2,rgba(0,0,0,.02))}</style>
     <div class="card" style="padding:0;overflow:auto">
     <table class="table" id="prets-tbl"><thead><tr>
-      <th>${TR('Distributeur')}</th><th>${TR('N° commande')}</th><th>${TR('Matériel')}</th><th>${TR('N° de série')}</th><th>${TR('Formule')}</th>
+      <th>${TR('Distributeur')}</th><th>${TR('Matériel')}</th><th>${TR('N° de série')}</th><th>${TR('Formule')}</th>
       <th>${TR('Remise')}</th><th>${TR('Retour prévu')}</th><th>${TR('Statut')}</th><th></th>
     </tr></thead><tbody>${lignes}</tbody></table></div>`;
 }
@@ -7199,22 +7246,13 @@ function modalPretSigneMail(id){
     <div class="modal-body">
       <p style="font-size:13px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.')}</p>
       <div class="form-group"><label class="form-label">${TR('Date de signature')}</label><input class="form-input" id="pret-signe-date" type="date" value="${today}" style="max-width:200px"></div>
-      <div class="form-group"><label class="form-label">${TR('PDF signé (preuve) — optionnel')}</label>
-        <input class="form-input" id="pret-signe-pdf" type="file" accept="application/pdf">
-        <div style="font-size:11px;color:var(--text3);margin-top:3px">${TR('Joignez le PDF signé et scanné renvoyé par le distributeur.')}</div></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="validerSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
 }
 window.modalPretSigneMail = modalPretSigneMail;
 async function validerSigneMail(id){
   const d = gv('pret-signe-date'); if(!d){ toast(TR('Date requise'),'ti-alert-circle','var(--warning)'); return; }
-  const f = ($('pret-signe-pdf')||{}).files ? $('pret-signe-pdf').files[0] : null;
-  let pdf = null;
-  if(f){
-    if(f.type && f.type.indexOf('pdf')<0){ toast(TR('Le fichier doit être un PDF'),'ti-alert-circle','var(--warning)'); return; }
-    try{ pdf = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); }); }catch(e){}
-  }
-  try{ await API.signePretMail(id, d, pdf); closeModal(); toast(TR('Offre de prêt signée par mail'),'ti-check','var(--success)'); if(STATE.view==='prets') render(); }
+  try{ await API.signePretMail(id, d); closeModal(); toast(TR('Offre de prêt signée par mail'),'ti-check','var(--success)'); if(STATE.view==='prets') render(); }
   catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.validerSigneMail = validerSigneMail;

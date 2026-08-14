@@ -420,16 +420,18 @@ router.get('/clients/:id', async (req, res) => {
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite,
+            mode_reglement, delai_reglement } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
       `INSERT INTO clients (nom,contact,email,tel,portable,ville,type,token_portail,edi,sur_carte,reseau_carte,
-                            adresse,adresse2,cp,pays,entite_facturation_id,public_site,priorite)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+                            adresse,adresse2,cp,pays,entite_facturation_id,public_site,priorite,mode_reglement,delai_reglement)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
       [nom, contact||null, email||null, tel||null, portable||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null]
+       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null,
+       mode_reglement||null, (delai_reglement!==undefined&&delai_reglement!==''&&delai_reglement!==null)?parseInt(delai_reglement):null]
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
@@ -440,16 +442,19 @@ router.post('/clients', async (req, res) => {
 router.put('/clients/:id', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite,
+            mode_reglement, delai_reglement } = req.body;
     const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
       `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,portable=$5,ville=$6,type=$7,
        edi=$8,sur_carte=$9,reseau_carte=$10,
-       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,priorite=$17,updated_at=NOW() WHERE id=$18 RETURNING *`,
+       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,priorite=$17,
+       mode_reglement=$18,delai_reglement=$19,updated_at=NOW() WHERE id=$20 RETURNING *`,
       [nom, contact, email, tel, portable||null, ville, type, !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null,
        (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
        !!public_site, priorite||null,
+       mode_reglement||null, (delai_reglement!==undefined&&delai_reglement!==''&&delai_reglement!==null)?parseInt(delai_reglement):null,
        req.params.id]
     );
     // Adresse modifiée : les anciennes coordonnées ne valent plus rien
@@ -483,6 +488,17 @@ router.post('/clients/:id/type', async (req, res) => {
     const type = (req.body && req.body.type) ? String(req.body.type).trim() : '';
     if (!type) return res.status(400).json({ error: 'type requis' });
     const row = await db.run('UPDATE clients SET type=$1, updated_at=NOW() WHERE id=$2 RETURNING id, nom, type', [type, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Fiche introuvable' });
+    res.json({ ok: true, client: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Changer uniquement la priorité (T1/T2/T3 ou vide) depuis la fiche
+router.post('/clients/:id/priorite', async (req, res) => {
+  try {
+    const prio = (req.body && req.body.priorite) ? String(req.body.priorite).trim() : null;
+    if (prio && !['T1','T2','T3'].includes(prio)) return res.status(400).json({ error: 'priorité invalide' });
+    const row = await db.run('UPDATE clients SET priorite=$1, updated_at=NOW() WHERE id=$2 RETURNING id, nom, priorite', [prio || null, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Fiche introuvable' });
     res.json({ ok: true, client: row });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -6030,8 +6046,7 @@ router.get('/prets', requireAuth, async (req, res) => {
       `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
        FROM prets p LEFT JOIN clients c ON c.id = p.client_id
        ORDER BY p.created_at DESC`);
-    // allège la charge : on n'envoie pas les gros champs (PDF/signature) dans la liste
-    res.json(rows.map(r => { const { pdf_data, signature_data, ...rest } = r; return { ...rest, has_pdf: !!pdf_data }; }));
+    res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -6104,31 +6119,15 @@ router.post('/prets/:id/statut', requireAuth, async (req, res) => {
 router.post('/prets/:id/signe-mail', requireAuth, async (req, res) => {
   try {
     const date = (req.body && req.body.date) ? String(req.body.date).slice(0, 10) : null;
-    // PDF signé scanné (optionnel) — stocké comme preuve dans pdf_data
-    const pdf = (req.body && req.body.pdf_data) ? String(req.body.pdf_data) : null;
     const row = await db.run(
       `UPDATE prets SET statut='signe',
          signed_at = COALESCE($1::date::timestamptz, NOW()),
          signataire_nom = COALESCE(NULLIF(signataire_nom, ''), 'Signé par e-mail'),
-         pdf_data = COALESCE($2, pdf_data),
          updated_at = NOW()
-       WHERE id=$3 RETURNING id, statut, signed_at`,
-      [date, pdf, req.params.id]);
+       WHERE id=$2 RETURNING id, statut, signed_at`,
+      [date, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
     res.json({ ok: true, pret: row });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Téléchargement du PDF signé / preuve stocké (en ligne ou scan uploadé)
-router.get('/prets/:id/pdf', requireAuth, async (req, res) => {
-  try {
-    const p = await db.get('SELECT distributeur_nom, pdf_data FROM prets WHERE id=$1', [req.params.id]);
-    if (!p || !p.pdf_data) return res.status(404).json({ error: 'Aucun PDF pour ce prêt' });
-    const b64 = String(p.pdf_data).replace(/^data:application\/pdf;base64,/, '');
-    const buf = Buffer.from(b64, 'base64');
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="Bon_de_pret_signe_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf"`);
-    res.send(buf);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -6218,23 +6217,14 @@ router.post('/pret-public/:token/signer', async (req, res) => {
         ? [{ filename: `Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
              content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' }]
         : [];
-      let modele = p.designation || '';
-      if (!modele && p.articles) { try { const a = typeof p.articles === 'string' ? JSON.parse(p.articles) : p.articles; if (Array.isArray(a) && a[0]) modele = a[0].designation || ''; } catch(e){} }
       await envoyerEmailPret({
         to: p.email || 'sav@eloflex.fr',
         cc: p.email ? 'sav@eloflex.fr' : undefined,
-        subject: `Eloflex — Réception de votre bon de prêt signé`,
-        html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
-          <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Bon de prêt signé</h2></div>
-          <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px;line-height:1.55">
-            <p>Bonjour,</p>
-            <p>Nous confirmons la bonne réception de votre bon de prêt du fauteuil <b>${modele || '—'}</b>.</p>
-            <p>Vous trouverez ci-joint votre bon de commande de prêt signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
-            <p>Nous revenons rapidement vers vous afin de vous indiquer le numéro de suivi de votre commande de fauteuil roulant électrique Eloflex.</p>
-            <p>Bien cordialement,</p>
-          </div>
-          <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
-        </div>`,
+        subject: `Bon de prêt Eloflex — signé par ${d.signataire_nom}`,
+        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
+          <p>Le bon de prêt du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> a été signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
+          ${attachments.length ? '<p>Le document signé est joint à cet e-mail (PDF).</p>' : ''}
+          <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
         attachments
       });
     } catch (mailErr) { console.error('[PRET] e-mail signature:', mailErr.message); }
