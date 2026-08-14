@@ -494,6 +494,7 @@ async function renderClients(ttl,c,a){
   a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
     <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(window._clientsQ)}" style="max-width:260px">
     ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalCompleterAdresses()"><i class="ti ti-map-pin-cog"></i>'+TR("Compléter les adresses")+'</button>' : ''}
+    ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="rapprochementSirene()"><i class="ti ti-building-bank"></i>'+TR("Rapprochement entreprises")+'</button>' : ''}
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
   </div>`;
   document.getElementById('clients-search')?.addEventListener('input', e => {
@@ -540,6 +541,86 @@ function ouvrirClientPennylane(nom){
 }
 window.ouvrirClientPennylane = ouvrirClientPennylane;
 
+// N° TVA intracommunautaire FR calculé depuis le SIREN
+function tvaFromSiren(siren){
+  const s = String(siren||'').replace(/\D/g,'');
+  if(s.length!==9) return '';
+  const cle = (12 + 3 * (parseInt(s,10) % 97)) % 97;
+  return 'FR' + String(cle).padStart(2,'0') + s;
+}
+window.tvaFromSiren = tvaFromSiren;
+function majTvaDepuisSiren(){
+  const tvaEl = $('f-tva'); if(!tvaEl) return;
+  if(!tvaEl.value){ const t = tvaFromSiren(gv('f-siren')); if(t) tvaEl.value = t; }
+}
+window.majTvaDepuisSiren = majTvaDepuisSiren;
+
+// ── Rapprochement des distributeurs avec l'Annuaire des entreprises (SIRENE) ──
+async function rapprochementSirene(){
+  toast(TR('Rapprochement en cours…'),'ti-loader-2');
+  let clients=[]; try{ clients = await API.clients(); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const sansSiren = (clients||[]).filter(c=> c.type!=='Particulier' && !c.siren && c.nom);
+  if(!sansSiren.length){ toast(TR('Tous les distributeurs ont déjà un SIREN.'),'ti-check','var(--success)'); return; }
+  const cibles = sansSiren.slice(0, 40);
+  const props=[];
+  for(let i=0;i<cibles.length;i++){
+    const c=cibles[i];
+    try{
+      const cp = String(c.cp||'').trim();
+      const url='https://recherche-entreprises.api.gouv.fr/search?per_page=3&q='+encodeURIComponent(c.nom)+(/^\d{5}$/.test(cp)?('&code_postal='+cp):'');
+      const r = await fetch(url).then(x=>x.json());
+      const cands=(r.results||[]).map(e=>({siren:e.siren, siret:(e.siege&&e.siege.siret)||'', nom:e.nom_complet||e.nom_raison_sociale||'', adresse:(e.siege&&e.siege.adresse)||'', cp:(e.siege&&e.siege.code_postal)||'', etat:e.etat_administratif}));
+      props.push({client:c, candidates:cands});
+    }catch(e){ props.push({client:c, candidates:[]}); }
+    await new Promise(res=>setTimeout(res,160));
+  }
+  window._SIRENE_PROPS = props;
+  afficherModalSirene(props, cibles.length, sansSiren.length);
+}
+window.rapprochementSirene = rapprochementSirene;
+
+function afficherModalSirene(props, traites, totalRestants){
+  const lignes = props.map((p,idx)=>{
+    const c=p.client;
+    const opts = p.candidates.map((cd,j)=>`<option value="${j}">${esc(cd.nom)} — ${esc(cd.siren)} (${esc(cd.cp)}) ${cd.etat==='A'?'✅':'⛔'}</option>`).join('');
+    return `<tr style="border-bottom:0.5px solid var(--border)">
+      <td style="padding:6px 8px;vertical-align:top"><b>${esc(c.nom)}</b><br><span style="font-size:11px;color:var(--text3)">${esc([c.cp,c.ville].filter(Boolean).join(' '))}</span></td>
+      <td style="padding:6px 8px;vertical-align:top">${p.candidates.length?`<select id="sirene-sel-${idx}" class="form-input" style="font-size:12px;padding:5px">${opts}</select>`:'<span style="color:var(--text3);font-size:12px">Aucun résultat</span>'}</td>
+      <td style="padding:6px 8px;text-align:right;white-space:nowrap;vertical-align:top">
+        <a href="https://annuaire-entreprises.data.gouv.fr/rechercher?terme=${encodeURIComponent(c.nom+' '+(c.ville||''))}" target="_blank" rel="noopener" title="Vérifier sur l'Annuaire" style="color:var(--accent);margin-right:8px"><i class="ti ti-external-link"></i></a>
+        ${p.candidates.length?`<button class="btn sm success" id="sirene-btn-${idx}" onclick="appliquerSirene(${idx})"><i class="ti ti-check"></i></button>`:''}
+      </td></tr>`;
+  }).join('');
+  const reste = totalRestants>traites ? ` · ${totalRestants-traites} restant(s) — relancez pour continuer` : '';
+  const html = `<div id="modal-sirene" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+    <div style="background:var(--surface);border-radius:12px;padding:20px;width:840px;max-width:95vw;max-height:88vh;overflow:auto" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h3 style="margin:0;font-size:16px"><i class="ti ti-building-bank"></i> Rapprochement entreprises — ${traites} distributeur(s) analysé(s)${reste}</h3>
+        <button class="btn sm" onclick="document.getElementById('modal-sirene').remove()"><i class="ti ti-x"></i></button>
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin:0 0 12px">Vérifiez chaque proposition avant d'appliquer (l'API peut proposer une entité voisine ou une association). Le n° de TVA est calculé automatiquement à partir du SIREN. ✅ = établissement actif.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="text-align:left;color:var(--text3);font-size:11px">
+          <th style="padding:6px 8px">Distributeur</th><th style="padding:6px 8px">Proposition (Annuaire)</th><th style="padding:6px 8px;text-align:right">Action</th>
+        </tr></thead>
+        <tbody>${lignes}</tbody>
+      </table>
+    </div></div>`;
+  const wrap=document.createElement('div'); wrap.innerHTML=html; document.body.appendChild(wrap.firstChild);
+}
+window.afficherModalSirene = afficherModalSirene;
+
+function appliquerSirene(idx){
+  const p = (window._SIRENE_PROPS||[])[idx]; if(!p) return;
+  const sel = $('sirene-sel-'+idx); const j = sel ? parseInt(sel.value) : 0;
+  const cd = p.candidates[j]; if(!cd || !cd.siren){ toast(TR('Aucune correspondance sélectionnée'),'ti-alert-circle','var(--warning)'); return; }
+  const tva = tvaFromSiren(cd.siren);
+  API.setClientSirene(p.client.id, {siren:cd.siren, siret:cd.siret, tva}).then(()=>{
+    const btn=$('sirene-btn-'+idx); if(btn) btn.outerHTML='<span style="color:#16a34a;font-size:12px;font-weight:600"><i class="ti ti-check"></i> Appliqué</span>';
+  }).catch(e=>toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'));
+}
+window.appliquerSirene = appliquerSirene;
+
 async function renderClient(ttl,c,a){
   const cl=await API.client(STATE.clientId);
   ttl.textContent=cl.nom;
@@ -562,6 +643,13 @@ async function renderClient(ttl,c,a){
   }).join(' ');
   const row = (label,val)=>`<tr><td style="color:var(--text3);padding:4px 0;width:150px;vertical-align:top">${label}</td><td style="font-weight:500">${val}</td></tr>`;
   const rglt = MODE_REGLEMENT_LABELS[cl.mode_reglement]||cl.mode_reglement||'—';
+  const annuaireUrl = cl.siren
+    ? `https://annuaire-entreprises.data.gouv.fr/entreprise/${encodeURIComponent(cl.siren)}`
+    : `https://annuaire-entreprises.data.gouv.fr/rechercher?terme=${encodeURIComponent([cl.nom,cl.ville].filter(Boolean).join(' '))}`;
+  const annuaireLink = `<a href="${annuaireUrl}" target="_blank" rel="noopener" title="Annuaire des entreprises (data.gouv.fr)" style="color:var(--accent);margin-left:6px;text-decoration:none"><i class="ti ti-building-bank"></i></a>`;
+  const sirenDisp = (cl.siren || cl.siret)
+    ? `${esc(cl.siren||'')}${cl.siret?` <span style="color:var(--text3);font-size:11px">· SIRET ${esc(cl.siret)}</span>`:''}`
+    : `<span style="color:var(--text3)">—</span>`;
   c.innerHTML=`
     <div class="breadcrumb"><span onclick="setView('clients')">Clients</span><i class="ti ti-chevron-right" style="font-size:11px"></i>${esc(cl.nom)}</div>
     <div class="grid-2" style="margin-bottom:12px">
@@ -583,6 +671,8 @@ async function renderClient(ttl,c,a){
           ${row('Tel. portable', portH)}
           ${row('E-mail(s)', mailH)}
           ${row('Type', esc(cl.type||'—'))}
+          ${row('SIREN / SIRET', `${sirenDisp}${annuaireLink}`)}
+          ${row('N° TVA', esc(cl.tva||'—'))}
           ${row(TR('Priorité'), `<div style="display:flex;gap:5px;flex-wrap:wrap">${prioBtns}</div>`)}
         </table>
         <div class="section-title" style="font-size:12px;margin-top:12px;color:var(--text2)"><i class="ti ti-settings-2"></i>Options additionnelles</div>
@@ -3235,6 +3325,9 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">${TR('Date limite de règlement (jours)')}</label>
     <input class="form-input" id="f-delai-reglement" type="number" min="0" step="1" placeholder="30" value="${d.delai_reglement!=null?d.delai_reglement:''}">
   </div>
+  <div class="form-group"><label class="form-label">SIREN</label><input class="form-input mono" id="f-siren" value="${esc(d.siren||'')}" placeholder="123456789" oninput="majTvaDepuisSiren()"></div>
+  <div class="form-group"><label class="form-label">SIRET (siège)</label><input class="form-input mono" id="f-siret" value="${esc(d.siret||'')}" placeholder="12345678900012"></div>
+  <div class="form-group"><label class="form-label">N° TVA</label><input class="form-input mono" id="f-tva" value="${esc(d.tva||'')}" placeholder="FR..."></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
     <select class="form-input" id="f-facturation-mode" onchange="toggleFacturation(this.value)">
       <option value="identique" ${!d.entite_facturation_id?'selected':''}>${TR('Identique (le distributeur se facture lui-même)')}</option>
@@ -3292,6 +3385,9 @@ async function saveClient(id){
     priorite: gv('f-priorite') || null,
     mode_reglement: gv('f-mode-reglement') || null,
     delai_reglement: gv('f-delai-reglement') || null,
+    siren: gv('f-siren') || null,
+    siret: gv('f-siret') || null,
+    tva: gv('f-tva') || null,
     reseau_carte: reseau
   };
   // Facturation : Identique (=null) ou Autre (id d'un distributeur existant)

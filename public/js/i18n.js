@@ -1647,7 +1647,11 @@ const EN_STR = {
  "Date requise": "Date required",
  "Mode de règlement par défaut": "Default payment method",
  "Date limite de règlement (jours)": "Default payment term (days)",
- "— Non défini —": "— Not set —"
+ "— Non défini —": "— Not set —",
+ "Rapprochement entreprises": "Company matching (SIRENE)",
+ "Rapprochement en cours…": "Matching in progress…",
+ "Tous les distributeurs ont déjà un SIREN.": "All distributors already have a SIREN.",
+ "Aucune correspondance sélectionnée": "No match selected"
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;
