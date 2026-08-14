@@ -495,6 +495,7 @@ async function renderClients(ttl,c,a){
     <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(window._clientsQ)}" style="max-width:260px">
     ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalCompleterAdresses()"><i class="ti ti-map-pin-cog"></i>'+TR("Compléter les adresses")+'</button>' : ''}
     ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="rapprochementSirene()"><i class="ti ti-building-bank"></i>'+TR("Rapprochement entreprises")+'</button>' : ''}
+    ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalRapprochementFichier()"><i class="ti ti-file-spreadsheet"></i>'+TR("Rapprochement (fichier)")+'</button>' : ''}
     <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
   </div>`;
   document.getElementById('clients-search')?.addEventListener('input', e => {
@@ -626,6 +627,115 @@ function appliquerSirene(idx){
   }).catch(e=>toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'));
 }
 window.appliquerSirene = appliquerSirene;
+
+// ── Rapprochement depuis un fichier CSV (ex. export Pennylane) → export enrichi ──
+function cleanNom(n){ n=String(n||''); n=n.replace(/\(.*?\)/g,''); n=n.replace(/\s*-\s*EDI\b/ig,''); n=n.replace(/\bchez\s+m[r|me]?\b.*/i,''); return n.replace(/\s+/g,' ').trim(); }
+function normA(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim(); }
+function scoreCand(qnom, qcp, cand){
+  const q = normA(qnom).split(' ').filter(w=>w.length>2);
+  const cn = normA(cand.nom);
+  const shared = q.filter(w=>cn.indexOf(w)>=0).length;
+  let sc = q.length ? shared/q.length : 0;
+  if(cand.etat==='A') sc+=0.25; else sc-=0.35;
+  if(cand.cp && qcp && String(cand.cp)===String(qcp)) sc+=0.2;
+  return sc;
+}
+function parseCsvSimple(text, delim){
+  const rows=[]; let field='', row=[], i=0, inq=false; const n=text.length;
+  while(i<n){ const c=text[i];
+    if(inq){ if(c==='"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} inq=false;i++;continue;} field+=c;i++;continue; }
+    if(c==='"'){ inq=true;i++;continue; }
+    if(c===delim){ row.push(field); field=''; i++; continue; }
+    if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; i++; continue; }
+    if(c==='\r'){ i++; continue; }
+    field+=c; i++;
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function telechargerCsv(filename, rows){
+  const esc=v=>{ v=(v==null?'':String(v)); return /[;"\n\r]/.test(v)? '"'+v.replace(/"/g,'""')+'"' : v; };
+  const content='﻿'+rows.map(r=>r.map(esc).join(';')).join('\r\n');
+  const blob=new Blob([content],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+async function fetchSirene(url){
+  let res = await fetch(url);
+  if(res.status===429){ await new Promise(r=>setTimeout(r,1300)); res = await fetch(url); }
+  if(!res.ok) return { results:[] };
+  return res.json();
+}
+function modalRapprochementFichier(){
+  showModal(`<div class="modal-header"><i class="ti ti-file-spreadsheet" style="color:var(--accent)"></i><h2>${TR('Rapprochement depuis un fichier')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin-top:0">${TR('Déposez un fichier CSV (ex. export Pennylane) avec au minimum les colonnes Nom, Code postal, Ville. Le navigateur interroge l\'Annuaire des entreprises et enrichit chaque ligne (SIREN, SIRET, TVA, lien). Un fichier enrichi est ensuite téléchargé, avec une colonne « à vérifier » pour les cas incertains.')}</p>
+      <input class="form-input" id="rf-file" type="file" accept=".csv,text/csv">
+      <div style="margin-top:8px"><label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer"><input type="checkbox" id="rf-actifs" checked> ${TR('Ne retenir que les établissements actifs')}</label></div>
+      <div id="rf-progress" style="margin-top:12px;font-size:13px;color:var(--text2)"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" id="rf-go" onclick="lancerRapprochementFichier()"><i class="ti ti-player-play"></i> ${TR('Lancer')}</button></div>`);
+}
+window.modalRapprochementFichier = modalRapprochementFichier;
+async function lancerRapprochementFichier(){
+  const inp=$('rf-file'); const f=inp && inp.files ? inp.files[0] : null;
+  if(!f){ toast(TR('Choisissez un fichier'),'ti-alert-circle','var(--warning)'); return; }
+  const seulActifs = !!($('rf-actifs') && $('rf-actifs').checked);
+  const text = await f.text();
+  const l0 = (text.split('\n')[0]||'');
+  const delim = (l0.split(';').length >= l0.split(',').length) ? ';' : ',';
+  const rows = parseCsvSimple(text, delim);
+  if(rows.length<2){ toast(TR('Fichier vide ou illisible'),'ti-alert-circle','var(--danger)'); return; }
+  const headers = rows[0].map(h=>String(h||'').trim());
+  const low = headers.map(h=>h.toLowerCase());
+  const findIdx=(...names)=>{ for(const nm of names){ const i=low.findIndex(h=>h.indexOf(nm)>=0); if(i>=0) return i; } return -1; };
+  const iNom=findIdx('nom'), iCp=findIdx('code postal','cp','postal'), iVille=findIdx('ville'), iSiren=findIdx('siren'), iTva=findIdx('tva');
+  if(iNom<0){ toast(TR('Colonne « Nom » introuvable dans le fichier'),'ti-alert-circle','var(--danger)'); return; }
+  const data = rows.slice(1).filter(r=>r.length && String(r[iNom]||'').trim());
+  const go=$('rf-go'); if(go){ go.disabled=true; go.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Traitement…'); }
+  const prog=$('rf-progress');
+  const outHeaders=[...headers,'SIRET (siège)','Nom officiel INSEE','Statut','Lien Annuaire','À vérifier'];
+  const out=[outHeaders];
+  let done=0, matched=0, verif=0, none=0;
+  for(const r of data){
+    const nom=String(r[iNom]||'').trim();
+    const cp=(iCp>=0?String(r[iCp]||''):'').trim();
+    const ville=(iVille>=0?String(r[iVille]||''):'').trim();
+    const cp5=/^\d{4}$/.test(cp)?('0'+cp):cp;
+    let cands=[];
+    try{
+      const url='https://recherche-entreprises.api.gouv.fr/search?per_page=5&q='+encodeURIComponent(cleanNom(nom))+(/^\d{5}$/.test(cp5)?('&code_postal='+cp5):'');
+      const j=await fetchSirene(url);
+      cands=(j.results||[]).map(e=>({siren:e.siren,siret:(e.siege&&e.siege.siret)||'',nom:e.nom_complet||e.nom_raison_sociale||'',cp:(e.siege&&e.siege.code_postal)||'',etat:e.etat_administratif}));
+    }catch(e){}
+    let pool = seulActifs ? cands.filter(c=>c.etat==='A') : cands;
+    if(!pool.length) pool = cands; // fallback si tout est fermé
+    let best=null, bestSc=-99;
+    for(const cd of pool){ const sc=scoreCand(nom,cp5,cd); if(sc>bestSc){bestSc=sc;best=cd;} }
+    const outRow=r.slice(); while(outRow.length<headers.length) outRow.push('');
+    let siret='',off='',stat='',aVer='',siren='';
+    if(!best){ none++; aVer='Aucun résultat — à compléter manuellement'; }
+    else {
+      off=best.nom; stat=best.etat==='A'?'Actif':(best.etat==='C'?'Fermé':(best.etat||''));
+      if(best.etat==='A' && bestSc>=0.3){
+        siren=best.siren; siret=best.siret;
+        const nbA=cands.filter(c=>c.etat==='A').length;
+        if(bestSc<0.6 || nbA>1){ aVer='À vérifier'+(nbA>1?' (plusieurs candidats)':' (nom différent)'); verif++; } else matched++;
+      } else { aVer='Candidat fermé ou incertain — à vérifier'; verif++; }
+    }
+    if(siren){ if(iSiren>=0) outRow[iSiren]=siren; const tv=tvaFromSiren(siren); if(iTva>=0 && tv) outRow[iTva]=tv; }
+    const lien = siren?('https://annuaire-entreprises.data.gouv.fr/entreprise/'+siren):('https://annuaire-entreprises.data.gouv.fr/rechercher?terme='+encodeURIComponent(nom+' '+ville));
+    out.push([...outRow, siret, off, stat, lien, aVer]);
+    done++;
+    if(prog && (done%5===0 || done===data.length)) prog.innerHTML=`<b>${done}/${data.length}</b> traité(s) — ${matched} rapprochés, ${verif} à vérifier, ${none} sans résultat.`;
+    await new Promise(res=>setTimeout(res,160));
+  }
+  if(prog) prog.innerHTML=`<b>Terminé : ${done} ligne(s)</b> — ${matched} rapprochés, ${verif} à vérifier, ${none} sans résultat. Téléchargement…`;
+  telechargerCsv('Distributeurs_enrichis_SIRENE.csv', out);
+  if(go){ go.disabled=false; go.innerHTML='<i class="ti ti-player-play"></i> '+TR('Lancer'); }
+  toast(TR('Fichier enrichi téléchargé'),'ti-download','var(--success)');
+}
+window.lancerRapprochementFichier = lancerRapprochementFichier;
 
 async function renderClient(ttl,c,a){
   const cl=await API.client(STATE.clientId);

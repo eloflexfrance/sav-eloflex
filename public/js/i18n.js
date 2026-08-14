@@ -1654,7 +1654,17 @@ const EN_STR = {
  "Aucune correspondance sélectionnée": "No match selected",
  "Confirmer SIRET/TVA": "Confirm SIRET/VAT",
  "Envoyer au distributeur un e-mail de confirmation SIRET / TVA ?": "Send the distributor a SIRET / VAT confirmation email?",
- "E-mail envoyé à ": "Email sent to "
+ "E-mail envoyé à ": "Email sent to ",
+ "Rapprochement (fichier)": "Matching (file)",
+ "Rapprochement depuis un fichier": "Matching from a file",
+ "Déposez un fichier CSV (ex. export Pennylane) avec au minimum les colonnes Nom, Code postal, Ville. Le navigateur interroge l'Annuaire des entreprises et enrichit chaque ligne (SIREN, SIRET, TVA, lien). Un fichier enrichi est ensuite téléchargé, avec une colonne « à vérifier » pour les cas incertains.": "Drop a CSV file (e.g. Pennylane export) with at least Name, Postal code, City columns. The browser queries the company directory and enriches each row (SIREN, SIRET, VAT, link). An enriched file is then downloaded, with a \"to check\" column for uncertain cases.",
+ "Ne retenir que les établissements actifs": "Keep only active establishments",
+ "Lancer": "Start",
+ "Traitement…": "Processing…",
+ "Choisissez un fichier": "Choose a file",
+ "Fichier vide ou illisible": "Empty or unreadable file",
+ "Colonne « Nom » introuvable dans le fichier": "\"Name\" column not found in the file",
+ "Fichier enrichi téléchargé": "Enriched file downloaded"
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
 if(typeof window!=='undefined') window.TR = TR;
