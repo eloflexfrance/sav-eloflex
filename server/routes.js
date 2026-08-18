@@ -4,7 +4,7 @@ const crypto   = require('crypto');
 const XLSX     = require('xlsx');
 const bcrypt   = require('bcryptjs');
 const db       = require('./db');
-const { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, savePreuveLivraison, deletePreuveLivraisonFile, savePhoto, getPhotoUrl } = require('./uploads');
+const { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, savePreuveLivraison, deletePreuveLivraisonFile } = require('./uploads');
 const router   = express.Router();
 
 // ── Auth : routes publiques (login/logout/me) ──────────────────────
@@ -725,22 +725,14 @@ router.put('/interventions/:id', async (req, res) => {
     const pgClient = await db.pool.connect();
     try {
       await pgClient.query('BEGIN');
-      // Mise à jour DYNAMIQUE : on ne touche qu'aux champs réellement fournis dans la requête.
-      // Évite d'effacer num_sav / num_bordereau_vf / envoi… lors d'une mise à jour partielle
-      // (ex. édition du seul numéro de facture depuis la fiche, qui remettait ces champs à NULL).
-      const CHAMPS_INTER = ['type','garantie','statut','description','notes','technicien',
-        'envoi_transporteur','envoi_numero','envoi_date','retour_transporteur','retour_numero','retour_date',
-        'num_bordereau_vf','num_sav','num_facture'];
-      const sets = [], vals = []; let np = 1;
-      for (const ch of CHAMPS_INTER) {
-        if (req.body[ch] === undefined) continue;
-        if (ch === 'garantie') { sets.push(`garantie=$${np++}`); vals.push(!!req.body[ch]); }
-        else { sets.push(`${ch}=$${np++}`); vals.push(req.body[ch] === '' ? null : req.body[ch]); }
-      }
-      if (sets.length) {
-        sets.push('updated_at=NOW()'); vals.push(req.params.id);
-        await pgClient.query(`UPDATE interventions SET ${sets.join(',')} WHERE id=$${np}`, vals);
-      }
+      await pgClient.query(
+        `UPDATE interventions SET type=COALESCE($1,type),garantie=COALESCE($2,garantie),statut=COALESCE($3,statut),description=COALESCE($4,description),notes=COALESCE($5,notes),technicien=COALESCE($6,technicien),
+          envoi_transporteur=$7,envoi_numero=$8,envoi_date=$9,retour_transporteur=$10,retour_numero=$11,retour_date=$12,
+          num_bordereau_vf=$13,num_sav=$14,num_facture=COALESCE($15,num_facture),updated_at=NOW() WHERE id=$16`,
+        [type, !!garantie, statut, description, notes, technicien,
+         envoi_transporteur||null, envoi_numero||null, envoi_date||null,
+         retour_transporteur||null, retour_numero||null, retour_date||null, num_bordereau_vf||null, num_sav||null, num_facture!==undefined?num_facture:undefined, req.params.id]
+      );
       for (const [champ, anc, nouv] of [
         ['statut', old.statut, statut],
         ['garantie', old.garantie?'Oui':'Non', garantie?'Oui':'Non'],
@@ -748,7 +740,7 @@ router.put('/interventions/:id', async (req, res) => {
         ['envoi_numero', old.envoi_numero, envoi_numero],
         ['retour_numero', old.retour_numero, retour_numero],
       ]) {
-        if (req.body[champ] !== undefined && String(anc) !== String(nouv))
+        if (String(anc) !== String(nouv))
           await pgClient.query('INSERT INTO intervention_historique (intervention_id,auteur,champ,ancienne_valeur,nouvelle_valeur) VALUES ($1,$2,$3,$4,$5)',
             [req.params.id, technicien||'Système', champ, String(anc??''), String(nouv??'')]);
       }
@@ -801,15 +793,7 @@ router.get('/interventions/:id/historique', async (req, res) => {
 
 // ── PHOTOS ────────────────────────────────────────────────────────
 router.get('/interventions/:id/photos', async (req, res) => {
-  try {
-    const rows = await db.all('SELECT * FROM intervention_photos WHERE intervention_id=$1 ORDER BY created_at', [req.params.id]);
-    // URLs résolues côté serveur (Cloudinary ou disque local) pour un affichage fiable
-    res.json(rows.map(p => ({
-      ...p,
-      url: getPhotoUrl(p.filename, false),
-      url_thumb: getPhotoUrl(p.filename_thumb || p.filename, true)
-    })));
-  }
+  try { res.json(await db.all('SELECT * FROM intervention_photos WHERE intervention_id=$1 ORDER BY created_at', [req.params.id])); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.post('/interventions/:id/photos', upload.array('photos', 20), async (req, res) => {
@@ -819,10 +803,9 @@ router.post('/interventions/:id/photos', upload.array('photos', 20), async (req,
     if (!req.files?.length) return res.status(400).json({ error: 'Aucun fichier' });
     const results = [];
     for (const file of req.files) {
-      // savePhoto gère Cloudinary (buffer) et le disque local (sharp) et renvoie filename + filename_thumb
-      const saved = await savePhoto(file, interId);
+      const thumb = await makeThumb(file.filename);
       const r = await db.run('INSERT INTO intervention_photos (intervention_id,filename,filename_thumb,legende,taille,mime) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-        [interId, saved.filename, saved.filename_thumb || saved.filename, req.body.legende||null, saved.taille, saved.mime]);
+        [interId, file.filename, thumb, req.body.legende||null, file.size, file.mimetype]);
       results.push(r);
     }
     await logHistorique(interId, 'Système', 'photos', '', `${req.files.length} photo(s) ajoutée(s)`);

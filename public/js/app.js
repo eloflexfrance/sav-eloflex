@@ -3108,9 +3108,9 @@ function renderPhotoGallery(photos,interId){
   if(!photos.length) return '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">'+TR("Aucune photo")+'</div>';
   return `<div class="photo-grid">${photos.map((p,idx)=>`
     <div class="photo-thumb">
-      <img src="${esc(p.url_thumb||('/uploads/thumbs/'+(p.filename_thumb||p.filename)))}" alt="${esc(p.legende||'Photo')}"
-        onclick="openLightbox(${interId},${idx},[${photos.map(x=>`'${esc(x.url||('/uploads/'+x.filename)).replace(/'/g,'&#39;')}'`).join(',')}])"
-        onerror="this.src='${esc(p.url||('/uploads/'+p.filename))}'">
+      <img src="/uploads/thumbs/${esc(p.filename_thumb||p.filename)}" alt="${esc(p.legende||'Photo')}"
+        onclick="openLightbox(${interId},${idx},[${photos.map(x=>`'${x.filename}'`).join(',')}])"
+        onerror="this.src='/uploads/${esc(p.filename)}'">
       <div class="photo-thumb-actions">
         <button class="photo-btn" onclick="editPhotoLegende(${interId},${p.id},'${esc(p.legende||'')}')"><i class="ti ti-pencil"></i></button>
         <button class="photo-btn danger" onclick="deletePhoto(${interId},${p.id})"><i class="ti ti-trash"></i></button>
@@ -3148,8 +3148,8 @@ function showLightbox(){
     <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5);font-size:12px">${LB.idx+1} / ${LB.filenames.length}</div>
     ${LB.idx>0?`<button onclick="lbNav(-1)" style="position:absolute;left:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:24px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-left"></i></button>`:''}
     ${LB.idx<LB.filenames.length-1?`<button onclick="lbNav(1)" style="position:absolute;right:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:24px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-right"></i></button>`:''}
-    <img src="${fname}" style="max-width:90vw;max-height:82vh;object-fit:contain;border-radius:6px;">
-    <a href="${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:12px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
+    <img src="/uploads/${fname}" style="max-width:90vw;max-height:82vh;object-fit:contain;border-radius:6px;">
+    <a href="/uploads/${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:12px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
   document.body.appendChild(el);
   el.addEventListener('click',e=>{if(e.target===el)closeLightbox();});
   document.addEventListener('keydown',lbKey);
@@ -3540,7 +3540,7 @@ async function ouvrirInterventionLiee(iid){ closeModal(); setView('interventions
 window.ouvrirInterventionLiee = ouvrirInterventionLiee;
 
 async function saveIntervention(id){
-  const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client')),num_sav:gv('f-num-sav'),date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau'),produits:TMP_PRODUITS};
+  const data={fauteuil_id:parseInt(gv('f-fauteuil')),client_id:parseInt(gv('f-client')),num_sav:gv('f-num-sav')||undefined,date:gv('f-date'),type:gv('f-type'),statut:gv('f-statut'),technicien:gv('f-tech'),garantie:document.querySelector('input[name="garantie"]:checked')?.value==='1',description:gv('f-desc'),notes:gv('f-notes'),envoi_transporteur:gv('f-env-trans'),envoi_numero:gv('f-env-num'),envoi_date:gv('f-env-date'),retour_transporteur:gv('f-ret-trans'),retour_numero:gv('f-ret-num'),retour_date:gv('f-ret-date'),num_bordereau_vf:gv('f-bordereau')||undefined,produits:TMP_PRODUITS};
   if(!data.fauteuil_id||!data.date){alert(TR('Fauteuil et date requis'));return;}
   try{if(id)await API.updateIntervention(id,data);else await API.createIntervention(data);TMP_PRODUITS=[];toast(id?'Intervention mise à jour':'Intervention créée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}
 }
@@ -6523,9 +6523,10 @@ function centrerSurGeo(lat, lng, label) {
   if (_carteGeoMarker) { _carteMap.removeLayer(_carteGeoMarker); _carteGeoMarker = null; }
   _carteGeoMarker = L.marker([lat, lng], {
     zIndexOffset: 2000,
+    interactive: false,   // laisse passer le clic vers un distributeur situé au même point
     icon: L.divIcon({
       className: '',
-      html: '<div style="position:relative;width:28px;height:28px">' +
+      html: '<div style="position:relative;width:28px;height:28px;pointer-events:none">' +
               '<div class="geo-onde"></div>' +
               '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;' +
                 'border-radius:50%;background:#2e7cf6;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>' +
