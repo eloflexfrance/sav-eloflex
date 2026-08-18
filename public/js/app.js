@@ -5487,6 +5487,7 @@ var _carteMarkers = [];
 var _carteClusterGroup = null; // groupe de clustering (leaflet.markercluster) si dispo
 var _carteDeptFiltre = '';     // (obsolète) ancien filtre "département couvert"
 var _carteDeptGeo = '';        // filtre par département via la recherche "Ville / CP / département" (ex "83", "2A")
+var _carteDeptLayer = null;    // contour du département surligné sur la carte
 var _cartePoints = [];
 // Point actuellement ciblé (via « Voir sur la carte ») : les recadrages auto
 // (après chargement / resize) doivent le respecter au lieu de revenir sur la France.
@@ -6127,6 +6128,28 @@ function chargerDepartementsGeo() {
   return _departementsGeoP;
 }
 
+// Surligne le contour d'un département sur la carte (recherche par n° de département)
+function surlignerDepartement(dep) {
+  if (!_carteMap) return;
+  chargerDepartementsGeo().then(function(idx) {
+    retirerDepartement();
+    var feat = idx && idx[String(dep).toUpperCase()];
+    if (!feat || !_carteMap) return;
+    _carteDeptLayer = L.geoJSON(feat, {
+      interactive: false,   // ne capte pas le clic (les marqueurs restent cliquables)
+      style: function(){ return { color: '#2e7cf6', weight: 2, opacity: 0.9, fillColor: '#2e7cf6', fillOpacity: 0.12, dashArray: '5 3' }; }
+    }).addTo(_carteMap);
+    if (_carteDeptLayer.bringToBack) _carteDeptLayer.bringToBack();
+    try { _carteMap.fitBounds(_carteDeptLayer.getBounds(), { padding: [30, 30] }); } catch(e) {}
+  });
+}
+function retirerDepartement() {
+  if (_carteDeptLayer && _carteMap) { _carteMap.removeLayer(_carteDeptLayer); }
+  _carteDeptLayer = null;
+}
+window.surlignerDepartement = surlignerDepartement;
+window.retirerDepartement = retirerDepartement;
+
 // Extrait les codes départements d'un texte libre ("84, 30, 13" ou "Vaucluse, Gard"…)
 function parseDepartements(txt) {
   if (!txt) return [];
@@ -6468,6 +6491,7 @@ function rechercheGeo() {
     if (_carteGeoMarker && _carteMap) { _carteMap.removeLayer(_carteGeoMarker); _carteGeoMarker = null; }
     _carteGeoCenter = null;
     _carteDeptGeo = '';
+    retirerDepartement();
     if (resultEl) resultEl.innerHTML = '';
     afficherMarkers();
     cadrerFrance();
@@ -6481,9 +6505,11 @@ function rechercheGeo() {
     _carteGeoCenter = null;
     _carteDeptGeo = dep;
     afficherMarkers(true);
+    surlignerDepartement(dep);
     return;
   }
   _carteDeptGeo = '';
+  retirerDepartement();
   if (resultEl) resultEl.innerHTML = '<span style="color:#999">'+TR("Recherche…")+'</span>';
 
   // Chercher d'abord dans nos propres points (CP ou ville exacte)
@@ -6523,10 +6549,9 @@ function centrerSurGeo(lat, lng, label) {
   if (_carteGeoMarker) { _carteMap.removeLayer(_carteGeoMarker); _carteGeoMarker = null; }
   _carteGeoMarker = L.marker([lat, lng], {
     zIndexOffset: 2000,
-    interactive: false,   // laisse passer le clic vers un distributeur situé au même point
     icon: L.divIcon({
       className: '',
-      html: '<div style="position:relative;width:28px;height:28px;pointer-events:none">' +
+      html: '<div style="position:relative;width:28px;height:28px">' +
               '<div class="geo-onde"></div>' +
               '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;' +
                 'border-radius:50%;background:#2e7cf6;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></div>' +
