@@ -1236,6 +1236,29 @@ function ouvrirBdcSource(){
   }
   ouvrirDansVF(docid||null, bdc);
 }
+// Ouvrir le BDC / devis dans le système choisi (VosFactures OU Pennylane), pour consulter l'un ou l'autre
+async function ouvrirBdcDans(sys){
+  var src=(document.getElementById('cmd-bdc-source')||{}).value||'';
+  var docid=(document.getElementById('cmd-bdc-docid')||{}).value||'';
+  var bdc=(document.getElementById('cmd-bdc').value||'').trim();
+  if(sys==='pennylane'){
+    var win=window.open('about:blank','_blank');
+    var go=function(u){ if(win && !win.closed){ win.location.href=u; } else { window.open(u,'_blank','noopener'); } };
+    // ID direct seulement si la pièce vient bien de Pennylane
+    if(src==='pennylane' && docid && /^\d+$/.test(docid)){ go('https://app.pennylane.com/companies/invoices/'+docid); return; }
+    if(!bdc){ if(win)win.close(); toast(TR('Renseigne d\'abord le numéro'),'ti-alert-circle','var(--warning)'); return; }
+    try{
+      var r=await API.pennylane_bdc_lookup(bdc);
+      if(r && r.configured===false){ if(win)win.close(); toast(TR('Pennylane non configuré'),'ti-alert-circle','var(--warning)'); return; }
+      if(r && r.found && r.vf_id!=null){ go('https://app.pennylane.com/companies/invoices/'+r.vf_id); }
+      else { go('https://app.pennylane.com/companies/clients_invoices'); toast(TR('Pièce non trouvée dans Pennylane — liste ouverte'),'ti-alert-circle','var(--warning)'); }
+    }catch(e){ go('https://app.pennylane.com/companies/clients_invoices'); }
+    return;
+  }
+  // VosFactures : ID direct seulement si la pièce vient bien de VosFactures, sinon recherche par n°
+  ouvrirDansVF((src==='vf' && docid) ? docid : null, bdc);
+}
+window.ouvrirBdcDans=ouvrirBdcDans;
 window.modalNouvelleCommande=modalNouvelleCommande; window.ncSetSource=ncSetSource; window.importerNouvelleCommande=importerNouvelleCommande; window.ouvrirBdcSource=ouvrirBdcSource;
 
 async function modalCommande(id, prefill){
@@ -1332,8 +1355,9 @@ async function modalCommande(id, prefill){
               <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="${t('cmd_num_bdc_placeholder')||'Numéro BDC ou Devis'}" oninput="majStatutBadge()">
               ${cm.origine==='sav'
                 ? `<span title="Commande issue d'un SAV : le contenu (lignes, série, facture, suivi) est repris automatiquement du SAV lié — pas d'import VosFactures ici" style="color:var(--text3);font-size:11px;align-self:center;white-space:nowrap;padding:0 6px"><i class="ti ti-tool"></i> SAV</span>`
-                : `<button class="btn sm" type="button" title="Importer depuis VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>`}
-              <button class="btn sm" type="button" title="${TR("Ouvrir le bon de commande (VosFactures / Pennylane)")}" onclick="ouvrirBdcSource()"><i class="ti ti-external-link"></i></button>
+                : `<button class="btn sm" type="button" title="Importer depuis Pennylane / VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>`}
+              <button class="btn sm" type="button" title="${TR("Ouvrir dans VosFactures")}" onclick="ouvrirBdcDans('vf')"><i class="ti ti-file-invoice"></i></button>
+              <button class="btn sm" type="button" title="${TR("Ouvrir dans Pennylane")}" onclick="ouvrirBdcDans('pennylane')"><i class="ti ti-brand-stripe"></i></button>
             </div>
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">${TR("N° commande distributeur")}</label>
@@ -1737,11 +1761,17 @@ function appliquerFactureVF(i){
 async function lookupBdcVF(){
   const numero = gv('cmd-bdc').trim();
   if(!numero){ toast(t('cmd_bdc_requis')||'Indique d\u2019abord un n° de bon de commande','ti-alert-circle','var(--danger)'); return; }
-  toast(t('cmd_vf_recherche_en_cours')||'Recherche dans VosFactures…','ti-loader-2');
+  toast(TR('Recherche du bon de commande (Pennylane / VosFactures)…'),'ti-loader-2');
   try{
-    const r = await API.vfBdcLookup(numero);
-    if(!r.configured){ toast(t('cmd_vf_non_configure')||'VosFactures non configuré','ti-alert-circle','var(--danger)'); return; }
-    if(!r.found){ toast(t('cmd_bdc_introuvable')||'Bon de commande introuvable dans VosFactures','ti-alert-circle','var(--danger)'); return; }
+    // On tente d'abord Pennylane, puis VosFactures en repli
+    let r=null, src='vf';
+    try{ const pl=await API.pennylane_bdc_lookup(numero); if(pl && pl.found){ r=pl; src='pennylane'; } }catch(_){}
+    if(!r){ r = await API.vfBdcLookup(numero); src='vf'; }
+    if(r && r.configured===false){ toast('Aucun système (Pennylane / VosFactures) configuré','ti-alert-circle','var(--danger)'); return; }
+    if(!r || !r.found){ toast(TR('Bon de commande introuvable (Pennylane / VosFactures)'),'ti-alert-circle','var(--danger)'); return; }
+    // Mémorise la source + l'identifiant de pièce pour le bouton « Ouvrir »
+    if($('cmd-bdc-source')) $('cmd-bdc-source').value = src;
+    if($('cmd-bdc-docid') && r.vf_id!=null) $('cmd-bdc-docid').value = String(r.vf_id);
     let remplis = [];
     if(r.distributeur && $('cmd-distrib') && !gv('cmd-distrib')){ $('cmd-distrib').value=r.distributeur; remplis.push('distributeur'); prefillGroupeDepuisDistrib(); }
     if(r.modele     && $('cmd-modele')  && !gv('cmd-modele'))  { $('cmd-modele').value=r.modele;       remplis.push('modèle'); }
