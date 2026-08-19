@@ -126,6 +126,19 @@ const requireAuth = requireRole();
 const adminOnly = requireRole('admin');
 const adminOrOp  = requireRole('admin', 'operateur');
 
+// Écriture sur la carte : admin, ou permission 'carte'=write (repli 'clients').
+// Permet aux utilisateurs "droits complets" d'utiliser les outils carte sous /admin.
+const carteWrite = (req, res, next) => {
+  const user = res.locals.user;
+  if (!user) return res.status(403).json({ error: 'Non authentifié' });
+  if (user.role === 'admin') return next();
+  const perms = user.permissions || {};
+  let perm = perms['carte'];
+  if (perm === undefined) perm = perms['clients'];
+  if (perm === 'write') return next();
+  return res.status(403).json({ error: 'Accès en écriture refusé sur le module "carte".' });
+};
+
 // ── Gestion des utilisateurs (admin only) ─────────────────────────
 router.get('/users', adminOnly, async (req, res) => {
   try {
@@ -5274,7 +5287,7 @@ router.post('/admin/carte-sync-adresses', adminOnly, async (req, res) => {
 
 // Admin: géocode par lot les distributeurs hors carte (hors Particulier) sans coordonnées.
 // ?limit=N (défaut 40). À lancer plusieurs fois pour tout couvrir.
-router.post('/admin/geocoder-hors-carte', adminOnly, async (req, res) => {
+router.post('/admin/geocoder-hors-carte', carteWrite, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 40, 100);
     // geocoded_at IS NULL = pas encore tenté (les échecs sont marqués pour ne pas les re-tenter en boucle)
@@ -5328,7 +5341,7 @@ router.post('/admin/reset-geocodage-hors-carte', adminOnly, async (req, res) => 
 // Admin: enrichit l'adresse des distributeurs hors carte depuis VosFactures (via vf_id),
 // quand l'adresse app est vide ou sans numéro de rue. Réarme le géocodage (geocoded_at=NULL).
 // ?limit=N (défaut 40). À lancer avant le géocodage pour améliorer le taux de réussite.
-router.post('/admin/enrichir-adresses-vf', adminOnly, async (req, res) => {
+router.post('/admin/enrichir-adresses-vf', carteWrite, async (req, res) => {
   try {
     if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) return res.json({ ok: false, reason: 'VosFactures non configuré' });
     const axios = require('axios');

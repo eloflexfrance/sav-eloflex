@@ -98,6 +98,18 @@ async function resolvePennylaneCustomerName(api, customer) {
   return _plCustomerCache[id];
 }
 
+// Résout un produit Pennylane (pour récupérer la référence quand la ligne ne porte
+// qu'un product_id). Cache local.
+const _plProductCache = {};
+async function resolvePennylaneProduct(api, id) {
+  if (!id) return null;
+  if (_plProductCache[id] !== undefined) return _plProductCache[id];
+  try { const { data } = await api.get(`/products/${id}`); _plProductCache[id] = data.product || data || null; }
+  catch (_) { _plProductCache[id] = null; }
+  return _plProductCache[id];
+}
+function _plNum(v) { if (v == null || v === '') return null; const n = parseFloat(String(v).replace(',', '.')); return isNaN(n) ? null : n; }
+
 // ── Vérification du token ───────────────────────────────────────────────────
 async function checkStatus() {
   const api = plApi();
@@ -153,11 +165,14 @@ async function syncCommandesPennylane(fullHistory = false) {
 
 async function traiterDocumentPennylane(client, api, doc, counters) {
   const ep = doc._ep || '/quotes';
+  // On FUSIONNE le détail dans l'élément de liste : le détail /{id} de Pennylane
+  // peut ne renvoyer que { id, url } et écraserait sinon le client/numéro déjà présents.
   let detail = doc;
   if (!doc.invoice_lines && doc.id) {
     try {
       const { data } = await api.get(`${ep}/${doc.id}`);
-      detail = data.quote || data.commercial_document || data;
+      const full = data.quote || data.commercial_document || data.customer_invoice || data;
+      if (full && typeof full === 'object') detail = Object.assign({}, doc, full);
     } catch (_) { detail = doc; }
   }
   if (!(detail.invoice_lines || detail.line_items || []).length && doc.id) {
@@ -302,10 +317,13 @@ async function lookupDocumentPennylane(numero) {
       }
 
       if (doc) {
+        // Le détail /{id} peut ne renvoyer que { id, url } : on FUSIONNE dans l'élément de liste
+        // pour ne pas perdre le client / le numéro / la date déjà présents.
         let detail = doc;
         try {
           const { data: d2 } = await api.get(`${endpoint}/${doc.id}`);
-          detail = d2.quote || d2.customer_invoice || d2.commercial_document || d2 || doc;
+          const full = d2.quote || d2.customer_invoice || d2.commercial_document || d2;
+          if (full && typeof full === 'object') detail = Object.assign({}, doc, full);
         } catch (_) {}
 
         let rawLignes = detail.invoice_lines || detail.line_items || [];
@@ -315,25 +333,42 @@ async function lookupDocumentPennylane(numero) {
             rawLignes = dl.items || dl.invoice_lines || [];
           } catch (_) {}
         }
-        const lignes = rawLignes.filter(l => l.label || l.description).map(l => ({
-          designation:    l.label || l.description || '',
-          designation_en: l.product?.reference || l.label || '',
-          reference:      l.product?.reference || null,
-          quantite:       parseInt(l.quantity) || 1,
-        }));
+        const lignes = [];
+        for (const l of rawLignes) {
+          if (!(l.label || l.description || l.product_label)) continue;
+          let reference = l.product_reference || l.reference
+            || (l.product && (l.product.reference || l.product.external_reference || l.product.gtin)) || null;
+          if (!reference && l.product_id) {
+            const pr = await resolvePennylaneProduct(api, l.product_id);
+            if (pr) reference = pr.reference || pr.external_reference || pr.gtin || null;
+          }
+          const prix = _plNum(l.raw_currency_unit_price != null ? l.raw_currency_unit_price
+                       : (l.currency_unit_price != null ? l.currency_unit_price
+                       : (l.unit_price != null ? l.unit_price : l.unit_amount)));
+          lignes.push({
+            designation:    l.label || l.description || l.product_label || '',
+            designation_en: reference || l.label || '',
+            reference:      reference || null,
+            num_serie:      l.serial_number || l.num_serie || '',
+            quantite:       parseInt(l.quantity) || 1,
+            prix:           prix,
+          });
+        }
 
         const ligneFauteuil = lignes.find(l => /eloflex/i.test(l.designation)) || lignes[0];
         const modele   = ligneFauteuil?.designation || '';
         const quantite = ligneFauteuil?.quantite || 1;
-        const texte    = lignes.map(l => l.designation).join(' ');
+        const texte    = lignes.map(l => l.designation + ' ' + (l.reference || '')).join(' ');
         const mSerie   = texte.match(/\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i);
+        const titreDoc = String(detail.label || detail.title || detail.object || detail.name || '');
 
         const dateCmd = (detail.date || detail.issue_date || detail.emitted_at || detail.document_date
                          || detail.created_at || doc.date || doc.created_at || '');
         let distrib = detail.customer?.name || detail.customer?.company_name || detail.customer?.label
                     || detail.customer_name || detail.client?.name || detail.client?.company_name || '';
         if (!distrib) {
-          const custObj = detail.customer || detail.client || (detail.customer_id ? { id: detail.customer_id } : null);
+          const custObj = detail.customer || detail.client
+                        || (detail.customer_id ? { id: detail.customer_id } : null);
           distrib = await resolvePennylaneCustomerName(api, custObj);
         }
 
@@ -344,10 +379,17 @@ async function lookupDocumentPennylane(numero) {
           date_commande: dateCmd ? String(dateCmd).slice(0, 10) : null,
           distributeur: distrib || null,
           modele, quantite, lignes,
-          num_serie: mSerie ? mSerie[0] : null,
+          num_serie: mSerie ? mSerie[0] : (lignes.find(l => l.num_serie) ? lignes.find(l => l.num_serie).num_serie : null),
+          total_ht: lignes.reduce((s, l) => s + (l.prix || 0) * (l.quantite || 1), 0) || null,
           kind: endpoint.replace('/', ''),
-          modele_demo: /essai|demo|d[ée]mo|pr[eê]t/i.test(texte),
-          _diag: { keys: Object.keys(detail).slice(0, 60), customer: detail.customer || null, customer_id: detail.customer_id || null, client: detail.client || null },
+          modele_demo: /essai|demo|d[ée]mo|pr[eê]t|gratuit/i.test(texte + ' ' + titreDoc),
+          _diag: {
+            detail_keys: Object.keys(detail).slice(0, 60),
+            doc_keys: Object.keys(doc).slice(0, 60),
+            customer: detail.customer || doc.customer || null,
+            customer_id: detail.customer_id || doc.customer_id || null,
+            line0: rawLignes[0] || null,
+          },
         };
       }
     } catch (e) {
