@@ -6045,7 +6045,15 @@ async function creerCommandeDepuisPret(p) {
   const a0 = (Array.isArray(arts) && arts[0]) ? arts[0] : null;
   const modele  = p.designation || (a0 && a0.designation) || '';
   const numSerie = p.num_serie || (a0 && a0.num_serie) || null;
-  const dateCmd = (p.date_remise ? String(p.date_remise).slice(0,10) : new Date().toISOString().slice(0,10));
+  // Formatage robuste en 'YYYY-MM-DD' (date_remise peut être un objet Date renvoyé par pg)
+  const _iso = (v) => {
+    if (!v) return null;
+    if (v instanceof Date) return isNaN(v) ? null : v.toISOString().slice(0,10);
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+    const d = new Date(s); return isNaN(d) ? null : d.toISOString().slice(0,10);
+  };
+  const dateCmd = _iso(p.date_remise) || new Date().toISOString().slice(0,10);
   const annee = parseInt(dateCmd.slice(0,4)) || new Date().getFullYear();
   const vfId = p.bdc_vf_id || null;
   // Anti-doublon si une commande porte déjà ce doc Pennylane

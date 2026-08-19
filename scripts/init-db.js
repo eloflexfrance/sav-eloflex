@@ -193,6 +193,8 @@ async function initDB() {
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS dernier_rappel TIMESTAMPTZ`);
     // Lien vers la commande créée automatiquement dans le Suivi (prêt + contrat-cadre signés)
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS commande_id INTEGER`);
+    // Garde-fou : neutralise d'éventuelles dates au format "Wed Aug 19" (bug corrigé) qui cassent le Suivi
+    try { await client.query(`UPDATE commandes SET date_commande=NULL WHERE date_commande ~ '^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) '`); } catch(e) {}
 
     // Table du contrat-cadre de prêt (commodat) — signé une fois par distributeur
     await client.query(`CREATE TABLE IF NOT EXISTS contrats_cadre (
