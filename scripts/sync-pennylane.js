@@ -338,9 +338,10 @@ async function lookupDocumentPennylane(numero) {
           if (!(l.label || l.description || l.product_label)) continue;
           let reference = l.product_reference || l.reference
             || (l.product && (l.product.reference || l.product.external_reference || l.product.gtin)) || null;
-          if (!reference && l.product_id) {
-            const pr = await resolvePennylaneProduct(api, l.product_id);
-            if (pr) reference = pr.reference || pr.external_reference || pr.gtin || null;
+          const pid = l.product_id || (l.product && l.product.id);
+          if (!reference && pid) {
+            const pr = await resolvePennylaneProduct(api, pid);
+            if (pr) reference = pr.reference || pr.external_reference || pr.gtin || pr.product_reference || null;
           }
           const prix = _plNum(l.raw_currency_unit_price != null ? l.raw_currency_unit_price
                        : (l.currency_unit_price != null ? l.currency_unit_price
@@ -360,7 +361,9 @@ async function lookupDocumentPennylane(numero) {
         const quantite = ligneFauteuil?.quantite || 1;
         const texte    = lignes.map(l => l.designation + ' ' + (l.reference || '')).join(' ');
         const mSerie   = texte.match(/\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i);
-        const titreDoc = String(detail.label || detail.title || detail.object || detail.name || '');
+        const titreDoc = [detail.label, detail.title, detail.object, detail.name,
+                          detail.pdf_invoice_subject, detail.pdf_description, detail.pdf_invoice_free_text,
+                          detail.special_mention].filter(Boolean).join(' ');
 
         const dateCmd = (detail.date || detail.issue_date || detail.emitted_at || detail.document_date
                          || detail.created_at || doc.date || doc.created_at || '');
