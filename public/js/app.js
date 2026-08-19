@@ -1244,13 +1244,12 @@ async function ouvrirBdcDans(sys){
   if(sys==='pennylane'){
     var win=window.open('about:blank','_blank');
     var go=function(u){ if(win && !win.closed){ win.location.href=u; } else { window.open(u,'_blank','noopener'); } };
-    // ID direct seulement si la pièce vient bien de Pennylane
-    if(src==='pennylane' && docid && /^\d+$/.test(docid)){ go('https://app.pennylane.com/companies/invoices/'+docid); return; }
     if(!bdc){ if(win)win.close(); toast(TR('Renseigne d\'abord le numéro'),'ti-alert-circle','var(--warning)'); return; }
     try{
+      // On récupère le lien de consultation direct du document (public_file_url)
       var r=await API.pennylane_bdc_lookup(bdc);
       if(r && r.configured===false){ if(win)win.close(); toast(TR('Pennylane non configuré'),'ti-alert-circle','var(--warning)'); return; }
-      if(r && r.found && r.vf_id!=null){ go('https://app.pennylane.com/companies/invoices/'+r.vf_id); }
+      if(r && r.found && r.url_doc){ go(r.url_doc); }
       else { go('https://app.pennylane.com/companies/clients_invoices'); toast(TR('Pièce non trouvée dans Pennylane — liste ouverte'),'ti-alert-circle','var(--warning)'); }
     }catch(e){ go('https://app.pennylane.com/companies/clients_invoices'); }
     return;

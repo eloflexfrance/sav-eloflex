@@ -386,6 +386,8 @@ async function lookupDocumentPennylane(numero) {
           num_serie: mSerie ? mSerie[0] : (lignes.find(l => l.num_serie) ? lignes.find(l => l.num_serie).num_serie : null),
           total_ht: lignes.reduce((s, l) => s + (l.prix || 0) * (l.quantite || 1), 0) || null,
           kind: endpoint.replace('/', ''),
+          // Lien de consultation direct du document (public, sans connexion API)
+          url_doc: detail.public_file_url || detail.file_url || detail.pdf_url || null,
           modele_demo: estPret,
           est_pret: estPret,
           // Formule déduite du sujet du document : "long terme" → long_terme, sinon essai_court
