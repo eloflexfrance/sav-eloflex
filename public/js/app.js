@@ -6973,6 +6973,7 @@ async function renderPrets(ttl,c,a){
       <td style="text-align:right;white-space:nowrap">
         <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
         <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
+        <button class="btn sm" title="Lien de signature (test, sans e-mail)" onclick="montrerLienSignature(location.origin+'/pret/'+'${p.token_signature||''}')"><i class="ti ti-link"></i></button>
         <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
         <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
         <button class="btn sm" title="Statut" onclick="menuPretStatut(${p.id})"><i class="ti ti-adjustments"></i></button>
@@ -7298,6 +7299,20 @@ async function envoyerPretLien(id){
 }
 window.envoyerPretLien = envoyerPretLien;
 
+// Affiche le lien de signature d'un document pour le tester soi-même, sans envoi d'e-mail
+function montrerLienSignature(url){
+  showModal(`<div class="modal-header"><i class="ti ti-link" style="color:var(--accent)"></i><h2>${TR('Lien de signature')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin-top:0">${TR('Ouvre ce lien pour signer le document toi-même (test), sans envoyer d\'e-mail au distributeur.')}</p>
+      <input class="form-input mono" id="lien-sign" value="${esc(url)}" readonly onclick="this.select()" style="font-size:12px">
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn primary" onclick="window.open(document.getElementById('lien-sign').value,'_blank','noopener')"><i class="ti ti-external-link"></i> ${TR('Ouvrir la page de signature')}</button>
+        <button class="btn" onclick="try{navigator.clipboard.writeText(document.getElementById('lien-sign').value);toast(TR('Lien copié'),'ti-copy')}catch(e){}"><i class="ti ti-copy"></i> ${TR('Copier le lien')}</button>
+      </div>
+    </div>`);
+}
+window.montrerLienSignature = montrerLienSignature;
+
 async function supprPret(id){
   if(!confirm(TR('Supprimer ce bon de prêt ?'))) return;
   try{ await API.deletePret(id); toast(TR('Supprimé'),'ti-trash');
@@ -7392,7 +7407,7 @@ function pretBonHTML(p){
     <p style="margin:0 0 8px;font-size:11px"><strong>Option d'achat :</strong> <span style="font-style:italic;color:#555">l'emprunteur peut proposer le rachat du matériel à tout moment. Prix fixé d'un commun accord, formalisé par une facture de vente distincte.</span></p>
     <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">SIGNATURES</div>
     <table style="width:100%;border-collapse:collapse;margin:8px 0 0"><tr>
-      <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>ELOFLEX</b><br>Nom : ${esc(CURRENT_USER&&CURRENT_USER.nom||'')}<br><br>&nbsp;</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>ELOFLEX SAS</b><br>${esc(p.signataire_eloflex||(CURRENT_USER&&CURRENT_USER.nom)||'')}<br><span style="font-size:10px;color:#777">Signé électroniquement le ${fd(((p.eloflex_date||p.created_at||new Date().toISOString())+'').slice(0,10))}</span></td>
       <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>Distributeur</b><br>${p.signataire_nom?('Signé par : '+esc(p.signataire_nom)+(p.signed_at?' le '+fd((''+p.signed_at).slice(0,10)):'')):'Nom : _______________  « Lu et approuvé, bon pour accord »'}<br>${p.signature_data?`<img src="${p.signature_data}" style="max-height:60px;max-width:220px;margin-top:4px">`:'&nbsp;'}</td>
     </tr></table>
   </div>`;
@@ -7494,7 +7509,8 @@ async function modalContrat(clientId){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         <button class="btn" onclick="apercuContrat(${cc.id})"><i class="ti ti-eye"></i> ${TR('Aperçu')}</button>
         <button class="btn" onclick="exportContratPDF(${cc.id})"><i class="ti ti-file-type-pdf"></i> PDF</button>
-        ${signe?'':`<button class="btn primary" onclick="envoyerContratLien(${cc.id})"><i class="ti ti-mail"></i> ${TR('Envoyer à signer')}</button>
+        ${signe?'':`<button class="btn" onclick="montrerLienSignature(location.origin+'/contrat/'+'${cc.token_signature||''}')"><i class="ti ti-link"></i> ${TR('Lien de signature')}</button>
+        <button class="btn primary" onclick="envoyerContratLien(${cc.id})"><i class="ti ti-mail"></i> ${TR('Envoyer à signer')}</button>
         <button class="btn success" onclick="modalContratSigneMail(${cc.id})"><i class="ti ti-mail-check"></i> ${TR('Signé par mail')}</button>`}
       </div>
     </div>
@@ -7592,7 +7608,7 @@ function contratBonHTML(c){
     <p>Droit français ; à défaut d'accord amiable, compétence exclusive des juridictions du siège d'ELOFLEX. Modification par avenant écrit ; divisibilité des clauses.</p>
     <p style="margin-top:10px">Fait à ${esc(c.lieu||'……………')}, le ${c.signed_at?fd((''+c.signed_at).slice(0,10)):'……/……/………'} — en deux exemplaires originaux.</p>
     <table style="width:100%;border-collapse:collapse;margin-top:8px"><tr>
-      <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>LE PRÊTEUR — ELOFLEX SAS</b><br>Représenté par : ${esc(c.representant_eloflex||'')}<br><br>&nbsp;</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>LE PRÊTEUR — ELOFLEX SAS</b><br>Représenté par : ${esc(c.representant_eloflex||'')}<br><span style="font-size:10px;color:#777">Signé électroniquement le ${fd(((c.eloflex_date||c.created_at||new Date().toISOString())+'').slice(0,10))}</span></td>
       <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>L'EMPRUNTEUR</b><br>${nom}<br>${c.signataire_nom?('Signé par : '+esc(c.signataire_nom)+(c.signed_at?' le '+fd((''+c.signed_at).slice(0,10)):'')):'Nom : _______________  « Lu et approuvé, bon pour accord »'}<br>${c.signature_data?`<img src="${c.signature_data}" style="max-height:60px;max-width:220px;margin-top:4px">`:'&nbsp;'}</td>
     </tr></table>
   </div>`;

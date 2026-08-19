@@ -6040,8 +6040,8 @@ async function envoyerEmailPret({ to, cc, subject, html, attachments }) {
 router.get('/prets', requireAuth, async (req, res) => {
   try {
     const rows = await db.all(
-      `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
-       FROM prets p LEFT JOIN clients c ON c.id = p.client_id
+      `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel, u.nom AS signataire_eloflex
+       FROM prets p LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN users u ON u.id = p.cree_par
        ORDER BY p.created_at DESC`);
     res.json(rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -6050,8 +6050,8 @@ router.get('/prets', requireAuth, async (req, res) => {
 router.get('/prets/:id', requireAuth, async (req, res) => {
   try {
     const p = await db.get(
-      `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
-       FROM prets p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id=$1`, [req.params.id]);
+      `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel, u.nom AS signataire_eloflex
+       FROM prets p LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN users u ON u.id = p.cree_par WHERE p.id=$1`, [req.params.id]);
     if (!p) return res.status(404).json({ error: 'Prêt introuvable' });
     res.json(p);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -6180,7 +6180,9 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
 // ── Public (sans authentification) : consultation + signature du bon ──
 router.get('/pret-public/:token', async (req, res) => {
   try {
-    const p = await db.get('SELECT * FROM prets WHERE token_signature=$1', [req.params.token]);
+    const p = await db.get(
+      `SELECT p.*, u.nom AS signataire_eloflex FROM prets p LEFT JOIN users u ON u.id=p.cree_par WHERE p.token_signature=$1`,
+      [req.params.token]);
     if (!p) return res.status(404).json({ error: 'Lien invalide ou expiré' });
     // on n'expose pas les champs sensibles internes
     res.json({
@@ -6190,7 +6192,8 @@ router.get('/pret-public/:token', async (req, res) => {
       livraison_autre: p.livraison_autre, livraison_nom: p.livraison_nom, livraison_adresse: p.livraison_adresse,
       date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
       prorogation_date: p.prorogation_date, observations: p.observations, statut: p.statut,
-      signataire_nom: p.signataire_nom, signed_at: p.signed_at
+      signataire_nom: p.signataire_nom, signed_at: p.signed_at,
+      signataire_eloflex: p.signataire_eloflex || null, eloflex_date: p.created_at || null
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6385,7 +6388,8 @@ router.get('/contrat-public/:token', async (req, res) => {
       id: cc.id, distributeur_nom: cc.distributeur_nom, lieu: cc.lieu,
       representant_eloflex: cc.representant_eloflex, representant_distrib: cc.representant_distrib,
       siret_distrib: cc.siret_distrib, siege_distrib: cc.siege_distrib,
-      statut: cc.statut, signataire_nom: cc.signataire_nom, signed_at: cc.signed_at
+      statut: cc.statut, signataire_nom: cc.signataire_nom, signed_at: cc.signed_at,
+      eloflex_date: cc.created_at || null
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

@@ -235,8 +235,13 @@ const PDF = {
     band('6 · SIGNATURES');
     const colW = W/2 - 3;
     const yTop = y;
-    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.text('ELOFLEX', L, y+4);
-    doc.setFont('helvetica','normal'); doc.text('Nom : ' + ( (window.CURRENT_USER && window.CURRENT_USER.nom) || ''), L, y+10);
+    doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.text('ELOFLEX SAS', L, y+4);
+    var _eloNom = p.signataire_eloflex || (window.CURRENT_USER && window.CURRENT_USER.nom) || '';
+    var _eloDate = p.eloflex_date ? this.fd((''+p.eloflex_date).slice(0,10)) : this.fd((new Date()).toISOString().slice(0,10));
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.text('Nom : ' + _eloNom, L, y+11);
+    doc.setFontSize(7.5); doc.setTextColor(90,90,90);
+    doc.text('Signé électroniquement le ' + _eloDate, L, y+16);
+    doc.setTextColor(0,0,0); doc.setFontSize(9);
     doc.setFont('helvetica','bold'); doc.text('Distributeur', L+colW+6, y+4);
     doc.setFont('helvetica','normal');
     if (p.signataire_nom) {
@@ -354,8 +359,13 @@ const PDF = {
     const colW = W/2 - 3; const yTop = y;
     doc.setFont('helvetica','bold'); doc.setFontSize(9);
     doc.text('LE PRÊTEUR — ELOFLEX SAS', L, y+5);
+    var _ccNom = c.representant_eloflex || c.signataire_eloflex || '';
+    var _ccDate = c.eloflex_date ? this.fd((''+c.eloflex_date).slice(0,10)) : this.fd((new Date()).toISOString().slice(0,10));
     doc.setFont('helvetica','normal'); doc.setFontSize(8);
-    doc.text('Représenté par : ' + (c.representant_eloflex || ''), L, y+11);
+    doc.text('Représenté par : ' + _ccNom, L, y+11);
+    doc.setFontSize(7.5); doc.setTextColor(90,90,90);
+    doc.text('Signé électroniquement le ' + _ccDate, L, y+17);
+    doc.setTextColor(0,0,0);
     doc.setFont('helvetica','bold'); doc.setFontSize(9);
     doc.text("L'EMPRUNTEUR (Distributeur)", L+colW+6, y+5);
     doc.setFont('helvetica','normal'); doc.setFontSize(8);
