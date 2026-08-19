@@ -375,6 +375,7 @@ async function lookupDocumentPennylane(numero) {
           distrib = await resolvePennylaneCustomerName(api, custObj);
         }
 
+        const estPret = /essai|demo|d[ée]mo|pr[eê]t|gratuit|loan/i.test(texte + ' ' + titreDoc);
         return {
           configured: true, found: true, source: 'pennylane',
           vf_id: doc.id,
@@ -385,14 +386,10 @@ async function lookupDocumentPennylane(numero) {
           num_serie: mSerie ? mSerie[0] : (lignes.find(l => l.num_serie) ? lignes.find(l => l.num_serie).num_serie : null),
           total_ht: lignes.reduce((s, l) => s + (l.prix || 0) * (l.quantite || 1), 0) || null,
           kind: endpoint.replace('/', ''),
-          modele_demo: /essai|demo|d[ée]mo|pr[eê]t|gratuit/i.test(texte + ' ' + titreDoc),
-          _diag: {
-            detail_keys: Object.keys(detail).slice(0, 60),
-            doc_keys: Object.keys(doc).slice(0, 60),
-            customer: detail.customer || doc.customer || null,
-            customer_id: detail.customer_id || doc.customer_id || null,
-            line0: rawLignes[0] || null,
-          },
+          modele_demo: estPret,
+          est_pret: estPret,
+          // Formule déduite du sujet du document : "long terme" → long_terme, sinon essai_court
+          formule: /long\s*terme/i.test(titreDoc + ' ' + texte) ? 'long_terme' : 'essai_court',
         };
       }
     } catch (e) {

@@ -6225,6 +6225,8 @@ router.post('/pret-public/:token/signer', async (req, res) => {
         attachments
       });
     } catch (mailErr) { console.error('[PRET] e-mail signature:', mailErr.message); }
+    // Notification interne (centre d'alertes)
+    try { await addAlerte('pret_signe', p.id, `✍️ Bon de prêt signé en ligne par ${d.signataire_nom} — ${p.distributeur_nom || ''} (${p.designation || ''} ${p.num_serie || ''}).`); } catch(_){}
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6416,6 +6418,8 @@ router.post('/contrat-public/:token/signer', async (req, res) => {
         attachments
       });
     } catch (mailErr) { console.error('[CONTRAT] e-mail signature:', mailErr.message); }
+    // Notification interne (centre d'alertes)
+    try { await addAlerte('contrat_signe', cc.id, `✍️ Contrat-cadre de prêt signé en ligne par ${d.signataire_nom} — ${cc.distributeur_nom || ''}.`); } catch(_){}
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

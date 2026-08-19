@@ -6952,7 +6952,7 @@ function pretBadge(s){ const u=PRET_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<s
 
 async function renderPrets(ttl,c,a){
   ttl.textContent = TR('Prêts') || 'Prêts';
-  a.innerHTML = `<button class="btn sm" onclick="ouvrirContratsModal()"><i class="ti ti-file-description"></i>${TR('Contrats-cadre')}</button><button class="btn sm primary" onclick="modalPret()"><i class="ti ti-plus"></i>${TR('Nouveau bon de prêt')}</button>`;
+  a.innerHTML = `<button class="btn sm" onclick="ouvrirContratsModal()"><i class="ti ti-file-description"></i>${TR('Contrats-cadre')}</button><button class="btn sm" onclick="creerPretDepuisPennylane()"><i class="ti ti-brand-stripe"></i>${TR('Depuis Pennylane')}</button><button class="btn sm primary" onclick="modalPret()"><i class="ti ti-plus"></i>${TR('Nouveau bon de prêt')}</button>`;
   let rows=[]; try{ rows = await API.prets(); }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
   if(!rows.length){ c.innerHTML=`<div class="empty"><i class="ti ti-file-certificate"></i>${TR('Aucun bon de prêt pour le moment.')}<br><span style="font-size:12px;color:var(--text3)">${TR('Créez-en un depuis une fiche distributeur ou avec « Nouveau bon de prêt ».')}</span></div>`; return; }
   const fdate = d => d ? fd((''+d).slice(0,10)) : '—';
@@ -7186,6 +7186,8 @@ async function importerPretVF(){
     if(r.vf_id!=null) $('pret-bdc-vfid').value = String(r.vf_id);
     if(r.numero) $('pret-bdc-vf').value = r.numero;
     if(r.distributeur){ pretSetDistrib('pret-client', r.distributeur); }
+    // Formule déduite du sujet du document (essai court / long terme)
+    if(r.formule){ const fs=$('pret-formule'); if(fs){ fs.value=r.formule; } }
     // remplace les lignes articles par celles du BDC
     const cont = $('pret-articles'); if(cont) cont.innerHTML='';
     (r.lignes||[]).forEach(l=>addPretArticle({designation:l.designation||'', reference:l.reference||'', num_serie:(l.num_serie||''), prix:(l.prix!=null?l.prix:'')}));
@@ -7193,10 +7195,25 @@ async function importerPretVF(){
     // n° de série global détecté → sur la première ligne fauteuil si vide
     if(r.num_serie){ const first=document.querySelector('#pret-articles .pa-ser'); if(first && !first.value) first.value=r.num_serie; }
     pretMajTotal();
-    if(msg) msg.innerHTML='<span style="color:#16a34a">'+((r.lignes||[]).length)+' '+TR('ligne(s) importée(s)')+(r.total_ht?(' — '+TR('total')+' '+Number(r.total_ht).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' € HT'):'')+'</span>';
+    pretMajRetour();
+    // Rappel du contrat-cadre du distributeur (si une fiche est liée)
+    const cidLie = gv('pret-client-id');
+    if(cidLie) majContratCadreHint(cidLie);
+    var note = (r.source==='pennylane' && r.est_pret===false) ? ' <span style="color:#d97706">— ⚠ ce document ne semble pas être un prêt</span>' : '';
+    if(msg) msg.innerHTML='<span style="color:#16a34a">'+((r.lignes||[]).length)+' '+TR('ligne(s) importée(s)')+(r.total_ht?(' — '+TR('total')+' '+Number(r.total_ht).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' € HT'):'')+'</span>'+note;
   }catch(e){ if(msg) msg.innerHTML='<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>'; }
 }
 window.importerPretVF = importerPretVF;
+
+// Créer un bon de prêt directement depuis un BDC de prêt Pennylane
+async function creerPretDepuisPennylane(){
+  const num = prompt(TR('N° du bon de commande de prêt Pennylane (ex. BC-2026-08-2) :'));
+  if(!num || !num.trim()) return;
+  await modalPret();                       // ouvre un nouveau bon de prêt vierge
+  const f = $('pret-bdc-vf'); if(f) f.value = num.trim();
+  await importerPretVF();                   // pré-remplit distributeur / matériel / réf / prix / formule
+}
+window.creerPretDepuisPennylane = creerPretDepuisPennylane;
 
 async function savePret(){
   const cid = gv('pret-client-id');
