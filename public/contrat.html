@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contrat-cadre de prêt Eloflex — signature</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="/js/pdf.js"></script>
+<style>
+  body{font-family:Calibri,Arial,Helvetica,sans-serif;background:#eef2f6;color:#222;margin:0;padding:20px}
+  .wrap{max-width:820px;margin:0 auto}
+  .card{background:#fff;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:20px 24px;margin-bottom:16px}
+  h1{color:#1F5C8C;font-size:19px;margin:0 0 4px}
+  .sub{color:#666;font-style:italic;font-size:13px;margin:0 0 12px;border-bottom:2px solid #1F5C8C;padding-bottom:8px}
+  h3{color:#1F5C8C;font-size:14px;margin:14px 0 5px}
+  p.a{font-size:12.5px;line-height:1.5;margin:0 0 8px;color:#333}
+  ul{margin:4px 0 8px;padding-left:20px}
+  li{font-size:12.5px;line-height:1.5;margin:2px 0;color:#333}
+  label{display:block;font-weight:600;font-size:13px;margin:10px 0 4px}
+  input[type=text]{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #ccd3da;border-radius:7px;font-size:14px}
+  .chk{display:flex;align-items:flex-start;gap:8px;font-weight:400;font-size:13px;margin:12px 0}
+  canvas{border:1px dashed #9fb3c6;border-radius:8px;background:#fbfdff;touch-action:none;width:100%;max-width:420px;height:150px;display:block}
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  button{border:none;border-radius:7px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer}
+  .primary{background:#1F5C8C;color:#fff}.ghost{background:#eef2f6;color:#334}
+  .primary:disabled{opacity:.5;cursor:not-allowed}
+  .msg{padding:12px 14px;border-radius:8px;font-size:14px;margin-top:12px}
+  .ok{background:#e7f6ec;color:#1a7a3a}.err{background:#fdecec;color:#b42318}
+  .muted{color:#888;font-size:12px}
+  .req{color:#b42318;font-weight:700}
+  #btnSign:disabled{background:#9db4c7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="doc"><p class="muted">Chargement du contrat-cadre…</p></div>
+
+  <div class="card" id="signcard" style="display:none">
+    <h1>Signature du contrat-cadre de prêt</h1>
+    <div class="sub">Merci de relire le contrat ci-dessus, puis de le signer. Ce contrat n'est à signer qu'une seule fois.</div>
+    <label for="signame">Nom du signataire <span class="req">*</span> <span class="muted">(obligatoire)</span></label>
+    <input type="text" id="signame" placeholder="Prénom et nom" oninput="refresh()">
+    <label>Signature <span class="req">*</span> <span class="muted">(tracez ci-dessous)</span></label>
+    <canvas id="pad" width="420" height="150"></canvas>
+    <div class="btns" style="margin-top:8px"><button class="ghost" type="button" onclick="clearPad()">Effacer la signature</button></div>
+    <div class="chk"><input type="checkbox" id="accept"><label for="accept" style="margin:0;font-weight:400">J'ai lu et j'approuve le contrat-cadre de prêt — « Lu et approuvé, bon pour accord ». <span class="req">*</span></label></div>
+    <div class="btns"><button class="primary" id="btnSign" onclick="signer()" disabled title="Renseignez votre nom, tracez votre signature et cochez la case">Signer le contrat-cadre</button></div>
+    <div id="signhint" style="margin-top:8px"></div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="card" id="done" style="display:none">
+    <div class="msg ok">✔ Merci, votre signature a bien été enregistrée. Une copie du contrat signé a été envoyée par e-mail. Vous pouvez fermer cette page.</div>
+    <div class="btns"><button class="ghost" type="button" onclick="telechargerPDF()">Télécharger le PDF signé</button></div>
+  </div>
+</div>
+
+<script>
+var TOKEN = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
+var CC = null;
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+function contratHTML(c){
+  return '<h1>CONTRAT-CADRE DE PRÊT À USAGE</h1>'+
+    '<div class="sub">Commodat – Articles 1875 à 1891 du Code civil</div>'+
+    '<p class="a"><b>Entre</b> ELOFLEX SAS (« le Prêteur »)'+(c.representant_eloflex?', représentée par '+esc(c.representant_eloflex):'')+
+      ' <b>et</b> '+esc(c.distributeur_nom||'…')+' (« l\'Emprunteur »)'+(c.siret_distrib?' — SIRET : '+esc(c.siret_distrib):'')+
+      (c.representant_distrib?', représenté par '+esc(c.representant_distrib):'')+'.</p>'+
+    '<h3>Article 1 – Objet et nature juridique</h3>'+
+    '<p class="a">Mise à disposition, à titre gratuit et temporaire, d\'un ou plusieurs fauteuils roulants électriques Eloflex aux fins exclusives d\'essai patient supervisé par un ergothérapeute, conformément à l\'arrêté du 6 février 2025 modifié (VPH, art. L.165-1 CSS). Le prêt constitue un commodat : ELOFLEX conserve la pleine propriété du matériel ; aucun transfert de propriété ne résulte de la remise. Chaque prêt fait l\'objet d\'un Bon de Prêt distinct.</p>'+
+    '<h3>Article 2 – Formules de prêt</h3>'+
+    '<p class="a"><b>Essai Court (15 à 30 jours)</b> : durée maximale 30 jours calendaires dès la livraison, sauf prorogation écrite. <b>Prêt Long Terme (≥ 3 mois, renouvelable)</b> : réservé aux partenaires sélectionnés, soumis aux engagements de l\'article 4.2.</p>'+
+    '<h3>Article 3 – Livraison et état du matériel</h3>'+
+    '<p class="a">Expédition par ELOFLEX à ses frais (sauf mention contraire du Bon de Prêt). État des lieux contradictoire formalisé par la signature du Bon de Prêt. Conservation de l\'emballage d\'origine et des mousses pendant toute la durée.</p>'+
+    '<h3>Article 4 – Obligations de l\'Emprunteur</h3>'+
+    '<p class="a">4.1 – Communes aux deux formules :</p>'+
+    '<ul>'+
+      '<li>Utiliser le matériel uniquement pour des essais patients supervisés par un ergothérapeute.</li>'+
+      '<li>Maintenir le matériel en bon état de fonctionnement et de propreté.</li>'+
+      '<li>Ne pas prêter, sous-louer ou céder le matériel à un tiers autre qu\'un patient en essai.</li>'+
+      '<li>Signaler sans délai tout incident, anomalie ou dommage.</li>'+
+      '<li>Retourner le matériel dans son emballage d\'origine, avec les mousses, en bon état général.</li>'+
+      '<li>Confirmer par e-mail le bon état du matériel avant tout retour.</li>'+
+      '<li>Retourner le matériel dans le délai prévu au Bon de Prêt.</li>'+
+      '<li>Participer aux frais de retour (transport) : 50 € HT par fauteuil.</li>'+
+      '<li>Prendre en charge la main d\'œuvre et les pièces de remise en état avant chaque nouvel essai et avant tout retour.</li>'+
+    '</ul>'+
+    '<p class="a">4.2 – Spécifiques Prêt Long Terme :</p>'+
+    '<ul>'+
+      '<li>Maintenir le matériel en état « quasi neuf ».</li>'+
+      '<li>Au moins un (1) essai patient par mois en moyenne (modèle prêté ou autre modèle Eloflex).</li>'+
+      '<li>Informer ELOFLEX en cas d\'indisponibilité prolongée et faciliter la mise à disposition pour d\'autres essais.</li>'+
+      '<li>Communiquer un bilan trimestriel simplifié des essais (nombre, retours patients).</li>'+
+    '</ul>'+
+    '<h3>Article 5 – Responsabilité et garantie</h3>'+
+    '<p class="a">Responsabilité dès la réception jusqu\'au retour effectif (art. 1880 à 1884 C. civ.). Perte / destruction totale : prix catalogue public HT en vigueur à la date du sinistre. Dommages partiels : frais réels (pièces + main d\'œuvre tarif SAV) sur devis accepté ou facture ; l\'usure normale n\'est pas facturée. Assurance RC professionnelle couvrant les biens confiés recommandée (attestation possible).</p>'+
+    '<h3>Article 6 – Frais de retour et d\'emballage</h3>'+
+    '<p class="a">Frais de retour : 50 € HT / fauteuil. Supplément si emballage / mousses manquants : 90 € HT au total si l\'emballage complet est absent. Facturés séparément, sans contrepartie du prêt.</p>'+
+    '<h3>Article 7 – Cession du matériel</h3>'+
+    '<p class="a">L\'Emprunteur peut proposer à tout moment le rachat du matériel. Offre sans engagement pour ELOFLEX ; en cas d\'accord, prix librement fixé au jour de la vente, formalisé par un bon de commande distinct et une facture de vente. Le transfert de propriété met fin au prêt pour ce matériel.</p>'+
+    '<h3>Article 8 – Durée et fin du prêt</h3>'+
+    '<p class="a">Fin : à l\'échéance du Bon de Prêt ; par accord mutuel ; à la demande d\'ELOFLEX (préavis 15 j Essai Court / 30 j Long Terme) ; de plein droit sans préavis en cas de manquement grave. Restitution dans les 7 jours calendaires suivant la notification de fin de prêt.</p>'+
+    '<h3>Article 9 – Dispositions générales</h3>'+
+    '<p class="a">Droit français ; à défaut d\'accord amiable, compétence exclusive des juridictions du siège social d\'ELOFLEX. Toute modification par avenant écrit signé des deux parties. La nullité d\'une clause n\'affecte pas les autres.</p>';
+}
+
+fetch('/api/contrat-public/'+encodeURIComponent(TOKEN)).then(function(r){
+  if(!r.ok) return r.json().then(function(j){ throw new Error(j.error||'Lien invalide'); });
+  return r.json();
+}).then(function(c){
+  CC=c;
+  document.getElementById('doc').innerHTML = contratHTML(c);
+  if(c.signed_at){
+    document.getElementById('signcard').style.display='none';
+    var d=document.getElementById('done'); d.style.display='block';
+    d.querySelector('.msg').textContent='Ce contrat-cadre a déjà été signé'+(c.signataire_nom?(' par '+c.signataire_nom):'')+'.';
+  } else {
+    document.getElementById('signcard').style.display='block';
+    initPad();
+  }
+}).catch(function(e){
+  document.getElementById('doc').innerHTML = '<div class="msg err">'+esc(e.message)+'</div>';
+});
+
+// ── Canvas signature ──
+var pad, ctx, drawing=false, hasSig=false;
+function initPad(){
+  pad=document.getElementById('pad'); ctx=pad.getContext('2d');
+  ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.strokeStyle='#12395c';
+  function pos(e){ var r=pad.getBoundingClientRect(); var t=e.touches?e.touches[0]:e; return {x:(t.clientX-r.left)*(pad.width/r.width), y:(t.clientY-r.top)*(pad.height/r.height)}; }
+  function start(e){ drawing=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); e.preventDefault(); }
+  function move(e){ if(!drawing)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); hasSig=true; refresh(); e.preventDefault(); }
+  function end(){ drawing=false; }
+  pad.addEventListener('mousedown',start); pad.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
+  pad.addEventListener('touchstart',start,{passive:false}); pad.addEventListener('touchmove',move,{passive:false}); pad.addEventListener('touchend',end);
+  document.getElementById('accept').addEventListener('change',refresh);
+  document.getElementById('signame').addEventListener('input',refresh);
+  refresh();
+}
+function clearPad(){ if(ctx){ctx.clearRect(0,0,pad.width,pad.height);} hasSig=false; refresh(); }
+function refresh(){
+  var name = (document.getElementById('signame').value||'').trim();
+  var checked = document.getElementById('accept').checked;
+  var miss = [];
+  if(!name || name.length<2) miss.push('votre nom');
+  if(!hasSig) miss.push('votre signature');
+  if(!checked) miss.push('cocher la case d\'approbation');
+  var btn = document.getElementById('btnSign');
+  btn.disabled = miss.length > 0;
+  btn.title = miss.length ? ('Obligatoire : ' + miss.join(', ')) : 'Signer le contrat-cadre';
+  var hint = document.getElementById('signhint');
+  if(hint) hint.innerHTML = miss.length ? ('<span class="muted">Pour signer, il reste à renseigner : <b>' + miss.join('</b>, <b>') + '</b>.</span>') : '';
+}
+var SIGNED_PDF=null;
+function signer(){
+  var name=document.getElementById('signame').value.trim();
+  var sig=pad.toDataURL('image/png');
+  var c=Object.assign({}, CC, {signataire_nom:name, signature_data:sig, signed_at:new Date().toISOString().slice(0,10)});
+  var pdfData=null;
+  try{ if(typeof PDF!=='undefined'&&PDF.contratCadreDoc){ pdfData=PDF.contratCadreDoc(c).output('datauristring'); SIGNED_PDF=pdfData; } }catch(e){}
+  var btn=document.getElementById('btnSign'); btn.disabled=true; btn.textContent='Envoi…';
+  fetch('/api/contrat-public/'+encodeURIComponent(TOKEN)+'/signer',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({signataire_nom:name, signature_data:sig, pdf_data:pdfData})
+  }).then(function(r){ if(!r.ok) return r.json().then(function(j){throw new Error(j.error||'Erreur');}); return r.json(); })
+    .then(function(){ document.getElementById('signcard').style.display='none'; document.getElementById('done').style.display='block'; })
+    .catch(function(e){ btn.disabled=false; btn.textContent='Signer le contrat-cadre'; document.getElementById('msg').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; });
+}
+function telechargerPDF(){
+  if(SIGNED_PDF){ var a=document.createElement('a'); a.href=SIGNED_PDF; a.download='Contrat_cadre_pret_signe.pdf'; a.click(); }
+  else if(typeof PDF!=='undefined'&&PDF.contratCadre&&CC){ PDF.contratCadre(Object.assign({},CC)); }
+}
+</script>
+</body>
+</html>

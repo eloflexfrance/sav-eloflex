@@ -74,6 +74,11 @@ app.get('/pret/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'pret.html'));
 });
 
+// ── Page publique de signature du contrat-cadre de prêt (sans auth) ──
+app.get('/contrat/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'contrat.html'));
+});
+
 // ── Routes API ───────────────────────────────────────────────────────
 app.use('/api', require('./routes'));
 

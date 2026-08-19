@@ -529,6 +529,7 @@ async function renderClient(ttl,c,a){
     <button class="btn sm" onclick="modalPortail(${cl.id},'${cl.token_portail||''}')"><i class="ti ti-link"></i>Portail</button>
     <button class="btn sm" onclick="modalNewFauteuil(${cl.id})"><i class="ti ti-plus"></i>${TR('Fauteuil')}</button>
     <button class="btn sm" onclick="modalPret(null,${cl.id})"><i class="ti ti-file-certificate"></i>${TR('Bon de prêt')}</button>
+    ${cl.type!=='Particulier'?`<button class="btn sm" onclick="modalContrat(${cl.id})"><i class="ti ti-file-description"></i>${TR('Contrat-cadre')}</button>`:''}
     <button class="btn sm primary" onclick="modalNewIntervention(null,${cl.id})"><i class="ti ti-plus"></i>Intervention</button>`;
   const s=cl.stats||{};
   c.innerHTML=`
@@ -6914,7 +6915,7 @@ function pretBadge(s){ const u=PRET_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<s
 
 async function renderPrets(ttl,c,a){
   ttl.textContent = TR('Prêts') || 'Prêts';
-  a.innerHTML = `<button class="btn sm primary" onclick="modalPret()"><i class="ti ti-plus"></i>${TR('Nouveau bon de prêt')}</button>`;
+  a.innerHTML = `<button class="btn sm" onclick="ouvrirContratsModal()"><i class="ti ti-file-description"></i>${TR('Contrats-cadre')}</button><button class="btn sm primary" onclick="modalPret()"><i class="ti ti-plus"></i>${TR('Nouveau bon de prêt')}</button>`;
   let rows=[]; try{ rows = await API.prets(); }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
   if(!rows.length){ c.innerHTML=`<div class="empty"><i class="ti ti-file-certificate"></i>${TR('Aucun bon de prêt pour le moment.')}<br><span style="font-size:12px;color:var(--text3)">${TR('Créez-en un depuis une fiche distributeur ou avec « Nouveau bon de prêt ».')}</span></div>`; return; }
   const fdate = d => d ? fd((''+d).slice(0,10)) : '—';
@@ -6978,12 +6979,13 @@ async function modalPret(id, prefillClientId){
       <div class="form-group" style="position:relative"><label class="form-label">${TR('Distributeur emprunteur')}</label>
         <input class="form-input" id="pret-client-search" autocomplete="off" placeholder="${TR('Taper le nom du distributeur…')}" value="${esc(p.distributeur_nom||'')}" oninput="pretDistribInput('pret-client')" onfocus="pretDistribSearch('pret-client',this.value)" onblur="setTimeout(function(){var d=document.getElementById('pret-client-drop');if(d)d.style.display='none'},150)">
         <div id="pret-client-drop" class="piece-dropdown" style="display:none"></div></div>
+      <div id="pret-cc-hint" style="margin:-4px 0 8px"></div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Contact')}</label><input class="form-input" id="pret-contact" value="${esc(p.contact||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Email')}</label><input class="form-input" id="pret-email" type="email" value="${esc(p.email||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="pret-tel" value="${esc(p.tel||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Formule')}</label>
-          <select class="form-input" id="pret-formule">
+          <select class="form-input" id="pret-formule" onchange="pretMajRetour()">
             <option value="essai_court" ${p.formule!=='long_terme'?'selected':''}>${PRET_FORMULES.essai_court}</option>
             <option value="long_terme" ${p.formule==='long_terme'?'selected':''}>${PRET_FORMULES.long_terme}</option>
           </select></div>
@@ -7000,11 +7002,11 @@ async function modalPret(id, prefillClientId){
           <div id="pret-liv-drop" class="piece-dropdown" style="display:none"></div></div>
         <div class="form-group"><label class="form-label">${TR('Adresse de livraison')}</label><input class="form-input" id="pret-liv-adresse" value="${esc(p.livraison_adresse||'')}"></div>
       </div>
-      <div class="form-group"><label class="form-label">${TR('N° de commande VosFactures')}</label>
+      <div class="form-group"><label class="form-label">${TR('N° de bon de commande (Pennylane / VosFactures)')}</label>
         <div style="display:flex;gap:6px">
-          <input class="form-input mono" id="pret-bdc-vf" value="${esc(p.bdc_vf||'')}" placeholder="ex. D0931" style="flex:1">
-          <button type="button" class="btn sm" title="Ouvrir dans VosFactures" onclick="ouvrirPretVF()"><i class="ti ti-external-link"></i></button>
-          <button type="button" class="btn sm primary" onclick="importerPretVF()"><i class="ti ti-download"></i> ${TR('Importer')}</button>
+          <input class="form-input mono" id="pret-bdc-vf" value="${esc(p.bdc_vf||'')}" placeholder="ex. BC-2026-08-2" style="flex:1">
+          <button type="button" class="btn sm" title="Ouvrir la pièce" onclick="ouvrirPretVF()"><i class="ti ti-external-link"></i></button>
+          <button type="button" class="btn sm primary" onclick="importerPretVF()" title="Récupérer distributeur et matériel depuis la pièce"><i class="ti ti-download"></i> ${TR('Importer')}</button>
         </div>
         <div id="pret-vf-msg" style="font-size:11px;color:var(--text3);margin-top:3px"></div></div>
       <div class="form-group">
@@ -7016,11 +7018,11 @@ async function modalPret(id, prefillClientId){
         <div style="text-align:right;font-size:13px;margin-top:6px">${TR('Total HT')} : <b id="pret-total">0,00 €</b></div>
       </div>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">${TR('Date de remise')}</label><input class="form-input" id="pret-remise" type="date" value="${(p.date_remise||'').slice(0,10)||today}"></div>
+        <div class="form-group"><label class="form-label">${TR('Date de remise')}</label><input class="form-input" id="pret-remise" type="date" value="${(p.date_remise||'').slice(0,10)||today}" onchange="pretMajRetour(true)"></div>
         <div class="form-group"><label class="form-label">${TR('Date de retour prévue')}</label><input class="form-input" id="pret-retour" type="date" value="${(p.date_retour_prevue||'').slice(0,10)}"></div>
       </div>
       <div class="form-group"><label class="form-label">${TR('Observations sur l\'état initial')}</label><textarea class="form-input" id="pret-obs" rows="2">${esc(p.observations||'')}</textarea></div>
-      <p style="font-size:11px;color:var(--text3);margin:0">${TR('Le rappel automatique de relance est envoyé 3 semaines après la date de remise.')}</p>
+      <p style="font-size:11px;color:var(--text3);margin:0">${TR('Rappel automatique : Essai court → avant l\'échéance de retour (retour proposé à +30 j de la remise). Prêt long terme → rappel périodique (bilan trimestriel).')}</p>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
@@ -7028,6 +7030,8 @@ async function modalPret(id, prefillClientId){
     </div>`);
   arts.forEach(a=>addPretArticle(a));
   pretMajTotal();
+  pretMajRetour();
+  if(p.client_id) majContratCadreHint(p.client_id);
 }
 window.modalPret = modalPret;
 
@@ -7056,6 +7060,16 @@ function pretMajTotal(){
   const el=$('pret-total'); if(el) el.textContent = tot.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €';
 }
 window.pretMajTotal = pretMajTotal;
+// Retour prévu adapté à la formule : Essai court → remise + 30 j.
+// force=true (changement de date de remise) recalcule ; sinon ne remplit que si vide.
+function pretMajRetour(force){
+  const f = gv('pret-formule'); const remise = gv('pret-remise'); const ret = $('pret-retour');
+  if(!ret) return;
+  if(f==='essai_court' && remise && (force || !ret.value)){
+    const d = new Date(remise+'T00:00:00'); if(!isNaN(d)){ d.setDate(d.getDate()+30); ret.value = d.toISOString().slice(0,10); }
+  }
+}
+window.pretMajRetour = pretMajRetour;
 
 // ── Autocomplétion distributeur (même composant déroulant que le reste de l'app) ──
 // prefix = 'pret-client' (emprunteur) ou 'pret-liv' (livraison)
@@ -7079,7 +7093,7 @@ window.pretDistribSearch = pretDistribSearch;
 function pretDistribSelect(prefix, id, nom){
   const inp=$(prefix+'-search'), hid=$(prefix+'-id'); if(inp) inp.value=nom; if(hid) hid.value=id;
   const drop=$(prefix+'-drop'); if(drop) drop.style.display='none';
-  if(prefix==='pret-client') pretRemplirClient(id); else pretRemplirLivraison(id);
+  if(prefix==='pret-client'){ pretRemplirClient(id); majContratCadreHint(id); } else pretRemplirLivraison(id);
 }
 window.pretDistribSelect = pretDistribSelect;
 // Renseigne le champ distributeur depuis un nom (import BDC) : lie la fiche si le nom correspond
@@ -7124,11 +7138,14 @@ async function importerPretVF(){
   const num = (gv('pret-bdc-vf')||'').trim();
   const msg = $('pret-vf-msg');
   if(!num){ if(msg) msg.innerHTML='<span style="color:var(--danger)">'+TR('Indique d’abord un numéro.')+'</span>'; return; }
-  if(msg) msg.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Recherche dans VosFactures…');
+  if(msg) msg.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Recherche du bon de commande…');
   try{
-    const r = await API.vfBdcLookup(num);
-    if(r && r.configured===false){ if(msg) msg.innerHTML='<span style="color:var(--danger)">VosFactures non configuré.</span>'; return; }
-    if(!r || !r.found){ if(msg) msg.innerHTML='<span style="color:var(--warning)">'+TR('Bordereau introuvable dans VosFactures')+'</span>'; return; }
+    // On tente d'abord Pennylane (BC-…, devis, factures), puis VosFactures en repli
+    let r = null;
+    try{ const pl = await API.pennylane_bdc_lookup(num); if(pl && pl.found) r = pl; }catch(_){}
+    if(!r){ r = await API.vfBdcLookup(num); }
+    if(r && r.configured===false){ if(msg) msg.innerHTML='<span style="color:var(--danger)">Aucun système (Pennylane / VosFactures) configuré.</span>'; return; }
+    if(!r || !r.found){ if(msg) msg.innerHTML='<span style="color:var(--warning)">'+TR('Bon de commande introuvable (Pennylane / VosFactures)')+'</span>'; return; }
     if(r.vf_id!=null) $('pret-bdc-vfid').value = String(r.vf_id);
     if(r.numero) $('pret-bdc-vf').value = r.numero;
     if(r.distributeur){ pretSetDistrib('pret-client', r.distributeur); }
@@ -7298,10 +7315,7 @@ function pretBonHTML(p){
     <p style="margin:6px 0 6px;font-style:italic;color:#555;font-size:11px">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions. Il confirme notamment :</p>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px;table-layout:fixed"><tr>
       <td style="padding:0 12px 0 0;vertical-align:top;width:50%;font-size:11px;line-height:1.5">
-        <span style="color:#1F5C8C">&#9679;</span> Veiller au bon fonctionnement et à une utilisation dans un environnement convenable<br>
         <span style="color:#1F5C8C">&#9679;</span> Utiliser le matériel uniquement pour des essais patients supervisés par un ergothérapeute<br>
-        <span style="color:#1F5C8C">&#9679;</span> Laisser le fauteuil au client final 7 jours maximum par essai<br>
-        <span style="color:#1F5C8C">&#9679;</span> Faire signer une décharge de responsabilité à chaque patient et la retourner à ELOFLEX<br>
         <span style="color:#1F5C8C">&#9679;</span> Conserver l'emballage et les mousses de protection<br>
         <span style="color:#1F5C8C">&#9679;</span> Signaler immédiatement tout incident ou dommage à ELOFLEX
       </td>
@@ -7309,8 +7323,7 @@ function pretBonHTML(p){
         <span style="color:#1F5C8C">&#9679;</span> Maintenir le matériel en état quasi-neuf (Prêt Long Terme)<br>
         <span style="color:#1F5C8C">&#9679;</span> Assurer au moins 1 essai / mois (Prêt Long Terme)<br>
         <span style="color:#1F5C8C">&#9679;</span> Confirmer par e-mail le bon état du fauteuil avant retour<br>
-        <span style="color:#1F5C8C">&#9679;</span> Prendre en charge les frais de retour (50 € HT / fauteuil)<br>
-        <span style="color:#1F5C8C">&#9679;</span> Retourner le fauteuil dans son carton d'origine, propre et fonctionnel
+        <span style="color:#1F5C8C">&#9679;</span> Prendre en charge les frais de retour (50 € HT / fauteuil)
       </td>
     </tr></table>
     <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">CONDITIONS FINANCIÈRES EN CAS DE DOMMAGE OU PERTE</div>
@@ -7331,3 +7344,203 @@ function pretBonHTML(p){
   </div>`;
 }
 window.pretBonHTML = pretBonHTML;
+
+// ══════════════════════════════════════════════════════════════════
+// ── CONTRAT-CADRE DE PRÊT (signé une fois par distributeur) ──
+// ══════════════════════════════════════════════════════════════════
+const CONTRAT_STATUTS_UI = {
+  aucun:     { l:'Non créé',  c:'#9ca3af' },
+  brouillon: { l:'Brouillon', c:'#6b7280' },
+  envoye:    { l:'Envoyé',    c:'#d97706' },
+  signe:     { l:'Signé',     c:'#16a34a' },
+};
+function contratBadge(s){ const u=CONTRAT_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c}">${u.l}</span>`; }
+
+// Bandeau d'info dans la fenêtre du bon de prêt : le distributeur a-t-il signé son contrat-cadre ?
+async function majContratCadreHint(clientId){
+  const el = $('pret-cc-hint'); if(!el || !clientId) return;
+  try{
+    const cc = await API.contratCadreByClient(clientId);
+    if(cc && cc.statut==='signe'){
+      el.innerHTML = `<div style="font-size:11px;color:#16a34a;display:flex;align-items:center;gap:5px"><i class="ti ti-shield-check"></i> ${TR('Contrat-cadre signé')}${cc.signed_at?(' — '+fd((''+cc.signed_at).slice(0,10))):''}</div>`;
+    } else if(cc && (cc.statut==='envoye'||cc.statut==='brouillon')){
+      el.innerHTML = `<div style="font-size:11px;color:#d97706;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><i class="ti ti-alert-triangle"></i> ${TR('Contrat-cadre')} : ${contratBadge(cc.statut)} — ${TR('non signé')} <a href="#" onclick="event.preventDefault();closeModal();modalContrat(${clientId})" style="color:var(--accent)">${TR('gérer')}</a></div>`;
+    } else {
+      el.innerHTML = `<div style="font-size:11px;color:#d97706;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><i class="ti ti-alert-triangle"></i> ${TR('Aucun contrat-cadre pour ce distributeur.')} <a href="#" onclick="event.preventDefault();closeModal();modalContrat(${clientId})" style="color:var(--accent)">${TR('en créer un')}</a></div>`;
+    }
+  }catch(e){ el.innerHTML=''; }
+}
+window.majContratCadreHint = majContratCadreHint;
+
+// Gestionnaire global : liste des contrats-cadre + création
+async function ouvrirContratsModal(){
+  await ensureClientsCache();
+  let rows=[]; try{ rows = await API.contratsCadre(); }catch(e){}
+  const lignes = rows.map(cc=>{
+    const nom = esc(cc.client_nom_actuel || cc.distributeur_nom || '—');
+    const sign = cc.signed_at ? `<span style="color:#16a34a;font-size:11px;margin-left:4px">${fd((''+cc.signed_at).slice(0,10))}</span>` : '';
+    return `<tr style="border-top:0.5px solid var(--border)">
+      <td style="padding:9px 10px">${nom}</td>
+      <td style="padding:9px 10px">${contratBadge(cc.statut)}${sign}</td>
+      <td style="padding:9px 10px;text-align:right;white-space:nowrap">
+        <button class="btn sm" title="${TR('Gérer')}" onclick="modalContrat(${cc.client_id})"><i class="ti ti-pencil"></i></button>
+        <button class="btn sm" title="Aperçu" onclick="apercuContrat(${cc.id})"><i class="ti ti-eye"></i></button>
+        <button class="btn sm" title="PDF" onclick="exportContratPDF(${cc.id})"><i class="ti ti-file-type-pdf"></i></button>
+      </td></tr>`;
+  }).join('');
+  showModal(`<div class="modal-header"><i class="ti ti-file-description" style="color:var(--accent)"></i><h2>${TR('Contrats-cadre de prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group" style="position:relative"><label class="form-label">${TR('Créer / gérer pour un distributeur')}</label>
+        <input class="form-input" id="cc-pick-search" autocomplete="off" placeholder="${TR('Taper le nom du distributeur…')}" oninput="ccPickInput()" onfocus="ccPickInput()" onblur="setTimeout(function(){var d=document.getElementById('cc-pick-drop');if(d)d.style.display='none'},150)">
+        <div id="cc-pick-drop" class="piece-dropdown" style="display:none"></div></div>
+      ${rows.length?`<div class="card" style="padding:0;overflow:auto;margin-top:6px"><table class="table" style="width:100%"><thead><tr>
+        <th style="text-align:left;padding:9px 10px">${TR('Distributeur')}</th><th style="text-align:left;padding:9px 10px">${TR('Statut')}</th><th></th></tr></thead>
+        <tbody>${lignes}</tbody></table></div>`:`<div class="empty" style="padding:20px"><i class="ti ti-file-description"></i>${TR('Aucun contrat-cadre pour le moment.')}</div>`}
+    </div>`);
+}
+window.ouvrirContratsModal = ouvrirContratsModal;
+function ccPickInput(){
+  const drop=$('cc-pick-drop'); if(!drop) return;
+  const q=(gv('cc-pick-search')||'').toLowerCase().trim();
+  const src=window._clientsCache||[];
+  const res=(q?src.filter(c=>c.nom&&c.nom.toLowerCase().includes(q)):src).filter(c=>c.type!=='Particulier').slice(0,25);
+  if(!res.length){ drop.style.display='none'; return; }
+  drop.innerHTML=res.map(c=>'<div class="piece-option" onmousedown="event.preventDefault();modalContrat('+c.id+')"><div style="font-size:12px;font-weight:600">'+esc(c.nom)+'</div>'+(c.ville?'<div style="font-size:11px;color:var(--text3)">'+esc(c.ville)+'</div>':'')+'</div>').join('');
+  drop.style.display='block';
+}
+window.ccPickInput = ccPickInput;
+
+// Fenêtre de gestion du contrat-cadre d'un distributeur
+async function modalContrat(clientId){
+  if(!clientId){ toast(TR('Sélectionne un distributeur'),'ti-alert-circle','var(--warning)'); return; }
+  let cl=null; try{ cl = await API.client(clientId); }catch(e){}
+  // s'assure qu'un contrat existe (création idempotente)
+  let cc=null;
+  try{
+    cc = await API.createContratCadre({
+      client_id: clientId,
+      distributeur_nom: cl?cl.nom:null,
+      siret_distrib: cl?(cl.siret||cl.siren||''):'',
+      siege_distrib: cl?[cl.adresse,cl.cp,cl.ville].filter(Boolean).join(' '):''
+    });
+    cc = await API.contratCadre(cc.id);
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const signe = cc.statut==='signe';
+  showModal(`<div class="modal-header"><i class="ti ti-file-description" style="color:var(--accent)"></i><h2>${TR('Contrat-cadre')} — ${esc(cc.distributeur_nom||cl&&cl.nom||'')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="cc-id" value="${cc.id}">
+      <div style="margin-bottom:10px">${TR('Statut')} : ${contratBadge(cc.statut)}${cc.signed_at?` <span style="font-size:12px;color:var(--text2)">— ${TR('signé le')} ${fd((''+cc.signed_at).slice(0,10))}${cc.signataire_nom?(' '+TR('par')+' '+esc(cc.signataire_nom)):''}</span>`:''}</div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">${TR('Représentant Eloflex')}</label><input class="form-input" id="cc-rep-eloflex" value="${esc(cc.representant_eloflex||(CURRENT_USER&&CURRENT_USER.nom)||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Représentant distributeur')}</label><input class="form-input" id="cc-rep-distrib" value="${esc(cc.representant_distrib||cc.signataire_nom||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('SIRET distributeur')}</label><input class="form-input mono" id="cc-siret" value="${esc(cc.siret_distrib||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Lieu (Fait à)')}</label><input class="form-input" id="cc-lieu" value="${esc(cc.lieu||'')}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">${TR('Siège du distributeur')}</label><input class="form-input" id="cc-siege" value="${esc(cc.siege_distrib||'')}"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <button class="btn" onclick="apercuContrat(${cc.id})"><i class="ti ti-eye"></i> ${TR('Aperçu')}</button>
+        <button class="btn" onclick="exportContratPDF(${cc.id})"><i class="ti ti-file-type-pdf"></i> PDF</button>
+        ${signe?'':`<button class="btn primary" onclick="envoyerContratLien(${cc.id})"><i class="ti ti-mail"></i> ${TR('Envoyer à signer')}</button>
+        <button class="btn success" onclick="modalContratSigneMail(${cc.id})"><i class="ti ti-mail-check"></i> ${TR('Signé par mail')}</button>`}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn danger" style="margin-right:auto" onclick="supprContrat(${cc.id})"><i class="ti ti-trash"></i></button>
+      <button class="btn" onclick="closeModal()">${TR('Fermer')}</button>
+      <button class="btn primary" onclick="saveContratInfos(${cc.id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
+    </div>`);
+}
+window.modalContrat = modalContrat;
+
+async function saveContratInfos(id){
+  const d = { lieu:gv('cc-lieu')||null, representant_eloflex:gv('cc-rep-eloflex')||null, representant_distrib:gv('cc-rep-distrib')||null, siret_distrib:gv('cc-siret')||null, siege_distrib:gv('cc-siege')||null };
+  try{ await API.updateContratCadre(id, d); toast(TR('Contrat-cadre enregistré'),'ti-check','var(--success)'); closeModal(); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.saveContratInfos = saveContratInfos;
+
+async function envoyerContratLien(id){
+  // enregistre d'abord les infos saisies
+  try{ await API.updateContratCadre(id, { lieu:gv('cc-lieu')||null, representant_eloflex:gv('cc-rep-eloflex')||null, representant_distrib:gv('cc-rep-distrib')||null, siret_distrib:gv('cc-siret')||null, siege_distrib:gv('cc-siege')||null }); }catch(e){}
+  let cc; try{ cc = await API.contratCadre(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const dest = prompt(TR('Envoyer le contrat-cadre à signer à :'), cc.client_email_actuel||'');
+  if(!dest) return;
+  let pdfData=null; try{ if(typeof PDF!=='undefined' && PDF.contratCadreDoc) pdfData = PDF.contratCadreDoc(cc).output('datauristring'); }catch(e){}
+  try{ const r = await API.envoyerContratCadre(id, dest, pdfData); toast(TR('Lien de signature envoyé à ')+r.to,'ti-mail','var(--success)'); closeModal(); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.envoyerContratLien = envoyerContratLien;
+
+function modalContratSigneMail(id){
+  const today = new Date().toISOString().slice(0,10);
+  showModal(`<div class="modal-header"><i class="ti ti-mail-check" style="color:var(--accent)"></i><h2>${TR('Contrat-cadre signé par mail')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le contrat-cadre signé par e-mail. Indiquez la date de signature.')}</p>
+      <div class="form-group"><label class="form-label">${TR('Date de signature')}</label><input class="form-input" id="cc-signe-date" type="date" value="${today}" style="max-width:200px"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="validerContratSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
+}
+window.modalContratSigneMail = modalContratSigneMail;
+async function validerContratSigneMail(id){
+  const d = gv('cc-signe-date'); if(!d){ toast(TR('Date requise'),'ti-alert-circle','var(--warning)'); return; }
+  try{ await API.signeContratCadreMail(id, d); closeModal(); toast(TR('Contrat-cadre signé par mail'),'ti-check','var(--success)'); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.validerContratSigneMail = validerContratSigneMail;
+
+async function apercuContrat(id){
+  let cc; try{ cc = await API.contratCadre(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  showModal(`<div class="modal-header"><i class="ti ti-file-description" style="color:var(--accent)"></i><h2>${TR('Aperçu du contrat-cadre')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="max-height:70vh;overflow:auto;background:#fff">${contratBonHTML(cc)}</div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Fermer')}</button><button class="btn primary" onclick="exportContratPDF(${id})"><i class="ti ti-file-type-pdf"></i>PDF</button></div>`);
+}
+window.apercuContrat = apercuContrat;
+
+async function exportContratPDF(id){
+  let cc; try{ cc = await API.contratCadre(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  if(typeof PDF!=='undefined' && PDF.contratCadre){ PDF.contratCadre(cc); } else { toast('Générateur PDF indisponible','ti-alert-circle','var(--danger)'); }
+}
+window.exportContratPDF = exportContratPDF;
+
+async function supprContrat(id){
+  if(!confirm(TR('Supprimer ce contrat-cadre ? (le distributeur devra le re-signer)'))) return;
+  try{ await API.deleteContratCadre(id); toast(TR('Supprimé'),'ti-trash'); closeModal(); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.supprContrat = supprContrat;
+
+// Aperçu HTML du contrat-cadre (résumé fidèle des articles)
+function contratBonHTML(c){
+  c = c || {};
+  const nom = esc(c.distributeur_nom || c.client_nom_actuel || '…');
+  return `<div style="font-family:Calibri,Arial,sans-serif;color:#222;font-size:12px;line-height:1.5;max-width:760px;margin:0 auto">
+    <div style="text-align:center;color:#1F5C8C;font-size:17px;font-weight:bold">CONTRAT-CADRE DE PRÊT À USAGE</div>
+    <div style="text-align:center;font-style:italic;color:#666;font-size:12px;margin:0 0 10px;border-bottom:2px solid #1F5C8C;padding-bottom:7px">Commodat – Articles 1875 à 1891 du Code civil</div>
+    <p><b>Entre</b> ELOFLEX SAS (« le Prêteur »)${c.representant_eloflex?', représentée par '+esc(c.representant_eloflex):''} <b>et</b> ${nom} (« l'Emprunteur »)${c.siret_distrib?' — SIRET : '+esc(c.siret_distrib):''}${c.representant_distrib?', représenté par '+esc(c.representant_distrib):''}.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 1 – Objet et nature juridique</h3>
+    <p>Mise à disposition, à titre gratuit et temporaire, de fauteuils roulants électriques Eloflex aux fins exclusives d'essai patient supervisé par un ergothérapeute (arrêté du 6 février 2025 modifié, VPH, art. L.165-1 CSS). Commodat : ELOFLEX conserve la pleine propriété ; aucun transfert de propriété ne résulte de la remise. Chaque prêt fait l'objet d'un Bon de Prêt distinct.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 2 – Formules de prêt</h3>
+    <p><b>Essai Court (15 à 30 j)</b> : max 30 jours calendaires dès la livraison, sauf prorogation écrite. <b>Prêt Long Terme (≥ 3 mois, renouvelable)</b> : réservé aux partenaires sélectionnés, engagements de l'article 4.2.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 3 – Livraison et état du matériel</h3>
+    <p>Expédition par ELOFLEX à ses frais (sauf mention contraire). État des lieux contradictoire par la signature du Bon de Prêt. Conservation de l'emballage et des mousses.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 4 – Obligations de l'Emprunteur</h3>
+    <p style="margin:0 0 3px">4.1 – Communes : essais supervisés par un ergothérapeute ; bon état et propreté ; interdiction de prêter/céder à un tiers ; signalement des incidents ; retour emballé avec mousses ; confirmation par e-mail avant retour ; respect du délai ; frais de retour 50 € HT/fauteuil ; prise en charge MO + pièces de remise en état.</p>
+    <p style="margin:0">4.2 – Long Terme : état « quasi neuf » ; ≥ 1 essai/mois ; information en cas d'indisponibilité ; bilan trimestriel simplifié.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 5 – Responsabilité et garantie</h3>
+    <p>Responsabilité de la réception au retour (art. 1880-1884 C. civ.). Perte/destruction totale : prix catalogue public HT à la date du sinistre. Dommages partiels : frais réels (pièces + MO tarif SAV) sur devis ou facture ; usure normale non facturée. Assurance RC pro recommandée.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 6 – Frais de retour et d'emballage</h3>
+    <p>Retour : 50 € HT/fauteuil. Emballage/mousses manquants : 90 € HT au total si l'emballage complet est absent. Facturés séparément, sans contrepartie du prêt.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 7 – Cession du matériel</h3>
+    <p>Offre de rachat possible à tout moment, sans engagement pour ELOFLEX ; prix librement fixé au jour de la vente, formalisé par un bon de commande distinct + facture de vente. Le transfert de propriété met fin au prêt pour ce matériel.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 8 – Durée et fin du prêt</h3>
+    <p>Fin à l'échéance du Bon de Prêt ; par accord mutuel ; à la demande d'ELOFLEX (préavis 15 j Essai Court / 30 j Long Terme) ; de plein droit sans préavis en cas de manquement grave. Restitution sous 7 jours calendaires après notification.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 9 – Dispositions générales</h3>
+    <p>Droit français ; à défaut d'accord amiable, compétence exclusive des juridictions du siège d'ELOFLEX. Modification par avenant écrit ; divisibilité des clauses.</p>
+    <p style="margin-top:10px">Fait à ${esc(c.lieu||'……………')}, le ${c.signed_at?fd((''+c.signed_at).slice(0,10)):'……/……/………'} — en deux exemplaires originaux.</p>
+    <table style="width:100%;border-collapse:collapse;margin-top:8px"><tr>
+      <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>LE PRÊTEUR — ELOFLEX SAS</b><br>Représenté par : ${esc(c.representant_eloflex||'')}<br><br>&nbsp;</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;width:50%;vertical-align:top"><b>L'EMPRUNTEUR</b><br>${nom}<br>${c.signataire_nom?('Signé par : '+esc(c.signataire_nom)+(c.signed_at?' le '+fd((''+c.signed_at).slice(0,10)):'')):'Nom : _______________  « Lu et approuvé, bon pour accord »'}<br>${c.signature_data?`<img src="${c.signature_data}" style="max-height:60px;max-width:220px;margin-top:4px">`:'&nbsp;'}</td>
+    </tr></table>
+  </div>`;
+}
+window.contratBonHTML = contratBonHTML;

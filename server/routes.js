@@ -6216,6 +6216,197 @@ router.post('/pret-public/:token/signer', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// ── CONTRAT-CADRE DE PRÊT (commodat) — signé une fois par distributeur ──
+// ══════════════════════════════════════════════════════════════════
+
+// Liste (statut par distributeur), sans les blobs
+router.get('/contrats-cadre', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(
+      `SELECT cc.id, cc.client_id, cc.distributeur_nom, cc.statut, cc.signataire_nom,
+              cc.signed_at, cc.created_at, cc.updated_at,
+              (cc.pdf_data IS NOT NULL) AS has_pdf,
+              c.nom AS client_nom_actuel, c.email AS client_email_actuel
+         FROM contrats_cadre cc LEFT JOIN clients c ON c.id = cc.client_id
+        ORDER BY cc.updated_at DESC`);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Statut du contrat-cadre pour un distributeur donné
+router.get('/contrats-cadre/by-client/:clientId', requireAuth, async (req, res) => {
+  try {
+    const cc = await db.get(
+      `SELECT id, client_id, distributeur_nom, statut, signataire_nom, signed_at,
+              (pdf_data IS NOT NULL) AS has_pdf
+         FROM contrats_cadre WHERE client_id=$1`, [req.params.clientId]);
+    res.json(cc || { statut: 'aucun' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/contrats-cadre/:id', requireAuth, async (req, res) => {
+  try {
+    const cc = await db.get(
+      `SELECT cc.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel,
+              c.siret AS client_siret, c.adresse AS client_adresse, c.cp AS client_cp, c.ville AS client_ville
+         FROM contrats_cadre cc LEFT JOIN clients c ON c.id = cc.client_id WHERE cc.id=$1`, [req.params.id]);
+    if (!cc) return res.status(404).json({ error: 'Contrat-cadre introuvable' });
+    res.json(cc);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Crée (ou renvoie) le contrat-cadre d'un distributeur. Idempotent par client_id.
+router.post('/contrats-cadre', requireAuth, async (req, res) => {
+  try {
+    const d = req.body || {};
+    if (!d.client_id) return res.status(400).json({ error: 'client_id requis' });
+    const existing = await db.get('SELECT * FROM contrats_cadre WHERE client_id=$1', [d.client_id]);
+    if (existing) {
+      const row = await db.run(
+        `UPDATE contrats_cadre SET distributeur_nom=COALESCE($1,distributeur_nom), lieu=$2,
+           representant_eloflex=$3, representant_distrib=$4, siret_distrib=$5, siege_distrib=$6, updated_at=NOW()
+         WHERE id=$7 RETURNING *`,
+        [d.distributeur_nom || null, d.lieu || null, d.representant_eloflex || null,
+         d.representant_distrib || null, d.siret_distrib || null, d.siege_distrib || null, existing.id]);
+      return res.json(row);
+    }
+    const token = crypto.randomBytes(20).toString('hex');
+    const row = await db.run(
+      `INSERT INTO contrats_cadre (client_id, distributeur_nom, lieu, representant_eloflex,
+        representant_distrib, siret_distrib, siege_distrib, statut, token_signature, cree_par)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'brouillon',$8,$9) RETURNING *`,
+      [d.client_id, d.distributeur_nom || null, d.lieu || null, d.representant_eloflex || null,
+       d.representant_distrib || null, d.siret_distrib || null, d.siege_distrib || null,
+       token, (req.session.user && req.session.user.id) || null]);
+    res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/contrats-cadre/:id', requireAuth, async (req, res) => {
+  try {
+    const d = req.body || {};
+    const row = await db.run(
+      `UPDATE contrats_cadre SET lieu=$1, representant_eloflex=$2, representant_distrib=$3,
+         siret_distrib=$4, siege_distrib=$5, updated_at=NOW() WHERE id=$6 RETURNING *`,
+      [d.lieu || null, d.representant_eloflex || null, d.representant_distrib || null,
+       d.siret_distrib || null, d.siege_distrib || null, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Contrat-cadre introuvable' });
+    res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/contrats-cadre/:id', requireAuth, async (req, res) => {
+  try {
+    await db.run('DELETE FROM contrats_cadre WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Marquer signé hors ligne (par e-mail), date choisie
+router.post('/contrats-cadre/:id/signe-mail', requireAuth, async (req, res) => {
+  try {
+    const date = (req.body && req.body.date) ? String(req.body.date).slice(0, 10) : null;
+    const row = await db.run(
+      `UPDATE contrats_cadre SET statut='signe',
+         signed_at = COALESCE($1::date::timestamptz, NOW()),
+         signataire_nom = COALESCE(NULLIF(signataire_nom, ''), 'Signé par e-mail'),
+         updated_at = NOW()
+       WHERE id=$2 RETURNING id, statut, signed_at`,
+      [date, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Contrat-cadre introuvable' });
+    res.json({ ok: true, contrat: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Envoyer au distributeur le lien de signature en ligne du contrat-cadre
+router.post('/contrats-cadre/:id/envoyer', requireAuth, async (req, res) => {
+  try {
+    const cc = await db.get('SELECT * FROM contrats_cadre WHERE id=$1', [req.params.id]);
+    if (!cc) return res.status(404).json({ error: 'Contrat-cadre introuvable' });
+    const dest = (req.body && req.body.email) || null;
+    if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail fournie' });
+    const base = process.env.APP_URL || (req.protocol + '://' + req.get('host'));
+    const lien = `${base}/contrat/${cc.token_signature}`;
+    const pdfData = req.body && req.body.pdf_data;
+    const attachments = pdfData
+      ? [{ filename: `Contrat_cadre_pret_${(cc.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
+           content: String(pdfData).replace(/^data:application\/pdf;base64,/, '') }]
+      : [];
+    const blocManuel = pdfData
+      ? `<div style="border:1px dashed #cbd5e1;border-radius:8px;padding:14px 16px;margin-top:16px;background:#f8fafc;font-size:13px;color:#334">
+           <b>Vous préférez signer à la main ?</b><br>
+           Vous pouvez télécharger le PDF ci-joint, le signer et le renvoyer scanné à l'adresse :
+           <a href="mailto:info@eloflex.fr" style="color:#1F5C8C;font-weight:600">info@eloflex.fr</a>.
+         </div>`
+      : '';
+    await envoyerEmailPret({
+      to: dest,
+      subject: `Contrat-cadre de prêt Eloflex — à signer en ligne`,
+      attachments,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
+        <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Contrat-cadre de prêt à signer</h2></div>
+        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px">
+          <p>Bonjour,</p>
+          <p>Dans le cadre de la mise à disposition de fauteuils Eloflex en prêt/essai, nous vous invitons à prendre connaissance du <b>contrat-cadre de prêt</b> et à le <b>signer en ligne</b>. Ce contrat n'est à signer qu'une seule fois ; chaque prêt fera ensuite l'objet d'un bon de prêt distinct.</p>
+          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le contrat-cadre</a></p>
+          <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>
+          ${blocManuel}
+        </div>
+        <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
+      </div>`
+    });
+    const updated = await db.run("UPDATE contrats_cadre SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END, updated_at=NOW() WHERE id=$1 RETURNING id, statut", [cc.id]);
+    res.json({ ok: true, to: dest, statut: updated.statut });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Public (sans authentification) : consultation + signature du contrat-cadre ──
+router.get('/contrat-public/:token', async (req, res) => {
+  try {
+    const cc = await db.get('SELECT * FROM contrats_cadre WHERE token_signature=$1', [req.params.token]);
+    if (!cc) return res.status(404).json({ error: 'Lien invalide ou expiré' });
+    res.json({
+      id: cc.id, distributeur_nom: cc.distributeur_nom, lieu: cc.lieu,
+      representant_eloflex: cc.representant_eloflex, representant_distrib: cc.representant_distrib,
+      siret_distrib: cc.siret_distrib, siege_distrib: cc.siege_distrib,
+      statut: cc.statut, signataire_nom: cc.signataire_nom, signed_at: cc.signed_at
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/contrat-public/:token/signer', async (req, res) => {
+  try {
+    const cc = await db.get('SELECT * FROM contrats_cadre WHERE token_signature=$1', [req.params.token]);
+    if (!cc) return res.status(404).json({ error: 'Lien invalide ou expiré' });
+    if (cc.signed_at) return res.status(409).json({ error: 'Ce contrat a déjà été signé.' });
+    const d = req.body || {};
+    if (!d.signataire_nom || !d.signature_data) return res.status(400).json({ error: 'Nom et signature requis' });
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
+    const ua = (req.headers['user-agent'] || '').toString().slice(0, 250);
+    await db.run(
+      `UPDATE contrats_cadre SET signataire_nom=$1, signature_data=$2, pdf_data=$3, sign_ip=$4, sign_ua=$5,
+        signed_at=NOW(), statut='signe', updated_at=NOW() WHERE id=$6`,
+      [String(d.signataire_nom).slice(0,120), d.signature_data, d.pdf_data || null, ip, ua, cc.id]);
+    try {
+      const attachments = d.pdf_data
+        ? [{ filename: `Contrat_cadre_pret_${(cc.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
+             content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' }]
+        : [];
+      await envoyerEmailPret({
+        to: 'sav@eloflex.fr',
+        subject: `Contrat-cadre de prêt Eloflex — signé par ${d.signataire_nom} (${cc.distributeur_nom || ''})`,
+        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
+          <p>Le contrat-cadre de prêt du distributeur <b>${cc.distributeur_nom || ''}</b> a été signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
+          ${attachments.length ? '<p>Le document signé est joint à cet e-mail (PDF).</p>' : ''}
+          <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
+        attachments
+      });
+    } catch (mailErr) { console.error('[CONTRAT] e-mail signature:', mailErr.message); }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
 module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;

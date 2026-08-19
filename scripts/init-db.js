@@ -189,6 +189,33 @@ async function initDB() {
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_client_id INTEGER`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_nom TEXT`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_adresse TEXT`);
+    // Rappel adapté à la formule : dernier rappel émis (Long Terme = trimestriel récurrent)
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS dernier_rappel TIMESTAMPTZ`);
+
+    // Table du contrat-cadre de prêt (commodat) — signé une fois par distributeur
+    await client.query(`CREATE TABLE IF NOT EXISTS contrats_cadre (
+      id SERIAL PRIMARY KEY,
+      client_id INTEGER UNIQUE REFERENCES clients(id) ON DELETE CASCADE,
+      distributeur_nom TEXT,
+      lieu TEXT,
+      representant_eloflex TEXT,
+      representant_distrib TEXT,
+      siret_distrib TEXT,
+      siege_distrib TEXT,
+      statut TEXT DEFAULT 'brouillon',
+      token_signature TEXT UNIQUE,
+      signataire_nom TEXT,
+      signature_data TEXT,
+      signed_at TIMESTAMPTZ,
+      sign_ip TEXT,
+      sign_ua TEXT,
+      pdf_data TEXT,
+      cree_par INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cc_client ON contrats_cadre(client_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_cc_token ON contrats_cadre(token_signature)`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (

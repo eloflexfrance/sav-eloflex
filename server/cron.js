@@ -96,22 +96,41 @@ async function runDailyChecks() {
     }
     if (demosDues.length) await envoyerEmailDemos(demosDues);
 
-    // 6. Bons de prêt : relance automatique 3 semaines (21 j) après la date de remise
+    // 6. Bons de prêt : rappels adaptés à la formule
+    //    Essai court → avant l'échéance de retour (retour prévu, ou remise + 30 j)
+    //    Prêt long terme → rappel périodique récurrent (bilan trimestriel, ~90 j)
     let pretsDus = [];
     try {
-      pretsDus = await db.all(
+      const essais = await db.all(
         `SELECT p.id, p.distributeur_nom, p.email, p.designation, p.num_serie, p.date_remise,
-                p.date_retour_prevue, c.nom AS client_nom, c.email AS client_email
+                p.date_retour_prevue, p.formule, c.nom AS client_nom, c.email AS client_email
          FROM prets p LEFT JOIN clients c ON c.id=p.client_id
-         WHERE p.date_remise IS NOT NULL AND p.rappel_envoye = FALSE
+         WHERE p.rappel_envoye = FALSE AND p.date_remise IS NOT NULL
+           AND COALESCE(p.formule,'essai_court') = 'essai_court'
            AND p.statut IN ('envoye','signe','en_cours','prolonge','retard')
-           AND p.date_remise + INTERVAL '21 days' <= NOW()`
+           AND COALESCE(p.date_retour_prevue, p.date_remise + INTERVAL '30 days') - INTERVAL '5 days' <= NOW()`
       );
-      for (const p of pretsDus) {
+      for (const p of essais) {
+        const ech = p.date_retour_prevue || '(≈ remise + 30 j)';
         await addAlerte('pret_rappel', p.id,
-          `📄 Prêt à relancer : ${p.client_nom || p.distributeur_nom} — ${p.designation || ''} ${p.num_serie || ''} (remis le ${p.date_remise}). 3 semaines écoulées : relancer le distributeur.`);
-        await db.run("UPDATE prets SET rappel_envoye=TRUE, statut=CASE WHEN statut='signe' THEN 'en_cours' ELSE statut END, updated_at=NOW() WHERE id=$1", [p.id]);
+          `📄 Essai court à échéance : ${p.client_nom || p.distributeur_nom} — ${p.designation || ''} ${p.num_serie || ''} (remis le ${p.date_remise}, retour prévu ${ech}). Organiser le retour ou prolonger.`);
+        await db.run("UPDATE prets SET rappel_envoye=TRUE, dernier_rappel=NOW(), statut=CASE WHEN statut='signe' THEN 'en_cours' ELSE statut END, updated_at=NOW() WHERE id=$1", [p.id]);
       }
+      const longs = await db.all(
+        `SELECT p.id, p.distributeur_nom, p.email, p.designation, p.num_serie, p.date_remise,
+                p.date_retour_prevue, p.formule, c.nom AS client_nom, c.email AS client_email
+         FROM prets p LEFT JOIN clients c ON c.id=p.client_id
+         WHERE p.date_remise IS NOT NULL
+           AND COALESCE(p.formule,'') = 'long_terme'
+           AND p.statut IN ('envoye','signe','en_cours','prolonge')
+           AND COALESCE(p.dernier_rappel, p.date_remise) + INTERVAL '90 days' <= NOW()`
+      );
+      for (const p of longs) {
+        await addAlerte('pret_rappel', p.id,
+          `📄 Prêt long terme — bilan trimestriel : ${p.client_nom || p.distributeur_nom} — ${p.designation || ''} ${p.num_serie || ''} (remis le ${p.date_remise}). Demander le bilan des essais (≥ 1/mois) et l'état du matériel.`);
+        await db.run("UPDATE prets SET dernier_rappel=NOW(), statut=CASE WHEN statut='signe' THEN 'en_cours' ELSE statut END, updated_at=NOW() WHERE id=$1", [p.id]);
+      }
+      pretsDus = essais.concat(longs);
       if (pretsDus.length) await envoyerEmailPretsRappel(pretsDus);
     } catch (e) { console.error('[CRON] prêts :', e.message); }
 
@@ -132,14 +151,18 @@ async function envoyerEmailPretsRappel(prets) {
     for (const pr of prets) {
       const dest = pr.email || pr.client_email;
       if (!dest) continue;
+      const estLong = (pr.formule === 'long_terme');
+      const corps = estLong
+        ? `<p>Dans le cadre de votre prêt long terme du fauteuil <b>${pr.designation || ''} ${pr.num_serie || ''}</b> (remis le ${pr.date_remise}), pourriez-vous nous communiquer un <b>bilan trimestriel</b> des essais réalisés (nombre, retours patients) et nous confirmer l'état du matériel (rappel : au moins 1 essai/mois) ?</p>`
+        : `<p>Votre essai du fauteuil <b>${pr.designation || ''} ${pr.num_serie || ''}</b> (remis le ${pr.date_remise}) approche de son échéance${pr.date_retour_prevue ? ` (retour prévu le ${pr.date_retour_prevue})` : ''}.</p>
+           <p>Pourriez-vous nous indiquer où en est l'essai : retour à organiser, prolongation souhaitée, ou rachat ?</p>`;
       await axios.post('https://api.brevo.com/v3/smtp/email', {
         sender: { name: 'Eloflex France', email: p.email_from || 'sav@eloflex.fr' },
         to: [{ email: dest }], cc: [{ email: p.email_cc_sav || 'sav@eloflex.fr' }],
         subject: `Eloflex — Suivi de votre prêt de fauteuil (${pr.designation || ''} ${pr.num_serie || ''})`,
         htmlContent: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
           <p>Bonjour,</p>
-          <p>Votre prêt du fauteuil <b>${pr.designation || ''} ${pr.num_serie || ''}</b> (remis le ${pr.date_remise}) arrive à 3 semaines.</p>
-          <p>Pourriez-vous nous indiquer où en est l'essai${pr.date_retour_prevue ? ` (retour prévu le ${pr.date_retour_prevue})` : ''} : retour à organiser, prolongation souhaitée, ou rachat ?</p>
+          ${corps}
           <p style="font-size:12px;color:#888">Eloflex France</p></div>`
       }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
     }
