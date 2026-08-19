@@ -191,6 +191,8 @@ async function initDB() {
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_adresse TEXT`);
     // Rappel adapté à la formule : dernier rappel émis (Long Terme = trimestriel récurrent)
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS dernier_rappel TIMESTAMPTZ`);
+    // Lien vers la commande créée automatiquement dans le Suivi (prêt + contrat-cadre signés)
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS commande_id INTEGER`);
 
     // Table du contrat-cadre de prêt (commodat) — signé une fois par distributeur
     await client.query(`CREATE TABLE IF NOT EXISTS contrats_cadre (

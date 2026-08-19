@@ -6036,6 +6036,56 @@ async function envoyerEmailPret({ to, cc, subject, html, attachments }) {
   });
 }
 
+// ── Automatisation : prêt + contrat-cadre signés → commande démo au Suivi ──
+// Crée la commande "démo" liée au prêt (une seule fois), et la relie au BDC Pennylane.
+async function creerCommandeDepuisPret(p) {
+  if (!p || p.commande_id) return;
+  let arts = p.articles;
+  if (typeof arts === 'string') { try { arts = JSON.parse(arts); } catch(_) { arts = null; } }
+  const a0 = (Array.isArray(arts) && arts[0]) ? arts[0] : null;
+  const modele  = p.designation || (a0 && a0.designation) || '';
+  const numSerie = p.num_serie || (a0 && a0.num_serie) || null;
+  const dateCmd = (p.date_remise ? String(p.date_remise).slice(0,10) : new Date().toISOString().slice(0,10));
+  const annee = parseInt(dateCmd.slice(0,4)) || new Date().getFullYear();
+  const vfId = p.bdc_vf_id || null;
+  // Anti-doublon si une commande porte déjà ce doc Pennylane
+  if (vfId) {
+    const ex = await db.get('SELECT id FROM commandes WHERE vf_commande_id=$1', [vfId]);
+    if (ex) { await db.run('UPDATE prets SET commande_id=$1 WHERE id=$2', [ex.id, p.id]); return ex.id; }
+  }
+  const row = await db.run(
+    `INSERT INTO commandes (client_id, annee_onglet, distributeur_nom, modele, quantite,
+        bdc, date_commande, num_serie, modele_demo, statut, informations, vf_commande_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10,$11) RETURNING id`,
+    [p.client_id || null, annee, p.distributeur_nom || null, modele, 1,
+     p.bdc_vf || null, dateCmd, numSerie, 'En préparation',
+     'Créée automatiquement depuis le bon de prêt signé (contrat-cadre + prêt signés).', vfId]);
+  await db.run('UPDATE prets SET commande_id=$1, updated_at=NOW() WHERE id=$2', [row.id, p.id]);
+  try { await addAlerte('pret_commande', p.id,
+    `📦 Commande démo ajoutée au suivi : ${p.distributeur_nom || ''} — ${modele || ''} ${numSerie || ''} (prêt + contrat-cadre signés).`); } catch(_){}
+  return row.id;
+}
+
+// Appelé quand un bon de prêt vient d'être signé : ajoute au Suivi si le contrat-cadre est signé
+async function apresPretSigne(pretId) {
+  try {
+    const p = await db.get('SELECT * FROM prets WHERE id=$1', [pretId]);
+    if (!p || p.commande_id || !p.client_id) return;
+    const cc = await db.get('SELECT statut FROM contrats_cadre WHERE client_id=$1', [p.client_id]);
+    if (cc && cc.statut === 'signe') await creerCommandeDepuisPret(p);
+  } catch (e) { console.error('[PRET] apresPretSigne:', e.message); }
+}
+
+// Appelé quand un contrat-cadre vient d'être signé : ajoute au Suivi les prêts déjà signés du distributeur
+async function apresContratSigne(clientId) {
+  try {
+    if (!clientId) return;
+    const prets = await db.all(
+      "SELECT * FROM prets WHERE client_id=$1 AND statut='signe' AND commande_id IS NULL", [clientId]);
+    for (const p of prets) await creerCommandeDepuisPret(p);
+  } catch (e) { console.error('[CONTRAT] apresContratSigne:', e.message); }
+}
+
 // Liste des prêts (avec nom distributeur à jour)
 router.get('/prets', requireAuth, async (req, res) => {
   try {
@@ -6124,6 +6174,7 @@ router.post('/prets/:id/signe-mail', requireAuth, async (req, res) => {
        WHERE id=$2 RETURNING id, statut, signed_at`,
       [date, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
+    await apresPretSigne(req.params.id);
     res.json({ ok: true, pret: row });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6230,6 +6281,8 @@ router.post('/pret-public/:token/signer', async (req, res) => {
     } catch (mailErr) { console.error('[PRET] e-mail signature:', mailErr.message); }
     // Notification interne (centre d'alertes)
     try { await addAlerte('pret_signe', p.id, `✍️ Bon de prêt signé en ligne par ${d.signataire_nom} — ${p.distributeur_nom || ''} (${p.designation || ''} ${p.num_serie || ''}).`); } catch(_){}
+    // Si le contrat-cadre du distributeur est aussi signé → ajout auto au Suivi commandes (démo)
+    await apresPretSigne(p.id);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6333,6 +6386,7 @@ router.post('/contrats-cadre/:id/signe-mail', requireAuth, async (req, res) => {
        WHERE id=$2 RETURNING id, statut, signed_at`,
       [date, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Contrat-cadre introuvable' });
+    try { const cc = await db.get('SELECT client_id FROM contrats_cadre WHERE id=$1', [req.params.id]); if (cc) await apresContratSigne(cc.client_id); } catch(_){}
     res.json({ ok: true, contrat: row });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6424,6 +6478,8 @@ router.post('/contrat-public/:token/signer', async (req, res) => {
     } catch (mailErr) { console.error('[CONTRAT] e-mail signature:', mailErr.message); }
     // Notification interne (centre d'alertes)
     try { await addAlerte('contrat_signe', cc.id, `✍️ Contrat-cadre de prêt signé en ligne par ${d.signataire_nom} — ${cc.distributeur_nom || ''}.`); } catch(_){}
+    // Prêts déjà signés de ce distributeur → ajout auto au Suivi commandes (démo)
+    await apresContratSigne(cc.client_id);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

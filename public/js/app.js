@@ -7197,9 +7197,12 @@ async function importerPretVF(){
     if(r.num_serie){ const first=document.querySelector('#pret-articles .pa-ser'); if(first && !first.value) first.value=r.num_serie; }
     pretMajTotal();
     pretMajRetour();
-    // Rappel du contrat-cadre du distributeur (si une fiche est liée)
+    // Contrat-cadre du distributeur : on crée le brouillon (idempotent) puis on affiche le statut
     const cidLie = gv('pret-client-id');
-    if(cidLie) majContratCadreHint(cidLie);
+    if(cidLie){
+      try{ await API.createContratCadre({ client_id: cidLie, distributeur_nom: (gv('pret-client-search')||r.distributeur||null) }); }catch(_){}
+      majContratCadreHint(cidLie);
+    }
     var note = (r.source==='pennylane' && r.est_pret===false) ? ' <span style="color:#d97706">— ⚠ ce document ne semble pas être un prêt</span>' : '';
     if(msg) msg.innerHTML='<span style="color:#16a34a">'+((r.lignes||[]).length)+' '+TR('ligne(s) importée(s)')+(r.total_ht?(' — '+TR('total')+' '+Number(r.total_ht).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' € HT'):'')+'</span>'+note;
   }catch(e){ if(msg) msg.innerHTML='<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>'; }
