@@ -34,11 +34,10 @@ function plApi() {
 }
 
 // ── Helpers numéro de document ──────────────────────────────────────────────
-// Normalisation simple (casse + espaces)
 function _norm(s) { return String(s == null ? '' : s).toUpperCase().replace(/\s+/g, '').trim(); }
 
-// Forme canonique tolérante : majuscules, chaque groupe de chiffres est débarrassé
-// de ses zéros de tête, séparateurs supprimés. Ainsi "D-2026-08-7" == "D-2026-08-07".
+// Forme canonique tolérante : chaque groupe de chiffres perd ses zéros de tête,
+// séparateurs supprimés. Ainsi "D-2026-08-7" == "D-2026-08-07".
 function _canon(s) {
   return _norm(s)
     .split(/[^A-Z0-9]+/)
@@ -46,7 +45,6 @@ function _canon(s) {
     .join('');
 }
 
-// Tous les champs où Pennylane peut ranger le numéro selon le type de document.
 function docNumberCandidates(d) {
   if (!d) return [];
   const fields = [
@@ -56,7 +54,6 @@ function docNumberCandidates(d) {
   return fields.filter(v => v != null && v !== '');
 }
 
-// Le document d correspond-il au numéro recherché ?
 function docMatchesNumber(d, numero) {
   const cibleN = _norm(numero), cibleC = _canon(numero);
   return docNumberCandidates(d).some(v => {
@@ -71,7 +68,6 @@ async function fetchAllPages(api, endpoint, params = {}, limit = 100, maxPages =
   let cursor = null, hasMore = true, pages = 0;
   while (hasMore && pages < maxPages) {
     pages++;
-    // filter/sort doivent être renvoyés à chaque page (exigence v2)
     const p = { ...params, limit, ...(cursor ? { cursor } : {}) };
     const { data } = await api.get(endpoint, { params: p });
     const items = data.items || data.quotes || data.commercial_documents || data.customer_invoices || [];
@@ -87,15 +83,17 @@ async function fetchAllPages(api, endpoint, params = {}, limit = 100, maxPages =
 const _plCustomerCache = {};
 async function resolvePennylaneCustomerName(api, customer) {
   if (!customer) return '';
-  const direct = customer.name || customer.company_name || customer.label || '';
+  const direct = customer.name || customer.company_name || customer.label
+              || [customer.first_name, customer.last_name].filter(Boolean).join(' ').trim();
   if (direct) return direct;
-  const id = customer.id;
+  const id = customer.id || customer.source_id;
   if (!id) return '';
   if (_plCustomerCache[id] !== undefined) return _plCustomerCache[id];
   try {
     const { data } = await api.get(`/customers/${id}`);
     const c = data.customer || data || {};
-    _plCustomerCache[id] = c.name || c.company_name || c.label || '';
+    _plCustomerCache[id] = c.name || c.company_name || c.label
+      || [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || '';
   } catch (_) { _plCustomerCache[id] = ''; }
   return _plCustomerCache[id];
 }
@@ -112,7 +110,6 @@ async function checkStatus() {
 async function syncCommandesPennylane(fullHistory = false) {
   const api = plApi();
   const client = await db.pool.connect();
-  let created = 0, updated = 0, skipped = 0;
 
   try {
     const dateFilter = fullHistory ? null : (() => {
@@ -170,11 +167,13 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
     } catch (_) {}
   }
 
-  const numero     = detail.invoice_number || detail.number || detail.label || String(detail.id);
-  const nomDistrib = detail.customer?.name || detail.customer_name || await resolvePennylaneCustomerName(api, detail.customer);
+  const numero = detail.invoice_number || detail.number || detail.label || String(detail.id);
+  let nomDistrib = detail.customer?.name || detail.customer?.company_name || detail.customer_name
+                || detail.client?.name || '';
+  if (!nomDistrib) nomDistrib = await resolvePennylaneCustomerName(api, detail.customer || detail.client || (detail.customer_id ? { id: detail.customer_id } : null));
   if (!nomDistrib) { counters.skipped++; return; }
 
-  const dateCommande = (detail.date || detail.created_at || '').slice(0, 10) || null;
+  const dateCommande = (detail.date || detail.issue_date || detail.emitted_at || detail.document_date || detail.created_at || '').slice(0, 10) || null;
   const annee = dateCommande ? parseInt(dateCommande.slice(0, 4)) : new Date().getFullYear();
 
   const lignes = (detail.invoice_lines || detail.line_items || []).map(l => ({
@@ -272,12 +271,11 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
 // ── Recherche d'un document par numéro (bdc-lookup) ─────────────────────────
 async function lookupDocumentPennylane(numero) {
   const api = plApi();
-  const debug = [];   // trace de diagnostic renvoyée au client (visible dans la réponse JSON)
+  const debug = [];
 
   for (const endpoint of ['/quotes', '/commercial_documents', '/customer_invoices']) {
     const dbg = { endpoint, scanned: 0, filter_error: null, echantillon: [] };
     try {
-      // 1) Tentative filtrée par numéro (rapide si le champ est indexé)
       let items = [];
       try {
         const { data } = await api.get(endpoint, {
@@ -288,7 +286,6 @@ async function lookupDocumentPennylane(numero) {
 
       let doc = items.find(d => docMatchesNumber(d, numero));
 
-      // 2) Repli : balayer les documents récents (jusqu'à 10 pages = 1000 docs)
       if (!doc) {
         let cursor = null;
         for (let pg = 0; pg < 10 && !doc; pg++) {
@@ -331,16 +328,26 @@ async function lookupDocumentPennylane(numero) {
         const texte    = lignes.map(l => l.designation).join(' ');
         const mSerie   = texte.match(/\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i);
 
+        const dateCmd = (detail.date || detail.issue_date || detail.emitted_at || detail.document_date
+                         || detail.created_at || doc.date || doc.created_at || '');
+        let distrib = detail.customer?.name || detail.customer?.company_name || detail.customer?.label
+                    || detail.customer_name || detail.client?.name || detail.client?.company_name || '';
+        if (!distrib) {
+          const custObj = detail.customer || detail.client || (detail.customer_id ? { id: detail.customer_id } : null);
+          distrib = await resolvePennylaneCustomerName(api, custObj);
+        }
+
         return {
           configured: true, found: true, source: 'pennylane',
           vf_id: doc.id,
           numero: detail.invoice_number || detail.number || detail.label || numero,
-          date_commande: (detail.date || detail.created_at || '').slice(0, 10) || null,
-          distributeur: (detail.customer?.name || detail.customer_name || await resolvePennylaneCustomerName(api, detail.customer)) || null,
+          date_commande: dateCmd ? String(dateCmd).slice(0, 10) : null,
+          distributeur: distrib || null,
           modele, quantite, lignes,
           num_serie: mSerie ? mSerie[0] : null,
           kind: endpoint.replace('/', ''),
           modele_demo: /essai|demo|d[ée]mo|pr[eê]t/i.test(texte),
+          _diag: { keys: Object.keys(detail).slice(0, 60), customer: detail.customer || null, customer_id: detail.customer_id || null, client: detail.client || null },
         };
       }
     } catch (e) {
