@@ -1,12 +1,16 @@
 /**
  * sync-pennylane.js
- * Synchronisation des commandes/devis depuis l'API Pennylane V2
+ * Synchronisation des commandes/devis/BDC depuis l'API Pennylane V2
  * Miroir fonctionnel de sync-vosfactures.js
- * 
- * Variables d'environnement requises :
+ *
+ * Variables d'environnement :
  *   PENNYLANE_API_KEY   — Bearer token généré dans Pennylane > Paramètres > API
  *                         (PENNYLANE_TOKEN accepté en repli pour compatibilité)
  *   PENNYLANE_BASE_URL  — optionnel, défaut : https://app.pennylane.com/api/external/v2
+ *
+ * Réf. API : pagination par curseur { items, has_more, next_cursor } ;
+ *            filtres = tableau JSON [{field, operator, value}] ;
+ *            opérateurs : eq, not_eq, lt, lteq, gt, gteq, in, not_in, start_with.
  */
 
 const axios = require('axios');
@@ -14,9 +18,7 @@ const db    = require('../server/db');
 
 const BASE_URL = process.env.PENNYLANE_BASE_URL || 'https://app.pennylane.com/api/external/v2';
 
-/**
- * Crée un client axios authentifié pour Pennylane V2
- */
+// ── Client axios authentifié ────────────────────────────────────────────────
 function plApi() {
   const token = process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN;
   if (!token) throw new Error('PENNYLANE_API_KEY non défini');
@@ -27,42 +29,53 @@ function plApi() {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
     },
-    timeout: 15000,
+    timeout: 20000,
   });
 }
 
-/**
- * Vérifie que le token est valide.
- * L'API v2 n'expose pas d'endpoint /me fiable : on valide le token
- * en appelant une liste légère (une seule facture). Un 200 = token OK ;
- * un 401/403 lève une erreur (badge « Erreur » côté interface).
- */
-async function checkStatus() {
-  const api = plApi();
-  const { data } = await api.get('/customer_invoices', { params: { limit: 1 } });
-  const exemple = (data.items || [])[0] || null;
-  return { ok: true, account: { verifie: true, exemple_numero: exemple ? (exemple.invoice_number || exemple.number || null) : null } };
+// ── Helpers numéro de document ──────────────────────────────────────────────
+// Normalisation simple (casse + espaces)
+function _norm(s) { return String(s == null ? '' : s).toUpperCase().replace(/\s+/g, '').trim(); }
+
+// Forme canonique tolérante : majuscules, chaque groupe de chiffres est débarrassé
+// de ses zéros de tête, séparateurs supprimés. Ainsi "D-2026-08-7" == "D-2026-08-07".
+function _canon(s) {
+  return _norm(s)
+    .split(/[^A-Z0-9]+/)
+    .map(tok => /^[0-9]+$/.test(tok) ? String(parseInt(tok, 10)) : tok)
+    .join('');
 }
 
-/**
- * Récupère toutes les pages d'un endpoint paginé (cursor-based)
- */
-async function fetchAllPages(api, endpoint, params = {}, limit = 100) {
-  const results = [];
-  let cursor = null;
-  let hasMore = true;
-  let pages = 0;
+// Tous les champs où Pennylane peut ranger le numéro selon le type de document.
+function docNumberCandidates(d) {
+  if (!d) return [];
+  const fields = [
+    d.invoice_number, d.number, d.document_number, d.label, d.reference,
+    d.external_reference, d.name, d.title, d.quote_number, d.pdf_invoice_number,
+  ];
+  return fields.filter(v => v != null && v !== '');
+}
 
-  while (hasMore && pages < 200) {
+// Le document d correspond-il au numéro recherché ?
+function docMatchesNumber(d, numero) {
+  const cibleN = _norm(numero), cibleC = _canon(numero);
+  return docNumberCandidates(d).some(v => {
+    const n = _norm(v), c = _canon(v);
+    return n === cibleN || c === cibleC;
+  });
+}
+
+// ── Pagination ──────────────────────────────────────────────────────────────
+async function fetchAllPages(api, endpoint, params = {}, limit = 100, maxPages = 200) {
+  const results = [];
+  let cursor = null, hasMore = true, pages = 0;
+  while (hasMore && pages < maxPages) {
     pages++;
-    // IMPORTANT (pagination v2) : filter/sort doivent être renvoyés à chaque page.
+    // filter/sort doivent être renvoyés à chaque page (exigence v2)
     const p = { ...params, limit, ...(cursor ? { cursor } : {}) };
     const { data } = await api.get(endpoint, { params: p });
-
-    // Pennylane V2 retourne { items: [...], has_more: bool, next_cursor: "..." }
     const items = data.items || data.quotes || data.commercial_documents || data.customer_invoices || [];
     results.push(...items);
-
     hasMore = data.has_more || false;
     cursor  = data.next_cursor || null;
     if (!cursor) hasMore = false;
@@ -70,8 +83,7 @@ async function fetchAllPages(api, endpoint, params = {}, limit = 100) {
   return results;
 }
 
-// Résout le nom d'un client Pennylane (l'objet customer d'une liste ne contient
-// parfois que l'id). Cache local pour éviter les appels répétés.
+// Résout le nom d'un client (l'objet customer d'une liste ne contient parfois que l'id)
 const _plCustomerCache = {};
 async function resolvePennylaneCustomerName(api, customer) {
   if (!customer) return '';
@@ -88,38 +100,34 @@ async function resolvePennylaneCustomerName(api, customer) {
   return _plCustomerCache[id];
 }
 
-/**
- * Synchronise les devis et bons de commande depuis Pennylane
- * Équivalent de syncCommandesVF() pour VosFactures
- * 
- * @param {boolean} fullHistory - si true, récupère tout l'historique ; sinon 90 derniers jours
- */
+// ── Vérification du token ───────────────────────────────────────────────────
+async function checkStatus() {
+  const api = plApi();
+  const { data } = await api.get('/customer_invoices', { params: { limit: 1 } });
+  const ex = (data.items || [])[0] || null;
+  return { ok: true, account: { verifie: true, exemple_numero: ex ? (ex.invoice_number || ex.number || null) : null } };
+}
+
+// ── Synchronisation en masse ────────────────────────────────────────────────
 async function syncCommandesPennylane(fullHistory = false) {
-  const api   = plApi();
+  const api = plApi();
   const client = await db.pool.connect();
   let created = 0, updated = 0, skipped = 0;
 
   try {
     const dateFilter = fullHistory ? null : (() => {
-      const d = new Date();
-      d.setDate(d.getDate() - 90);
+      const d = new Date(); d.setDate(d.getDate() - 90);
       return d.toISOString().slice(0, 10);
     })();
 
-    // Filtre v2 : tableau JSON [{field, operator, value}]. Opérateurs valides :
-    // eq, not_eq, lt, lteq, gt, gteq, in, not_in, start_with.
     const buildFilter = (extra = []) => {
       const filters = [...extra];
       if (dateFilter) filters.push({ field: 'date', operator: 'gteq', value: dateFilter });
       return filters.length ? JSON.stringify(filters) : undefined;
     };
 
-    // ─── 1. Devis (= BDC / Devis clients) ───────────────────────────────────
     const quotes = await fetchAllPages(api, '/quotes', { filter: buildFilter() });
 
-    // ─── 2. Documents commerciaux (bons de commande) ─────────────────────────
-    // On récupère par date puis on ne garde que les bons de commande côté client
-    // (le champ/valeur exact du type varie selon le compte).
     let commercialDocs = [];
     try {
       const docs = await fetchAllPages(api, '/commercial_documents', { filter: buildFilter() });
@@ -127,10 +135,7 @@ async function syncCommandesPennylane(fullHistory = false) {
         const t = String(d.type || d.document_type || d.kind || '').toLowerCase();
         return !t || /order|commande|purchase/.test(t);
       });
-    } catch(e) {
-      // L'endpoint peut ne pas exister selon la version — on continue sans
-      console.warn('  ⚠️ commercial_documents non disponible:', e.message);
-    }
+    } catch (e) { console.warn('  ⚠️ commercial_documents non disponible:', e.message); }
 
     const allDocs = [
       ...quotes.map(d => ({ ...d, _ep: '/quotes' })),
@@ -138,95 +143,77 @@ async function syncCommandesPennylane(fullHistory = false) {
     ];
     console.log(`  📄 ${allDocs.length} document(s) récupéré(s) depuis Pennylane`);
 
+    const counters = { created: 0, updated: 0, skipped: 0 };
     for (const doc of allDocs) {
-      try {
-        await traiterDocumentPennylane(client, api, doc, { created, updated, skipped });
-      } catch (e) {
-        console.warn(`  ⚠️ Doc Pennylane #${doc.id} : ${e.message}`);
-        skipped++;
-      }
+      try { await traiterDocumentPennylane(client, api, doc, counters); }
+      catch (e) { console.warn(`  ⚠️ Doc Pennylane #${doc.id} : ${e.message}`); counters.skipped++; }
     }
-
-    return `Pennylane sync: ${created} créées, ${updated} mises à jour, ${skipped} ignorées`;
+    return `Pennylane sync: ${counters.created} créées, ${counters.updated} mises à jour, ${counters.skipped} ignorées`;
   } finally {
     client.release();
   }
 }
 
-/**
- * Traite un document Pennylane (devis ou bon de commande) et l'upsert en DB
- */
 async function traiterDocumentPennylane(client, api, doc, counters) {
-  // Récupérer les détails complets si nécessaire (lignes)
   const ep = doc._ep || '/quotes';
   let detail = doc;
   if (!doc.invoice_lines && doc.id) {
     try {
       const { data } = await api.get(`${ep}/${doc.id}`);
       detail = data.quote || data.commercial_document || data;
-    } catch(_) { detail = doc; }
+    } catch (_) { detail = doc; }
   }
-  // Lignes via le sous-endpoint dédié si toujours absentes
   if (!(detail.invoice_lines || detail.line_items || []).length && doc.id) {
     try {
       const { data: dl } = await api.get(`${ep}/${doc.id}/invoice_lines`);
       detail = { ...detail, invoice_lines: dl.items || dl.invoice_lines || [] };
-    } catch(_) {}
+    } catch (_) {}
   }
 
-  const numero       = detail.invoice_number || detail.number || String(detail.id);
-  const nomDistrib   = detail.customer?.name || detail.customer_name || await resolvePennylaneCustomerName(api, detail.customer);
+  const numero     = detail.invoice_number || detail.number || detail.label || String(detail.id);
+  const nomDistrib = detail.customer?.name || detail.customer_name || await resolvePennylaneCustomerName(api, detail.customer);
   if (!nomDistrib) { counters.skipped++; return; }
 
   const dateCommande = (detail.date || detail.created_at || '').slice(0, 10) || null;
-  const annee        = dateCommande ? parseInt(dateCommande.slice(0, 4)) : new Date().getFullYear();
+  const annee = dateCommande ? parseInt(dateCommande.slice(0, 4)) : new Date().getFullYear();
 
-  // Lignes d'articles
   const lignes = (detail.invoice_lines || detail.line_items || []).map(l => ({
     designation: l.label || l.description || l.product_name || '',
     reference:   l.product?.reference || l.reference || null,
     quantite:    parseInt(l.quantity) || 1,
   })).filter(l => l.designation);
 
-  // Modèle principal (première ligne Eloflex ou première ligne)
   const ligneFauteuil = lignes.find(l => /eloflex/i.test(l.designation)) || lignes[0];
-  const modele        = ligneFauteuil?.designation || '';
-  const quantite      = ligneFauteuil?.quantite || 1;
+  const modele   = ligneFauteuil?.designation || '';
+  const quantite = ligneFauteuil?.quantite || 1;
 
-  // Détection numéro de série
-  const texte   = lignes.map(l => l.designation).join(' ');
-  const mSerie  = texte.match(/\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i);
+  const texte  = lignes.map(l => l.designation).join(' ');
+  const mSerie = texte.match(/\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i);
   const numSerie = mSerie ? mSerie[0] : null;
 
-  // Trouver ou créer le client
   const nomNorm = nomDistrib.toLowerCase().trim();
-  let clientRow = await client.query(
-    'SELECT id FROM clients WHERE LOWER(TRIM(nom)) = $1 LIMIT 1', [nomNorm]
-  );
+  let clientRow = await client.query('SELECT id FROM clients WHERE LOWER(TRIM(nom)) = $1 LIMIT 1', [nomNorm]);
   let clientId;
   if (clientRow.rows.length) {
     clientId = clientRow.rows[0].id;
   } else {
-    const emails = detail.customer?.billing_email ? [detail.customer.billing_email] : [];
+    const email = detail.customer?.billing_email || detail.customer?.email || null;
     const ins = await client.query(
       `INSERT INTO clients (nom, email, type, token_portail)
        VALUES ($1, $2, 'Distributeur', md5(random()::text)) RETURNING id`,
-      [nomDistrib, emails[0] || null]
+      [nomDistrib, email]
     );
     clientId = ins.rows[0].id;
   }
 
-  // Chercher fauteuil lié par série
   let fauteuilId = null;
   if (numSerie) {
     const fr = await client.query('SELECT id FROM fauteuils WHERE serie = $1', [numSerie]);
     if (fr.rows.length) fauteuilId = fr.rows[0].id;
   }
 
-  // pennylane_id stocké dans vf_commande_id (même colonne, intégration interchangeable)
   const pennylaneId = detail.id;
 
-  // Anti-doublon par BDC + distributeur (commandes importées Excel sans pennylane_id)
   if (numero) {
     const ex = await client.query(
       `SELECT id FROM commandes WHERE vf_commande_id IS NULL AND bdc = $1 AND LOWER(distributeur_nom) = LOWER($2) LIMIT 1`,
@@ -244,7 +231,6 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
     }
   }
 
-  // Upsert standard
   const r = await client.query(
     `INSERT INTO commandes (
       client_id, fauteuil_id, annee_onglet, distributeur_nom, modele, quantite,
@@ -260,11 +246,9 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
       fauteuil_id      = COALESCE(commandes.fauteuil_id,      EXCLUDED.fauteuil_id),
       updated_at       = NOW()
     RETURNING (xmax = 0) AS inserted`,
-    [clientId, fauteuilId, annee, nomDistrib, modele, quantite,
-     numero, dateCommande, numSerie, pennylaneId]
+    [clientId, fauteuilId, annee, nomDistrib, modele, quantite, numero, dateCommande, numSerie, pennylaneId]
   );
 
-  // Upsert des lignes si nouvelles
   if (r.rows[0].inserted && lignes.length) {
     const cmdRow = await client.query('SELECT id FROM commandes WHERE vf_commande_id = $1', [pennylaneId]);
     if (cmdRow.rows.length) {
@@ -285,115 +269,93 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
   }
 }
 
-/**
- * Recherche un document Pennylane par numéro (devis, facture, bon de commande…)
- * Équivalent du bdc-lookup VosFactures
- */
+// ── Recherche d'un document par numéro (bdc-lookup) ─────────────────────────
 async function lookupDocumentPennylane(numero) {
   const api = plApi();
+  const debug = [];   // trace de diagnostic renvoyée au client (visible dans la réponse JSON)
 
-  const numLow = numero.toLowerCase();
-  const matchNum = d => String(d.invoice_number || d.number || '').toLowerCase() === numLow;
-
-  // Essai dans quotes (devis), puis factures, puis documents commerciaux
-  for (const endpoint of ['/quotes', '/customer_invoices', '/commercial_documents']) {
+  for (const endpoint of ['/quotes', '/commercial_documents', '/customer_invoices']) {
+    const dbg = { endpoint, scanned: 0, filter_error: null, echantillon: [] };
     try {
       // 1) Tentative filtrée par numéro (rapide si le champ est indexé)
       let items = [];
       try {
         const { data } = await api.get(endpoint, {
-          params: {
-            filter: JSON.stringify([{ field: 'invoice_number', operator: 'eq', value: numero }]),
-            limit: 5,
-          }
+          params: { filter: JSON.stringify([{ field: 'invoice_number', operator: 'eq', value: numero }]), limit: 5 }
         });
         items = data.items || data.quotes || data.customer_invoices || data.commercial_documents || [];
-      } catch (_) { items = []; }
+      } catch (e) { dbg.filter_error = (e.response && e.response.status) ? `HTTP ${e.response.status}` : e.message; }
 
-      // 2) Repli : si le filtre ne renvoie rien, on balaie les documents récents
-      //    (2 pages max = 200 documents) pour rester léger sur une recherche unitaire.
-      let doc = items.find(matchNum);
+      let doc = items.find(d => docMatchesNumber(d, numero));
+
+      // 2) Repli : balayer les documents récents (jusqu'à 10 pages = 1000 docs)
       if (!doc) {
-        try {
-          let cursor = null;
-          for (let pg = 0; pg < 2 && !doc; pg++) {
-            const { data: d } = await api.get(endpoint, { params: { limit: 100, ...(cursor ? { cursor } : {}) } });
-            const recents = d.items || d.quotes || d.customer_invoices || d.commercial_documents || [];
-            doc = recents.find(matchNum);
-            cursor = d.next_cursor || null;
-            if (!cursor) break;
+        let cursor = null;
+        for (let pg = 0; pg < 10 && !doc; pg++) {
+          const { data: d } = await api.get(endpoint, { params: { limit: 100, ...(cursor ? { cursor } : {}) } });
+          const recents = d.items || d.quotes || d.customer_invoices || d.commercial_documents || [];
+          dbg.scanned += recents.length;
+          if (dbg.echantillon.length < 5) {
+            for (const rd of recents.slice(0, 5)) dbg.echantillon.push(docNumberCandidates(rd).map(_norm).join(' | ') || `#${rd.id}`);
           }
-        } catch (_) {}
+          doc = recents.find(rd => docMatchesNumber(rd, numero));
+          cursor = d.next_cursor || null;
+          if (!cursor) break;
+        }
       }
+
       if (doc) {
-        // Charger les détails complets
-        const baseType = endpoint.replace('/', '').replace('s', ''); // quotes→quote
         let detail = doc;
         try {
           const { data: d2 } = await api.get(`${endpoint}/${doc.id}`);
           detail = d2.quote || d2.customer_invoice || d2.commercial_document || d2 || doc;
-        } catch(_) {}
+        } catch (_) {}
 
-        // Les lignes ne sont pas toujours incluses dans le détail :
-        // repli sur le sous-endpoint dédié /…/{id}/invoice_lines.
         let rawLignes = detail.invoice_lines || detail.line_items || [];
         if (!rawLignes.length && doc.id) {
           try {
             const { data: dl } = await api.get(`${endpoint}/${doc.id}/invoice_lines`);
             rawLignes = dl.items || dl.invoice_lines || [];
-          } catch(_) {}
+          } catch (_) {}
         }
-        const lignes = rawLignes
-          .filter(l => l.label || l.description)
-          .map(l => ({
-            designation:    l.label || l.description || '',
-            designation_en: l.product?.reference || l.label || '',
-            reference:      l.product?.reference || null,
-            quantite:       parseInt(l.quantity) || 1,
-          }));
+        const lignes = rawLignes.filter(l => l.label || l.description).map(l => ({
+          designation:    l.label || l.description || '',
+          designation_en: l.product?.reference || l.label || '',
+          reference:      l.product?.reference || null,
+          quantite:       parseInt(l.quantity) || 1,
+        }));
 
         const ligneFauteuil = lignes.find(l => /eloflex/i.test(l.designation)) || lignes[0];
         const modele   = ligneFauteuil?.designation || '';
         const quantite = ligneFauteuil?.quantite || 1;
-
-        const texte  = lignes.map(l => l.designation).join(' ');
-        const mSerie = texte.match(/\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i);
-
-        const modeleDemo = /essai|demo|d[ée]mo|pr[eê]t/i.test(texte);
+        const texte    = lignes.map(l => l.designation).join(' ');
+        const mSerie   = texte.match(/\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i);
 
         return {
-          configured: true,
-          found:      true,
-          source:     'pennylane',
-          vf_id:      doc.id,
-          numero:     detail.invoice_number || numero,
+          configured: true, found: true, source: 'pennylane',
+          vf_id: doc.id,
+          numero: detail.invoice_number || detail.number || detail.label || numero,
           date_commande: (detail.date || detail.created_at || '').slice(0, 10) || null,
-          distributeur:  (detail.customer?.name || detail.customer_name || await resolvePennylaneCustomerName(api, detail.customer)) || null,
-          modele,
-          quantite,
-          lignes,
-          num_serie:  mSerie ? mSerie[0] : null,
-          kind:       endpoint.replace('/', ''),
-          modele_demo: modeleDemo,
+          distributeur: (detail.customer?.name || detail.customer_name || await resolvePennylaneCustomerName(api, detail.customer)) || null,
+          modele, quantite, lignes,
+          num_serie: mSerie ? mSerie[0] : null,
+          kind: endpoint.replace('/', ''),
+          modele_demo: /essai|demo|d[ée]mo|pr[eê]t/i.test(texte),
         };
       }
-    } catch(e) {
-      // endpoint non disponible, on essaie le suivant
+    } catch (e) {
+      dbg.error = (e.response && e.response.status) ? `HTTP ${e.response.status}` : e.message;
     }
+    debug.push(dbg);
   }
 
-  return { configured: true, found: false };
+  return { configured: true, found: false, numero, debug };
 }
 
-/**
- * Crée une facture client dans Pennylane depuis une commande
- */
+// ── Génération d'une facture (brouillon) ────────────────────────────────────
 async function genererFacturePennylane(cmd, lignes) {
   const api = plApi();
 
-  // 1. Trouver le client dans Pennylane
-  // (l'API v2 n'a pas d'opérateur "contains" ; on tente start_with puis on
-  //  balaie quelques pages en repli, avec correspondance côté serveur.)
   let customerId = null;
   const cible = (cmd.distributeur_nom || '').toLowerCase().trim();
   const corr = c => {
@@ -402,14 +364,11 @@ async function genererFacturePennylane(cmd, lignes) {
   };
   try {
     const { data } = await api.get('/customers', {
-      params: {
-        filter: JSON.stringify([{ field: 'name', operator: 'start_with', value: cmd.distributeur_nom.slice(0, 6) }]),
-        limit: 20,
-      }
+      params: { filter: JSON.stringify([{ field: 'name', operator: 'start_with', value: (cmd.distributeur_nom || '').slice(0, 6) }]), limit: 20 }
     });
     const match = (data.items || []).find(corr);
     if (match) customerId = match.id;
-  } catch(_) {}
+  } catch (_) {}
   if (!customerId) {
     try {
       let cursor = null;
@@ -420,25 +379,18 @@ async function genererFacturePennylane(cmd, lignes) {
         cursor = d.next_cursor || null;
         if (!cursor) break;
       }
-    } catch(_) {}
+    } catch (_) {}
   }
 
   const today = new Date().toISOString().slice(0, 10);
-
-  // 2. Créer la facture (draft pour que tu puisses la vérifier avant envoi)
   const payload = {
     customer_id: customerId,
-    date:        cmd.date_livraison || today,
-    deadline:    (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); })(),
-    draft:       true, // brouillon — tu finalises dans Pennylane
+    date: cmd.date_livraison || today,
+    deadline: (() => { const d = new Date(); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); })(),
+    draft: true,
     external_reference: cmd.bdc || `SAV-${cmd.id}`,
-    invoice_lines: (lignes.length ? lignes : [{
-      label: cmd.modele || 'Commande Éloflex',
-      quantity: String(cmd.quantite || 1),
-      raw_currency_unit_price: '0.00',
-      vat_rate: 'FR_200',
-    }]).map(l => ({
-      label:    l.designation || l.label || 'Article',
+    invoice_lines: (lignes.length ? lignes : [{ designation: cmd.modele || 'Commande Éloflex', quantite: cmd.quantite || 1 }]).map(l => ({
+      label: l.designation || l.label || 'Article',
       quantity: String(l.quantite || 1),
       raw_currency_unit_price: '0.00',
       vat_rate: 'FR_200',
