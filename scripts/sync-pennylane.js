@@ -4,7 +4,8 @@
  * Miroir fonctionnel de sync-vosfactures.js
  * 
  * Variables d'environnement requises :
- *   PENNYLANE_TOKEN     — Bearer token généré dans Pennylane > Connectivité > API
+ *   PENNYLANE_API_KEY   — Bearer token généré dans Pennylane > Paramètres > API
+ *                         (PENNYLANE_TOKEN accepté en repli pour compatibilité)
  *   PENNYLANE_BASE_URL  — optionnel, défaut : https://app.pennylane.com/api/external/v2
  */
 
@@ -17,8 +18,8 @@ const BASE_URL = process.env.PENNYLANE_BASE_URL || 'https://app.pennylane.com/ap
  * Crée un client axios authentifié pour Pennylane V2
  */
 function plApi() {
-  const token = process.env.PENNYLANE_TOKEN;
-  if (!token) throw new Error('PENNYLANE_TOKEN non défini');
+  const token = process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN;
+  if (!token) throw new Error('PENNYLANE_API_KEY non défini');
   return axios.create({
     baseURL: BASE_URL,
     headers: {
@@ -31,12 +32,16 @@ function plApi() {
 }
 
 /**
- * Vérifie que le token est valide et retourne les infos du compte
+ * Vérifie que le token est valide.
+ * L'API v2 n'expose pas d'endpoint /me fiable : on valide le token
+ * en appelant une liste légère (une seule facture). Un 200 = token OK ;
+ * un 401/403 lève une erreur (badge « Erreur » côté interface).
  */
 async function checkStatus() {
   const api = plApi();
-  const { data } = await api.get('/me');
-  return { ok: true, account: data };
+  const { data } = await api.get('/customer_invoices', { params: { limit: 1 } });
+  const exemple = (data.items || [])[0] || null;
+  return { ok: true, account: { verifie: true, exemple_numero: exemple ? (exemple.invoice_number || exemple.number || null) : null } };
 }
 
 /**
@@ -46,8 +51,11 @@ async function fetchAllPages(api, endpoint, params = {}, limit = 100) {
   const results = [];
   let cursor = null;
   let hasMore = true;
+  let pages = 0;
 
-  while (hasMore) {
+  while (hasMore && pages < 200) {
+    pages++;
+    // IMPORTANT (pagination v2) : filter/sort doivent être renvoyés à chaque page.
     const p = { ...params, limit, ...(cursor ? { cursor } : {}) };
     const { data } = await api.get(endpoint, { params: p });
 
@@ -60,6 +68,24 @@ async function fetchAllPages(api, endpoint, params = {}, limit = 100) {
     if (!cursor) hasMore = false;
   }
   return results;
+}
+
+// Résout le nom d'un client Pennylane (l'objet customer d'une liste ne contient
+// parfois que l'id). Cache local pour éviter les appels répétés.
+const _plCustomerCache = {};
+async function resolvePennylaneCustomerName(api, customer) {
+  if (!customer) return '';
+  const direct = customer.name || customer.company_name || customer.label || '';
+  if (direct) return direct;
+  const id = customer.id;
+  if (!id) return '';
+  if (_plCustomerCache[id] !== undefined) return _plCustomerCache[id];
+  try {
+    const { data } = await api.get(`/customers/${id}`);
+    const c = data.customer || data || {};
+    _plCustomerCache[id] = c.name || c.company_name || c.label || '';
+  } catch (_) { _plCustomerCache[id] = ''; }
+  return _plCustomerCache[id];
 }
 
 /**
@@ -80,32 +106,36 @@ async function syncCommandesPennylane(fullHistory = false) {
       return d.toISOString().slice(0, 10);
     })();
 
+    // Filtre v2 : tableau JSON [{field, operator, value}]. Opérateurs valides :
+    // eq, not_eq, lt, lteq, gt, gteq, in, not_in, start_with.
     const buildFilter = (extra = []) => {
       const filters = [...extra];
-      if (dateFilter) filters.push({ field: 'updated_after', operator: 'gteq', value: dateFilter });
+      if (dateFilter) filters.push({ field: 'date', operator: 'gteq', value: dateFilter });
       return filters.length ? JSON.stringify(filters) : undefined;
     };
 
     // ─── 1. Devis (= BDC / Devis clients) ───────────────────────────────────
-    const quotes = await fetchAllPages(api, '/quotes', {
-      filter: buildFilter(),
-      sort_by: 'updated_at',
-      sort_direction: 'desc',
-    });
+    const quotes = await fetchAllPages(api, '/quotes', { filter: buildFilter() });
 
     // ─── 2. Documents commerciaux (bons de commande) ─────────────────────────
-    // Types disponibles : purchase_order, shipping_order, proforma
+    // On récupère par date puis on ne garde que les bons de commande côté client
+    // (le champ/valeur exact du type varie selon le compte).
     let commercialDocs = [];
     try {
-      commercialDocs = await fetchAllPages(api, '/commercial_documents', {
-        filter: buildFilter([{ field: 'type', operator: 'eq', value: 'purchase_order' }]),
+      const docs = await fetchAllPages(api, '/commercial_documents', { filter: buildFilter() });
+      commercialDocs = docs.filter(d => {
+        const t = String(d.type || d.document_type || d.kind || '').toLowerCase();
+        return !t || /order|commande|purchase/.test(t);
       });
     } catch(e) {
       // L'endpoint peut ne pas exister selon la version — on continue sans
       console.warn('  ⚠️ commercial_documents non disponible:', e.message);
     }
 
-    const allDocs = [...quotes, ...commercialDocs];
+    const allDocs = [
+      ...quotes.map(d => ({ ...d, _ep: '/quotes' })),
+      ...commercialDocs.map(d => ({ ...d, _ep: '/commercial_documents' })),
+    ];
     console.log(`  📄 ${allDocs.length} document(s) récupéré(s) depuis Pennylane`);
 
     for (const doc of allDocs) {
@@ -128,16 +158,24 @@ async function syncCommandesPennylane(fullHistory = false) {
  */
 async function traiterDocumentPennylane(client, api, doc, counters) {
   // Récupérer les détails complets si nécessaire (lignes)
+  const ep = doc._ep || '/quotes';
   let detail = doc;
   if (!doc.invoice_lines && doc.id) {
     try {
-      const { data } = await api.get(`/quotes/${doc.id}`);
-      detail = data.quote || data;
+      const { data } = await api.get(`${ep}/${doc.id}`);
+      detail = data.quote || data.commercial_document || data;
     } catch(_) { detail = doc; }
+  }
+  // Lignes via le sous-endpoint dédié si toujours absentes
+  if (!(detail.invoice_lines || detail.line_items || []).length && doc.id) {
+    try {
+      const { data: dl } = await api.get(`${ep}/${doc.id}/invoice_lines`);
+      detail = { ...detail, invoice_lines: dl.items || dl.invoice_lines || [] };
+    } catch(_) {}
   }
 
   const numero       = detail.invoice_number || detail.number || String(detail.id);
-  const nomDistrib   = detail.customer?.name || detail.customer_name || '';
+  const nomDistrib   = detail.customer?.name || detail.customer_name || await resolvePennylaneCustomerName(api, detail.customer);
   if (!nomDistrib) { counters.skipped++; return; }
 
   const dateCommande = (detail.date || detail.created_at || '').slice(0, 10) || null;
@@ -254,21 +292,39 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
 async function lookupDocumentPennylane(numero) {
   const api = plApi();
 
-  // Essai dans quotes (devis)
+  const numLow = numero.toLowerCase();
+  const matchNum = d => String(d.invoice_number || d.number || '').toLowerCase() === numLow;
+
+  // Essai dans quotes (devis), puis factures, puis documents commerciaux
   for (const endpoint of ['/quotes', '/customer_invoices', '/commercial_documents']) {
     try {
-      const { data } = await api.get(endpoint, {
-        params: {
-          filter: JSON.stringify([
-            { field: 'invoice_number', operator: 'eq', value: numero }
-          ]),
-          limit: 5,
-        }
-      });
-      const items = data.items || data.quotes || data.customer_invoices || data.commercial_documents || [];
-      const doc = items.find(d =>
-        (d.invoice_number || d.number || '').toLowerCase() === numero.toLowerCase()
-      );
+      // 1) Tentative filtrée par numéro (rapide si le champ est indexé)
+      let items = [];
+      try {
+        const { data } = await api.get(endpoint, {
+          params: {
+            filter: JSON.stringify([{ field: 'invoice_number', operator: 'eq', value: numero }]),
+            limit: 5,
+          }
+        });
+        items = data.items || data.quotes || data.customer_invoices || data.commercial_documents || [];
+      } catch (_) { items = []; }
+
+      // 2) Repli : si le filtre ne renvoie rien, on balaie les documents récents
+      //    (2 pages max = 200 documents) pour rester léger sur une recherche unitaire.
+      let doc = items.find(matchNum);
+      if (!doc) {
+        try {
+          let cursor = null;
+          for (let pg = 0; pg < 2 && !doc; pg++) {
+            const { data: d } = await api.get(endpoint, { params: { limit: 100, ...(cursor ? { cursor } : {}) } });
+            const recents = d.items || d.quotes || d.customer_invoices || d.commercial_documents || [];
+            doc = recents.find(matchNum);
+            cursor = d.next_cursor || null;
+            if (!cursor) break;
+          }
+        } catch (_) {}
+      }
       if (doc) {
         // Charger les détails complets
         const baseType = endpoint.replace('/', '').replace('s', ''); // quotes→quote
@@ -278,7 +334,16 @@ async function lookupDocumentPennylane(numero) {
           detail = d2.quote || d2.customer_invoice || d2.commercial_document || d2 || doc;
         } catch(_) {}
 
-        const lignes = (detail.invoice_lines || detail.line_items || [])
+        // Les lignes ne sont pas toujours incluses dans le détail :
+        // repli sur le sous-endpoint dédié /…/{id}/invoice_lines.
+        let rawLignes = detail.invoice_lines || detail.line_items || [];
+        if (!rawLignes.length && doc.id) {
+          try {
+            const { data: dl } = await api.get(`${endpoint}/${doc.id}/invoice_lines`);
+            rawLignes = dl.items || dl.invoice_lines || [];
+          } catch(_) {}
+        }
+        const lignes = rawLignes
           .filter(l => l.label || l.description)
           .map(l => ({
             designation:    l.label || l.description || '',
@@ -303,7 +368,7 @@ async function lookupDocumentPennylane(numero) {
           vf_id:      doc.id,
           numero:     detail.invoice_number || numero,
           date_commande: (detail.date || detail.created_at || '').slice(0, 10) || null,
-          distributeur:  detail.customer?.name || null,
+          distributeur:  (detail.customer?.name || detail.customer_name || await resolvePennylaneCustomerName(api, detail.customer)) || null,
           modele,
           quantite,
           lignes,
@@ -326,21 +391,37 @@ async function lookupDocumentPennylane(numero) {
 async function genererFacturePennylane(cmd, lignes) {
   const api = plApi();
 
-  // 1. Trouver ou créer le client dans Pennylane
+  // 1. Trouver le client dans Pennylane
+  // (l'API v2 n'a pas d'opérateur "contains" ; on tente start_with puis on
+  //  balaie quelques pages en repli, avec correspondance côté serveur.)
   let customerId = null;
+  const cible = (cmd.distributeur_nom || '').toLowerCase().trim();
+  const corr = c => {
+    const n = (c.name || c.company_name || c.label || '').toLowerCase();
+    return n && (n === cible || n.includes(cible.slice(0, 8)) || cible.includes(n.slice(0, 8)));
+  };
   try {
     const { data } = await api.get('/customers', {
       params: {
-        filter: JSON.stringify([
-          { field: 'name', operator: 'contains', value: cmd.distributeur_nom.slice(0, 10) }
-        ]),
-        limit: 5,
+        filter: JSON.stringify([{ field: 'name', operator: 'start_with', value: cmd.distributeur_nom.slice(0, 6) }]),
+        limit: 20,
       }
     });
-    const items = data.items || [];
-    const match = items.find(c => c.name?.toLowerCase().includes(cmd.distributeur_nom.toLowerCase().slice(0, 8)));
+    const match = (data.items || []).find(corr);
     if (match) customerId = match.id;
   } catch(_) {}
+  if (!customerId) {
+    try {
+      let cursor = null;
+      for (let pg = 0; pg < 3 && !customerId; pg++) {
+        const { data: d } = await api.get('/customers', { params: { limit: 100, ...(cursor ? { cursor } : {}) } });
+        const match = (d.items || []).find(corr);
+        if (match) customerId = match.id;
+        cursor = d.next_cursor || null;
+        if (!cursor) break;
+      }
+    } catch(_) {}
+  }
 
   const today = new Date().toISOString().slice(0, 10);
 

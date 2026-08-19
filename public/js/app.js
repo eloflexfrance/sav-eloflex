@@ -89,16 +89,6 @@ function canWrite(module) {
   if (isAdmin()) return true;
   return (CURRENT_USER?.permissions || {})[module] === 'write';
 }
-// Droit d'écriture sur la carte : admin, ou permission 'carte'=write,
-// ou (compte ancien sans clé 'carte') hérite de 'clients'=write.
-function canWriteCarte() {
-  if (isAdmin()) return true;
-  const perms = CURRENT_USER?.permissions || {};
-  let p = perms['carte'];
-  if (p === undefined) p = perms['clients'];
-  return p === 'write';
-}
-window.canWriteCarte = canWriteCarte;
 // Rétrocompatibilité (générique sans module)
 const isOp = () => isAdmin() || Object.values(CURRENT_USER?.permissions || {}).includes('write');
 
@@ -2318,7 +2308,7 @@ async function renderParametres(ttl,c,a){
       <h3><i class="ti ti-brand-stripe"></i> Pennylane <span id="pl-status-badge" style="font-size:11px;margin-left:8px"></span></h3>
       <p style="font-size:12px;color:var(--text2);margin-bottom:10px">
         Intégration Pennylane V2 — parallèle à VosFactures.<br>
-        Configure la variable d'environnement <code>PENNYLANE_TOKEN</code> dans Render (Environment) avec ton token API Pennylane.
+        Configure la variable d'environnement <code>PENNYLANE_API_KEY</code> dans Render (Environment) avec ton token API Pennylane.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn" onclick="syncPennylane(false)"><i class="ti ti-refresh"></i> Sync Pennylane (90j)</button>
@@ -5657,11 +5647,11 @@ function renderCarte(ttl, c, a) {
       return '<option value="'+y+'"'+(y===_carteAnnee?' selected':'')+'>'+y+'</option>';
     }).join('') + '</select>' +
     '<button onclick="cadrerFrance()" title="Recentrer sur la France" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-focus-centered"></i> Recentrer</button>' +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-plus"></i> '+TR("Ajouter")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="ouvrirRattachements()" title="Relier les points aux fiches clients" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-link"></i> '+TR("Rattacher")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="lancerGeocodageCarte()" title="'+TR("Positionner les distributeurs dont l'adresse a été complétée")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-pin-search"></i> '+TR("Géocoder")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="controleVillesCarte()" title="'+TR("Repérer les villes ne correspondant pas au code postal")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-check"></i> '+TR("Contrôle villes")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-plus"></i> '+TR("Ajouter")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="ouvrirRattachements()" title="Relier les points aux fiches clients" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-link"></i> '+TR("Rattacher")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="lancerGeocodageCarte()" title="'+TR("Positionner les distributeurs dont l'adresse a été complétée")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-pin-search"></i> '+TR("Géocoder")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="controleVillesCarte()" title="'+TR("Repérer les villes ne correspondant pas au code postal")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><i class="ti ti-map-check"></i> '+TR("Contrôle villes")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
 
   var legende = Object.keys(RESEAUX_CONFIG).map(function(k){
@@ -5904,7 +5894,7 @@ function chargerPoints() {
     })
     .catch(function(e){
       var c = document.getElementById('carte-leaflet');
-      if (c) c.innerHTML = '<div style="padding:40px;text-align:center;color:#888">'+TR("Aucun point pour le moment.")+'<br>' + (typeof canWriteCarte==='function'&&canWriteCarte() ? 'Importez vos fichiers KML via le bouton en haut.' : '') + '</div>';
+      if (c) c.innerHTML = '<div style="padding:40px;text-align:center;color:#888">'+TR("Aucun point pour le moment.")+'<br>' + (typeof isAdmin==='function'&&isAdmin() ? 'Importez vos fichiers KML via le bouton en haut.' : '') + '</div>';
     });
 }
 window.chargerPoints = chargerPoints;
@@ -6115,7 +6105,7 @@ function popupCarte(p) {
     (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:11px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
     (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> '+TR("Voir la fiche complète →")+'</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px">'+TR("Voir ses commandes →")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<div style="margin-top:6px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer"><i class="ti ti-edit"></i> '+TR("Modifier")+'</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<div style="margin-top:6px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer"><i class="ti ti-edit"></i> '+TR("Modifier")+'</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
     '</div>';
 }
 
@@ -6291,7 +6281,7 @@ function popupHorsCarte(c) {
       ((c.adresse && c.adresse.trim().toLowerCase() !== String(c.nom||'').trim().toLowerCase()) ? _esc(c.adresse) + '<br>' : '') +
       ((c.cp || c.ville) ? _esc((c.cp||'') + ' ' + (c.ville||'')) : '') + '</div>' +
     '<button onclick="ajouterDistributeurCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:6px"><i class="ti ti-map-pin-plus"></i> '+TR("Ajouter à la carte")+'</button>' +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="passerParticulierCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\',this)" style="width:100%;background:#d97706;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:6px"><i class="ti ti-user"></i> '+TR("Passer en particulier")+'</button>' : '') +
+    (typeof isAdmin==='function' && isAdmin() ? '<button onclick="passerParticulierCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\',this)" style="width:100%;background:#d97706;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer;margin-bottom:6px"><i class="ti ti-user"></i> '+TR("Passer en particulier")+'</button>' : '') +
     '<button onclick="ouvrirFicheDistrib(' + c.id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer">'+TR("Voir la fiche →")+'</button>' +
     '</div>';
 }

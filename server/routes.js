@@ -126,20 +126,6 @@ const requireAuth = requireRole();
 const adminOnly = requireRole('admin');
 const adminOrOp  = requireRole('admin', 'operateur');
 
-// Écriture sur la carte : admin, ou permission 'carte'=write (hérite de 'clients').
-// Permet aux utilisateurs "droits complets" d'utiliser les outils carte
-// exposés sous /admin (géocodage, enrichissement d'adresses).
-const carteWrite = (req, res, next) => {
-  const user = res.locals.user;
-  if (!user) return res.status(403).json({ error: 'Non authentifié' });
-  if (user.role === 'admin') return next();
-  const perms = user.permissions || {};
-  let perm = perms['carte'];
-  if (perm === undefined) perm = perms['clients'];
-  if (perm === 'write') return next();
-  return res.status(403).json({ error: 'Accès en écriture refusé sur le module "carte".' });
-};
-
 // ── Gestion des utilisateurs (admin only) ─────────────────────────
 router.get('/users', adminOnly, async (req, res) => {
   try {
@@ -2628,7 +2614,7 @@ router.get('/commandes/doublons', async (req, res) => {
 
 router.get('/pennylane/status', async (req, res) => {
   try {
-    if (!process.env.PENNYLANE_TOKEN) return res.json({ configured: false });
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ configured: false });
     const { checkStatus } = require('../scripts/sync-pennylane');
     const info = await checkStatus();
     res.json({ configured: true, account: info.account });
@@ -2645,7 +2631,7 @@ router.post('/pennylane/sync-commandes', adminOnly, async (req, res) => {
 
 router.get('/pennylane/bdc-lookup', async (req, res) => {
   try {
-    if (!process.env.PENNYLANE_TOKEN) return res.json({ configured: false });
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ configured: false });
     const numero = (req.query.numero || '').trim();
     if (!numero) return res.status(400).json({ error: 'numero requis' });
     const { lookupDocumentPennylane } = require('../scripts/sync-pennylane');
@@ -2656,7 +2642,7 @@ router.get('/pennylane/bdc-lookup', async (req, res) => {
 
 router.post('/pennylane/generer-facture/:cmdId', adminOrOp, async (req, res) => {
   try {
-    if (!process.env.PENNYLANE_TOKEN) return res.json({ ok: false, reason: 'Pennylane non configuré' });
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ ok: false, reason: 'Pennylane non configuré' });
     const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom FROM commandes cmd
       JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.cmdId]);
     if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
@@ -5288,7 +5274,7 @@ router.post('/admin/carte-sync-adresses', adminOnly, async (req, res) => {
 
 // Admin: géocode par lot les distributeurs hors carte (hors Particulier) sans coordonnées.
 // ?limit=N (défaut 40). À lancer plusieurs fois pour tout couvrir.
-router.post('/admin/geocoder-hors-carte', carteWrite, async (req, res) => {
+router.post('/admin/geocoder-hors-carte', adminOnly, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 40, 100);
     // geocoded_at IS NULL = pas encore tenté (les échecs sont marqués pour ne pas les re-tenter en boucle)
@@ -5342,7 +5328,7 @@ router.post('/admin/reset-geocodage-hors-carte', adminOnly, async (req, res) => 
 // Admin: enrichit l'adresse des distributeurs hors carte depuis VosFactures (via vf_id),
 // quand l'adresse app est vide ou sans numéro de rue. Réarme le géocodage (geocoded_at=NULL).
 // ?limit=N (défaut 40). À lancer avant le géocodage pour améliorer le taux de réussite.
-router.post('/admin/enrichir-adresses-vf', carteWrite, async (req, res) => {
+router.post('/admin/enrichir-adresses-vf', adminOnly, async (req, res) => {
   try {
     if (!process.env.VOSFACTURES_API_TOKEN || !process.env.VOSFACTURES_ACCOUNT) return res.json({ ok: false, reason: 'VosFactures non configuré' });
     const axios = require('axios');
