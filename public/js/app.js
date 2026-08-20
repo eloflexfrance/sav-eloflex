@@ -2015,12 +2015,18 @@ async function enregistrerCommande(id){
     quantite: parseInt(gv('cmd-quantite'))||1,
     bdc: gv('cmd-bdc'), date_commande: gv('cmd-date')||null,
     bdc_source: gv('cmd-bdc-source')||null, bdc_doc_id: gv('cmd-bdc-docid')||null,
-    client_final: gv('cf-nom') || gv('cmd-clientfinal'),
+    // Client final : priorité au champ bénéficiaire édité ; le nom du bloc livraison
+    // n'est utilisé que si une adresse distincte est réellement choisie (type non vide).
+    // Évite que l'ancien nom (caché) ne « revienne » après suppression.
+    client_final: gv('cmd-clientfinal') || (gv('cmd-clientfinal-type') ? gv('cf-nom') : ''),
     client_final_type: gv('cmd-clientfinal-type')||null,
-    cf_nom: gv('cf-nom')||null, cf_prenom: gv('cf-prenom')||null,
-    cf_adresse: gv('cf-adresse')||null, cf_cp: gv('cf-cp')||null,
-    cf_ville: gv('cf-ville')||null, cf_tel: gv('cf-tel')||null,
-    cf_email: gv('cf-email')||null,
+    cf_nom: gv('cmd-clientfinal-type') ? (gv('cf-nom')||null) : null,
+    cf_prenom: gv('cmd-clientfinal-type') ? (gv('cf-prenom')||null) : null,
+    cf_adresse: gv('cmd-clientfinal-type') ? (gv('cf-adresse')||null) : null,
+    cf_cp: gv('cmd-clientfinal-type') ? (gv('cf-cp')||null) : null,
+    cf_ville: gv('cmd-clientfinal-type') ? (gv('cf-ville')||null) : null,
+    cf_tel: gv('cmd-clientfinal-type') ? (gv('cf-tel')||null) : null,
+    cf_email: gv('cmd-clientfinal-type') ? (gv('cf-email')||null) : null,
     num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
     date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
