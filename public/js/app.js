@@ -161,6 +161,7 @@ async function render(){
   try{
     if(STATE.view==='dashboard')     await renderDashboard(ttl,c,a);
     else if(STATE.view==='clients')  await renderClients(ttl,c,a);
+    else if(STATE.view==='demandes') await renderDemandes(ttl,c,a);
     else if(STATE.view==='client')   await renderClient(ttl,c,a);
     else if(STATE.view==='devis')    await renderDevis(ttl,c,a);
     else if(STATE.view==='fauteuil') await renderFauteuil(ttl,c,a);
@@ -602,8 +603,10 @@ async function renderClient(ttl,c,a){
         </div>`).join('')}
     </div>
     <div class="section-title" style="margin:16px 0 8px"><i class="ti ti-clipboard-list"></i>Commandes</div>
-    <div id="client-commandes-list" style="margin-bottom:20px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>`;
+    <div id="client-commandes-list" style="margin-bottom:20px"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
+    ${cl.type!=='Particulier'?`<div id="client-demandes" data-client="${cl.id}" data-nom="${esc(cl.nom)}" data-email="${esc(cl.email||'')}" style="margin-bottom:20px"></div>`:''}`;
   chargerCommandesClient(cl.id);
+  if(cl.type!=='Particulier') chargerDemandesFiche(cl.id);
 }
 
 async function chargerCommandesClient(clientId){
@@ -7652,3 +7655,203 @@ function contratBonHTML(c){
   </div>`;
 }
 window.contratBonHTML = contratBonHTML;
+
+// ══════════════════════════════════════════════════════════════════
+// ── DEMANDES D'INFORMATIONS (leads transmis aux distributeurs) ──
+// ══════════════════════════════════════════════════════════════════
+const DI_STATUTS = {
+  transmise:   { l:'Transmise',   c:'#2563eb' },
+  relance:     { l:'Relancé',     c:'#d97706' },
+  retour_recu: { l:'Retour reçu', c:'#16a34a' },
+  essai:       { l:'Essai',       c:'#7c3aed' },
+  vente:       { l:'Vente',       c:'#15803d' },
+  sans_suite:  { l:'Sans suite',  c:'#6b7280' },
+};
+const DI_NON_TRAITEES = ['transmise','relance'];
+function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.l}</span>`; }
+function diStatutOptions(sel){ return Object.keys(DI_STATUTS).map(k=>`<option value="${k}" ${k===sel?'selected':''}>${DI_STATUTS[k].l}</option>`).join(''); }
+const _dfd = d => d ? fd((''+d).slice(0,10)) : '—';
+
+// ── Section sur la fiche distributeur ──
+async function chargerDemandesFiche(clientId){
+  const el = document.getElementById('client-demandes'); if(!el) return;
+  const nom = el.getAttribute('data-nom')||''; const email = el.getAttribute('data-email')||'';
+  let rows=[]; try{ rows = await API.demandesInfo({client_id:clientId}); }catch(e){ el.innerHTML=''; return; }
+  const nonTraitees = rows.filter(r=>DI_NON_TRAITEES.includes(r.statut)).length;
+  const header = `<div class="section-title" style="margin:4px 0 8px;display:flex;align-items:center;gap:8px">
+      <i class="ti ti-address-book"></i>${TR("Demandes d'informations")}
+      <span class="badge hg" style="font-weight:600">${rows.length}</span>
+      ${nonTraitees?`<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">${nonTraitees} ${TR('non traitée(s)')}</span>`:''}
+      <span style="margin-left:auto;display:flex;gap:6px">
+        <button class="btn sm primary" onclick="modalDemande(${clientId},'${esc(nom).replace(/'/g,'&#39;')}')"><i class="ti ti-plus"></i> ${TR('Ajouter')}</button>
+        ${nonTraitees?`<button class="btn sm" onclick="relancerDemandes(${clientId},'${esc(email).replace(/'/g,'&#39;')}')"><i class="ti ti-mail"></i> ${TR('Demander un retour')}</button>`:''}
+        <button class="btn sm" onclick="exporterDemandes(${clientId})"><i class="ti ti-download"></i> ${TR('Export')}</button>
+      </span></div>`;
+  if(!rows.length){ el.innerHTML = header + `<div style="font-size:12px;color:var(--text3);padding:6px 0">${TR('Aucune demande transmise pour ce distributeur.')}</div>`; return; }
+  el.innerHTML = header + demandesTableHTML(rows, false);
+}
+window.chargerDemandesFiche = chargerDemandesFiche;
+
+// ── Tableau des demandes (réutilisé fiche + vue globale) ──
+function demandesTableHTML(rows, withDistrib){
+  const lignes = rows.map(d=>`<tr style="border-top:0.5px solid var(--border)">
+    <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
+    ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
+    <td style="padding:8px 10px">${esc(d.nom||'')}${d.ville?`<span style="color:var(--text3)"> — ${esc(d.ville)}${d.cp?(' '+esc(d.cp)):''}</span>`:''}</td>
+    <td style="padding:8px 10px;white-space:nowrap">${d.telephone?esc(d.telephone):(d.email?('<span style="font-size:11px">'+esc(d.email)+'</span>'):'—')}</td>
+    <td style="padding:8px 10px">${diBadge(d.statut)}${d.date_retour?`<span style="font-size:10px;color:var(--text3);display:block">${_dfd(d.date_retour)}</span>`:''}</td>
+    <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
+    <td style="padding:8px 10px;text-align:right;white-space:nowrap">
+      <button class="btn sm" title="Statut" onclick="menuDemandeStatut(${d.id})"><i class="ti ti-adjustments"></i></button>
+      <button class="btn sm" title="Modifier" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
+      <button class="btn sm danger" title="Supprimer" onclick="supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
+    </td></tr>`).join('');
+  return `<div class="card" style="padding:0;overflow:auto"><table class="table" style="width:100%"><thead><tr>
+    <th style="text-align:left;padding:8px 10px">${TR('Date')}</th>
+    ${withDistrib?`<th style="text-align:left;padding:8px 10px">${TR('Distributeur')}</th>`:''}
+    <th style="text-align:left;padding:8px 10px">${TR('Contact')}</th>
+    <th style="text-align:left;padding:8px 10px">${TR('Téléphone')}</th>
+    <th style="text-align:left;padding:8px 10px">${TR('Statut')}</th>
+    <th style="text-align:left;padding:8px 10px">${TR('Annotation')}</th><th></th>
+  </tr></thead><tbody>${lignes}</tbody></table></div>`;
+}
+
+// ── Vue globale ──
+let DEMANDES_FILTRE = { statut:'', non_traitees:false, q:'' };
+async function renderDemandes(ttl,c,a){
+  ttl.textContent = TR("Demandes d'informations");
+  a.innerHTML = `<label class="btn sm" style="cursor:pointer"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDemandesExcel(this)"><i class="ti ti-upload"></i> ${TR('Importer Excel')}</label>
+    <button class="btn sm" onclick="exporterDemandes()"><i class="ti ti-download"></i> ${TR('Export')}</button>
+    <button class="btn sm primary" onclick="modalDemande()"><i class="ti ti-plus"></i> ${TR('Nouvelle demande')}</button>`;
+  let stats={total:0,non_traitees:0,par_statut:{}}; try{ stats=await API.demandesInfoStats(); }catch(e){}
+  const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
+    <div class="stat-card"><div class="stat-label">${TR('Total')}</div><div class="stat-value">${stats.total||0}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('Non traitées')}</div><div class="stat-value" style="color:#d97706">${stats.non_traitees||0}</div></div>
+    ${['retour_recu','essai','vente'].map(k=>`<div class="stat-card"><div class="stat-label">${DI_STATUTS[k].l}</div><div class="stat-value" style="color:${DI_STATUTS[k].c}">${stats.par_statut[k]||0}</div></div>`).join('')}
+  </div>`;
+  const filtres = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+    <input class="form-input" id="di-q" placeholder="${TR('Rechercher (contact, distributeur, ville…)')}" value="${esc(DEMANDES_FILTRE.q)}" oninput="DEMANDES_FILTRE.q=this.value;clearTimeout(window._diT);window._diT=setTimeout(chargerDemandesGlobal,300)" style="max-width:320px">
+    <select class="form-input" id="di-statut" onchange="DEMANDES_FILTRE.statut=this.value;chargerDemandesGlobal()" style="max-width:180px"><option value="">${TR('Tous les statuts')}</option>${diStatutOptions(DEMANDES_FILTRE.statut)}</select>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" ${DEMANDES_FILTRE.non_traitees?'checked':''} onchange="DEMANDES_FILTRE.non_traitees=this.checked;chargerDemandesGlobal()"> ${TR('Non traitées seulement')}</label>
+  </div>`;
+  c.innerHTML = tiles + filtres + `<div id="di-global-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
+  chargerDemandesGlobal();
+}
+window.renderDemandes = renderDemandes;
+async function chargerDemandesGlobal(){
+  const el = document.getElementById('di-global-list'); if(!el) return;
+  const params={}; if(DEMANDES_FILTRE.statut) params.statut=DEMANDES_FILTRE.statut; if(DEMANDES_FILTRE.non_traitees) params.non_traitees='1'; if(DEMANDES_FILTRE.q) params.q=DEMANDES_FILTRE.q;
+  let rows=[]; try{ rows=await API.demandesInfo(params); }catch(e){ el.innerHTML=`<div class="empty">Erreur : ${esc(e.message)}</div>`; return; }
+  window._DI_ROWS = rows;
+  if(!rows.length){ el.innerHTML=`<div class="empty"><i class="ti ti-address-book"></i>${TR('Aucune demande.')}</div>`; return; }
+  el.innerHTML = `<div style="font-size:12px;color:var(--text3);margin-bottom:6px">${rows.length} ${TR('demande(s)')}</div>` + demandesTableHTML(rows, true);
+}
+window.chargerDemandesGlobal = chargerDemandesGlobal;
+
+// ── Ajout / modification ──
+async function modalDemande(clientId, distribNom, id){
+  await ensureClientsCache();
+  let d = { statut:'transmise', date_transmission:new Date().toISOString().slice(0,10) };
+  if(id){ try{ const all = (window._DI_ROWS||[]); d = all.find(x=>x.id===id) || await API.demandesInfo({}).then(r=>r.find(x=>x.id===id)); }catch(e){} }
+  else if(clientId){ d.client_id=clientId; d.distributeur_nom=distribNom||((window._clientsCache||[]).find(c=>c.id===clientId)||{}).nom||''; }
+  const noms=[...new Set((window._clientsCache||[]).filter(c=>c.type!=='Particulier').map(c=>c.nom).filter(Boolean))];
+  showModal(`<div class="modal-header"><i class="ti ti-address-book" style="color:var(--accent)"></i><h2>${id?TR('Modifier la demande'):TR("Nouvelle demande d'information")}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="di-id" value="${id||''}">
+      <input type="hidden" id="di-client-id" value="${d.client_id||''}">
+      <div class="form-group"><label class="form-label">${TR('Distributeur')}</label>
+        <input class="form-input" id="di-distrib" list="di-distrib-list" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur')}" oninput="diDistribChange(this.value)">
+        <datalist id="di-distrib-list">${noms.map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="di-tel" value="${esc(d.telephone||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Ville')}</label><input class="form-input" id="di-ville" value="${esc(d.ville||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Code postal')}</label><input class="form-input" id="di-cp" value="${esc(d.cp||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('E-mail')}</label><input class="form-input" id="di-email" value="${esc(d.email||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Statut')}</label><select class="form-input" id="di-statut">${diStatutOptions(d.statut)}</select></div>
+        <div class="form-group"><label class="form-label">${TR('Date de transmission')}</label><input class="form-input" id="di-date" type="date" value="${(d.date_transmission||'').slice(0,10)}"></div>
+        <div class="form-group"><label class="form-label">${TR('Date de retour')}</label><input class="form-input" id="di-date-retour" type="date" value="${(d.date_retour||'').slice(0,10)}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">${TR('Annotation')}</label><textarea class="form-input" id="di-annot" rows="2">${esc(d.annotation||'')}</textarea></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="saveDemande()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
+}
+window.modalDemande = modalDemande;
+function diDistribChange(nom){ const m=(window._clientsCache||[]).find(c=>(c.nom||'').toLowerCase()===(nom||'').toLowerCase()); const h=$('di-client-id'); if(h) h.value = m?m.id:''; }
+window.diDistribChange = diDistribChange;
+async function saveDemande(){
+  const id=gv('di-id');
+  const data={
+    client_id: gv('di-client-id')||null, distributeur_nom: gv('di-distrib')||null,
+    nom: gv('di-nom')||null, telephone: gv('di-tel')||null, ville: gv('di-ville')||null, cp: gv('di-cp')||null,
+    email: gv('di-email')||null, statut: gv('di-statut')||'transmise',
+    date_transmission: gv('di-date')||null, date_retour: gv('di-date-retour')||null, annotation: gv('di-annot')||null
+  };
+  try{ if(id){ await API.updateDemandeInfo(id,data); } else { await API.createDemandeInfo(data); }
+    closeModal(); toast(TR('Demande enregistrée'),'ti-check','var(--success)');
+    if(STATE.view==='demandes') chargerDemandesGlobal(); else if(STATE.view==='client') chargerDemandesFiche(gv('di-client-id')||STATE.clientId);
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.saveDemande = saveDemande;
+
+function menuDemandeStatut(id){
+  showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut de la demande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:7px">
+      ${Object.keys(DI_STATUTS).map(k=>`<button class="btn" style="justify-content:flex-start;border-left:4px solid ${DI_STATUTS[k].c}" onclick="setDemandeStatut(${id},'${k}')">${DI_STATUTS[k].l}</button>`).join('')}
+    </div>`);
+}
+window.menuDemandeStatut = menuDemandeStatut;
+async function setDemandeStatut(id, statut){
+  try{ await API.setDemandeInfoStatut(id, statut); closeModal(); toast(TR('Statut mis à jour'),'ti-check','var(--success)');
+    if(STATE.view==='demandes') chargerDemandesGlobal(); else if(STATE.view==='client') chargerDemandesFiche(STATE.clientId);
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.setDemandeStatut = setDemandeStatut;
+async function supprDemande(id){
+  if(!confirm(TR('Supprimer cette demande ?'))) return;
+  try{ await API.deleteDemandeInfo(id); toast(TR('Supprimé'),'ti-trash');
+    if(STATE.view==='demandes') chargerDemandesGlobal(); else if(STATE.view==='client') chargerDemandesFiche(STATE.clientId);
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.supprDemande = supprDemande;
+
+async function relancerDemandes(clientId, email){
+  const dest = prompt(TR('Envoyer la demande de retour à :'), email||'');
+  if(!dest) return;
+  try{ const r = await API.relanceDemandesInfo(clientId, dest);
+    toast(TR('Relance envoyée à ')+r.to+' ('+r.count+')','ti-mail','var(--success)');
+    if(STATE.view==='client') chargerDemandesFiche(clientId); else if(STATE.view==='demandes') chargerDemandesGlobal();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.relancerDemandes = relancerDemandes;
+
+// Export CSV (ouvrable dans Excel)
+async function exporterDemandes(clientId){
+  let rows;
+  try{ rows = clientId ? await API.demandesInfo({client_id:clientId}) : (window._DI_ROWS || await API.demandesInfo({})); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  if(!rows.length){ toast(TR('Aucune demande à exporter'),'ti-alert-circle','var(--warning)'); return; }
+  const esc2 = v => { v=(v==null?'':String(v)); return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const head=['Distributeur','Date','Contact','Téléphone','Email','Ville','CP','Statut','Date retour','Annotation'];
+  const lines=[head.join(';')].concat(rows.map(d=>[
+    d.client_nom_actuel||d.distributeur_nom||'', (d.date_transmission||'').slice(0,10), d.nom||'', d.telephone||'', d.email||'',
+    d.ville||'', d.cp||'', (DI_STATUTS[d.statut]||{}).l||d.statut||'', (d.date_retour||'').slice(0,10), d.annotation||''
+  ].map(esc2).join(';')));
+  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='demandes_informations.csv'; a.click(); URL.revokeObjectURL(url);
+}
+window.exporterDemandes = exporterDemandes;
+
+// Import de l'historique Excel
+async function importDemandesExcel(input){
+  const f = input.files && input.files[0]; if(!f) return;
+  const fd2 = new FormData(); fd2.append('file', f);
+  toast(TR('Import en cours…'),'ti-loader-2');
+  try{
+    const r = await fetch('/api/demandes-info/import-excel',{method:'POST',body:fd2}).then(x=>x.json());
+    if(r.error){ toast('Erreur : '+r.error,'ti-alert-circle','var(--danger)'); return; }
+    toast(`${r.inserted} ${TR('demande(s) importée(s)')} — ${r.lies_distributeur} ${TR('reliées à un distributeur')}`,'ti-check','var(--success)');
+    if(STATE.view==='demandes') chargerDemandesGlobal();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+  input.value='';
+}
+window.importDemandesExcel = importDemandesExcel;

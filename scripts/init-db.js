@@ -221,6 +221,28 @@ async function initDB() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_cc_client ON contrats_cadre(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_cc_token ON contrats_cadre(token_signature)`);
 
+    // Table des demandes d'informations transmises aux distributeurs (leads / prospects)
+    await client.query(`CREATE TABLE IF NOT EXISTS demandes_info (
+      id SERIAL PRIMARY KEY,
+      client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+      distributeur_nom TEXT,
+      nom TEXT,
+      ville TEXT,
+      cp TEXT,
+      telephone TEXT,
+      email TEXT,
+      annotation TEXT,
+      statut TEXT DEFAULT 'transmise',
+      date_transmission DATE DEFAULT CURRENT_DATE,
+      date_retour DATE,
+      relance_envoyee BOOLEAN DEFAULT FALSE,
+      cree_par INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_di_client ON demandes_info(client_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_di_statut ON demandes_info(statut)`);
+
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (
       id SERIAL PRIMARY KEY,

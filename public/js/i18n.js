@@ -5,6 +5,7 @@ const TRANSLATIONS = {
     // Navigation
     nav_dashboard: 'Tableau de bord',
     nav_clients: 'Clients / Distributeurs',
+    nav_demandes: "Demandes d'infos",
     nav_interventions: 'Interventions',
     nav_expeditions: 'Expéditions SAV',
     nav_catalogue: 'Catalogue pièces',
@@ -588,6 +589,7 @@ const TRANSLATIONS = {
     // Navigation
     nav_dashboard: 'Dashboard',
     nav_clients: 'Clients / Distributors',
+    nav_demandes: 'Info requests',
     nav_interventions: 'Service orders',
     nav_expeditions: 'Shipments',
     nav_catalogue: 'Parts catalogue',

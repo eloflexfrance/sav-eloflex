@@ -6492,6 +6492,209 @@ router.post('/contrat-public/:token/signer', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// ── DEMANDES D'INFORMATIONS transmises aux distributeurs (leads) ──
+// ══════════════════════════════════════════════════════════════════
+const DI_STATUTS = ['transmise','relance','retour_recu','essai','vente','sans_suite'];
+const DI_NON_TRAITEES = ['transmise','relance'];
+
+// Liste avec filtres (client_id, statut, non_traitees, q)
+router.get('/demandes-info', requireAuth, async (req, res) => {
+  try {
+    const conds = [], p = []; let i = 0;
+    if (req.query.client_id) { conds.push(`d.client_id = $${++i}`); p.push(req.query.client_id); }
+    if (req.query.statut)    { conds.push(`d.statut = $${++i}`); p.push(req.query.statut); }
+    if (req.query.non_traitees === '1') conds.push(`d.statut = ANY('{transmise,relance}')`);
+    if (req.query.q) { conds.push(`(d.nom ILIKE $${++i} OR d.ville ILIKE $${i} OR d.telephone ILIKE $${i} OR d.annotation ILIKE $${i} OR COALESCE(c.nom,d.distributeur_nom) ILIKE $${i})`); p.push('%'+req.query.q+'%'); }
+    const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
+    const rows = await db.all(
+      `SELECT d.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
+       FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id
+       ${where} ORDER BY d.date_transmission DESC NULLS LAST, d.id DESC
+       LIMIT ${Math.min(parseInt(req.query.limit)||2000, 5000)}`, p);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Compteurs (global ou pour un distributeur)
+router.get('/demandes-info/stats', requireAuth, async (req, res) => {
+  try {
+    const p = []; let where = '';
+    if (req.query.client_id) { where = 'WHERE client_id = $1'; p.push(req.query.client_id); }
+    const rows = await db.all(`SELECT statut, COUNT(*)::int AS n FROM demandes_info ${where} GROUP BY statut`, p);
+    const par = {}; let total = 0, nonTraitees = 0;
+    for (const r of rows) { par[r.statut] = r.n; total += r.n; if (DI_NON_TRAITEES.includes(r.statut)) nonTraitees += r.n; }
+    res.json({ total, non_traitees: nonTraitees, par_statut: par });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/demandes-info', requireAuth, async (req, res) => {
+  try {
+    const d = req.body || {};
+    const statut = DI_STATUTS.includes(d.statut) ? d.statut : 'transmise';
+    const row = await db.run(
+      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [d.client_id||null, d.distributeur_nom||null, d.nom||null, d.ville||null, d.cp||null, d.telephone||null,
+       d.email||null, d.annotation||null, statut, d.date_transmission||new Date().toISOString().slice(0,10),
+       d.date_retour||null, (req.session.user && req.session.user.id)||null]);
+    res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/demandes-info/:id', requireAuth, async (req, res) => {
+  try {
+    const d = req.body || {};
+    const statut = DI_STATUTS.includes(d.statut) ? d.statut : 'transmise';
+    const row = await db.run(
+      `UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, annotation=$6,
+        statut=$7, date_transmission=$8, date_retour=$9, updated_at=NOW() WHERE id=$10 RETURNING *`,
+      [d.nom||null, d.ville||null, d.cp||null, d.telephone||null, d.email||null, d.annotation||null,
+       statut, d.date_transmission||null, d.date_retour||null, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Demande introuvable' });
+    res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/demandes-info/:id/statut', requireAuth, async (req, res) => {
+  try {
+    const statut = String((req.body && req.body.statut)||'').trim();
+    if (!DI_STATUTS.includes(statut)) return res.status(400).json({ error: 'Statut invalide' });
+    const dateRetour = (req.body && req.body.date_retour) ? req.body.date_retour : null;
+    // Une demande "traitée" (hors relance) reçoit une date de retour par défaut aujourd'hui si absente
+    const setRetour = (!DI_NON_TRAITEES.includes(statut));
+    const row = await db.run(
+      `UPDATE demandes_info SET statut=$1,
+         date_retour = CASE WHEN $2::text IS NOT NULL THEN $2::date
+                            WHEN $3 AND date_retour IS NULL THEN CURRENT_DATE
+                            ELSE date_retour END,
+         updated_at=NOW() WHERE id=$4 RETURNING *`,
+      [statut, dateRetour, setRetour, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Demande introuvable' });
+    res.json({ ok: true, demande: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/demandes-info/:id', requireAuth, async (req, res) => {
+  try { await db.run('DELETE FROM demandes_info WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Import de l'historique Excel (fichier "contacts distributeurs")
+router.post('/demandes-info/import-excel', requireAuth, uploadExcel.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Aucun fichier' });
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const ws = wb.Sheets['CONTACTS'] || wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false, dateNF: 'yyyy-mm-dd' });
+    // Détection de la ligne d'en-tête et des colonnes
+    const norm = s => String(s==null?'':s).toLowerCase();
+    let hdr = -1, col = {};
+    for (let r = 0; r < Math.min(rows.length, 8); r++) {
+      const line = (rows[r]||[]).map(norm);
+      if (line.some(c => c.includes('distributeur')) && line.some(c => c.includes('contact') || c.includes('patient'))) {
+        hdr = r;
+        line.forEach((c, idx) => {
+          if (c.includes('coordonn')) col.coord = idx;                            // "Coordonnées distributeur" (adresse)
+          else if (c.includes('distributeur') && col.distrib === undefined) col.distrib = idx; // "Distributeurs" (nom) — 1re occurrence
+          else if (c.includes('contact') || c.includes('patient')) col.contact = idx;
+          else if (c.includes('date') && col.date === undefined) col.date = idx;
+          else if (c.includes('retour') || c.includes('action')) col.annot = idx;
+          else if (c.includes('essai')) col.essai = idx;
+          else if (c.includes('vente')) col.vente = idx;
+        });
+        break;
+      }
+    }
+    if (hdr < 0) return res.status(400).json({ error: 'En-têtes non reconnus (attendu : Distributeurs / Patients contacts / Date / Retours actions).' });
+    if (col.distrib === undefined) col.distrib = 0;
+    if (col.contact === undefined) col.contact = 2;
+
+    // Index des fiches clients par nom normalisé
+    const clients = await db.all('SELECT id, nom FROM clients');
+    const cidx = {};
+    const nk = s => String(s==null?'':s).toLowerCase().replace(/\s+/g,' ').trim();
+    for (const c of clients) cidx[nk(c.nom)] = c.id;
+
+    const reEmail = /[\w.+-]+@[\w-]+\.[\w.-]+/;
+    const rePhone = /(?:(?:\+33|0)\s*[1-9])(?:[\s.\-]*\d{2}){4}/;
+    let inserted = 0, skipped = 0, lies = 0;
+    for (let r = hdr + 1; r < rows.length; r++) {
+      const line = rows[r] || [];
+      const distrib = (line[col.distrib] || '').toString().trim();
+      const contact = (line[col.contact] || '').toString().trim();
+      if (!distrib || !contact) { skipped++; continue; }
+      // Nom = avant le premier " - " ; le reste peut contenir e-mail / téléphone
+      const parts = contact.split(/\s[-–]\s/);
+      const nom = parts[0].trim();
+      const reste = parts.slice(1).join(' - ');
+      const email = (contact.match(reEmail) || [null])[0];
+      const tel = (contact.match(rePhone) || [null])[0];
+      let annotation = col.annot !== undefined ? (line[col.annot] || '') : '';
+      annotation = String(annotation).trim();
+      const essai = col.essai !== undefined ? String(line[col.essai] || '').trim() : '';
+      const vente = col.vente !== undefined ? String(line[col.vente] || '').trim() : '';
+      let statut = 'transmise';
+      if (vente) statut = 'vente'; else if (essai) statut = 'essai';
+      const extra = [];
+      if (essai && statut !== 'essai') extra.push('Essai : ' + essai);
+      if (vente && statut !== 'vente') extra.push('Vente : ' + vente);
+      if (reste && !email && !tel && reste !== nom) extra.push(reste);
+      if (extra.length) annotation = (annotation ? annotation + ' · ' : '') + extra.join(' · ');
+      const dateRaw = col.date !== undefined ? line[col.date] : null;
+      let date = null;
+      if (dateRaw instanceof Date) date = dateRaw.toISOString().slice(0,10);
+      else if (dateRaw) { const s = String(dateRaw); date = /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0,10) : (isNaN(new Date(s)) ? null : new Date(s).toISOString().slice(0,10)); }
+      const clientId = cidx[nk(distrib)] || null;
+      if (clientId) lies++;
+      await db.run(
+        `INSERT INTO demandes_info (client_id, distributeur_nom, nom, telephone, email, annotation, statut, date_transmission, cree_par)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [clientId, distrib, nom || contact, tel, email, annotation || null, statut, date, (req.session.user && req.session.user.id)||null]);
+      inserted++;
+    }
+    res.json({ ok: true, inserted, skipped, lies_distributeur: lies });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Envoyer un e-mail de relance au distributeur (liste des demandes non traitées)
+router.post('/demandes-info/relance', requireAuth, async (req, res) => {
+  try {
+    const clientId = req.body && req.body.client_id;
+    const dest = (req.body && req.body.email) || null;
+    if (!clientId) return res.status(400).json({ error: 'client_id requis' });
+    if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail' });
+    const cli = await db.get('SELECT nom FROM clients WHERE id=$1', [clientId]);
+    const dmd = await db.all(
+      `SELECT * FROM demandes_info WHERE client_id=$1 AND statut = ANY('{transmise,relance}') ORDER BY date_transmission ASC`, [clientId]);
+    if (!dmd.length) return res.status(400).json({ error: 'Aucune demande en attente pour ce distributeur' });
+    const lignes = dmd.map(d => `<tr>
+        <td style="border:1px solid #e5e7eb;padding:6px 9px">${d.date_transmission || ''}</td>
+        <td style="border:1px solid #e5e7eb;padding:6px 9px">${(d.nom||'')}${d.ville?(' — '+d.ville):''}${d.telephone?(' — '+d.telephone):''}</td>
+        <td style="border:1px solid #e5e7eb;padding:6px 9px">${d.annotation || ''}</td></tr>`).join('');
+    await envoyerEmailPret({
+      to: dest,
+      subject: `Eloflex — Suivi des demandes patients transmises`,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222">
+        <div style="background:#1F5C8C;padding:16px 20px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:16px">Suivi des demandes patients</h2></div>
+        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:20px">
+          <p>Bonjour,</p>
+          <p>Nous vous avons transmis les demandes patients ci-dessous. Pourriez-vous nous indiquer où en sont ces contacts (rendez-vous, essai, vente, sans suite) ?</p>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;margin:10px 0">
+            <tr style="background:#F2F5F8"><th style="border:1px solid #e5e7eb;padding:6px 9px;text-align:left">Date</th><th style="border:1px solid #e5e7eb;padding:6px 9px;text-align:left">Contact</th><th style="border:1px solid #e5e7eb;padding:6px 9px;text-align:left">Note</th></tr>
+            ${lignes}
+          </table>
+          <p>Merci d'avance pour votre retour.</p>
+        </div>
+        <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div>
+      </div>`
+    });
+    await db.run(`UPDATE demandes_info SET relance_envoyee=TRUE, statut=CASE WHEN statut='transmise' THEN 'relance' ELSE statut END, updated_at=NOW()
+      WHERE client_id=$1 AND statut = ANY('{transmise,relance}')`, [clientId]);
+    res.json({ ok: true, to: dest, count: dmd.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
 module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;
