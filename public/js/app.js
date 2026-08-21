@@ -7668,24 +7668,16 @@ const DI_STATUTS = {
   sans_suite:  { l:'Sans suite',  c:'#6b7280', i:'⛔' },
 };
 const DI_NON_TRAITEES = ['transmise','relance'];   // = "En attente" (à traiter)
-function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280',i:''}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.i?u.i+' ':''}${u.l}</span>`; }
+function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.l}</span>`; }
 function diCouleur(s){ return (DI_STATUTS[s]||{c:'#6b7280'}).c; }
 function diStatutOptions(sel){ return Object.keys(DI_STATUTS).map(k=>`<option value="${k}" ${k===sel?'selected':''}>${DI_STATUTS[k].l}</option>`).join(''); }
 const _dfd = d => d ? fd((''+d).slice(0,10)) : '—';
 function _joursDepuis(v){ if(!v) return null; const d=new Date((''+v).slice(0,10)); if(isNaN(d)) return null; return Math.max(0,Math.round((Date.now()-d.getTime())/86400000)); }
-// Cellule statut enrichie : badge + date du dernier changement + ancienneté (si en attente) + historique
+// Cellule statut sobre : badge + icône historique (les dates sont dans la modale historique)
 function diStatutCell(d){
-  const st = d.statut;
-  const dref = d.statut_date || (st==='transmise'?d.date_transmission:d.date_retour) || d.date_transmission;
-  let sub = dref ? `<span style="font-size:10px;color:var(--text3);display:block;margin-top:2px">${TR('le')} ${_dfd(dref)}</span>` : '';
-  let age = '';
-  if(DI_NON_TRAITEES.includes(st)){
-    const j=_joursDepuis(d.statut_date||d.date_transmission);
-    if(j!=null){ const col=j>=60?'#dc2626':j>=30?'#d97706':'var(--text3)'; age=`<span style="font-size:10px;font-weight:700;color:${col};display:block">⏳ ${j} ${TR('j en attente')}</span>`; }
-  }
   const nb = Array.isArray(d.historique)?d.historique.length:0;
   const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:14px;margin-left:4px"></i>` : '';
-  return `<div style="display:flex;align-items:center;gap:2px">${diBadge(st)}${hist}</div>${sub}${age}`;
+  return `<span style="display:inline-flex;align-items:center;gap:2px">${diBadge(d.statut)}${hist}</span>`;
 }
 // Petite légende des statuts
 function diLegende(){
@@ -7727,7 +7719,7 @@ async function chargerDemandesFiche(clientId){
   const header = `<div class="section-title" style="margin:4px 0 8px;display:flex;align-items:center;gap:8px">
       <i class="ti ti-address-book"></i>${TR("Demandes d'informations")}
       <span class="badge hg" style="font-weight:600">${rows.length}</span>
-      ${nonTraitees?`<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">⏳ ${nonTraitees} ${TR('en attente')}</span>`:''}
+      ${nonTraitees?`<span style="color:#d97706;font-size:12px;font-weight:600">● ${nonTraitees} ${TR('en attente')}</span>`:''}
       <span style="margin-left:auto;display:flex;gap:6px">
         <button class="btn sm primary" onclick="modalDemande(${clientId},'${esc(nom).replace(/'/g,'&#39;')}')"><i class="ti ti-plus"></i> ${TR('Ajouter')}</button>
         ${nonTraitees?`<button class="btn sm" onclick="relancerDemandes(${clientId},'${esc(email).replace(/'/g,'&#39;')}')"><i class="ti ti-mail"></i> ${TR('Demander un retour')}</button>`:''}
@@ -7779,7 +7771,7 @@ async function renderDemandes(ttl,c,a){
   let stats={total:0,non_traitees:0,par_statut:{}}; try{ stats=await API.demandesInfoStats(); }catch(e){}
   const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
     <div class="stat-card"><div class="stat-label">${TR('Total')}</div><div class="stat-value">${stats.total||0}</div></div>
-    <div class="stat-card"><div class="stat-label">⏳ ${TR('En attente')}</div><div class="stat-value" style="color:#d97706">${stats.non_traitees||0}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('En attente')}</div><div class="stat-value" style="color:#d97706">${stats.non_traitees||0}</div></div>
     ${['retour_recu','essai','vente'].map(k=>`<div class="stat-card"><div class="stat-label">${DI_STATUTS[k].l}</div><div class="stat-value" style="color:${DI_STATUTS[k].c}">${stats.par_statut[k]||0}</div></div>`).join('')}
   </div>`;
   const vueTabs = `<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:10px">
@@ -7850,7 +7842,7 @@ async function chargerDemandesParDistrib(){
     const srcItems = g._items || g.items;
     const nt = g.items.filter(x=>DI_NON_TRAITEES.includes(x.statut)).length;
     const items = srcItems.slice().sort((a,b)=>(''+(b.date_transmission||'')).localeCompare(''+(a.date_transmission||'')));
-    const ntBadge = nt ? `<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">⏳ ${nt} ${TR('en attente')}</span>` : '';
+    const ntBadge = nt ? `<span title="${nt} ${TR('en attente')}" style="width:8px;height:8px;border-radius:99px;background:#d97706;display:inline-block;flex:none"></span>` : '';
     const grpEmail = (g.email||'').replace(/'/g,'&#39;');
     const open = !!g._open;
     const lignes = items.map(d=>{
@@ -7896,7 +7888,7 @@ async function chargerDemandesParDistrib(){
       </div>
     </div>`;
   }).join('');
-  el.innerHTML = barre + diLegende() + `<div class="card" style="padding:0">${blocs || `<div class="empty" style="padding:20px">${TR('Aucun distributeur.')}</div>`}</div>`;
+  el.innerHTML = barre + `<div class="card" style="padding:0">${blocs || `<div class="empty" style="padding:20px">${TR('Aucun distributeur.')}</div>`}</div>`;
   // Garder le focus + curseur dans la barre de recherche après re-render
   const qi=document.getElementById('di-distrib-q'); if(qi && DI_DISTRIB_Q){ qi.focus(); const v=qi.value; qi.value=''; qi.value=v; }
 }
@@ -8017,7 +8009,7 @@ function menuDemandeStatut(id){
         <input class="form-input" type="date" id="di-statut-date" value="${today}"></div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${TR('Statut actuel')} : ${d.statut?diBadge(d.statut):'—'}</div>
       <div style="display:flex;flex-direction:column;gap:7px">
-        ${Object.keys(DI_STATUTS).map(k=>`<button class="btn" style="justify-content:flex-start;border-left:4px solid ${DI_STATUTS[k].c}${k===d.statut?';background:var(--bg2,#eef1f4)':''}" onclick="setDemandeStatut(${id},'${k}')">${DI_STATUTS[k].i} ${DI_STATUTS[k].l}${k===d.statut?' ✓':''}</button>`).join('')}
+        ${Object.keys(DI_STATUTS).map(k=>`<button class="btn" style="justify-content:flex-start;border-left:4px solid ${DI_STATUTS[k].c}${k===d.statut?';background:var(--bg2,#eef1f4)':''}" onclick="setDemandeStatut(${id},'${k}')">${DI_STATUTS[k].l}${k===d.statut?' ✓':''}</button>`).join('')}
       </div>
     </div>`);
 }
