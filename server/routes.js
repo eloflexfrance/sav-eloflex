@@ -6767,6 +6767,40 @@ router.post('/demandes-info/relance', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Relance pour UN contact précis (bouton sur chaque ligne)
+router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
+  try {
+    const id = req.params.id;
+    const dest = (req.body && req.body.email) || null;
+    if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail' });
+    const d = await db.get(
+      `SELECT di.*, c.nom AS client_nom FROM demandes_info di LEFT JOIN clients c ON c.id = di.client_id WHERE di.id = $1`, [id]);
+    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    await envoyerEmailPret({
+      to: dest,
+      subject: `Eloflex — Suivi du contact ${d.nom || ''}`,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222">
+        <div style="background:#1F5C8C;padding:16px 20px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:16px">Suivi d'un contact patient</h2></div>
+        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:20px">
+          <p>Bonjour,</p>
+          <p>Pourriez-vous nous indiquer où en est le contact suivant que nous vous avons transmis ?</p>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;margin:10px 0">
+            <tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8;width:130px">Contact</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${d.nom || ''}</td></tr>
+            ${d.ville || d.cp ? `<tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8">Ville</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${[d.ville, d.cp].filter(Boolean).join(' ')}</td></tr>` : ''}
+            ${d.telephone ? `<tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8">Téléphone</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${d.telephone}</td></tr>` : ''}
+            ${d.date_transmission ? `<tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8">Transmis le</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${d.date_transmission}</td></tr>` : ''}
+            ${d.annotation ? `<tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8">Note</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${d.annotation}</td></tr>` : ''}
+          </table>
+          <p>Merci d'avance pour votre retour (rendez-vous, essai, vente, sans suite).</p>
+        </div>
+        <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div>
+      </div>`
+    });
+    await db.run(`UPDATE demandes_info SET relance_envoyee=TRUE, statut=CASE WHEN statut='transmise' THEN 'relance' ELSE statut END, updated_at=NOW() WHERE id=$1`, [id]);
+    res.json({ ok: true, to: dest });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
 module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;

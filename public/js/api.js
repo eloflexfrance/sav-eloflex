@@ -68,6 +68,7 @@ const API = {
   setDemandeInfoStatut:(id,statut,dateRetour)=>API.post(`/demandes-info/${id}/statut`,{statut,...(dateRetour?{date_retour:dateRetour}:{})}),
   deleteDemandeInfo:(id)=>API.del(`/demandes-info/${id}`),
   relanceDemandesInfo:(clientId,email)=>API.post('/demandes-info/relance',{client_id:clientId,email}),
+  relanceContactInfo:(id,email)=>API.post(`/demandes-info/${id}/relance`,{email}),
   fusionnerClients:(idCible,idSource,vfIgnore)=>API.post(`/clients/${idCible}/fusionner`,{client_source_id:idSource,vf_ignore_source:vfIgnore}),
   adressesIncompletes:()=>API.get('/clients/adresses-incompletes'),
   reseauParNom:(nom)=>API.get('/clients/reseau-par-nom?nom='+encodeURIComponent(nom||'')),

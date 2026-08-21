@@ -6416,7 +6416,7 @@ async function controleVillesCarte() {
   var setInfo = function(t, col) { if (info) info.innerHTML = '<span style="color:' + (col || '#666') + '">' + t + '</span>'; };
   try {
     setInfo('Contrôle des villes en cours…');
-    var norm = function(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\bSAINT\b/g,'ST').trim(); };
+    var norm = function(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').replace(/\bSAINT\b/g,'ST').trim(); };
     var cls = await fetch('/api/clients').then(function(r){ return r.json(); });
     var arr = Array.isArray(cls) ? cls : (cls.rows || []);
     var fiches = arr.filter(function(c){ return c.type !== 'Particulier' && c.ville && String(c.ville).trim() && /^\d{5}$/.test(String(c.cp||'').trim()); });
@@ -7722,7 +7722,7 @@ function demandesTableHTML(rows, withDistrib){
 
 // ── Vue globale ──
 let DEMANDES_FILTRE = { statut:'', non_traitees:false, q:'' };
-let DEMANDES_VUE = 'liste';   // 'liste' | 'distrib'
+let DEMANDES_VUE = 'distrib';   // 'liste' | 'distrib'
 function setDemandesVue(v){ DEMANDES_VUE=v; render(); }
 window.setDemandesVue = setDemandesVue;
 async function renderDemandes(ttl,c,a){
@@ -7766,6 +7766,7 @@ window.chargerDemandesGlobal = chargerDemandesGlobal;
 
 // ── Vue par distributeur (accordéon alphabétique, façon Excel) ──
 let DI_DISTRIB_Q = '';
+const _diKey = s => (s==null?'':String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 async function chargerDemandesParDistrib(){
   const el = document.getElementById('di-distrib-list'); if(!el) return;
   let rows=[]; try{ rows=await API.demandesInfo({}); }catch(e){ el.innerHTML=`<div class="empty">Erreur : ${esc(e.message)}</div>`; return; }
@@ -7779,10 +7780,20 @@ async function chargerDemandesParDistrib(){
     groups[key].items.push(d);
   }
   window._DI_GROUPS = groups;
-  let list = Object.values(groups).sort((a,b)=>a.nom.localeCompare(b.nom,'fr',{sensitivity:'base'}));
-  if(DI_DISTRIB_Q){ const q=DI_DISTRIB_Q.toLowerCase(); list = list.filter(g=>g.nom.toLowerCase().includes(q)); }
+  // Tri alphabétique robuste (insensible aux accents et à la casse)
+  let list = Object.values(groups).sort((a,b)=>{ const ka=_diKey(a.nom), kb=_diKey(b.nom); return ka<kb?-1:ka>kb?1:0; });
+  // Recherche : distributeur OU contact (nom / mail / téléphone / ville / CP / annotation)
+  const q = _diKey(DI_DISTRIB_Q);
+  if(q){
+    list = list.map(g=>{
+      const nameHit = _diKey(g.nom).includes(q);
+      if(nameHit) return Object.assign({}, g, {_open:true, _items:g.items});
+      const its = g.items.filter(d=> _diKey(d.nom).includes(q) || _diKey(d.email).includes(q) || _diKey(d.telephone).includes(q) || _diKey(d.ville).includes(q) || _diKey(d.cp).includes(q) || _diKey(d.annotation).includes(q));
+      return its.length ? Object.assign({}, g, {_open:true, _items:its}) : null;
+    }).filter(Boolean);
+  }
   const barre = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <input class="form-input" placeholder="${TR('Rechercher un distributeur…')}" value="${esc(DI_DISTRIB_Q)}" oninput="DI_DISTRIB_Q=this.value;clearTimeout(window._diDT);window._diDT=setTimeout(chargerDemandesParDistrib,250)" style="max-width:280px">
+    <input class="form-input" id="di-distrib-q" autofocus placeholder="${TR('Rechercher : distributeur, contact, mail, téléphone…')}" value="${esc(DI_DISTRIB_Q)}" oninput="DI_DISTRIB_Q=this.value;clearTimeout(window._diDT);window._diDT=setTimeout(chargerDemandesParDistrib,250)" style="max-width:360px">
     <span style="font-size:12px;color:var(--text3)">${list.length} ${TR('distributeur(s)')}</span>
     <span style="flex:1"></span>
     <button class="btn sm" onclick="toggleTousDistrib(true)"><i class="ti ti-chevrons-down"></i> ${TR('Tout déplier')}</button>
@@ -7790,12 +7801,15 @@ async function chargerDemandesParDistrib(){
   </div>`;
   const blocs = list.map((g,i)=>{
     const gid = 'dg'+i;
+    const srcItems = g._items || g.items;
     const nt = g.items.filter(x=>DI_NON_TRAITEES.includes(x.statut)).length;
-    const items = g.items.slice().sort((a,b)=>(''+(b.date_transmission||'')).localeCompare(''+(a.date_transmission||'')));
+    const items = srcItems.slice().sort((a,b)=>(''+(b.date_transmission||'')).localeCompare(''+(a.date_transmission||'')));
     const ntBadge = nt ? `<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">${nt} ${TR('non traitée(s)')}</span>` : '';
-    const emailAttr = (g.email||'').replace(/'/g,'&#39;');
-    const relBtn = nt ? `<button class="btn sm" title="${TR('Demander un retour')}" onclick="event.stopPropagation();relancerDemandes(${g.client_id||'null'},'${emailAttr}')"><i class="ti ti-mail"></i></button>` : '';
-    const lignes = items.map(d=>`<tr style="border-top:0.5px solid var(--border)">
+    const grpEmail = (g.email||'').replace(/'/g,'&#39;');
+    const open = !!g._open;
+    const lignes = items.map(d=>{
+      const cEmail = (d.email||g.email||'').replace(/'/g,'&#39;');
+      return `<tr style="border-top:0.5px solid var(--border)">
       <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
       <td style="padding:7px 10px">${esc(d.nom||'')}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
@@ -7804,18 +7818,19 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
       <td style="padding:7px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
       <td style="padding:7px 10px;text-align:right;white-space:nowrap">
+        <button class="btn sm" title="${TR('Demander un retour à ce contact')}" onclick="relancerContact(${d.id},'${cEmail}')"><i class="ti ti-mail"></i></button>
         <button class="btn sm" title="${TR('Statut')}" onclick="menuDemandeStatut(${d.id})"><i class="ti ti-adjustments"></i></button>
         <button class="btn sm" title="${TR('Modifier')}" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
-      </td></tr>`).join('');
+      </td></tr>`;
+    }).join('');
     return `<div style="border-top:0.5px solid var(--border)">
-      <div onclick="toggleDistribGroup('${gid}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;user-select:none">
-        <i id="ic-${gid}" class="ti ti-plus" style="color:var(--accent);width:16px"></i>
-        <span style="font-weight:600;flex:1">${esc(g.nom)}</span>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;user-select:none">
+        <i id="ic-${gid}" class="ti ${open?'ti-eye-off':'ti-eye'}" title="${TR('Voir les demandes')}" onclick="toggleDistribGroup('${gid}')" style="color:var(--accent);width:18px;cursor:pointer;font-size:17px"></i>
+        <span style="font-weight:600;flex:1;cursor:pointer" onclick="toggleDistribGroup('${gid}')">${esc(g.nom)}</span>
         ${ntBadge}
         <span style="background:var(--bg2,#eef1f4);border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600" title="${TR('Nombre de demandes')}">${g.items.length}</span>
-        ${relBtn}
       </div>
-      <div id="bd-${gid}" style="display:none;overflow:auto">
+      <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:auto">
         <table class="table" style="width:100%"><thead><tr>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Date')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Contact')}</th>
@@ -7829,20 +7844,31 @@ async function chargerDemandesParDistrib(){
     </div>`;
   }).join('');
   el.innerHTML = barre + `<div class="card" style="padding:0">${blocs || `<div class="empty" style="padding:20px">${TR('Aucun distributeur.')}</div>`}</div>`;
+  // Garder le focus + curseur dans la barre de recherche après re-render
+  const qi=document.getElementById('di-distrib-q'); if(qi && DI_DISTRIB_Q){ qi.focus(); const v=qi.value; qi.value=''; qi.value=v; }
 }
 window.chargerDemandesParDistrib = chargerDemandesParDistrib;
 function toggleDistribGroup(gid){
   const bd=document.getElementById('bd-'+gid), ic=document.getElementById('ic-'+gid); if(!bd) return;
   const open = bd.style.display==='none';
   bd.style.display = open?'block':'none';
-  if(ic){ ic.classList.toggle('ti-plus',!open); ic.classList.toggle('ti-minus',open); }
+  if(ic){ ic.classList.toggle('ti-eye',!open); ic.classList.toggle('ti-eye-off',open); }
 }
 window.toggleDistribGroup = toggleDistribGroup;
 function toggleTousDistrib(open){
   document.querySelectorAll('[id^="bd-dg"]').forEach(bd=>{ bd.style.display = open?'block':'none'; });
-  document.querySelectorAll('[id^="ic-dg"]').forEach(ic=>{ ic.classList.toggle('ti-plus',!open); ic.classList.toggle('ti-minus',open); });
+  document.querySelectorAll('[id^="ic-dg"]').forEach(ic=>{ ic.classList.toggle('ti-eye',!open); ic.classList.toggle('ti-eye-off',open); });
 }
 window.toggleTousDistrib = toggleTousDistrib;
+async function relancerContact(id, email){
+  const dest = prompt(TR('Envoyer la demande de retour (au distributeur) à :'), email||'');
+  if(!dest) return;
+  try{ const r = await API.relanceContactInfo(id, dest);
+    toast(TR('Relance envoyée à ')+r.to,'ti-mail','var(--success)');
+    if(DEMANDES_VUE==='distrib') chargerDemandesParDistrib(); else if(STATE.view==='demandes') chargerDemandesGlobal(); else if(STATE.view==='client') chargerDemandesFiche(STATE.clientId);
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.relancerContact = relancerContact;
 function voirDemandesDistrib(nom){ DEMANDES_FILTRE={statut:'',non_traitees:false,q:nom}; DEMANDES_VUE='liste'; render(); }
 window.voirDemandesDistrib = voirDemandesDistrib;
 
@@ -7858,8 +7884,9 @@ async function modalDemande(clientId, distribNom, id){
       <input type="hidden" id="di-id" value="${id||''}">
       <input type="hidden" id="di-client-id" value="${d.client_id||''}">
       <div class="form-group"><label class="form-label">${TR('Distributeur')}</label>
-        <input class="form-input" id="di-distrib" list="di-distrib-list" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur')}" oninput="diDistribChange(this.value)">
-        <datalist id="di-distrib-list">${noms.map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
+        <input class="form-input" id="di-distrib" list="di-distrib-list" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur (lié à une fiche existante)')}" oninput="diDistribChange(this.value)" autocomplete="off">
+        <datalist id="di-distrib-list">${noms.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+        <div id="di-distrib-lien" style="font-size:12px;margin-top:4px"></div></div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="di-tel" value="${esc(d.telephone||'')}"></div>
@@ -7873,9 +7900,20 @@ async function modalDemande(clientId, distribNom, id){
       <div class="form-group"><label class="form-label">${TR('Annotation')}</label><textarea class="form-input" id="di-annot" rows="2">${esc(d.annotation||'')}</textarea></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="saveDemande()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
+  setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); },0);
 }
 window.modalDemande = modalDemande;
-function diDistribChange(nom){ const m=(window._clientsCache||[]).find(c=>(c.nom||'').toLowerCase()===(nom||'').toLowerCase()); const h=$('di-client-id'); if(h) h.value = m?m.id:''; }
+function diDistribChange(nom){
+  const val=(nom||'').trim();
+  const m=(window._clientsCache||[]).find(c=>(c.nom||'').toLowerCase()===val.toLowerCase());
+  const h=$('di-client-id'); if(h) h.value = m?m.id:'';
+  const lien=$('di-distrib-lien');
+  if(lien){
+    if(!val){ lien.innerHTML=''; }
+    else if(m){ lien.innerHTML=`<span style="color:var(--success)"><i class="ti ti-link"></i> ${TR('Lié à la fiche')} : <strong>${esc(m.nom)}</strong></span>`; }
+    else { lien.innerHTML=`<span style="color:var(--text3)"><i class="ti ti-alert-triangle"></i> ${TR('Nouveau distributeur (non lié à une fiche existante)')}</span>`; }
+  }
+}
 window.diDistribChange = diDistribChange;
 async function saveDemande(){
   const id=gv('di-id');
@@ -7887,10 +7925,15 @@ async function saveDemande(){
   };
   try{ if(id){ await API.updateDemandeInfo(id,data); } else { await API.createDemandeInfo(data); }
     closeModal(); toast(TR('Demande enregistrée'),'ti-check','var(--success)');
-    if(STATE.view==='demandes') chargerDemandesGlobal(); else if(STATE.view==='client') chargerDemandesFiche(gv('di-client-id')||STATE.clientId);
+    rafraichirDemandes(gv('di-client-id')||STATE.clientId);
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.saveDemande = saveDemande;
+function rafraichirDemandes(clientId){
+  if(STATE.view==='demandes'){ if(DEMANDES_VUE==='distrib') chargerDemandesParDistrib(); else chargerDemandesGlobal(); }
+  else if(STATE.view==='client') chargerDemandesFiche(clientId||STATE.clientId);
+}
+window.rafraichirDemandes = rafraichirDemandes;
 
 function menuDemandeStatut(id){
   showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut de la demande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
@@ -7901,14 +7944,14 @@ function menuDemandeStatut(id){
 window.menuDemandeStatut = menuDemandeStatut;
 async function setDemandeStatut(id, statut){
   try{ await API.setDemandeInfoStatut(id, statut); closeModal(); toast(TR('Statut mis à jour'),'ti-check','var(--success)');
-    if(STATE.view==='demandes') chargerDemandesGlobal(); else if(STATE.view==='client') chargerDemandesFiche(STATE.clientId);
+    rafraichirDemandes();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.setDemandeStatut = setDemandeStatut;
 async function supprDemande(id){
   if(!confirm(TR('Supprimer cette demande ?'))) return;
   try{ await API.deleteDemandeInfo(id); toast(TR('Supprimé'),'ti-trash');
-    if(STATE.view==='demandes') chargerDemandesGlobal(); else if(STATE.view==='client') chargerDemandesFiche(STATE.clientId);
+    rafraichirDemandes();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.supprDemande = supprDemande;
