@@ -7815,7 +7815,12 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 10px;font-size:12px">${esc(d.demande_client||'')}</td>
     <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
     </tr>`).join('');
-  return `<div class="card" style="padding:0;overflow:auto"><table class="table di-table" style="width:100%"><thead><tr>
+  return `<div class="card" style="padding:0;overflow:hidden"><table class="table di-table" style="width:100%;table-layout:fixed">
+    <colgroup>
+      <col style="width:300px"><col style="width:84px">${withDistrib?'<col style="width:150px">':''}<col style="width:140px"><col style="width:116px">
+      <col style="width:200px"><col style="width:104px"><col style="width:170px"><col>
+    </colgroup>
+    <thead><tr>
     <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Date')}</th>
     ${withDistrib?`<th style="text-align:left;padding:8px 10px">${TR('Distributeur')}</th>`:''}
@@ -7943,8 +7948,8 @@ async function chargerDemandesParDistrib(){
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
         <table class="table di-table" style="width:100%;table-layout:fixed">
           <colgroup>
-            <col style="width:22%"><col style="width:6%"><col style="width:12%"><col style="width:9%">
-            <col style="width:12%"><col style="width:9%"><col style="width:14%"><col style="width:16%">
+            <col style="width:300px"><col style="width:84px"><col style="width:140px"><col style="width:116px">
+            <col style="width:200px"><col style="width:104px"><col style="width:170px"><col>
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
