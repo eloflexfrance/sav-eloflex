@@ -7820,7 +7820,8 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 10px;text-align:right;white-space:nowrap">
         <button class="btn sm" title="${TR('Demander un retour à ce contact')}" onclick="relancerContact(${d.id},'${cEmail}')"><i class="ti ti-mail"></i></button>
         <button class="btn sm" title="${TR('Statut')}" onclick="menuDemandeStatut(${d.id})"><i class="ti ti-adjustments"></i></button>
-        <button class="btn sm" title="${TR('Modifier')}" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
+        <button class="btn sm" title="${TR('Modifier / changer de distributeur')}" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
+        <button class="btn sm danger" title="${TR('Supprimer ce contact')}" onclick="supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
       </td></tr>`;
     }).join('');
     return `<div style="border-top:0.5px solid var(--border)">
@@ -7829,6 +7830,7 @@ async function chargerDemandesParDistrib(){
         <span style="font-weight:600;flex:1;cursor:pointer" onclick="toggleDistribGroup('${gid}')">${esc(g.nom)}</span>
         ${ntBadge}
         <span style="background:var(--bg2,#eef1f4);border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600" title="${TR('Nombre de demandes')}">${g.items.length}</span>
+        <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:auto">
         <table class="table" style="width:100%"><thead><tr>
@@ -7869,6 +7871,20 @@ async function relancerContact(id, email){
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.relancerContact = relancerContact;
+async function reaffecterGroupe(nom){
+  const g = (window._DI_GROUPS||{})[nom]; if(!g){ return; }
+  const nouveau = prompt(TR('Déplacer les ')+g.items.length+TR(' demande(s) de « ')+nom+TR(' » vers quel distributeur ?\n(le nom sera lié à la fiche s\'il existe)'), '');
+  if(nouveau==null) return;
+  const nn = nouveau.trim(); if(!nn){ toast(TR('Nom vide'),'ti-alert-circle','var(--warning)'); return; }
+  if(nn===nom){ return; }
+  try{
+    const r = await API.reaffecterDemandes({ ids: g.items.map(x=>x.id), nouveau_nom: nn });
+    toast(`${r.deplaces} ${TR('demande(s) déplacée(s) vers')} « ${nn} »${r.lie_client?(' — '+TR('lié à la fiche')):''}`,'ti-check','var(--success)');
+    window._DISTRIB_NOMS = null;
+    chargerDemandesParDistrib();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.reaffecterGroupe = reaffecterGroupe;
 function voirDemandesDistrib(nom){ DEMANDES_FILTRE={statut:'',non_traitees:false,q:nom}; DEMANDES_VUE='liste'; render(); }
 window.voirDemandesDistrib = voirDemandesDistrib;
 
@@ -7878,13 +7894,18 @@ async function modalDemande(clientId, distribNom, id){
   let d = { statut:'transmise', date_transmission:new Date().toISOString().slice(0,10) };
   if(id){ try{ const all = (window._DI_ROWS||[]); d = all.find(x=>x.id===id) || await API.demandesInfo({}).then(r=>r.find(x=>x.id===id)); }catch(e){} }
   else if(clientId){ d.client_id=clientId; d.distributeur_nom=distribNom||((window._clientsCache||[]).find(c=>c.id===clientId)||{}).nom||''; }
-  const noms=[...new Set((window._clientsCache||[]).filter(c=>c.type!=='Particulier').map(c=>c.nom).filter(Boolean))];
+  // Liste de référence : fiches clients (distributeurs) + distributeurs déjà présents dans les demandes
+  if(!window._DISTRIB_NOMS){ try{ window._DISTRIB_NOMS = await API.distributeursReferences(); }catch(e){ window._DISTRIB_NOMS=[]; } }
+  const clientNoms = (window._clientsCache||[]).filter(c=>c.type!=='Particulier').map(c=>c.nom).filter(Boolean);
+  const noms=[...new Set([...clientNoms, ...(window._DISTRIB_NOMS||[])])]
+    .filter(n=>n && n.trim() && n.trim()!=='0')
+    .sort((a,b)=>_diKey(a)<_diKey(b)?-1:_diKey(a)>_diKey(b)?1:0);
   showModal(`<div class="modal-header"><i class="ti ti-address-book" style="color:var(--accent)"></i><h2>${id?TR('Modifier la demande'):TR("Nouvelle demande d'information")}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <input type="hidden" id="di-id" value="${id||''}">
       <input type="hidden" id="di-client-id" value="${d.client_id||''}">
       <div class="form-group"><label class="form-label">${TR('Distributeur')}</label>
-        <input class="form-input" id="di-distrib" list="di-distrib-list" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur (lié à une fiche existante)')}" oninput="diDistribChange(this.value)" autocomplete="off">
+        <input class="form-input" id="di-distrib" list="di-distrib-list" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur (lié à une fiche existante)')}" oninput="diDistribChange(this.value)">
         <datalist id="di-distrib-list">${noms.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
         <div id="di-distrib-lien" style="font-size:12px;margin-top:4px"></div></div>
       <div class="grid-2">
@@ -7930,6 +7951,7 @@ async function saveDemande(){
 }
 window.saveDemande = saveDemande;
 function rafraichirDemandes(clientId){
+  window._DISTRIB_NOMS = null;   // recharger l'autocomplétion (nouveaux distributeurs)
   if(STATE.view==='demandes'){ if(DEMANDES_VUE==='distrib') chargerDemandesParDistrib(); else chargerDemandesGlobal(); }
   else if(STATE.view==='client') chargerDemandesFiche(clientId||STATE.clientId);
 }

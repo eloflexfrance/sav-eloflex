@@ -6801,6 +6801,46 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Réaffecter un lot de demandes à un autre distributeur (déplacer / fusionner un groupe)
+router.post('/demandes-info/reaffecter', requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const nouveau = (b.nouveau_nom || '').trim();
+    if (!nouveau) return res.status(400).json({ error: 'Nouveau nom de distributeur requis' });
+    // Trouver la fiche client correspondant au nouveau nom (lien automatique)
+    const match = await db.get('SELECT id FROM clients WHERE LOWER(nom) = LOWER($1) LIMIT 1', [nouveau]);
+    const clientId = match ? match.id : null;
+    let ids = Array.isArray(b.ids) ? b.ids.map(x => parseInt(x)).filter(x => !isNaN(x)) : [];
+    let moved = [];
+    if (ids.length) {
+      const ph = ids.map((_, i) => '$' + (i + 3)).join(',');
+      moved = await db.all(
+        `UPDATE demandes_info SET distributeur_nom=$1, client_id=$2, updated_at=NOW() WHERE id IN (${ph}) RETURNING id`,
+        [nouveau, clientId, ...ids]);
+    } else if (b.ancien_nom != null) {
+      const anc = String(b.ancien_nom).trim();
+      moved = await db.all(
+        `UPDATE demandes_info SET distributeur_nom=$1, client_id=$2, updated_at=NOW()
+         WHERE client_id IS NULL AND COALESCE(distributeur_nom,'') = $3 RETURNING id`, [nouveau, clientId, anc]);
+    } else {
+      return res.status(400).json({ error: 'ids ou ancien_nom requis' });
+    }
+    res.json({ ok: true, deplaces: moved.length, lie_client: clientId });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Liste des noms de distributeurs déjà référencés dans les demandes (pour autocomplétion)
+router.get('/demandes-info/distributeurs', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(
+      `SELECT DISTINCT COALESCE(c.nom, d.distributeur_nom) AS nom
+       FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id
+       WHERE COALESCE(c.nom, d.distributeur_nom) IS NOT NULL AND TRIM(COALESCE(c.nom, d.distributeur_nom)) <> ''
+       ORDER BY nom`);
+    res.json(rows.map(r => r.nom));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
 module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;
