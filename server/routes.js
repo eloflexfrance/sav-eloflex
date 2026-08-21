@@ -6555,11 +6555,12 @@ router.post('/demandes-info', requireAuth, async (req, res) => {
     const d = req.body || {};
     const statut = DI_STATUTS.includes(d.statut) ? d.statut : 'transmise';
     const row = await db.run(
-      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par, demande_client, relance_mail_date, relance_tel_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [d.client_id||null, d.distributeur_nom||null, d.nom||null, d.ville||null, d.cp||null, d.telephone||null,
        d.email||null, d.annotation||null, statut, d.date_transmission||new Date().toISOString().slice(0,10),
-       d.date_retour||null, (req.session.user && req.session.user.id)||null]);
+       d.date_retour||null, (req.session.user && req.session.user.id)||null,
+       d.demande_client||null, d.relance_mail_date||null, d.relance_tel_date||null]);
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -6570,9 +6571,11 @@ router.put('/demandes-info/:id', requireAuth, async (req, res) => {
     const statut = DI_STATUTS.includes(d.statut) ? d.statut : 'transmise';
     const row = await db.run(
       `UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, annotation=$6,
-        statut=$7, date_transmission=$8, date_retour=$9, updated_at=NOW() WHERE id=$10 RETURNING *`,
+        statut=$7, date_transmission=$8, date_retour=COALESCE($9::date, date_retour), demande_client=$10,
+        relance_mail_date=$11, relance_tel_date=$12, updated_at=NOW() WHERE id=$13 RETURNING *`,
       [d.nom||null, d.ville||null, d.cp||null, d.telephone||null, d.email||null, d.annotation||null,
-       statut, d.date_transmission||null, d.date_retour||null, req.params.id]);
+       statut, d.date_transmission||null, d.date_retour||null, d.demande_client||null,
+       d.relance_mail_date||null, d.relance_tel_date||null, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Demande introuvable' });
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -6806,8 +6809,20 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
         <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div>
       </div>`
     });
-    await db.run(`UPDATE demandes_info SET relance_envoyee=TRUE, statut=CASE WHEN statut='transmise' THEN 'relance' ELSE statut END, updated_at=NOW() WHERE id=$1`, [id]);
+    await db.run(`UPDATE demandes_info SET relance_envoyee=TRUE, relance_mail_date=CURRENT_DATE,
+      statut=CASE WHEN statut='transmise' THEN 'relance' ELSE statut END, statut_date=CASE WHEN statut='transmise' THEN CURRENT_DATE ELSE statut_date END,
+      updated_at=NOW() WHERE id=$1`, [id]);
     res.json({ ok: true, to: dest });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Relance TÉLÉPHONIQUE : enregistre la date (bouton téléphone sur la ligne)
+router.post('/demandes-info/:id/relance-tel', requireAuth, async (req, res) => {
+  try {
+    const date = (req.body && req.body.date) ? String(req.body.date).slice(0,10) : new Date().toISOString().slice(0,10);
+    const row = await db.run(`UPDATE demandes_info SET relance_tel_date=$1::date, updated_at=NOW() WHERE id=$2 RETURNING *`, [date, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Demande introuvable' });
+    res.json({ ok: true, demande: row });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -69,6 +69,7 @@ const API = {
   deleteDemandeInfo:(id)=>API.del(`/demandes-info/${id}`),
   relanceDemandesInfo:(clientId,email)=>API.post('/demandes-info/relance',{client_id:clientId,email}),
   relanceContactInfo:(id,email)=>API.post(`/demandes-info/${id}/relance`,{email}),
+  relanceTelInfo:(id,date)=>API.post(`/demandes-info/${id}/relance-tel`,{date}),
   reaffecterDemandes:(payload)=>API.post('/demandes-info/reaffecter',payload),
   distributeursReferences:()=>API.get('/demandes-info/distributeurs'),
   fusionnerClients:(idCible,idSource,vfIgnore)=>API.post(`/clients/${idCible}/fusionner`,{client_source_id:idSource,vf_ignore_source:vfIgnore}),

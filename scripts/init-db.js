@@ -245,6 +245,9 @@ async function initDB() {
     // Historique des changements de statut (dates) : [{statut, date, par}]
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS historique JSONB DEFAULT '[]'::jsonb`);
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS statut_date DATE`);
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS demande_client TEXT`);
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS relance_mail_date DATE`);
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS relance_tel_date DATE`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (
