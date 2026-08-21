@@ -6510,7 +6510,7 @@ router.post('/contrat-public/:token/signer', async (req, res) => {
 // ── DEMANDES D'INFORMATIONS transmises aux distributeurs (leads) ──
 // ══════════════════════════════════════════════════════════════════
 const DI_STATUTS = ['transmise','relance','retour_recu','essai','vente','sans_suite','absence_retour'];
-const DI_NON_TRAITEES = ['transmise','relance','absence_retour'];
+const DI_NON_TRAITEES = ['transmise','relance'];
 
 // Liste avec filtres (client_id, statut, non_traitees, q)
 router.get('/demandes-info', requireAuth, async (req, res) => {

@@ -7669,7 +7669,7 @@ const DI_STATUTS = {
   sans_suite:  { l:'Sans suite',   c:'#6b7280', ic:'ti-ban' },
   absence_retour:{ l:'Absence de retour', c:'#dc2626', ic:'ti-clock-x' },
 };
-const DI_NON_TRAITEES = ['transmise','relance','absence_retour'];   // = "En attente" (à traiter)
+const DI_NON_TRAITEES = ['transmise','relance'];   // = "En attente" (à traiter) — hors "Absence de retour"
 function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.l}</span>`; }
 function diCouleur(s){ return (DI_STATUTS[s]||{c:'#6b7280'}).c; }
 function diStatutOptions(sel){ return Object.keys(DI_STATUTS).map(k=>`<option value="${k}" ${k===sel?'selected':''}>${DI_STATUTS[k].l}</option>`).join(''); }
@@ -7989,9 +7989,10 @@ async function chargerDemandesParDistrib(){
     return `<div style="border-top:0.5px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;user-select:none">
         <i id="ic-${gid}" class="ti ${open?'ti-eye-off':'ti-eye'}" title="${alerte?(absN+' '+TR('demandes sans retour du distributeur !')):TR('Voir les demandes')}" onclick="toggleDistribGroup('${gid}')" style="color:${alerte?'#dc2626':'var(--accent)'};width:18px;cursor:pointer;font-size:17px"></i>
-        <span style="font-weight:600;flex:1;cursor:pointer;${alerte?'color:#dc2626':''}" onclick="toggleDistribGroup('${gid}')">${esc(g.nom)}${alerte?` <i class="ti ti-alert-triangle" title="${absN} ${TR('demandes sans retour')}" style="font-size:13px"></i>`:''}</span>
+        <span style="font-weight:600;cursor:pointer;${alerte?'color:#dc2626':''}" onclick="toggleDistribGroup('${gid}')">${esc(g.nom)}${alerte?` <i class="ti ti-alert-triangle" title="${absN} ${TR('demandes sans retour')}" style="font-size:13px"></i>`:''}</span>
         ${ntBadge}
         <span style="background:var(--bg2,#eef1f4);border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600" title="${TR('Nombre de demandes')}">${g.items.length}</span>
+        <span style="flex:1"></span>
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
