@@ -7660,17 +7660,63 @@ window.contratBonHTML = contratBonHTML;
 // ── DEMANDES D'INFORMATIONS (leads transmis aux distributeurs) ──
 // ══════════════════════════════════════════════════════════════════
 const DI_STATUTS = {
-  transmise:   { l:'Transmise',   c:'#2563eb' },
-  relance:     { l:'Relancé',     c:'#d97706' },
-  retour_recu: { l:'Retour reçu', c:'#16a34a' },
-  essai:       { l:'Essai',       c:'#7c3aed' },
-  vente:       { l:'Vente',       c:'#15803d' },
-  sans_suite:  { l:'Sans suite',  c:'#6b7280' },
+  transmise:   { l:'Transmise',   c:'#2563eb', i:'📤' },
+  relance:     { l:'Relancé',     c:'#d97706', i:'🔔' },
+  retour_recu: { l:'Retour reçu', c:'#16a34a', i:'📞' },
+  essai:       { l:'Essai',       c:'#7c3aed', i:'🧪' },
+  vente:       { l:'Vente',       c:'#15803d', i:'✅' },
+  sans_suite:  { l:'Sans suite',  c:'#6b7280', i:'⛔' },
 };
-const DI_NON_TRAITEES = ['transmise','relance'];
-function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.l}</span>`; }
+const DI_NON_TRAITEES = ['transmise','relance'];   // = "En attente" (à traiter)
+function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280',i:''}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.i?u.i+' ':''}${u.l}</span>`; }
+function diCouleur(s){ return (DI_STATUTS[s]||{c:'#6b7280'}).c; }
 function diStatutOptions(sel){ return Object.keys(DI_STATUTS).map(k=>`<option value="${k}" ${k===sel?'selected':''}>${DI_STATUTS[k].l}</option>`).join(''); }
 const _dfd = d => d ? fd((''+d).slice(0,10)) : '—';
+function _joursDepuis(v){ if(!v) return null; const d=new Date((''+v).slice(0,10)); if(isNaN(d)) return null; return Math.max(0,Math.round((Date.now()-d.getTime())/86400000)); }
+// Cellule statut enrichie : badge + date du dernier changement + ancienneté (si en attente) + historique
+function diStatutCell(d){
+  const st = d.statut;
+  const dref = d.statut_date || (st==='transmise'?d.date_transmission:d.date_retour) || d.date_transmission;
+  let sub = dref ? `<span style="font-size:10px;color:var(--text3);display:block;margin-top:2px">${TR('le')} ${_dfd(dref)}</span>` : '';
+  let age = '';
+  if(DI_NON_TRAITEES.includes(st)){
+    const j=_joursDepuis(d.statut_date||d.date_transmission);
+    if(j!=null){ const col=j>=60?'#dc2626':j>=30?'#d97706':'var(--text3)'; age=`<span style="font-size:10px;font-weight:700;color:${col};display:block">⏳ ${j} ${TR('j en attente')}</span>`; }
+  }
+  const nb = Array.isArray(d.historique)?d.historique.length:0;
+  const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:14px;margin-left:4px"></i>` : '';
+  return `<div style="display:flex;align-items:center;gap:2px">${diBadge(st)}${hist}</div>${sub}${age}`;
+}
+// Petite légende des statuts
+function diLegende(){
+  return `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:11px;color:var(--text2);margin-bottom:10px">
+    <span style="font-weight:600;color:var(--text3)">${TR('Statuts')} :</span>
+    ${Object.keys(DI_STATUTS).map(k=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:99px;background:${DI_STATUTS[k].c};display:inline-block"></span>${DI_STATUTS[k].i} ${DI_STATUTS[k].l}</span>`).join('')}
+  </div>`;
+}
+// Modale historique des statuts (timeline avec dates)
+function historiqueDemande(id){
+  const d = trouverDemande(id); if(!d){ toast(TR('Demande introuvable'),'ti-alert-circle','var(--warning)'); return; }
+  let hist = Array.isArray(d.historique)?d.historique.slice():[];
+  hist.sort((a,b)=>(''+(b.date||'')).localeCompare(''+(a.date||'')));
+  const items = hist.length ? hist.map((h,i)=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;${i?'border-top:0.5px solid var(--border)':''}">
+      <span style="width:11px;height:11px;border-radius:99px;background:${diCouleur(h.statut)};margin-top:3px;flex:none"></span>
+      <div style="flex:1"><div>${diBadge(h.statut)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${_dfd(h.date)}${h.par?(' · '+esc(h.par)):''}</div></div>
+    </div>`).join('') : `<div style="color:var(--text3);font-size:12px">${TR('Aucun changement de statut enregistré.')}</div>`;
+  showModal(`<div class="modal-header"><i class="ti ti-history" style="color:var(--accent)"></i><h2>${TR('Historique du suivi')} — ${esc(d.nom||'')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:6px">${TR('Transmis le')} ${_dfd(d.date_transmission)}</div>
+      ${items}
+    </div>`);
+}
+window.historiqueDemande = historiqueDemande;
+function trouverDemande(id){
+  id = Number(id);
+  const groups = window._DI_GROUPS||{};
+  for(const k in groups){ const f=(groups[k].items||[]).find(x=>Number(x.id)===id); if(f) return f; }
+  return (window._DI_ROWS||[]).find(x=>Number(x.id)===id) || null;
+}
 
 // ── Section sur la fiche distributeur ──
 async function chargerDemandesFiche(clientId){
@@ -7681,7 +7727,7 @@ async function chargerDemandesFiche(clientId){
   const header = `<div class="section-title" style="margin:4px 0 8px;display:flex;align-items:center;gap:8px">
       <i class="ti ti-address-book"></i>${TR("Demandes d'informations")}
       <span class="badge hg" style="font-weight:600">${rows.length}</span>
-      ${nonTraitees?`<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">${nonTraitees} ${TR('non traitée(s)')}</span>`:''}
+      ${nonTraitees?`<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">⏳ ${nonTraitees} ${TR('en attente')}</span>`:''}
       <span style="margin-left:auto;display:flex;gap:6px">
         <button class="btn sm primary" onclick="modalDemande(${clientId},'${esc(nom).replace(/'/g,'&#39;')}')"><i class="ti ti-plus"></i> ${TR('Ajouter')}</button>
         ${nonTraitees?`<button class="btn sm" onclick="relancerDemandes(${clientId},'${esc(email).replace(/'/g,'&#39;')}')"><i class="ti ti-mail"></i> ${TR('Demander un retour')}</button>`:''}
@@ -7695,7 +7741,7 @@ window.chargerDemandesFiche = chargerDemandesFiche;
 // ── Tableau des demandes (réutilisé fiche + vue globale) ──
 function demandesTableHTML(rows, withDistrib){
   const lignes = rows.map(d=>`<tr style="border-top:0.5px solid var(--border)">
-    <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
+    <td style="padding:8px 10px 8px 8px;white-space:nowrap;border-left:3px solid ${diCouleur(d.statut)}">${_dfd(d.date_transmission)}</td>
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
     <td style="padding:8px 10px">${esc(d.nom||'')}${d.ville?`<span style="color:var(--text3)"> — ${esc(d.ville)}${d.cp?(' '+esc(d.cp)):''}</span>`:''}</td>
     <td style="padding:8px 10px;white-space:nowrap">
@@ -7703,7 +7749,7 @@ function demandesTableHTML(rows, withDistrib){
       ${d.email?`<span style="font-size:11px;display:block"><a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none">${esc(d.email)}</a></span>`:''}
       ${(!d.telephone&&!d.email)?'—':''}
     </td>
-    <td style="padding:8px 10px">${diBadge(d.statut)}${d.date_retour?`<span style="font-size:10px;color:var(--text3);display:block">${_dfd(d.date_retour)}</span>`:''}</td>
+    <td style="padding:8px 10px">${diStatutCell(d)}</td>
     <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
     <td style="padding:8px 10px;text-align:right;white-space:nowrap">
       <button class="btn sm" title="Statut" onclick="menuDemandeStatut(${d.id})"><i class="ti ti-adjustments"></i></button>
@@ -7733,7 +7779,7 @@ async function renderDemandes(ttl,c,a){
   let stats={total:0,non_traitees:0,par_statut:{}}; try{ stats=await API.demandesInfoStats(); }catch(e){}
   const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
     <div class="stat-card"><div class="stat-label">${TR('Total')}</div><div class="stat-value">${stats.total||0}</div></div>
-    <div class="stat-card"><div class="stat-label">${TR('Non traitées')}</div><div class="stat-value" style="color:#d97706">${stats.non_traitees||0}</div></div>
+    <div class="stat-card"><div class="stat-label">⏳ ${TR('En attente')}</div><div class="stat-value" style="color:#d97706">${stats.non_traitees||0}</div></div>
     ${['retour_recu','essai','vente'].map(k=>`<div class="stat-card"><div class="stat-label">${DI_STATUTS[k].l}</div><div class="stat-value" style="color:${DI_STATUTS[k].c}">${stats.par_statut[k]||0}</div></div>`).join('')}
   </div>`;
   const vueTabs = `<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:10px">
@@ -7743,7 +7789,7 @@ async function renderDemandes(ttl,c,a){
   const filtres = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
     <input class="form-input" id="di-q" placeholder="${TR('Rechercher (contact, distributeur, ville…)')}" value="${esc(DEMANDES_FILTRE.q)}" oninput="DEMANDES_FILTRE.q=this.value;clearTimeout(window._diT);window._diT=setTimeout(chargerDemandesGlobal,300)" style="max-width:320px">
     <select class="form-input" id="di-statut" onchange="DEMANDES_FILTRE.statut=this.value;chargerDemandesGlobal()" style="max-width:180px"><option value="">${TR('Tous les statuts')}</option>${diStatutOptions(DEMANDES_FILTRE.statut)}</select>
-    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" ${DEMANDES_FILTRE.non_traitees?'checked':''} onchange="DEMANDES_FILTRE.non_traitees=this.checked;chargerDemandesGlobal()"> ${TR('Non traitées seulement')}</label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" ${DEMANDES_FILTRE.non_traitees?'checked':''} onchange="DEMANDES_FILTRE.non_traitees=this.checked;chargerDemandesGlobal()"> ${TR('En attente seulement')}</label>
   </div>`;
   if(DEMANDES_VUE==='distrib'){
     c.innerHTML = tiles + vueTabs + `<div id="di-distrib-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
@@ -7804,17 +7850,17 @@ async function chargerDemandesParDistrib(){
     const srcItems = g._items || g.items;
     const nt = g.items.filter(x=>DI_NON_TRAITEES.includes(x.statut)).length;
     const items = srcItems.slice().sort((a,b)=>(''+(b.date_transmission||'')).localeCompare(''+(a.date_transmission||'')));
-    const ntBadge = nt ? `<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">${nt} ${TR('non traitée(s)')}</span>` : '';
+    const ntBadge = nt ? `<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">⏳ ${nt} ${TR('en attente')}</span>` : '';
     const grpEmail = (g.email||'').replace(/'/g,'&#39;');
     const open = !!g._open;
     const lignes = items.map(d=>{
       const cEmail = (d.email||g.email||'').replace(/'/g,'&#39;');
       return `<tr style="border-top:0.5px solid var(--border)">
-      <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
+      <td style="padding:7px 10px 7px 8px;white-space:nowrap;border-left:3px solid ${diCouleur(d.statut)}">${_dfd(d.date_transmission)}</td>
       <td style="padding:7px 10px">${esc(d.nom||'')}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
-      <td style="padding:7px 10px">${diBadge(d.statut)}</td>
+      <td style="padding:7px 10px">${diStatutCell(d)}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
       <td style="padding:7px 10px;font-size:12px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
       <td style="padding:7px 10px;text-align:right;white-space:nowrap">
@@ -7850,7 +7896,7 @@ async function chargerDemandesParDistrib(){
       </div>
     </div>`;
   }).join('');
-  el.innerHTML = barre + `<div class="card" style="padding:0">${blocs || `<div class="empty" style="padding:20px">${TR('Aucun distributeur.')}</div>`}</div>`;
+  el.innerHTML = barre + diLegende() + `<div class="card" style="padding:0">${blocs || `<div class="empty" style="padding:20px">${TR('Aucun distributeur.')}</div>`}</div>`;
   // Garder le focus + curseur dans la barre de recherche après re-render
   const qi=document.getElementById('di-distrib-q'); if(qi && DI_DISTRIB_Q){ qi.focus(); const v=qi.value; qi.value=''; qi.value=v; }
 }
@@ -7963,14 +8009,22 @@ function rafraichirDemandes(clientId){
 window.rafraichirDemandes = rafraichirDemandes;
 
 function menuDemandeStatut(id){
-  showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut de la demande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:7px">
-      ${Object.keys(DI_STATUTS).map(k=>`<button class="btn" style="justify-content:flex-start;border-left:4px solid ${DI_STATUTS[k].c}" onclick="setDemandeStatut(${id},'${k}')">${DI_STATUTS[k].l}</button>`).join('')}
+  const d = trouverDemande(id) || {};
+  const today = new Date().toISOString().slice(0,10);
+  showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Changer le statut')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">${TR('Date du changement')}</label>
+        <input class="form-input" type="date" id="di-statut-date" value="${today}"></div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">${TR('Statut actuel')} : ${d.statut?diBadge(d.statut):'—'}</div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        ${Object.keys(DI_STATUTS).map(k=>`<button class="btn" style="justify-content:flex-start;border-left:4px solid ${DI_STATUTS[k].c}${k===d.statut?';background:var(--bg2,#eef1f4)':''}" onclick="setDemandeStatut(${id},'${k}')">${DI_STATUTS[k].i} ${DI_STATUTS[k].l}${k===d.statut?' ✓':''}</button>`).join('')}
+      </div>
     </div>`);
 }
 window.menuDemandeStatut = menuDemandeStatut;
 async function setDemandeStatut(id, statut){
-  try{ await API.setDemandeInfoStatut(id, statut); closeModal(); toast(TR('Statut mis à jour'),'ti-check','var(--success)');
+  const date = (document.getElementById('di-statut-date')||{}).value || '';
+  try{ await API.setDemandeInfoStatut(id, statut, date?{date_statut:date}:{}); closeModal(); toast(TR('Statut mis à jour'),'ti-check','var(--success)');
     rafraichirDemandes();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }

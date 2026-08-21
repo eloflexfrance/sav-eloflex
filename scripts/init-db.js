@@ -242,6 +242,9 @@ async function initDB() {
     )`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_di_client ON demandes_info(client_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_di_statut ON demandes_info(statut)`);
+    // Historique des changements de statut (dates) : [{statut, date, par}]
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS historique JSONB DEFAULT '[]'::jsonb`);
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS statut_date DATE`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (

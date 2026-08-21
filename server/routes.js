@@ -6582,17 +6582,27 @@ router.post('/demandes-info/:id/statut', requireAuth, async (req, res) => {
   try {
     const statut = String((req.body && req.body.statut)||'').trim();
     if (!DI_STATUTS.includes(statut)) return res.status(400).json({ error: 'Statut invalide' });
-    const dateRetour = (req.body && req.body.date_retour) ? req.body.date_retour : null;
-    // Une demande "traitée" (hors relance) reçoit une date de retour par défaut aujourd'hui si absente
-    const setRetour = (!DI_NON_TRAITEES.includes(statut));
+    const dateStatut = (req.body && req.body.date_statut) ? String(req.body.date_statut).slice(0,10) : null;
+    const dateRetour = (req.body && req.body.date_retour) ? String(req.body.date_retour).slice(0,10) : null;
+    const setRetour = (!DI_NON_TRAITEES.includes(statut)); // statut "terminé" (hors attente) → date de retour
+    const u = (req.session && req.session.user) || {};
+    const par = u.nom || u.prenom || u.email || u.login || null;
+    // On lit l'historique existant pour y ajouter l'entrée
+    const cur = await db.get('SELECT historique FROM demandes_info WHERE id=$1', [req.params.id]);
+    if (!cur) return res.status(404).json({ error: 'Demande introuvable' });
+    let hist = [];
+    try { hist = Array.isArray(cur.historique) ? cur.historique : JSON.parse(cur.historique || '[]'); } catch(_) { hist = []; }
+    const entree = { statut, date: dateStatut || new Date().toISOString().slice(0,10), par };
+    hist.push(entree);
     const row = await db.run(
       `UPDATE demandes_info SET statut=$1,
-         date_retour = CASE WHEN $2::text IS NOT NULL THEN $2::date
-                            WHEN $3 AND date_retour IS NULL THEN CURRENT_DATE
+         statut_date = $2::date,
+         historique = $3::jsonb,
+         date_retour = CASE WHEN $4::text IS NOT NULL THEN $4::date
+                            WHEN $5 THEN COALESCE($2::date, CURRENT_DATE)
                             ELSE date_retour END,
-         updated_at=NOW() WHERE id=$4 RETURNING *`,
-      [statut, dateRetour, setRetour, req.params.id]);
-    if (!row) return res.status(404).json({ error: 'Demande introuvable' });
+         updated_at=NOW() WHERE id=$6 RETURNING *`,
+      [statut, entree.date, JSON.stringify(hist), dateRetour, setRetour, req.params.id]);
     res.json({ ok: true, demande: row });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

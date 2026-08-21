@@ -65,7 +65,7 @@ const API = {
   demandesInfoParDistrib:()=>API.get('/demandes-info/par-distributeur'),
   createDemandeInfo:(d)=>API.post('/demandes-info',d),
   updateDemandeInfo:(id,d)=>API.put(`/demandes-info/${id}`,d),
-  setDemandeInfoStatut:(id,statut,dateRetour)=>API.post(`/demandes-info/${id}/statut`,{statut,...(dateRetour?{date_retour:dateRetour}:{})}),
+  setDemandeInfoStatut:(id,statut,opts)=>API.post(`/demandes-info/${id}/statut`,{statut,...(opts&&typeof opts==='object'?opts:(opts?{date_retour:opts}:{}))}),
   deleteDemandeInfo:(id)=>API.del(`/demandes-info/${id}`),
   relanceDemandesInfo:(clientId,email)=>API.post('/demandes-info/relance',{client_id:clientId,email}),
   relanceContactInfo:(id,email)=>API.post(`/demandes-info/${id}/relance`,{email}),
