@@ -6538,7 +6538,13 @@ router.get('/demandes-info/stats', requireAuth, async (req, res) => {
     const rows = await db.all(`SELECT statut, COUNT(*)::int AS n FROM demandes_info ${where} GROUP BY statut`, p);
     const par = {}; let total = 0, nonTraitees = 0;
     for (const r of rows) { par[r.statut] = r.n; total += r.n; if (DI_NON_TRAITEES.includes(r.statut)) nonTraitees += r.n; }
-    res.json({ total, non_traitees: nonTraitees, par_statut: par });
+    // Relances à faire : mail (Transmise, pas de mail, ≥7j) + téléphone (Relancé mail, pas de tél., ≥7j après le mail)
+    const rel = await db.get(`SELECT
+        COUNT(*) FILTER (WHERE statut='transmise' AND relance_mail_date IS NULL AND date_transmission <= CURRENT_DATE - INTERVAL '7 days')::int AS mail,
+        COUNT(*) FILTER (WHERE statut='relance' AND relance_mail_date IS NOT NULL AND relance_tel_date IS NULL AND relance_mail_date <= CURRENT_DATE - INTERVAL '7 days')::int AS tel
+      FROM demandes_info ${where}`, p);
+    const relMail = (rel && rel.mail) || 0, relTel = (rel && rel.tel) || 0;
+    res.json({ total, non_traitees: nonTraitees, par_statut: par, relances_mail: relMail, relances_tel: relTel, relances_a_faire: relMail + relTel });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

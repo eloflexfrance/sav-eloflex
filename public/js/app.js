@@ -7663,7 +7663,7 @@ window.contratBonHTML = contratBonHTML;
 const DI_STATUTS = {
   transmise:   { l:'Transmise',    c:'#2563eb', ic:'ti-send' },
   relance:     { l:'Relancé mail', c:'#d97706', ic:'ti-mail-forward' },
-  retour_recu: { l:'Retour reçu',  c:'#16a34a', ic:'ti-phone-check' },
+  retour_recu: { l:'Appel émis',   c:'#16a34a', ic:'ti-phone-outgoing' },
   essai:       { l:'Essai',        c:'#7c3aed', ic:'ti-flask' },
   vente:       { l:'Vente',        c:'#15803d', ic:'ti-shopping-cart' },
   sans_suite:  { l:'Sans suite',   c:'#6b7280', ic:'ti-ban' },
@@ -7675,6 +7675,10 @@ function diCouleur(s){ return (DI_STATUTS[s]||{c:'#6b7280'}).c; }
 function diStatutOptions(sel){ return Object.keys(DI_STATUTS).map(k=>`<option value="${k}" ${k===sel?'selected':''}>${DI_STATUTS[k].l}</option>`).join(''); }
 const _dfd = d => d ? fd((''+d).slice(0,10)) : '—';
 function _joursDepuis(v){ if(!v) return null; const d=new Date((''+v).slice(0,10)); if(isNaN(d)) return null; return Math.max(0,Math.round((Date.now()-d.getTime())/86400000)); }
+// Relances à faire (s'arrêtent dès que la demande est conclue) :
+function diRelanceMailDue(d){ return d.statut==='transmise' && !d.relance_mail_date && (_joursDepuis(d.date_transmission)>=7); }
+function diRelanceTelDue(d){ return d.statut==='relance' && d.relance_mail_date && !d.relance_tel_date && (_joursDepuis(d.relance_mail_date)>=7); }
+function diRelanceDue(d){ return diRelanceMailDue(d) || diRelanceTelDue(d); }
 // Sélecteur de statut en icônes : coloré = sélectionné, grisé = non sélectionné ; clic = change le statut
 function diStatutIcons(d){
   // Date de chaque statut (dernier passage) pour l'afficher au survol
@@ -7702,8 +7706,7 @@ async function setDemandeStatutInline(id, statut){
 window.setDemandeStatutInline = setDemandeStatutInline;
 // Groupe d'actions : envoyer le mail de relance (séparé du statut) + éditer + supprimer.
 function diActionsCluster(d){
-  const j=_joursDepuis(d.date_transmission);
-  const blink=(DI_NON_TRAITEES.includes(d.statut) && !d.relance_mail_date && j!=null && j>=7)?' di-blink':'';
+  const blink = diRelanceMailDue(d) ? ' di-blink' : '';
   const relTitle = TR('Relancer par mail')+(d.relance_mail_date?(' — '+TR('dernière : ')+_dfd(d.relance_mail_date)):'');
   return `<span style="display:inline-flex;gap:1px;flex:none">
     <button class="btn sm" title="${relTitle}" onclick="event.stopPropagation();if(confirm('${TR('Envoyer le mail de relance à ce distributeur ?')}'))relancerMailContact(${d.id})" style="color:${d.relance_mail_date?'#d97706':'var(--accent)'}"><i class="ti ti-mail${blink}"></i></button>
@@ -7854,6 +7857,9 @@ async function renderDemandes(ttl,c,a){
   const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px">
     <div class="stat-card"><div class="stat-label">${TR('Total')}</div><div class="stat-value">${stats.total||0}</div></div>
     <div class="stat-card"><div class="stat-label">${TR('En attente')}</div><div class="stat-value" style="color:#d97706">${stats.non_traitees||0}</div></div>
+    <div class="stat-card" title="${TR('Mail')} : ${stats.relances_mail||0} · ${TR('Téléphone')} : ${stats.relances_tel||0}" onclick="DI_RELANCE_ONLY=true;DI_STATUT_FILTRE=new Set();setDemandesVue('distrib')" style="cursor:pointer;border:1px solid ${(stats.relances_a_faire||0)?'#dc2626':'var(--border)'}">
+      <div class="stat-label"><i class="ti ti-bell-ringing"></i> ${TR('Relances à faire')}</div>
+      <div class="stat-value" style="color:${(stats.relances_a_faire||0)?'#dc2626':'var(--text3)'}">${stats.relances_a_faire||0}</div></div>
     ${['retour_recu','essai','vente'].map(k=>`<div class="stat-card"><div class="stat-label">${DI_STATUTS[k].l}</div><div class="stat-value" style="color:${DI_STATUTS[k].c}">${stats.par_statut[k]||0}</div></div>`).join('')}
   </div>`;
   const vueTabs = `<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:10px">
@@ -7886,6 +7892,17 @@ window.chargerDemandesGlobal = chargerDemandesGlobal;
 
 // ── Vue par distributeur (accordéon alphabétique, façon Excel) ──
 let DI_DISTRIB_Q = '';
+let DI_STATUT_FILTRE = new Set();   // filtre par catégorie de statut (vue par distributeur)
+let DI_RELANCE_ONLY = false;        // filtre "Relances à faire"
+const DI_NON_TRAITEES_FILTRE = ['transmise','relance','retour_recu'];   // "Non traitées" = 3 premiers statuts
+function diFiltreRelances(){ DI_RELANCE_ONLY=!DI_RELANCE_ONLY; if(STATE.view==='demandes'){ DEMANDES_VUE='distrib'; if(document.getElementById('di-distrib-list')) chargerDemandesParDistrib(); else render(); } }
+window.diFiltreRelances = diFiltreRelances;
+function diFiltreStatut(k){ if(DI_STATUT_FILTRE.has(k)) DI_STATUT_FILTRE.delete(k); else DI_STATUT_FILTRE.add(k); chargerDemandesParDistrib(); }
+window.diFiltreStatut = diFiltreStatut;
+function diFiltreNonTraitees(){ const on = DI_STATUT_FILTRE.size===DI_NON_TRAITEES_FILTRE.length && DI_NON_TRAITEES_FILTRE.every(x=>DI_STATUT_FILTRE.has(x)); DI_STATUT_FILTRE = new Set(on?[]:DI_NON_TRAITEES_FILTRE); chargerDemandesParDistrib(); }
+window.diFiltreNonTraitees = diFiltreNonTraitees;
+function diFiltreReset(){ DI_STATUT_FILTRE = new Set(); chargerDemandesParDistrib(); }
+window.diFiltreReset = diFiltreReset;
 const _diKey = s => (s==null?'':String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 async function chargerDemandesParDistrib(){
   const el = document.getElementById('di-distrib-list'); if(!el) return;
@@ -7912,10 +7929,35 @@ async function chargerDemandesParDistrib(){
       return its.length ? Object.assign({}, g, {_open:true, _items:its}) : null;
     }).filter(Boolean);
   }
+  // Filtre par catégorie de statut (n'affiche que les demandes des statuts sélectionnés)
+  if(DI_STATUT_FILTRE.size){
+    list = list.map(g=>{
+      const base = g._items || g.items;
+      const its = base.filter(d=>DI_STATUT_FILTRE.has(d.statut));
+      return its.length ? Object.assign({}, g, {_items:its, _open:true}) : null;
+    }).filter(Boolean);
+  }
+  // Filtre "Relances à faire"
+  if(DI_RELANCE_ONLY){
+    list = list.map(g=>{
+      const base = g._items || g.items;
+      const its = base.filter(diRelanceDue);
+      return its.length ? Object.assign({}, g, {_items:its, _open:true}) : null;
+    }).filter(Boolean);
+  }
+  const ntActif = DI_STATUT_FILTRE.size===DI_NON_TRAITEES_FILTRE.length && DI_NON_TRAITEES_FILTRE.every(x=>DI_STATUT_FILTRE.has(x));
+  const filtres = `<div style="display:inline-flex;gap:3px;align-items:center;flex-wrap:wrap">
+      <button class="btn sm${ntActif?' primary':''}" title="${TR('Non traitées (Transmise, Relancé mail, Appel émis)')}" onclick="diFiltreNonTraitees()"><i class="ti ti-inbox"></i> ${TR('Non traitées')}</button>
+      <button class="btn sm${DI_RELANCE_ONLY?' primary':''}" title="${TR('Relances à faire (mail à 7j, tél. à 7j après le mail)')}" onclick="diFiltreRelances()"><i class="ti ti-bell-ringing"></i> ${TR('Relances à faire')}</button>
+      <span style="width:1px;height:22px;background:var(--border);margin:0 4px"></span>
+      ${Object.keys(DI_STATUTS).map(k=>{const u=DI_STATUTS[k];const on=DI_STATUT_FILTRE.has(k);return `<span onclick="diFiltreStatut('${k}')" title="${u.l}" style="cursor:pointer;width:26px;height:26px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;${on?('background:'+u.c):''}"><i class="ti ${u.ic}" style="font-size:17px;color:${on?'#fff':'var(--text3)'};opacity:${on?1:.4}"></i></span>`;}).join('')}
+      ${(DI_STATUT_FILTRE.size||DI_RELANCE_ONLY)?`<button class="btn sm" title="${TR('Réinitialiser le filtre')}" onclick="DI_STATUT_FILTRE=new Set();DI_RELANCE_ONLY=false;chargerDemandesParDistrib()"><i class="ti ti-x"></i></button>`:''}
+    </div>`;
   const barre = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-    <input class="form-input" id="di-distrib-q" autofocus placeholder="${TR('Rechercher : distributeur, contact, mail, téléphone…')}" value="${esc(DI_DISTRIB_Q)}" oninput="DI_DISTRIB_Q=this.value;clearTimeout(window._diDT);window._diDT=setTimeout(chargerDemandesParDistrib,250)" style="max-width:360px">
-    <span style="font-size:12px;color:var(--text3)">${list.length} ${TR('distributeur(s)')}</span>
+    <input class="form-input" id="di-distrib-q" autofocus placeholder="${TR('Rechercher : distributeur, contact, mail, téléphone…')}" value="${esc(DI_DISTRIB_Q)}" oninput="DI_DISTRIB_Q=this.value;clearTimeout(window._diDT);window._diDT=setTimeout(chargerDemandesParDistrib,250)" style="max-width:300px">
+    ${filtres}
     <span style="flex:1"></span>
+    <span style="font-size:12px;color:var(--text3)">${list.length} ${TR('distributeur(s)')}</span>
     <button class="btn sm" onclick="toggleTousDistrib(true)"><i class="ti ti-chevrons-down"></i> ${TR('Tout déplier')}</button>
     <button class="btn sm" onclick="toggleTousDistrib(false)"><i class="ti ti-chevrons-up"></i> ${TR('Tout replier')}</button>
   </div>`;
