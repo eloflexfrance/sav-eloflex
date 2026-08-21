@@ -7698,7 +7698,11 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
     <td style="padding:8px 10px">${esc(d.nom||'')}${d.ville?`<span style="color:var(--text3)"> — ${esc(d.ville)}${d.cp?(' '+esc(d.cp)):''}</span>`:''}</td>
-    <td style="padding:8px 10px;white-space:nowrap">${d.telephone?esc(d.telephone):(d.email?('<span style="font-size:11px">'+esc(d.email)+'</span>'):'—')}</td>
+    <td style="padding:8px 10px;white-space:nowrap">
+      ${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:''}
+      ${d.email?`<span style="font-size:11px;display:block"><a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none">${esc(d.email)}</a></span>`:''}
+      ${(!d.telephone&&!d.email)?'—':''}
+    </td>
     <td style="padding:8px 10px">${diBadge(d.statut)}${d.date_retour?`<span style="font-size:10px;color:var(--text3);display:block">${_dfd(d.date_retour)}</span>`:''}</td>
     <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
     <td style="padding:8px 10px;text-align:right;white-space:nowrap">
@@ -7710,7 +7714,7 @@ function demandesTableHTML(rows, withDistrib){
     <th style="text-align:left;padding:8px 10px">${TR('Date')}</th>
     ${withDistrib?`<th style="text-align:left;padding:8px 10px">${TR('Distributeur')}</th>`:''}
     <th style="text-align:left;padding:8px 10px">${TR('Contact')}</th>
-    <th style="text-align:left;padding:8px 10px">${TR('Téléphone')}</th>
+    <th style="text-align:left;padding:8px 10px">${TR('Coordonnées')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Statut')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Annotation')}</th><th></th>
   </tr></thead><tbody>${lignes}</tbody></table></div>`;
@@ -7718,6 +7722,9 @@ function demandesTableHTML(rows, withDistrib){
 
 // ── Vue globale ──
 let DEMANDES_FILTRE = { statut:'', non_traitees:false, q:'' };
+let DEMANDES_VUE = 'liste';   // 'liste' | 'distrib'
+function setDemandesVue(v){ DEMANDES_VUE=v; render(); }
+window.setDemandesVue = setDemandesVue;
 async function renderDemandes(ttl,c,a){
   ttl.textContent = TR("Demandes d'informations");
   a.innerHTML = `<label class="btn sm" style="cursor:pointer"><input type="file" accept=".xlsx,.xls" style="display:none" onchange="importDemandesExcel(this)"><i class="ti ti-upload"></i> ${TR('Importer Excel')}</label>
@@ -7729,13 +7736,22 @@ async function renderDemandes(ttl,c,a){
     <div class="stat-card"><div class="stat-label">${TR('Non traitées')}</div><div class="stat-value" style="color:#d97706">${stats.non_traitees||0}</div></div>
     ${['retour_recu','essai','vente'].map(k=>`<div class="stat-card"><div class="stat-label">${DI_STATUTS[k].l}</div><div class="stat-value" style="color:${DI_STATUTS[k].c}">${stats.par_statut[k]||0}</div></div>`).join('')}
   </div>`;
+  const vueTabs = `<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:10px">
+    <button class="btn sm" style="border:0;border-radius:0;${DEMANDES_VUE==='liste'?'background:var(--accent);color:#fff':''}" onclick="setDemandesVue('liste')"><i class="ti ti-list"></i> ${TR('Liste')}</button>
+    <button class="btn sm" style="border:0;border-radius:0;${DEMANDES_VUE==='distrib'?'background:var(--accent);color:#fff':''}" onclick="setDemandesVue('distrib')"><i class="ti ti-building-store"></i> ${TR('Par distributeur')}</button>
+  </div>`;
   const filtres = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
     <input class="form-input" id="di-q" placeholder="${TR('Rechercher (contact, distributeur, ville…)')}" value="${esc(DEMANDES_FILTRE.q)}" oninput="DEMANDES_FILTRE.q=this.value;clearTimeout(window._diT);window._diT=setTimeout(chargerDemandesGlobal,300)" style="max-width:320px">
     <select class="form-input" id="di-statut" onchange="DEMANDES_FILTRE.statut=this.value;chargerDemandesGlobal()" style="max-width:180px"><option value="">${TR('Tous les statuts')}</option>${diStatutOptions(DEMANDES_FILTRE.statut)}</select>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" ${DEMANDES_FILTRE.non_traitees?'checked':''} onchange="DEMANDES_FILTRE.non_traitees=this.checked;chargerDemandesGlobal()"> ${TR('Non traitées seulement')}</label>
   </div>`;
-  c.innerHTML = tiles + filtres + `<div id="di-global-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
-  chargerDemandesGlobal();
+  if(DEMANDES_VUE==='distrib'){
+    c.innerHTML = tiles + vueTabs + `<div id="di-distrib-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
+    chargerDemandesParDistrib();
+  } else {
+    c.innerHTML = tiles + vueTabs + filtres + `<div id="di-global-list"><div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
+    chargerDemandesGlobal();
+  }
 }
 window.renderDemandes = renderDemandes;
 async function chargerDemandesGlobal(){
@@ -7747,6 +7763,46 @@ async function chargerDemandesGlobal(){
   el.innerHTML = `<div style="font-size:12px;color:var(--text3);margin-bottom:6px">${rows.length} ${TR('demande(s)')}</div>` + demandesTableHTML(rows, true);
 }
 window.chargerDemandesGlobal = chargerDemandesGlobal;
+
+// ── Vue par distributeur (récapitulatif agrégé) ──
+async function chargerDemandesParDistrib(){
+  const el = document.getElementById('di-distrib-list'); if(!el) return;
+  let rows=[]; try{ rows=await API.demandesInfoParDistrib(); }catch(e){ el.innerHTML=`<div class="empty">Erreur : ${esc(e.message)}</div>`; return; }
+  window._DI_DISTRIB = rows;
+  if(!rows.length){ el.innerHTML=`<div class="empty"><i class="ti ti-building-store"></i>${TR('Aucun distributeur.')}</div>`; return; }
+  const lignes = rows.map(r=>{
+    const nom = esc(r.distributeur||'—');
+    const nt = r.non_traitees||0;
+    const badge = nt ? `<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:600">${nt}</span>` : `<span style="color:var(--text3)">0</span>`;
+    const email = (r.email||'').replace(/'/g,'&#39;');
+    const relBtn = nt ? `<button class="btn sm" title="${TR('Demander un retour')}" onclick="relancerDemandes(${r.client_id||'null'},'${email}')"><i class="ti ti-mail"></i></button>` : '';
+    return `<tr style="border-top:0.5px solid var(--border)">
+      <td style="padding:8px 10px;font-weight:600">${nom}${r.relance_envoyee?`<i class="ti ti-mail-check" title="${TR('Relance déjà envoyée')}" style="color:var(--text3);margin-left:5px"></i>`:''}</td>
+      <td style="padding:8px 10px;text-align:center">${r.total||0}</td>
+      <td style="padding:8px 10px;text-align:center">${badge}</td>
+      <td style="padding:8px 10px;text-align:center;color:${DI_STATUTS.vente.c}">${r.ventes||0}</td>
+      <td style="padding:8px 10px;text-align:center;color:${DI_STATUTS.essai.c}">${r.essais||0}</td>
+      <td style="padding:8px 10px;text-align:center;color:${DI_STATUTS.retour_recu.c}">${r.retours||0}</td>
+      <td style="padding:8px 10px;white-space:nowrap;color:var(--text2)">${_dfd(r.derniere_date)}</td>
+      <td style="padding:8px 10px;text-align:right;white-space:nowrap">
+        ${relBtn}
+        <button class="btn sm" title="${TR('Voir les demandes')}" onclick="voirDemandesDistrib('${nom.replace(/'/g,'&#39;')}')"><i class="ti ti-eye"></i></button>
+      </td></tr>`;
+  }).join('');
+  el.innerHTML = `<div style="font-size:12px;color:var(--text3);margin-bottom:6px">${rows.length} ${TR('distributeur(s) ayant eu un contact')}</div>
+    <div class="card" style="padding:0;overflow:auto"><table class="table" style="width:100%"><thead><tr>
+      <th style="text-align:left;padding:8px 10px">${TR('Distributeur')}</th>
+      <th style="text-align:center;padding:8px 10px">${TR('Total')}</th>
+      <th style="text-align:center;padding:8px 10px">${TR('Non traitées')}</th>
+      <th style="text-align:center;padding:8px 10px">${DI_STATUTS.vente.l}</th>
+      <th style="text-align:center;padding:8px 10px">${DI_STATUTS.essai.l}</th>
+      <th style="text-align:center;padding:8px 10px">${DI_STATUTS.retour_recu.l}</th>
+      <th style="text-align:left;padding:8px 10px">${TR('Dernier contact')}</th><th></th>
+    </tr></thead><tbody>${lignes}</tbody></table></div>`;
+}
+window.chargerDemandesParDistrib = chargerDemandesParDistrib;
+function voirDemandesDistrib(nom){ DEMANDES_FILTRE={statut:'',non_traitees:false,q:nom}; DEMANDES_VUE='liste'; render(); }
+window.voirDemandesDistrib = voirDemandesDistrib;
 
 // ── Ajout / modification ──
 async function modalDemande(clientId, distribNom, id){

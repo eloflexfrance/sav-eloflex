@@ -6528,6 +6528,28 @@ router.get('/demandes-info/stats', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Récapitulatif agrégé par distributeur (pour le traitement / relance)
+router.get('/demandes-info/par-distributeur', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(`
+      SELECT COALESCE(c.nom, d.distributeur_nom) AS distributeur,
+             MAX(d.client_id) AS client_id,
+             MAX(c.email) AS email,
+             COUNT(*)::int AS total,
+             COUNT(*) FILTER (WHERE d.statut = ANY('{transmise,relance}'))::int AS non_traitees,
+             COUNT(*) FILTER (WHERE d.statut = 'vente')::int AS ventes,
+             COUNT(*) FILTER (WHERE d.statut = 'essai')::int AS essais,
+             COUNT(*) FILTER (WHERE d.statut = 'retour_recu')::int AS retours,
+             COUNT(*) FILTER (WHERE d.statut = 'sans_suite')::int AS sans_suite,
+             MAX(d.date_transmission) AS derniere_date,
+             BOOL_OR(d.relance_envoyee) AS relance_envoyee
+      FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id
+      GROUP BY COALESCE(c.nom, d.distributeur_nom)
+      ORDER BY non_traitees DESC, total DESC`);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/demandes-info', requireAuth, async (req, res) => {
   try {
     const d = req.body || {};

@@ -62,6 +62,7 @@ const API = {
   // ── Demandes d'informations (distributeurs) ──
   demandesInfo:(params)=>API.get('/demandes-info'+(params?('?'+new URLSearchParams(params).toString()):'')),
   demandesInfoStats:(clientId)=>API.get('/demandes-info/stats'+(clientId?('?client_id='+clientId):'')),
+  demandesInfoParDistrib:()=>API.get('/demandes-info/par-distributeur'),
   createDemandeInfo:(d)=>API.post('/demandes-info',d),
   updateDemandeInfo:(id,d)=>API.put(`/demandes-info/${id}`,d),
   setDemandeInfoStatut:(id,statut,dateRetour)=>API.post(`/demandes-info/${id}/statut`,{statut,...(dateRetour?{date_retour:dateRetour}:{})}),
