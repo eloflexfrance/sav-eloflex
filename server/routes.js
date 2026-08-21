@@ -3212,7 +3212,7 @@ router.post('/tracking/sync', adminOnly, async (req, res) => {
 
 
 // ── Helper Brevo pour emails SAV ─────────────────────────────────
-async function sendBrevoMail({ from, fromName, to, cc, subject, html, attachments }) {
+async function sendBrevoMail({ from, fromName, to, cc, bcc, subject, html, attachments }) {
   const axios = require('axios');
   const key = process.env.BREVO_API_KEY;
   if (!key) throw new Error('BREVO_API_KEY manquante');
@@ -3220,6 +3220,7 @@ async function sendBrevoMail({ from, fromName, to, cc, subject, html, attachment
     sender: { name: fromName||'Eloflex France', email: from||'sav@eloflex.fr' },
     to: [{ email: to }],
     ...(cc ? { cc: [{ email: cc }] } : {}),
+    ...(bcc ? { bcc: [{ email: bcc }] } : {}),
     ...(attachments && attachments.length ? { attachment: attachments } : {}),
     subject, htmlContent: html
   }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
@@ -5166,6 +5167,18 @@ router.get('/carte/points', requireAuth, async (req, res) => {
       GROUP BY distributeur_nom, client_id
     `);
 
+    // Demandes "absence de retour" par distributeur (pour signaler les distributeurs peu réactifs sur la carte)
+    const absRows = await db.all(`
+      SELECT client_id, COALESCE(distributeur_nom,'') AS distributeur_nom, COUNT(*)::int AS n
+      FROM demandes_info WHERE statut='absence_retour'
+      GROUP BY client_id, COALESCE(distributeur_nom,'')`);
+    const absRetourPour = (p) => {
+      let cand = [];
+      if (p.client_id) cand = absRows.filter(a => a.client_id === p.client_id);
+      if (!cand.length) cand = absRows.filter(a => a.distributeur_nom && memeEntite(p.nom, a.distributeur_nom));
+      return cand.reduce((s, a) => s + (a.n || 0), 0);
+    };
+
     const cumul = (liste) => liste.reduce((a, s) => ({
       nb_commandes: a.nb_commandes + (parseInt(s.nb_commandes) || 0),
       impayes:      a.impayes      + (parseInt(s.impayes) || 0),
@@ -5200,6 +5213,7 @@ router.get('/carte/points', requireAuth, async (req, res) => {
         lien_type: lien,
         derniere_annee: derniereAnneePour(p, trouves),
         priorite: prioritePour(p),
+        abs_retour: absRetourPour(p),
         noms_rattaches: [...new Set(trouves.map(t => t.distributeur_nom).filter(Boolean))]
       };
     });
@@ -6023,7 +6037,7 @@ const SIGNATURE_EMAIL_HTML = `
 </table>`;
 
 // Envoi d'e-mail lié à un prêt — via l'API Brevo (le SMTP est bloqué par Render)
-async function envoyerEmailPret({ to, cc, subject, html, attachments }) {
+async function envoyerEmailPret({ to, cc, bcc, subject, html, attachments }) {
   const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
   const att = (attachments || []).map(a => ({
     name: a.filename || a.name || 'document.pdf',
@@ -6031,7 +6045,7 @@ async function envoyerEmailPret({ to, cc, subject, html, attachments }) {
   }));
   await sendBrevoMail({
     from: p.email_from || 'sav@eloflex.fr', fromName: 'Eloflex France',
-    to, cc: cc !== undefined ? cc : (p.email_cc_sav || 'sav@eloflex.fr'),
+    to, cc: cc !== undefined ? cc : (p.email_cc_sav || 'sav@eloflex.fr'), bcc,
     subject, html, attachments: att
   });
 }
@@ -6495,8 +6509,8 @@ router.post('/contrat-public/:token/signer', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 // ── DEMANDES D'INFORMATIONS transmises aux distributeurs (leads) ──
 // ══════════════════════════════════════════════════════════════════
-const DI_STATUTS = ['transmise','relance','retour_recu','essai','vente','sans_suite'];
-const DI_NON_TRAITEES = ['transmise','relance'];
+const DI_STATUTS = ['transmise','relance','retour_recu','essai','vente','sans_suite','absence_retour'];
+const DI_NON_TRAITEES = ['transmise','relance','absence_retour'];
 
 // Liste avec filtres (client_id, statut, non_traitees, q)
 router.get('/demandes-info', requireAuth, async (req, res) => {
@@ -6784,28 +6798,33 @@ router.post('/demandes-info/relance', requireAuth, async (req, res) => {
 router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
   try {
     const id = req.params.id;
-    const dest = (req.body && req.body.email) || null;
-    if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail' });
     const d = await db.get(
-      `SELECT di.*, c.nom AS client_nom FROM demandes_info di LEFT JOIN clients c ON c.id = di.client_id WHERE di.id = $1`, [id]);
+      `SELECT di.*, c.nom AS client_nom, c.email AS client_email FROM demandes_info di LEFT JOIN clients c ON c.id = di.client_id WHERE di.id = $1`, [id]);
     if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    // Destinataire = le distributeur (fiche client). On peut forcer une adresse via le corps.
+    const dest = ((req.body && req.body.email) || d.client_email || '').trim();
+    if (!dest) return res.status(400).json({ error: "Aucune adresse e-mail pour ce distributeur (fiche client). Renseignez-la ou saisissez-en une." });
+    // Date d'enregistrement du contact au format FR
+    const frDate = (v) => { if (!v) return ''; const s = String(v).slice(0,10); const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}/${m[2]}/${m[1]}` : s; };
+    const villeCp = [d.ville, d.cp].filter(Boolean).join(' ');
+    const ligne = (v) => v ? `<div>${String(v)}</div>` : '';
     await envoyerEmailPret({
       to: dest,
+      bcc: 'info@eloflex.fr',
       subject: `Eloflex — Suivi du contact ${d.nom || ''}`,
-      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222">
-        <div style="background:#1F5C8C;padding:16px 20px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:16px">Suivi d'un contact patient</h2></div>
-        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:20px">
-          <p>Bonjour,</p>
-          <p>Pourriez-vous nous indiquer où en est le contact suivant que nous vous avons transmis ?</p>
-          <table style="width:100%;border-collapse:collapse;font-size:13px;margin:10px 0">
-            <tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8;width:130px">Contact</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${d.nom || ''}</td></tr>
-            ${d.ville || d.cp ? `<tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8">Ville</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${[d.ville, d.cp].filter(Boolean).join(' ')}</td></tr>` : ''}
-            ${d.telephone ? `<tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8">Téléphone</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${d.telephone}</td></tr>` : ''}
-            ${d.date_transmission ? `<tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8">Transmis le</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${d.date_transmission}</td></tr>` : ''}
-            ${d.annotation ? `<tr><td style="border:1px solid #e5e7eb;padding:6px 9px;background:#F2F5F8">Note</td><td style="border:1px solid #e5e7eb;padding:6px 9px">${d.annotation}</td></tr>` : ''}
-          </table>
-          <p>Merci d'avance pour votre retour (rendez-vous, essai, vente, sans suite).</p>
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222;font-size:14px;line-height:1.5">
+        <p>Bonjour</p>
+        <p>Nous vous avons transmis les coordonnées d'un contact potentiel le ${frDate(d.date_transmission)} dont voici les coordonnées :</p>
+        <div style="margin:10px 0 14px;padding-left:2px">
+          ${ligne(d.nom)}
+          ${ligne(d.telephone)}
+          ${ligne(villeCp)}
+          ${ligne(d.demande_client)}
         </div>
+        <p>L'avez-vous contacté suite à cette demande de notre part ?</p>
+        <p>A défaut de réponse, nous vous contacterons sous peu par téléphone afin d'avoir un suivi</p>
+        <p>Nous restons bien entendu à votre disposition si vous avez besoin d'éléments complémentaires.</p>
+        <p>Bien cordialement</p>
         <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div>
       </div>`
     });

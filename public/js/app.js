@@ -6142,6 +6142,7 @@ function popupCarte(p) {
       '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:11px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
       statutTxt +
     '</div>' +
+    ((p.abs_retour||0) > 3 ? '<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:6px;padding:5px 8px;font-size:11.5px;font-weight:600;margin-bottom:8px"><i class="ti ti-alert-triangle" style="font-size:12px"></i> ' + p.abs_retour + ' ' + TR("demandes sans retour (distributeur peu réactif)") + '</div>' : '') +
     '<div style="font-size:11px;color:#999;margin-bottom:10px">' +
       (p.lien_type === 'client'
         ? '<span style="color:#16a34a">'+TR("🔗 Lié au client")+'</span>'
@@ -7666,8 +7667,9 @@ const DI_STATUTS = {
   essai:       { l:'Essai',        c:'#7c3aed', ic:'ti-flask' },
   vente:       { l:'Vente',        c:'#15803d', ic:'ti-shopping-cart' },
   sans_suite:  { l:'Sans suite',   c:'#6b7280', ic:'ti-ban' },
+  absence_retour:{ l:'Absence de retour', c:'#dc2626', ic:'ti-clock-x' },
 };
-const DI_NON_TRAITEES = ['transmise','relance'];   // = "En attente" (à traiter)
+const DI_NON_TRAITEES = ['transmise','relance','absence_retour'];   // = "En attente" (à traiter)
 function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.l}</span>`; }
 function diCouleur(s){ return (DI_STATUTS[s]||{c:'#6b7280'}).c; }
 function diStatutOptions(sel){ return Object.keys(DI_STATUTS).map(k=>`<option value="${k}" ${k===sel?'selected':''}>${DI_STATUTS[k].l}</option>`).join(''); }
@@ -7688,17 +7690,37 @@ async function setDemandeStatutInline(id, statut){
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.setDemandeStatutInline = setDemandeStatutInline;
-// Cellule "Relance mail" : enveloppe cliquable (envoie le mail + date) + date de la dernière relance
-function diRelanceMailCell(d){
-  const em=(d.email||'').replace(/'/g,'&#39;');
-  const dt = d.relance_mail_date ? `<span style="font-size:10px;color:var(--text3);display:block;margin-top:2px">${_dfd(d.relance_mail_date)}</span>` : '';
-  return `<i class="ti ti-mail" title="${TR('Relancer par mail')}" onclick="event.stopPropagation();relancerContact(${d.id},'${em}')" style="cursor:pointer;color:${d.relance_mail_date?'#d97706':'var(--accent)'};font-size:17px"></i>${dt}`;
+// Injecte le CSS de clignotement (une seule fois)
+function diEnsureBlinkCSS(){
+  if(document.getElementById('di-blink-css')) return;
+  const s=document.createElement('style'); s.id='di-blink-css';
+  s.textContent='@keyframes diBlink{0%,100%{opacity:1}50%{opacity:.15}} .di-blink{animation:diBlink 1s ease-in-out infinite}';
+  document.head.appendChild(s);
 }
-// Cellule "Relance téléphonique" : téléphone cliquable (enregistre la date) + date
+// Cellule "Relance mail" : enveloppe cliquable (envoie le mail au distributeur + date). Clignote si en attente et pas de relance après 7 j.
+function diRelanceMailCell(d){
+  const dt = d.relance_mail_date ? `<span style="font-size:10px;color:var(--text3);display:block;margin-top:2px">${_dfd(d.relance_mail_date)}</span>` : '';
+  const j = _joursDepuis(d.date_transmission);
+  const blink = (DI_NON_TRAITEES.includes(d.statut) && !d.relance_mail_date && j!=null && j>=7) ? ' di-blink' : '';
+  return `<i class="ti ti-mail${blink}" title="${TR('Relancer par mail (au distributeur)')}" onclick="event.stopPropagation();relancerMailContact(${d.id})" style="cursor:pointer;color:${d.relance_mail_date?'#d97706':'var(--accent)'};font-size:17px"></i>${dt}`;
+}
+// Cellule "Relance téléphonique" : téléphone cliquable (enregistre la date). Clignote 7 j après la relance mail si pas encore fait.
 function diRelanceTelCell(d){
   const dt = d.relance_tel_date ? `<span style="font-size:10px;color:var(--text3);display:block;margin-top:2px">${_dfd(d.relance_tel_date)}</span>` : '';
-  return `<i class="ti ti-phone" title="${TR('Marquer une relance téléphonique')}" onclick="event.stopPropagation();relanceTel(${d.id})" style="cursor:pointer;color:${d.relance_tel_date?'#16a34a':'var(--text3)'};font-size:17px"></i>${dt}`;
+  const j = _joursDepuis(d.relance_mail_date);
+  const blink = (DI_NON_TRAITEES.includes(d.statut) && d.relance_mail_date && !d.relance_tel_date && j!=null && j>=7) ? ' di-blink' : '';
+  return `<i class="ti ti-phone${blink}" title="${TR('Marquer une relance téléphonique')}" onclick="event.stopPropagation();relanceTel(${d.id})" style="cursor:pointer;color:${d.relance_tel_date?'#16a34a':'var(--text3)'};font-size:17px"></i>${dt}`;
 }
+async function relancerMailContact(id){
+  try{ const r=await API.relanceContactInfo(id); toast(TR('Relance envoyée à ')+r.to,'ti-mail','var(--success)'); rafraichirDemandes(); }
+  catch(e){
+    if(/adresse/i.test(e.message||'')){
+      const dest=prompt(TR('Aucune adresse sur la fiche distributeur. Saisir une adresse e-mail :'),'');
+      if(dest){ try{ const r=await API.relanceContactInfo(id,dest); toast(TR('Relance envoyée à ')+r.to,'ti-mail','var(--success)'); rafraichirDemandes(); }catch(e2){ toast('Erreur : '+e2.message,'ti-alert-circle','var(--danger)'); } }
+    } else { toast('Erreur : '+(e.message||''),'ti-alert-circle','var(--danger)'); }
+  }
+}
+window.relancerMailContact = relancerMailContact;
 async function relanceTel(id){
   const today=new Date().toISOString().slice(0,10);
   const date=prompt(TR('Date de la relance téléphonique :'), today);
@@ -7744,6 +7766,8 @@ async function chargerDemandesFiche(clientId){
   const nom = el.getAttribute('data-nom')||''; const email = el.getAttribute('data-email')||'';
   let rows=[]; try{ rows = await API.demandesInfo({client_id:clientId}); }catch(e){ el.innerHTML=''; return; }
   const nonTraitees = rows.filter(r=>DI_NON_TRAITEES.includes(r.statut)).length;
+  const absN = rows.filter(r=>r.statut==='absence_retour').length;
+  const alerte = absN>3 ? `<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:8px 12px;margin:4px 0 10px;font-size:13px;font-weight:600"><i class="ti ti-alert-triangle"></i> ${TR('Distributeur peu réactif :')} ${absN} ${TR('demandes en « absence de retour » (le distributeur ne fait pas les relances).')}</div>` : '';
   const header = `<div class="section-title" style="margin:4px 0 8px;display:flex;align-items:center;gap:8px">
       <i class="ti ti-address-book"></i>${TR("Demandes d'informations")}
       <span class="badge hg" style="font-weight:600">${rows.length}</span>
@@ -7752,7 +7776,7 @@ async function chargerDemandesFiche(clientId){
         <button class="btn sm primary" onclick="modalDemande(${clientId},'${esc(nom).replace(/'/g,'&#39;')}')"><i class="ti ti-plus"></i> ${TR('Ajouter')}</button>
         ${nonTraitees?`<button class="btn sm" onclick="relancerDemandes(${clientId},'${esc(email).replace(/'/g,'&#39;')}')"><i class="ti ti-mail"></i> ${TR('Demander un retour')}</button>`:''}
         <button class="btn sm" onclick="exporterDemandes(${clientId})"><i class="ti ti-download"></i> ${TR('Export')}</button>
-      </span></div>`;
+      </span></div>` + alerte;
   if(!rows.length){ el.innerHTML = header + `<div style="font-size:12px;color:var(--text3);padding:6px 0">${TR('Aucune demande transmise pour ce distributeur.')}</div>`; return; }
   el.innerHTML = header + demandesTableHTML(rows, false);
 }
@@ -7760,8 +7784,10 @@ window.chargerDemandesFiche = chargerDemandesFiche;
 
 // ── Tableau des demandes (réutilisé fiche + vue globale) ──
 function demandesTableHTML(rows, withDistrib){
+  diEnsureBlinkCSS();
   const lignes = rows.map(d=>`<tr style="border-top:0.5px solid var(--border)">
-    <td style="padding:8px 10px 8px 8px;white-space:nowrap;border-left:3px solid ${diCouleur(d.statut)}">${_dfd(d.date_transmission)}</td>
+    <td style="padding:8px 8px;border-left:3px solid ${diCouleur(d.statut)}">${diStatutIcons(d)}</td>
+    <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
     <td style="padding:8px 10px">${esc(d.nom||'')}</td>
     <td style="padding:8px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
@@ -7771,12 +7797,12 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 8px;text-align:center">${diRelanceMailCell(d)}</td>
     <td style="padding:8px 8px;text-align:center">${diRelanceTelCell(d)}</td>
     <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
-    <td style="padding:8px 8px">${diStatutIcons(d)}</td>
     <td style="padding:8px 8px;text-align:right;white-space:nowrap">
       <button class="btn sm" title="Modifier" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
       <button class="btn sm danger" title="Supprimer" onclick="supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
     </td></tr>`).join('');
   return `<div class="card" style="padding:0;overflow:auto"><table class="table" style="width:100%;min-width:1400px"><thead><tr>
+    <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Date')}</th>
     ${withDistrib?`<th style="text-align:left;padding:8px 10px">${TR('Distributeur')}</th>`:''}
     <th style="text-align:left;padding:8px 10px">${TR('Contact')}</th>
@@ -7786,14 +7812,14 @@ function demandesTableHTML(rows, withDistrib){
     <th style="text-align:left;padding:8px 10px">${TR('Demande client')}</th>
     <th style="text-align:center;padding:8px 6px">${TR('Relance mail')}</th>
     <th style="text-align:center;padding:8px 6px">${TR('Relance tél.')}</th>
-    <th style="text-align:left;padding:8px 10px">${TR('Annotation de suivi')}</th>
-    <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th><th></th>
+    <th style="text-align:left;padding:8px 10px">${TR('Annotation de suivi')}</th><th></th>
   </tr></thead><tbody>${lignes}</tbody></table></div>`;
 }
 
 // ── Vue globale ──
 let DEMANDES_FILTRE = { statut:'', non_traitees:false, q:'' };
 let DEMANDES_VUE = 'distrib';   // 'liste' | 'distrib'
+let DI_OPEN = new Set();         // noms des distributeurs dépliés (persiste au re-render)
 function setDemandesVue(v){ DEMANDES_VUE=v; render(); }
 window.setDemandesVue = setDemandesVue;
 async function renderDemandes(ttl,c,a){
@@ -7870,27 +7896,30 @@ async function chargerDemandesParDistrib(){
     <button class="btn sm" onclick="toggleTousDistrib(true)"><i class="ti ti-chevrons-down"></i> ${TR('Tout déplier')}</button>
     <button class="btn sm" onclick="toggleTousDistrib(false)"><i class="ti ti-chevrons-up"></i> ${TR('Tout replier')}</button>
   </div>`;
+  diEnsureBlinkCSS();
+  window._DI_GID2NOM = {};
   const blocs = list.map((g,i)=>{
     const gid = 'dg'+i;
     const srcItems = g._items || g.items;
     const nt = g.items.filter(x=>DI_NON_TRAITEES.includes(x.statut)).length;
+    const absN = g.items.filter(x=>x.statut==='absence_retour').length;
+    const alerte = absN>3;   // distributeur peu réactif : >3 "absence de retour"
     const items = srcItems.slice().sort((a,b)=>(''+(b.date_transmission||'')).localeCompare(''+(a.date_transmission||'')));
     const ntBadge = nt ? `<span title="${nt} ${TR('en attente')}" style="width:8px;height:8px;border-radius:99px;background:#d97706;display:inline-block;flex:none"></span>` : '';
-    const grpEmail = (g.email||'').replace(/'/g,'&#39;');
-    const open = !!g._open;
+    const open = DI_OPEN.has(g.nom) || !!g._open;
+    window._DI_GID2NOM[gid] = g.nom;
     const lignes = items.map(d=>{
-      const cEmail = (d.email||g.email||'').replace(/'/g,'&#39;');
       return `<tr style="border-top:0.5px solid var(--border)">
-      <td style="padding:7px 10px 7px 8px;white-space:nowrap;border-left:3px solid ${diCouleur(d.statut)}">${_dfd(d.date_transmission)}</td>
-      <td style="padding:7px 10px">${esc(d.nom||'')}</td>
+      <td style="padding:7px 8px;border-left:3px solid ${diCouleur(d.statut)}">${diStatutIcons(d)}</td>
+      <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
+      <td style="padding:7px 10px;word-break:break-word">${esc(d.nom||'')}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
       <td style="padding:7px 10px;font-size:12px;word-break:break-word">${esc(d.demande_client||'')}</td>
-      <td style="padding:7px 10px;text-align:center">${diRelanceMailCell(d)}</td>
-      <td style="padding:7px 10px;text-align:center">${diRelanceTelCell(d)}</td>
+      <td style="padding:7px 8px;text-align:center">${diRelanceMailCell(d)}</td>
+      <td style="padding:7px 8px;text-align:center">${diRelanceTelCell(d)}</td>
       <td style="padding:7px 10px;font-size:12px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
-      <td style="padding:7px 8px">${diStatutIcons(d)}</td>
       <td style="padding:7px 8px;text-align:right;white-space:nowrap">
         <button class="btn sm" title="${TR('Modifier / changer de distributeur')}" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
         <button class="btn sm danger" title="${TR('Supprimer ce contact')}" onclick="supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
@@ -7898,20 +7927,21 @@ async function chargerDemandesParDistrib(){
     }).join('');
     return `<div style="border-top:0.5px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;user-select:none">
-        <i id="ic-${gid}" class="ti ${open?'ti-eye-off':'ti-eye'}" title="${TR('Voir les demandes')}" onclick="toggleDistribGroup('${gid}')" style="color:var(--accent);width:18px;cursor:pointer;font-size:17px"></i>
-        <span style="font-weight:600;flex:1;cursor:pointer" onclick="toggleDistribGroup('${gid}')">${esc(g.nom)}</span>
+        <i id="ic-${gid}" class="ti ${open?'ti-eye-off':'ti-eye'}" title="${alerte?(absN+' '+TR('demandes sans retour du distributeur !')):TR('Voir les demandes')}" onclick="toggleDistribGroup('${gid}')" style="color:${alerte?'#dc2626':'var(--accent)'};width:18px;cursor:pointer;font-size:17px"></i>
+        <span style="font-weight:600;flex:1;cursor:pointer;${alerte?'color:#dc2626':''}" onclick="toggleDistribGroup('${gid}')">${esc(g.nom)}${alerte?` <i class="ti ti-alert-triangle" title="${absN} ${TR('demandes sans retour')}" style="font-size:13px"></i>`:''}</span>
         ${ntBadge}
         <span style="background:var(--bg2,#eef1f4);border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600" title="${TR('Nombre de demandes')}">${g.items.length}</span>
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:auto">
-        <table class="table" style="width:100%;table-layout:fixed;min-width:1560px">
+        <table class="table" style="width:100%;table-layout:fixed;min-width:1540px">
           <colgroup>
-            <col style="width:84px"><col style="width:128px"><col style="width:106px"><col style="width:168px">
-            <col style="width:120px"><col><col style="width:78px"><col style="width:78px">
-            <col><col style="width:158px"><col style="width:74px">
+            <col style="width:186px"><col style="width:82px"><col style="width:126px"><col style="width:104px">
+            <col style="width:166px"><col style="width:118px"><col style="width:118px"><col style="width:74px">
+            <col style="width:74px"><col><col style="width:64px">
           </colgroup>
           <thead><tr>
+          <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Date')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Contact')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Téléphone')}</th>
@@ -7920,8 +7950,7 @@ async function chargerDemandesParDistrib(){
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Demande client')}</th>
           <th style="text-align:center;padding:6px 6px;font-size:11px">${TR('Relance mail')}</th>
           <th style="text-align:center;padding:6px 6px;font-size:11px">${TR('Relance tél.')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Annotation de suivi')}</th>
-          <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th><th></th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Annotation de suivi')}</th><th></th>
         </tr></thead><tbody>${lignes}</tbody></table>
       </div>
     </div>`;
@@ -7936,11 +7965,15 @@ function toggleDistribGroup(gid){
   const open = bd.style.display==='none';
   bd.style.display = open?'block':'none';
   if(ic){ ic.classList.toggle('ti-eye',!open); ic.classList.toggle('ti-eye-off',open); }
+  const nom=(window._DI_GID2NOM||{})[gid];
+  if(nom){ if(open) DI_OPEN.add(nom); else DI_OPEN.delete(nom); }
 }
 window.toggleDistribGroup = toggleDistribGroup;
 function toggleTousDistrib(open){
   document.querySelectorAll('[id^="bd-dg"]').forEach(bd=>{ bd.style.display = open?'block':'none'; });
   document.querySelectorAll('[id^="ic-dg"]').forEach(ic=>{ ic.classList.toggle('ti-eye',!open); ic.classList.toggle('ti-eye-off',open); });
+  const map=window._DI_GID2NOM||{};
+  if(open){ Object.values(map).forEach(n=>DI_OPEN.add(n)); } else { DI_OPEN.clear(); }
 }
 window.toggleTousDistrib = toggleTousDistrib;
 async function relancerContact(id, email){
