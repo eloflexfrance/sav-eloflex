@@ -7679,10 +7679,10 @@ function _joursDepuis(v){ if(!v) return null; const d=new Date((''+v).slice(0,10
 function diStatutIcons(d){
   const nb = Array.isArray(d.historique)?d.historique.length:0;
   const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:13px;margin-left:4px"></i>` : '';
-  return `<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap">${Object.keys(DI_STATUTS).map(k=>{
+  return `<span style="display:inline-flex;align-items:center;gap:1px;white-space:nowrap">${Object.keys(DI_STATUTS).map(k=>{
     const u=DI_STATUTS[k], on=(d.statut===k);
-    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:23px;height:23px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:14px"></i></span>`;
-    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${u.l}" style="cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:16px;color:var(--text3);opacity:.3"></i></span>`;
+    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:21px;height:21px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:13px"></i></span>`;
+    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${u.l}" style="cursor:pointer;width:20px;height:21px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:15px;color:var(--text3);opacity:.3"></i></span>`;
   }).join('')}${hist}</span>`;
 }
 async function setDemandeStatutInline(id, statut){
@@ -7802,7 +7802,7 @@ function demandesTableHTML(rows, withDistrib){
       <button class="btn sm" title="Modifier" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
       <button class="btn sm danger" title="Supprimer" onclick="supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
     </td></tr>`).join('');
-  return `<div class="card" style="padding:0;overflow:auto"><table class="table" style="width:100%;min-width:1400px"><thead><tr>
+  return `<div class="card" style="padding:0;overflow:auto"><table class="table" style="width:100%"><thead><tr>
     <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Date')}</th>
     ${withDistrib?`<th style="text-align:left;padding:8px 10px">${TR('Distributeur')}</th>`:''}
@@ -7934,12 +7934,12 @@ async function chargerDemandesParDistrib(){
         <span style="background:var(--bg2,#eef1f4);border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600" title="${TR('Nombre de demandes')}">${g.items.length}</span>
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
-      <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:auto">
-        <table class="table" style="width:100%;table-layout:fixed;min-width:1560px">
+      <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
+        <table class="table" style="width:100%;table-layout:fixed">
           <colgroup>
-            <col style="width:202px"><col style="width:82px"><col style="width:124px"><col style="width:102px">
-            <col style="width:160px"><col style="width:116px"><col style="width:116px"><col style="width:72px">
-            <col style="width:72px"><col><col style="width:60px">
+            <col style="width:15%"><col style="width:6%"><col style="width:10%"><col style="width:8%">
+            <col style="width:12%"><col style="width:8%"><col style="width:9%"><col style="width:4.5%">
+            <col style="width:4.5%"><col style="width:19%"><col style="width:4%">
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
