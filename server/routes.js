@@ -6617,6 +6617,7 @@ router.post('/demandes-info/:id/statut', requireAuth, async (req, res) => {
     try { hist = Array.isArray(cur.historique) ? cur.historique : JSON.parse(cur.historique || '[]'); } catch(_) { hist = []; }
     const entree = { statut, date: dateStatut || new Date().toISOString().slice(0,10), par };
     hist.push(entree);
+    const appelEmis = (statut === 'retour_recu'); // "Appel émis" = appel passé au distributeur → date de relance téléphonique
     const row = await db.run(
       `UPDATE demandes_info SET statut=$1,
          statut_date = $2::date,
@@ -6624,8 +6625,9 @@ router.post('/demandes-info/:id/statut', requireAuth, async (req, res) => {
          date_retour = CASE WHEN $4::text IS NOT NULL THEN $4::date
                             WHEN $5 THEN COALESCE($2::date, CURRENT_DATE)
                             ELSE date_retour END,
-         updated_at=NOW() WHERE id=$6 RETURNING *`,
-      [statut, entree.date, JSON.stringify(hist), dateRetour, setRetour, req.params.id]);
+         relance_tel_date = CASE WHEN $6 THEN COALESCE($2::date, CURRENT_DATE) ELSE relance_tel_date END,
+         updated_at=NOW() WHERE id=$7 RETURNING *`,
+      [statut, entree.date, JSON.stringify(hist), dateRetour, setRetour, appelEmis, req.params.id]);
     res.json({ ok: true, demande: row });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
