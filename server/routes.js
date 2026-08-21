@@ -6587,16 +6587,16 @@ router.post('/demandes-info/import-excel', requireAuth, uploadExcel.single('file
     const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
     const ws = wb.Sheets['CONTACTS'] || wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false, dateNF: 'yyyy-mm-dd' });
-    // Détection de la ligne d'en-tête et des colonnes
-    const norm = s => String(s==null?'':s).toLowerCase();
+    const norm = s => String(s == null ? '' : s).toLowerCase();
+    // Détection ligne d'en-tête + colonnes
     let hdr = -1, col = {};
-    for (let r = 0; r < Math.min(rows.length, 8); r++) {
-      const line = (rows[r]||[]).map(norm);
+    for (let r = 0; r < Math.min(rows.length, 10); r++) {
+      const line = (rows[r] || []).map(norm);
       if (line.some(c => c.includes('distributeur')) && line.some(c => c.includes('contact') || c.includes('patient'))) {
         hdr = r;
         line.forEach((c, idx) => {
-          if (c.includes('coordonn')) col.coord = idx;                            // "Coordonnées distributeur" (adresse)
-          else if (c.includes('distributeur') && col.distrib === undefined) col.distrib = idx; // "Distributeurs" (nom) — 1re occurrence
+          if (c.includes('coordonn')) col.coord = idx;
+          else if (c.includes('distributeur') && col.distrib === undefined) col.distrib = idx;
           else if (c.includes('contact') || c.includes('patient')) col.contact = idx;
           else if (c.includes('date') && col.date === undefined) col.date = idx;
           else if (c.includes('retour') || c.includes('action')) col.annot = idx;
@@ -6612,48 +6612,98 @@ router.post('/demandes-info/import-excel', requireAuth, uploadExcel.single('file
 
     // Index des fiches clients par nom normalisé
     const clients = await db.all('SELECT id, nom FROM clients');
+    const nk = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
     const cidx = {};
-    const nk = s => String(s==null?'':s).toLowerCase().replace(/\s+/g,' ').trim();
     for (const c of clients) cidx[nk(c.nom)] = c.id;
 
     const reEmail = /[\w.+-]+@[\w-]+\.[\w.-]+/;
-    const rePhone = /(?:(?:\+33|0)\s*[1-9])(?:[\s.\-]*\d{2}){4}/;
-    let inserted = 0, skipped = 0, lies = 0;
+    const rePhone = /(?:\+33|0)\s*[1-9](?:[\s.\-]*\d{2}){4}/;
+    const statutDe = (txt) => {
+      const t = norm(txt);
+      if (!t) return 'transmise';
+      if (/vendu|command|achat|achet|factur/.test(t)) return 'vente';
+      if (/essai/.test(t)) return 'essai';
+      if (/plus.*int[ée]ress|pas.*int[ée]ress|arr[êe]t|sans suite|abandon|refus|d[ée]c[ée]d|ne (souhaite|veut)|non renouvel|trop cher/.test(t)) return 'sans_suite';
+      if (/relanc|pas de retour|message|r[ée]pondeur|[àa] appeler|pas r[ée]pondu|sans r[ée]ponse|attente|renvoi|renvoy/.test(t)) return 'relance';
+      if (/\bok\b|re[çc]u|rendez|\brdv\b|contact pris|pris contact|s.en occupe|programm/.test(t)) return 'retour_recu';
+      return 'transmise';
+    };
+    const parseContact = (contact) => {
+      const email = (contact.match(reEmail) || [null])[0];
+      const telM = (contact.match(rePhone) || [null])[0];
+      const tel = telM ? telM.replace(/[\s.\-]/g, '') : null;
+      const cpM = contact.match(/\b(\d{5})\b/);
+      const cp = cpM ? cpM[1] : null;
+      const segs = contact.split(/\s[-–]\s/).map(s => s.trim()).filter(Boolean);
+      const nom = segs[0] || contact;
+      let ville = null;
+      for (let k = 1; k < segs.length; k++) {
+        let s = segs[k];
+        if (reEmail.test(s) || rePhone.test(s)) continue;
+        s = s.replace(/\b\d{5}\b/g, ' ').replace(/[\d.\-/]{5,}/g, ' ').replace(/\s+/g, ' ').trim();
+        if (s && s.length >= 2 && !/^\d+$/.test(s)) { ville = s; break; }
+      }
+      return { nom, email, tel, cp, ville };
+    };
+    const toIso = (v) => {
+      if (v instanceof Date) return isNaN(v) ? null : v.toISOString().slice(0, 10);
+      if (!v) return null;
+      const s = String(v).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (m) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; }
+      const d = new Date(s); return isNaN(d) ? null : d.toISOString().slice(0, 10);
+    };
+
+    const uid = (req.session.user && req.session.user.id) || null;
+    const data = [];
+    let skipped = 0;
     for (let r = hdr + 1; r < rows.length; r++) {
       const line = rows[r] || [];
       const distrib = (line[col.distrib] || '').toString().trim();
       const contact = (line[col.contact] || '').toString().trim();
-      if (!distrib || !contact) { skipped++; continue; }
-      // Nom = avant le premier " - " ; le reste peut contenir e-mail / téléphone
-      const parts = contact.split(/\s[-–]\s/);
-      const nom = parts[0].trim();
-      const reste = parts.slice(1).join(' - ');
-      const email = (contact.match(reEmail) || [null])[0];
-      const tel = (contact.match(rePhone) || [null])[0];
-      let annotation = col.annot !== undefined ? (line[col.annot] || '') : '';
-      annotation = String(annotation).trim();
+      if (!distrib || !contact) { skipped++; continue; }        // lignes de sous-total / vides
+      const pc = parseContact(contact);
+      const annot0 = col.annot !== undefined ? String(line[col.annot] || '').trim() : '';
       const essai = col.essai !== undefined ? String(line[col.essai] || '').trim() : '';
       const vente = col.vente !== undefined ? String(line[col.vente] || '').trim() : '';
-      let statut = 'transmise';
-      if (vente) statut = 'vente'; else if (essai) statut = 'essai';
+      let statut = statutDe(annot0);
+      if (vente) statut = 'vente'; else if (essai && statut === 'transmise') statut = 'essai';
+      let annotation = annot0;
       const extra = [];
       if (essai && statut !== 'essai') extra.push('Essai : ' + essai);
       if (vente && statut !== 'vente') extra.push('Vente : ' + vente);
-      if (reste && !email && !tel && reste !== nom) extra.push(reste);
       if (extra.length) annotation = (annotation ? annotation + ' · ' : '') + extra.join(' · ');
-      const dateRaw = col.date !== undefined ? line[col.date] : null;
-      let date = null;
-      if (dateRaw instanceof Date) date = dateRaw.toISOString().slice(0,10);
-      else if (dateRaw) { const s = String(dateRaw); date = /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0,10) : (isNaN(new Date(s)) ? null : new Date(s).toISOString().slice(0,10)); }
+      const date = toIso(col.date !== undefined ? line[col.date] : null);
       const clientId = cidx[nk(distrib)] || null;
-      if (clientId) lies++;
-      await db.run(
-        `INSERT INTO demandes_info (client_id, distributeur_nom, nom, telephone, email, annotation, statut, date_transmission, cree_par)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [clientId, distrib, nom || contact, tel, email, annotation || null, statut, date, (req.session.user && req.session.user.id)||null]);
-      inserted++;
+      data.push([clientId, distrib, pc.nom || contact, pc.ville, pc.cp, pc.tel, pc.email, annotation || null, statut, date, uid]);
     }
-    res.json({ ok: true, inserted, skipped, lies_distributeur: lies });
+
+    // Option : remplacer l'historique existant avant import
+    if (req.query.remplacer === '1' || (req.body && req.body.remplacer)) {
+      await db.run('DELETE FROM demandes_info');
+    }
+
+    // Insertion par lots (rapide) avec repli ligne-par-ligne si un lot échoue (isolation des erreurs)
+    const COLS = '(client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, cree_par)';
+    let inserted = 0, errors = 0, lies = 0, errSample = null;
+    const CHUNK = 200;
+    for (let i = 0; i < data.length; i += CHUNK) {
+      const chunk = data.slice(i, i + CHUNK);
+      const ph = [], vals = [];
+      chunk.forEach((row, ri) => { const b = ri * 11; ph.push('(' + Array.from({ length: 11 }, (_, k) => '$' + (b + k + 1)).join(',') + ')'); vals.push(...row); });
+      try {
+        await db.run(`INSERT INTO demandes_info ${COLS} VALUES ${ph.join(',')}`, vals);
+        inserted += chunk.length;
+      } catch (e) {
+        for (const row of chunk) {
+          try { await db.run(`INSERT INTO demandes_info ${COLS} VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, row); inserted++; }
+          catch (e2) { errors++; if (!errSample) errSample = e2.message; }
+        }
+      }
+    }
+    lies = data.filter(row => row[0]).length;
+    res.json({ ok: true, inserted, skipped, errors, lies_distributeur: lies, erreur_exemple: errSample });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

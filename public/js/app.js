@@ -7843,13 +7843,17 @@ window.exporterDemandes = exporterDemandes;
 
 // Import de l'historique Excel
 async function importDemandesExcel(input){
-  const f = input.files && input.files[0]; if(!f) return;
+  const f = input.files && input.files[0]; if(!f){ return; }
+  const remplacer = confirm(TR("Remplacer tout l'historique des demandes existant ?")+"\n\n"+TR("OK = vider puis importer.   Annuler = ajouter à l'existant."));
   const fd2 = new FormData(); fd2.append('file', f);
   toast(TR('Import en cours…'),'ti-loader-2');
   try{
-    const r = await fetch('/api/demandes-info/import-excel',{method:'POST',body:fd2}).then(x=>x.json());
-    if(r.error){ toast('Erreur : '+r.error,'ti-alert-circle','var(--danger)'); return; }
-    toast(`${r.inserted} ${TR('demande(s) importée(s)')} — ${r.lies_distributeur} ${TR('reliées à un distributeur')}`,'ti-check','var(--success)');
+    const url = '/api/demandes-info/import-excel' + (remplacer ? '?remplacer=1' : '');
+    const r = await fetch(url,{method:'POST',body:fd2}).then(x=>x.json());
+    if(r.error){ toast('Erreur : '+r.error,'ti-alert-circle','var(--danger)'); input.value=''; return; }
+    let msg = `${r.inserted} ${TR('demande(s) importée(s)')} — ${r.lies_distributeur} ${TR('reliées à un distributeur')}`;
+    if(r.errors){ msg += ` — ${r.errors} ${TR('erreur(s)')}`; }
+    toast(msg, r.errors ? 'ti-alert-triangle' : 'ti-check', r.errors ? 'var(--warning)' : 'var(--success)');
     if(STATE.view==='demandes') chargerDemandesGlobal();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
   input.value='';
