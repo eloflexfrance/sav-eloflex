@@ -7678,10 +7678,11 @@ function _joursDepuis(v){ if(!v) return null; const d=new Date((''+v).slice(0,10
 // Sélecteur de statut en icônes : coloré = sélectionné, grisé = non sélectionné ; clic = change le statut
 function diStatutIcons(d){
   const nb = Array.isArray(d.historique)?d.historique.length:0;
-  const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:13px;margin-left:5px"></i>` : '';
-  return `<span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap">${Object.keys(DI_STATUTS).map(k=>{
+  const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:13px;margin-left:4px"></i>` : '';
+  return `<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap">${Object.keys(DI_STATUTS).map(k=>{
     const u=DI_STATUTS[k], on=(d.statut===k);
-    return `<i class="ti ${u.ic}" title="${u.l}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;font-size:17px;color:${on?u.c:'var(--text3)'};opacity:${on?1:0.3}"></i>`;
+    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:23px;height:23px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:14px"></i></span>`;
+    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${u.l}" style="cursor:pointer;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:16px;color:var(--text3);opacity:.3"></i></span>`;
   }).join('')}${hist}</span>`;
 }
 async function setDemandeStatutInline(id, statut){
@@ -7934,11 +7935,11 @@ async function chargerDemandesParDistrib(){
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:auto">
-        <table class="table" style="width:100%;table-layout:fixed;min-width:1540px">
+        <table class="table" style="width:100%;table-layout:fixed;min-width:1560px">
           <colgroup>
-            <col style="width:186px"><col style="width:82px"><col style="width:126px"><col style="width:104px">
-            <col style="width:166px"><col style="width:118px"><col style="width:118px"><col style="width:74px">
-            <col style="width:74px"><col><col style="width:64px">
+            <col style="width:202px"><col style="width:82px"><col style="width:124px"><col style="width:102px">
+            <col style="width:160px"><col style="width:116px"><col style="width:116px"><col style="width:72px">
+            <col style="width:72px"><col><col style="width:60px">
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
