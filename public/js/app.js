@@ -7764,43 +7764,85 @@ async function chargerDemandesGlobal(){
 }
 window.chargerDemandesGlobal = chargerDemandesGlobal;
 
-// ── Vue par distributeur (récapitulatif agrégé) ──
+// ── Vue par distributeur (accordéon alphabétique, façon Excel) ──
+let DI_DISTRIB_Q = '';
 async function chargerDemandesParDistrib(){
   const el = document.getElementById('di-distrib-list'); if(!el) return;
-  let rows=[]; try{ rows=await API.demandesInfoParDistrib(); }catch(e){ el.innerHTML=`<div class="empty">Erreur : ${esc(e.message)}</div>`; return; }
-  window._DI_DISTRIB = rows;
-  if(!rows.length){ el.innerHTML=`<div class="empty"><i class="ti ti-building-store"></i>${TR('Aucun distributeur.')}</div>`; return; }
-  const lignes = rows.map(r=>{
-    const nom = esc(r.distributeur||'—');
-    const nt = r.non_traitees||0;
-    const badge = nt ? `<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 9px;font-size:12px;font-weight:600">${nt}</span>` : `<span style="color:var(--text3)">0</span>`;
-    const email = (r.email||'').replace(/'/g,'&#39;');
-    const relBtn = nt ? `<button class="btn sm" title="${TR('Demander un retour')}" onclick="relancerDemandes(${r.client_id||'null'},'${email}')"><i class="ti ti-mail"></i></button>` : '';
-    return `<tr style="border-top:0.5px solid var(--border)">
-      <td style="padding:8px 10px;font-weight:600">${nom}${r.relance_envoyee?`<i class="ti ti-mail-check" title="${TR('Relance déjà envoyée')}" style="color:var(--text3);margin-left:5px"></i>`:''}</td>
-      <td style="padding:8px 10px;text-align:center">${r.total||0}</td>
-      <td style="padding:8px 10px;text-align:center">${badge}</td>
-      <td style="padding:8px 10px;text-align:center;color:${DI_STATUTS.vente.c}">${r.ventes||0}</td>
-      <td style="padding:8px 10px;text-align:center;color:${DI_STATUTS.essai.c}">${r.essais||0}</td>
-      <td style="padding:8px 10px;text-align:center;color:${DI_STATUTS.retour_recu.c}">${r.retours||0}</td>
-      <td style="padding:8px 10px;white-space:nowrap;color:var(--text2)">${_dfd(r.derniere_date)}</td>
-      <td style="padding:8px 10px;text-align:right;white-space:nowrap">
+  let rows=[]; try{ rows=await API.demandesInfo({}); }catch(e){ el.innerHTML=`<div class="empty">Erreur : ${esc(e.message)}</div>`; return; }
+  if(!rows.length){ el.innerHTML=`<div class="empty"><i class="ti ti-building-store"></i>${TR('Aucune demande.')}</div>`; return; }
+  // Regroupement par distributeur
+  const groups = {};
+  for(const d of rows){
+    const key = (d.client_nom_actuel||d.distributeur_nom||'—').trim() || '—';
+    if(!groups[key]) groups[key] = { nom:key, client_id:d.client_id||null, email:d.client_email_actuel||d.email||'', items:[] };
+    else if(!groups[key].email && (d.client_email_actuel||d.email)) groups[key].email = d.client_email_actuel||d.email;
+    groups[key].items.push(d);
+  }
+  window._DI_GROUPS = groups;
+  let list = Object.values(groups).sort((a,b)=>a.nom.localeCompare(b.nom,'fr',{sensitivity:'base'}));
+  if(DI_DISTRIB_Q){ const q=DI_DISTRIB_Q.toLowerCase(); list = list.filter(g=>g.nom.toLowerCase().includes(q)); }
+  const barre = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <input class="form-input" placeholder="${TR('Rechercher un distributeur…')}" value="${esc(DI_DISTRIB_Q)}" oninput="DI_DISTRIB_Q=this.value;clearTimeout(window._diDT);window._diDT=setTimeout(chargerDemandesParDistrib,250)" style="max-width:280px">
+    <span style="font-size:12px;color:var(--text3)">${list.length} ${TR('distributeur(s)')}</span>
+    <span style="flex:1"></span>
+    <button class="btn sm" onclick="toggleTousDistrib(true)"><i class="ti ti-chevrons-down"></i> ${TR('Tout déplier')}</button>
+    <button class="btn sm" onclick="toggleTousDistrib(false)"><i class="ti ti-chevrons-up"></i> ${TR('Tout replier')}</button>
+  </div>`;
+  const blocs = list.map((g,i)=>{
+    const gid = 'dg'+i;
+    const nt = g.items.filter(x=>DI_NON_TRAITEES.includes(x.statut)).length;
+    const items = g.items.slice().sort((a,b)=>(''+(b.date_transmission||'')).localeCompare(''+(a.date_transmission||'')));
+    const ntBadge = nt ? `<span style="background:#d97706;color:#fff;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:600">${nt} ${TR('non traitée(s)')}</span>` : '';
+    const emailAttr = (g.email||'').replace(/'/g,'&#39;');
+    const relBtn = nt ? `<button class="btn sm" title="${TR('Demander un retour')}" onclick="event.stopPropagation();relancerDemandes(${g.client_id||'null'},'${emailAttr}')"><i class="ti ti-mail"></i></button>` : '';
+    const lignes = items.map(d=>`<tr style="border-top:0.5px solid var(--border)">
+      <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
+      <td style="padding:7px 10px">${esc(d.nom||'')}</td>
+      <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
+      <td style="padding:7px 10px">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
+      <td style="padding:7px 10px">${diBadge(d.statut)}</td>
+      <td style="padding:7px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
+      <td style="padding:7px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
+      <td style="padding:7px 10px;text-align:right;white-space:nowrap">
+        <button class="btn sm" title="${TR('Statut')}" onclick="menuDemandeStatut(${d.id})"><i class="ti ti-adjustments"></i></button>
+        <button class="btn sm" title="${TR('Modifier')}" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
+      </td></tr>`).join('');
+    return `<div style="border-top:0.5px solid var(--border)">
+      <div onclick="toggleDistribGroup('${gid}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;user-select:none">
+        <i id="ic-${gid}" class="ti ti-plus" style="color:var(--accent);width:16px"></i>
+        <span style="font-weight:600;flex:1">${esc(g.nom)}</span>
+        ${ntBadge}
+        <span style="background:var(--bg2,#eef1f4);border-radius:99px;padding:1px 10px;font-size:12px;font-weight:600" title="${TR('Nombre de demandes')}">${g.items.length}</span>
         ${relBtn}
-        <button class="btn sm" title="${TR('Voir les demandes')}" onclick="voirDemandesDistrib('${nom.replace(/'/g,'&#39;')}')"><i class="ti ti-eye"></i></button>
-      </td></tr>`;
+      </div>
+      <div id="bd-${gid}" style="display:none;overflow:auto">
+        <table class="table" style="width:100%"><thead><tr>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Date')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Contact')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Téléphone')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Mail')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Statut')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Ville / CP')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Annotation')}</th><th></th>
+        </tr></thead><tbody>${lignes}</tbody></table>
+      </div>
+    </div>`;
   }).join('');
-  el.innerHTML = `<div style="font-size:12px;color:var(--text3);margin-bottom:6px">${rows.length} ${TR('distributeur(s) ayant eu un contact')}</div>
-    <div class="card" style="padding:0;overflow:auto"><table class="table" style="width:100%"><thead><tr>
-      <th style="text-align:left;padding:8px 10px">${TR('Distributeur')}</th>
-      <th style="text-align:center;padding:8px 10px">${TR('Total')}</th>
-      <th style="text-align:center;padding:8px 10px">${TR('Non traitées')}</th>
-      <th style="text-align:center;padding:8px 10px">${DI_STATUTS.vente.l}</th>
-      <th style="text-align:center;padding:8px 10px">${DI_STATUTS.essai.l}</th>
-      <th style="text-align:center;padding:8px 10px">${DI_STATUTS.retour_recu.l}</th>
-      <th style="text-align:left;padding:8px 10px">${TR('Dernier contact')}</th><th></th>
-    </tr></thead><tbody>${lignes}</tbody></table></div>`;
+  el.innerHTML = barre + `<div class="card" style="padding:0">${blocs || `<div class="empty" style="padding:20px">${TR('Aucun distributeur.')}</div>`}</div>`;
 }
 window.chargerDemandesParDistrib = chargerDemandesParDistrib;
+function toggleDistribGroup(gid){
+  const bd=document.getElementById('bd-'+gid), ic=document.getElementById('ic-'+gid); if(!bd) return;
+  const open = bd.style.display==='none';
+  bd.style.display = open?'block':'none';
+  if(ic){ ic.classList.toggle('ti-plus',!open); ic.classList.toggle('ti-minus',open); }
+}
+window.toggleDistribGroup = toggleDistribGroup;
+function toggleTousDistrib(open){
+  document.querySelectorAll('[id^="bd-dg"]').forEach(bd=>{ bd.style.display = open?'block':'none'; });
+  document.querySelectorAll('[id^="ic-dg"]').forEach(ic=>{ ic.classList.toggle('ti-plus',!open); ic.classList.toggle('ti-minus',open); });
+}
+window.toggleTousDistrib = toggleTousDistrib;
 function voirDemandesDistrib(nom){ DEMANDES_FILTRE={statut:'',non_traitees:false,q:nom}; DEMANDES_VUE='liste'; render(); }
 window.voirDemandesDistrib = voirDemandesDistrib;
 
