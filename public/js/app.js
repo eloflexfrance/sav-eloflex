@@ -7813,10 +7813,10 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
       <td style="padding:7px 10px">${esc(d.nom||'')}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
-      <td style="padding:7px 10px">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
+      <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
       <td style="padding:7px 10px">${diBadge(d.statut)}</td>
-      <td style="padding:7px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
-      <td style="padding:7px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
+      <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
+      <td style="padding:7px 10px;font-size:12px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
       <td style="padding:7px 10px;text-align:right;white-space:nowrap">
         <button class="btn sm" title="${TR('Demander un retour à ce contact')}" onclick="relancerContact(${d.id},'${cEmail}')"><i class="ti ti-mail"></i></button>
         <button class="btn sm" title="${TR('Statut')}" onclick="menuDemandeStatut(${d.id})"><i class="ti ti-adjustments"></i></button>
@@ -7833,7 +7833,12 @@ async function chargerDemandesParDistrib(){
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:auto">
-        <table class="table" style="width:100%"><thead><tr>
+        <table class="table" style="width:100%;table-layout:fixed;min-width:1000px">
+          <colgroup>
+            <col style="width:92px"><col style="width:150px"><col style="width:118px"><col style="width:200px">
+            <col style="width:100px"><col style="width:180px"><col><col style="width:160px">
+          </colgroup>
+          <thead><tr>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Date')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Contact')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Téléphone')}</th>
