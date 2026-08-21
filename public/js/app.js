@@ -7677,8 +7677,6 @@ const _dfd = d => d ? fd((''+d).slice(0,10)) : '—';
 function _joursDepuis(v){ if(!v) return null; const d=new Date((''+v).slice(0,10)); if(isNaN(d)) return null; return Math.max(0,Math.round((Date.now()-d.getTime())/86400000)); }
 // Sélecteur de statut en icônes : coloré = sélectionné, grisé = non sélectionné ; clic = change le statut
 function diStatutIcons(d){
-  const nb = Array.isArray(d.historique)?d.historique.length:0;
-  const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:14px;margin-left:5px"></i>` : '';
   // Date de chaque statut (dernier passage) pour l'afficher au survol
   const dates = {};
   if(Array.isArray(d.historique)) d.historique.forEach(h=>{ if(h && h.statut && h.date) dates[h.statut]=h.date; });
@@ -7688,7 +7686,13 @@ function diStatutIcons(d){
     const t = u.l + (dates[k] ? ' — '+_dfd(dates[k]) : '');
     if(on) return `<span title="${t}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:16px"></i></span>`;
     return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${t}" style="cursor:pointer;width:25px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:18px;color:var(--text3);opacity:.3"></i></span>`;
-  }).join('')}${hist}</span>`;
+  }).join('')}</span>`;
+}
+// Icône historique (placée en dernière colonne)
+function diHistCell(d){
+  const nb = Array.isArray(d.historique)?d.historique.length:0;
+  if(nb<2) return '';
+  return `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:17px"></i>`;
 }
 async function setDemandeStatutInline(id, statut){
   try{ await API.setDemandeInfoStatut(id, statut, {date_statut:new Date().toISOString().slice(0,10)});
@@ -7814,11 +7818,12 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
     <td style="padding:8px 10px;font-size:12px">${esc(d.demande_client||'')}</td>
     <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
+    <td style="padding:8px 8px;text-align:center">${diHistCell(d)}</td>
     </tr>`).join('');
   return `<div class="card" style="padding:0;overflow:hidden"><table class="table di-table" style="width:100%;table-layout:fixed">
     <colgroup>
       <col style="width:322px"><col style="width:96px">${withDistrib?'<col style="width:160px">':''}<col style="width:160px"><col style="width:128px">
-      <col style="width:220px"><col style="width:128px"><col style="width:300px"><col>
+      <col style="width:220px"><col style="width:128px"><col style="width:300px"><col><col style="width:44px">
     </colgroup>
     <thead><tr>
     <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
@@ -7830,6 +7835,7 @@ function demandesTableHTML(rows, withDistrib){
     <th style="text-align:left;padding:8px 10px">${TR('Ville / CP')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Demande client')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Annotation de suivi')}</th>
+    <th style="text-align:center;padding:8px 6px" title="${TR('Historique')}"><i class="ti ti-history"></i></th>
   </tr></thead><tbody>${lignes}</tbody></table></div>`;
 }
 
@@ -7935,6 +7941,7 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
       <td style="padding:7px 10px;font-size:12px;word-break:break-word">${esc(d.demande_client||'')}</td>
       <td style="padding:7px 10px;font-size:12px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
+      <td style="padding:7px 8px;text-align:center">${diHistCell(d)}</td>
       </tr>`;
     }).join('');
     return `<div style="border-top:0.5px solid var(--border)">
@@ -7949,7 +7956,7 @@ async function chargerDemandesParDistrib(){
         <table class="table di-table" style="width:100%;table-layout:fixed">
           <colgroup>
             <col style="width:322px"><col style="width:96px"><col style="width:160px"><col style="width:128px">
-            <col style="width:220px"><col style="width:128px"><col style="width:300px"><col>
+            <col style="width:220px"><col style="width:128px"><col style="width:300px"><col><col style="width:44px">
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
@@ -7960,6 +7967,7 @@ async function chargerDemandesParDistrib(){
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Ville / CP')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Demande client')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Annotation de suivi')}</th>
+          <th style="text-align:center;padding:6px 6px;font-size:11px" title="${TR('Historique')}"><i class="ti ti-history"></i></th>
         </tr></thead><tbody>${lignes}</tbody></table>
       </div>
     </div>`;
@@ -7972,6 +7980,12 @@ window.chargerDemandesParDistrib = chargerDemandesParDistrib;
 function toggleDistribGroup(gid){
   const bd=document.getElementById('bd-'+gid), ic=document.getElementById('ic-'+gid); if(!bd) return;
   const open = bd.style.display==='none';
+  if(open){
+    // Un seul distributeur ouvert à la fois : on ferme tous les autres
+    document.querySelectorAll('[id^="bd-dg"]').forEach(x=>{ if(x!==bd) x.style.display='none'; });
+    document.querySelectorAll('[id^="ic-dg"]').forEach(x=>{ if(x!==ic){ x.classList.add('ti-eye'); x.classList.remove('ti-eye-off'); } });
+    DI_OPEN.clear();
+  }
   bd.style.display = open?'block':'none';
   if(ic){ ic.classList.toggle('ti-eye',!open); ic.classList.toggle('ti-eye-off',open); }
   const nom=(window._DI_GID2NOM||{})[gid];
@@ -8023,13 +8037,16 @@ async function modalDemande(clientId, distribNom, id){
   const noms=[...new Set([...clientNoms, ...(window._DISTRIB_NOMS||[])])]
     .filter(n=>n && n.trim() && n.trim()!=='0')
     .sort((a,b)=>_diKey(a)<_diKey(b)?-1:_diKey(a)>_diKey(b)?1:0);
+  window._DI_NOMS_LISTE = noms;
   showModal(`<div class="modal-header"><i class="ti ti-address-book" style="color:var(--accent)"></i><h2>${id?TR('Modifier la demande'):TR("Nouvelle demande d'information")}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <input type="hidden" id="di-id" value="${id||''}">
       <input type="hidden" id="di-client-id" value="${d.client_id||''}">
       <div class="form-group"><label class="form-label">${TR('Distributeur')}</label>
-        <input class="form-input" id="di-distrib" list="di-distrib-list" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur (lié à une fiche existante)')}" oninput="diDistribChange(this.value)">
-        <datalist id="di-distrib-list">${noms.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+        <div style="position:relative">
+          <input class="form-input" id="di-distrib" autocomplete="off" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur (lié à une fiche existante)')}" oninput="diDistribInput(this.value)" onfocus="diDistribInput(this.value)" onblur="setTimeout(diDistribHideDrop,200)">
+          <div id="di-distrib-drop" style="display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 2px);max-height:240px;overflow:auto;background:rgba(255,255,255,0.98);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(30,60,110,.18)"></div>
+        </div>
         <div id="di-distrib-lien" style="font-size:12px;margin-top:4px"></div></div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
@@ -8061,6 +8078,28 @@ function diDistribChange(nom){
   }
 }
 window.diDistribChange = diDistribChange;
+// Autocomplétion personnalisée (la datalist native ne s'affiche plus au-delà de ~1000 options)
+function diDistribInput(val){
+  const drop=document.getElementById('di-distrib-drop'); if(!drop) return;
+  diDistribChange(val);
+  const q=_diKey(val);
+  const list=window._DI_NOMS_LISTE||[];
+  const matches=(q?list.filter(n=>_diKey(n).includes(q)):list).slice(0,15);
+  window._DI_MATCH=matches;
+  if(!matches.length){ drop.style.display='none'; return; }
+  drop.innerHTML=matches.map((n,i)=>`<div onmousedown="event.preventDefault();diDistribPick(${i})" onmouseover="this.style.background='rgba(46,124,246,.10)'" onmouseout="this.style.background='transparent'" style="padding:8px 11px;cursor:pointer;font-size:13px;color:var(--text);border-bottom:0.5px solid var(--border)">${esc(n)}</div>`).join('');
+  drop.style.display='block';
+}
+window.diDistribInput=diDistribInput;
+function diDistribPick(i){
+  const n=(window._DI_MATCH||[])[i]; if(n==null) return;
+  const inp=$('di-distrib'); if(inp) inp.value=n;
+  diDistribChange(n);
+  diDistribHideDrop();
+}
+window.diDistribPick=diDistribPick;
+function diDistribHideDrop(){ const d=document.getElementById('di-distrib-drop'); if(d) d.style.display='none'; }
+window.diDistribHideDrop=diDistribHideDrop;
 async function saveDemande(){
   const id=gv('di-id');
   const data={
