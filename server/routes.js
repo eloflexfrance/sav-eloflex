@@ -6805,9 +6805,16 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
     const dest = ((req.body && req.body.email) || d.client_email || '').trim();
     if (!dest) return res.status(400).json({ error: "Aucune adresse e-mail pour ce distributeur (fiche client). Renseignez-la ou saisissez-en une." });
     // Date d'enregistrement du contact au format FR
-    const frDate = (v) => { if (!v) return ''; const s = String(v).slice(0,10); const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[3]}/${m[2]}/${m[1]}` : s; };
+    const frDate = (v) => {
+      if (!v) return '';
+      let s;
+      if (v instanceof Date) { if (isNaN(v)) return ''; s = v.toISOString().slice(0,10); }
+      else s = String(v).slice(0,10);
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+    };
     const villeCp = [d.ville, d.cp].filter(Boolean).join(' ');
-    const ligne = (v) => v ? `<div>${String(v)}</div>` : '';
+    const ligne = (v) => v ? `<div style="font-style:italic;font-weight:bold">${String(v)}</div>` : '';
     await envoyerEmailPret({
       to: dest,
       bcc: 'info@eloflex.fr',
@@ -6818,6 +6825,7 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
         <div style="margin:10px 0 14px;padding-left:2px">
           ${ligne(d.nom)}
           ${ligne(d.telephone)}
+          ${ligne(d.email)}
           ${ligne(villeCp)}
           ${ligne(d.demande_client)}
         </div>
