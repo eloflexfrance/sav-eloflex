@@ -7805,7 +7805,7 @@ window.chargerDemandesFiche = chargerDemandesFiche;
 function demandesTableHTML(rows, withDistrib){
   diEnsureBlinkCSS();
   const lignes = rows.map(d=>`<tr style="border-top:0.5px solid var(--border)">
-    <td style="padding:8px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:16px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
+    <td style="padding:8px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:12px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
     <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
     <td style="padding:8px 10px">${esc(d.nom||'')}</td>
@@ -7817,8 +7817,8 @@ function demandesTableHTML(rows, withDistrib){
     </tr>`).join('');
   return `<div class="card" style="padding:0;overflow:hidden"><table class="table di-table" style="width:100%;table-layout:fixed">
     <colgroup>
-      <col style="width:300px"><col style="width:84px">${withDistrib?'<col style="width:150px">':''}<col style="width:140px"><col style="width:116px">
-      <col style="width:200px"><col style="width:104px"><col style="width:170px"><col>
+      <col style="width:292px"><col style="width:96px">${withDistrib?'<col style="width:160px">':''}<col style="width:160px"><col style="width:128px">
+      <col style="width:220px"><col style="width:128px"><col style="width:240px"><col>
     </colgroup>
     <thead><tr>
     <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
@@ -7927,7 +7927,7 @@ async function chargerDemandesParDistrib(){
     window._DI_GID2NOM[gid] = g.nom;
     const lignes = items.map(d=>{
       return `<tr style="border-top:0.5px solid var(--border)">
-      <td style="padding:7px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:16px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
+      <td style="padding:7px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:12px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
       <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.nom||'')}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
@@ -7948,8 +7948,8 @@ async function chargerDemandesParDistrib(){
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
         <table class="table di-table" style="width:100%;table-layout:fixed">
           <colgroup>
-            <col style="width:300px"><col style="width:84px"><col style="width:140px"><col style="width:116px">
-            <col style="width:200px"><col style="width:104px"><col style="width:170px"><col>
+            <col style="width:292px"><col style="width:96px"><col style="width:160px"><col style="width:128px">
+            <col style="width:220px"><col style="width:128px"><col style="width:240px"><col>
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
