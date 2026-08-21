@@ -7817,8 +7817,8 @@ function demandesTableHTML(rows, withDistrib){
     </tr>`).join('');
   return `<div class="card" style="padding:0;overflow:hidden"><table class="table di-table" style="width:100%;table-layout:fixed">
     <colgroup>
-      <col style="width:292px"><col style="width:96px">${withDistrib?'<col style="width:160px">':''}<col style="width:160px"><col style="width:128px">
-      <col style="width:220px"><col style="width:128px"><col style="width:240px"><col>
+      <col style="width:322px"><col style="width:96px">${withDistrib?'<col style="width:160px">':''}<col style="width:160px"><col style="width:128px">
+      <col style="width:220px"><col style="width:128px"><col style="width:300px"><col>
     </colgroup>
     <thead><tr>
     <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
@@ -7948,8 +7948,8 @@ async function chargerDemandesParDistrib(){
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
         <table class="table di-table" style="width:100%;table-layout:fixed">
           <colgroup>
-            <col style="width:292px"><col style="width:96px"><col style="width:160px"><col style="width:128px">
-            <col style="width:220px"><col style="width:128px"><col style="width:240px"><col>
+            <col style="width:322px"><col style="width:96px"><col style="width:160px"><col style="width:128px">
+            <col style="width:220px"><col style="width:128px"><col style="width:300px"><col>
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
