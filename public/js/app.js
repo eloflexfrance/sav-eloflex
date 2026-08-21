@@ -7679,28 +7679,34 @@ function _joursDepuis(v){ if(!v) return null; const d=new Date((''+v).slice(0,10
 function diStatutIcons(d){
   const nb = Array.isArray(d.historique)?d.historique.length:0;
   const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:14px;margin-left:5px"></i>` : '';
-  const jm=_joursDepuis(d.date_transmission);
-  const mailEnRetard = DI_NON_TRAITEES.includes(d.statut) && !d.relance_mail_date && jm!=null && jm>=7;   // relance mail à faire depuis 7 j
+  // Date de chaque statut (dernier passage) pour l'afficher au survol
+  const dates = {};
+  if(Array.isArray(d.historique)) d.historique.forEach(h=>{ if(h && h.statut && h.date) dates[h.statut]=h.date; });
+  if(d.statut && d.statut_date) dates[d.statut]=d.statut_date;
   return `<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap">${Object.keys(DI_STATUTS).map(k=>{
     const u=DI_STATUTS[k], on=(d.statut===k);
-    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:16px"></i></span>`;
-    const blink = (k==='relance' && mailEnRetard) ? ' di-blink' : '';
-    const col = (k==='relance' && mailEnRetard) ? DI_STATUTS.relance.c : 'var(--text3)';
-    const op  = (k==='relance' && mailEnRetard) ? '1' : '.3';
-    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${u.l}" style="cursor:pointer;width:25px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}${blink}" style="font-size:18px;color:${col};opacity:${op}"></i></span>`;
+    const t = u.l + (dates[k] ? ' — '+_dfd(dates[k]) : '');
+    if(on) return `<span title="${t}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:16px"></i></span>`;
+    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${t}" style="cursor:pointer;width:25px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:18px;color:var(--text3);opacity:.3"></i></span>`;
   }).join('')}${hist}</span>`;
 }
 async function setDemandeStatutInline(id, statut){
-  // "Relancé mail" déclenche l'envoi du mail de relance au distributeur (+ enregistre la date)
-  if(statut==='relance'){
-    if(!confirm(TR('Envoyer le mail de relance à ce distributeur ?'))) return;
-    return relancerMailContact(id);
-  }
   try{ await API.setDemandeInfoStatut(id, statut, {date_statut:new Date().toISOString().slice(0,10)});
     rafraichirDemandes();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.setDemandeStatutInline = setDemandeStatutInline;
+// Groupe d'actions : envoyer le mail de relance (séparé du statut) + éditer + supprimer.
+function diActionsCluster(d){
+  const j=_joursDepuis(d.date_transmission);
+  const blink=(DI_NON_TRAITEES.includes(d.statut) && !d.relance_mail_date && j!=null && j>=7)?' di-blink':'';
+  const relTitle = TR('Relancer par mail')+(d.relance_mail_date?(' — '+TR('dernière : ')+_dfd(d.relance_mail_date)):'');
+  return `<span style="display:inline-flex;gap:1px;flex:none">
+    <button class="btn sm" title="${relTitle}" onclick="event.stopPropagation();if(confirm('${TR('Envoyer le mail de relance à ce distributeur ?')}'))relancerMailContact(${d.id})" style="color:${d.relance_mail_date?'#d97706':'var(--accent)'}"><i class="ti ti-mail${blink}"></i></button>
+    <button class="btn sm" title="${TR('Modifier / changer de distributeur')}" onclick="event.stopPropagation();modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
+    <button class="btn sm danger" title="${TR('Supprimer ce contact')}" onclick="event.stopPropagation();supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
+  </span>`;
+}
 // Injecte le CSS de clignotement (une seule fois)
 function diEnsureBlinkCSS(){
   if(document.getElementById('di-blink-css')) return;
@@ -7799,7 +7805,7 @@ window.chargerDemandesFiche = chargerDemandesFiche;
 function demandesTableHTML(rows, withDistrib){
   diEnsureBlinkCSS();
   const lignes = rows.map(d=>`<tr style="border-top:0.5px solid var(--border)">
-    <td style="padding:8px 8px;border-left:3px solid ${diCouleur(d.statut)}">${diStatutIcons(d)}</td>
+    <td style="padding:8px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:16px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
     <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
     <td style="padding:8px 10px">${esc(d.nom||'')}</td>
@@ -7808,10 +7814,7 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
     <td style="padding:8px 10px;font-size:12px">${esc(d.demande_client||'')}</td>
     <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
-    <td style="padding:8px 8px;text-align:right;white-space:nowrap">
-      <button class="btn sm" title="Modifier" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
-      <button class="btn sm danger" title="Supprimer" onclick="supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
-    </td></tr>`).join('');
+    </tr>`).join('');
   return `<div class="card" style="padding:0;overflow:auto"><table class="table di-table" style="width:100%"><thead><tr>
     <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Date')}</th>
@@ -7821,7 +7824,7 @@ function demandesTableHTML(rows, withDistrib){
     <th style="text-align:left;padding:8px 10px">${TR('Mail')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Ville / CP')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Demande client')}</th>
-    <th style="text-align:left;padding:8px 10px">${TR('Annotation de suivi')}</th><th></th>
+    <th style="text-align:left;padding:8px 10px">${TR('Annotation de suivi')}</th>
   </tr></thead><tbody>${lignes}</tbody></table></div>`;
 }
 
@@ -7919,7 +7922,7 @@ async function chargerDemandesParDistrib(){
     window._DI_GID2NOM[gid] = g.nom;
     const lignes = items.map(d=>{
       return `<tr style="border-top:0.5px solid var(--border)">
-      <td style="padding:7px 8px;border-left:3px solid ${diCouleur(d.statut)}">${diStatutIcons(d)}</td>
+      <td style="padding:7px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:16px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
       <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.nom||'')}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
@@ -7927,10 +7930,7 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
       <td style="padding:7px 10px;font-size:12px;word-break:break-word">${esc(d.demande_client||'')}</td>
       <td style="padding:7px 10px;font-size:12px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
-      <td style="padding:7px 8px;text-align:right;white-space:nowrap">
-        <button class="btn sm" title="${TR('Modifier / changer de distributeur')}" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
-        <button class="btn sm danger" title="${TR('Supprimer ce contact')}" onclick="supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
-      </td></tr>`;
+      </tr>`;
     }).join('');
     return `<div style="border-top:0.5px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;user-select:none">
@@ -7943,8 +7943,8 @@ async function chargerDemandesParDistrib(){
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
         <table class="table di-table" style="width:100%;table-layout:fixed">
           <colgroup>
-            <col style="width:17%"><col style="width:6%"><col style="width:11%"><col style="width:9%">
-            <col style="width:12%"><col style="width:9%"><col style="width:15%"><col style="width:17%"><col style="width:4%">
+            <col style="width:22%"><col style="width:6%"><col style="width:12%"><col style="width:9%">
+            <col style="width:12%"><col style="width:9%"><col style="width:14%"><col style="width:16%">
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
@@ -7954,7 +7954,7 @@ async function chargerDemandesParDistrib(){
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Mail')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Ville / CP')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Demande client')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Annotation de suivi')}</th><th></th>
+          <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Annotation de suivi')}</th>
         </tr></thead><tbody>${lignes}</tbody></table>
       </div>
     </div>`;
