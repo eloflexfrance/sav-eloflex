@@ -7678,14 +7678,24 @@ function _joursDepuis(v){ if(!v) return null; const d=new Date((''+v).slice(0,10
 // Sélecteur de statut en icônes : coloré = sélectionné, grisé = non sélectionné ; clic = change le statut
 function diStatutIcons(d){
   const nb = Array.isArray(d.historique)?d.historique.length:0;
-  const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:13px;margin-left:4px"></i>` : '';
-  return `<span style="display:inline-flex;align-items:center;gap:1px;white-space:nowrap">${Object.keys(DI_STATUTS).map(k=>{
+  const hist = nb>1 ? `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:14px;margin-left:5px"></i>` : '';
+  const jm=_joursDepuis(d.date_transmission);
+  const mailEnRetard = DI_NON_TRAITEES.includes(d.statut) && !d.relance_mail_date && jm!=null && jm>=7;   // relance mail à faire depuis 7 j
+  return `<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap">${Object.keys(DI_STATUTS).map(k=>{
     const u=DI_STATUTS[k], on=(d.statut===k);
-    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:21px;height:21px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:13px"></i></span>`;
-    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${u.l}" style="cursor:pointer;width:20px;height:21px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:15px;color:var(--text3);opacity:.3"></i></span>`;
+    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:16px"></i></span>`;
+    const blink = (k==='relance' && mailEnRetard) ? ' di-blink' : '';
+    const col = (k==='relance' && mailEnRetard) ? DI_STATUTS.relance.c : 'var(--text3)';
+    const op  = (k==='relance' && mailEnRetard) ? '1' : '.3';
+    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${u.l}" style="cursor:pointer;width:25px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}${blink}" style="font-size:18px;color:${col};opacity:${op}"></i></span>`;
   }).join('')}${hist}</span>`;
 }
 async function setDemandeStatutInline(id, statut){
+  // "Relancé mail" déclenche l'envoi du mail de relance au distributeur (+ enregistre la date)
+  if(statut==='relance'){
+    if(!confirm(TR('Envoyer le mail de relance à ce distributeur ?'))) return;
+    return relancerMailContact(id);
+  }
   try{ await API.setDemandeInfoStatut(id, statut, {date_statut:new Date().toISOString().slice(0,10)});
     rafraichirDemandes();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
@@ -7695,7 +7705,9 @@ window.setDemandeStatutInline = setDemandeStatutInline;
 function diEnsureBlinkCSS(){
   if(document.getElementById('di-blink-css')) return;
   const s=document.createElement('style'); s.id='di-blink-css';
-  s.textContent='@keyframes diBlink{0%,100%{opacity:1}50%{opacity:.15}} .di-blink{animation:diBlink 1s ease-in-out infinite}';
+  s.textContent='@keyframes diBlink{0%,100%{opacity:1}50%{opacity:.15}} .di-blink{animation:diBlink 1s ease-in-out infinite}'
+    + ' .di-table td{padding-top:11px!important;padding-bottom:11px!important;font-size:12.5px}'
+    + ' .di-table th{padding-top:8px!important;padding-bottom:8px!important}';
   document.head.appendChild(s);
 }
 // Cellule "Relance mail" : enveloppe cliquable (envoie le mail au distributeur + date). Clignote si en attente et pas de relance après 7 j.
@@ -7795,14 +7807,12 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
     <td style="padding:8px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
     <td style="padding:8px 10px;font-size:12px">${esc(d.demande_client||'')}</td>
-    <td style="padding:8px 8px;text-align:center">${diRelanceMailCell(d)}</td>
-    <td style="padding:8px 8px;text-align:center">${diRelanceTelCell(d)}</td>
     <td style="padding:8px 10px;font-size:12px;color:var(--text2)">${esc(d.annotation||'')}</td>
     <td style="padding:8px 8px;text-align:right;white-space:nowrap">
       <button class="btn sm" title="Modifier" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
       <button class="btn sm danger" title="Supprimer" onclick="supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
     </td></tr>`).join('');
-  return `<div class="card" style="padding:0;overflow:auto"><table class="table" style="width:100%"><thead><tr>
+  return `<div class="card" style="padding:0;overflow:auto"><table class="table di-table" style="width:100%"><thead><tr>
     <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Date')}</th>
     ${withDistrib?`<th style="text-align:left;padding:8px 10px">${TR('Distributeur')}</th>`:''}
@@ -7811,8 +7821,6 @@ function demandesTableHTML(rows, withDistrib){
     <th style="text-align:left;padding:8px 10px">${TR('Mail')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Ville / CP')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Demande client')}</th>
-    <th style="text-align:center;padding:8px 6px">${TR('Relance mail')}</th>
-    <th style="text-align:center;padding:8px 6px">${TR('Relance tél.')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Annotation de suivi')}</th><th></th>
   </tr></thead><tbody>${lignes}</tbody></table></div>`;
 }
@@ -7918,8 +7926,6 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
       <td style="padding:7px 10px;font-size:12px;word-break:break-word">${esc(d.demande_client||'')}</td>
-      <td style="padding:7px 8px;text-align:center">${diRelanceMailCell(d)}</td>
-      <td style="padding:7px 8px;text-align:center">${diRelanceTelCell(d)}</td>
       <td style="padding:7px 10px;font-size:12px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
       <td style="padding:7px 8px;text-align:right;white-space:nowrap">
         <button class="btn sm" title="${TR('Modifier / changer de distributeur')}" onclick="modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
@@ -7935,11 +7941,10 @@ async function chargerDemandesParDistrib(){
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
-        <table class="table" style="width:100%;table-layout:fixed">
+        <table class="table di-table" style="width:100%;table-layout:fixed">
           <colgroup>
-            <col style="width:15%"><col style="width:6%"><col style="width:10%"><col style="width:8%">
-            <col style="width:12%"><col style="width:8%"><col style="width:9%"><col style="width:4.5%">
-            <col style="width:4.5%"><col style="width:19%"><col style="width:4%">
+            <col style="width:17%"><col style="width:6%"><col style="width:11%"><col style="width:9%">
+            <col style="width:12%"><col style="width:9%"><col style="width:15%"><col style="width:17%"><col style="width:4%">
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:11px">${TR('Statut')}</th>
@@ -7949,8 +7954,6 @@ async function chargerDemandesParDistrib(){
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Mail')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Ville / CP')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Demande client')}</th>
-          <th style="text-align:center;padding:6px 6px;font-size:11px">${TR('Relance mail')}</th>
-          <th style="text-align:center;padding:6px 6px;font-size:11px">${TR('Relance tél.')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:11px">${TR('Annotation de suivi')}</th><th></th>
         </tr></thead><tbody>${lignes}</tbody></table>
       </div>

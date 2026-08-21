@@ -6828,9 +6828,12 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
         <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div>
       </div>`
     });
+    const u = (req.session && req.session.user) || {};
+    const par = u.nom || u.prenom || u.email || u.login || null;
+    let hist = []; try { hist = Array.isArray(d.historique) ? d.historique : JSON.parse(d.historique || '[]'); } catch(_) { hist = []; }
+    hist.push({ statut: 'relance', date: new Date().toISOString().slice(0,10), par });
     await db.run(`UPDATE demandes_info SET relance_envoyee=TRUE, relance_mail_date=CURRENT_DATE,
-      statut=CASE WHEN statut='transmise' THEN 'relance' ELSE statut END, statut_date=CASE WHEN statut='transmise' THEN CURRENT_DATE ELSE statut_date END,
-      updated_at=NOW() WHERE id=$1`, [id]);
+      statut='relance', statut_date=CURRENT_DATE, historique=$2::jsonb, updated_at=NOW() WHERE id=$1`, [id, JSON.stringify(hist)]);
     res.json({ ok: true, to: dest });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
