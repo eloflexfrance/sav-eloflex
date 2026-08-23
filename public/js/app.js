@@ -264,17 +264,10 @@ async function renderDashboard(ttl,c,a){
       <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">${t('db_alertes')}</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
     </div>
     <div class="card">
-      <div class="section-title"><i class="ti ti-tool"></i>${t('db_activites')}</div>
-      <div class="table-wrap"><table class="t">
-        <thead><tr><th>N° SAV</th><th>${t('col_date')}</th><th>${t('col_client')}</th><th>${t('col_modele')}</th><th>${t('col_type')}</th><th>${t('col_garantie')}</th><th>${t('col_statut')}</th></tr></thead>
-        <tbody>${recentes.map(i=>`<tr onclick="viewIntervention(${i.id})">
-          <td class="mono" style="color:var(--accent);font-size:11px">${esc(i.num_sav||'—')}</td><td>${fd(i.date)}</td><td>${esc(i.client_nom)}</td>
-          <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
-          <td>${traduireType(i.type)}</td>
-          <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('garantie_expiree')}</span></td>
-          <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
-        </tr>`).join('')}</tbody>
-      </table></div>
+      <div class="section-title"><i class="ti ti-address-book"></i>${t('db_dernieres_demandes')||"Dernières demandes d'informations"}
+        <button class="btn sm" style="margin-left:auto" onclick="setView('demandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir tout'}</button>
+      </div>
+      <div id="dash-demandes-info">${t('msg_chargement')}</div>
     </div>
     <div class="card" style="margin-top:14px">
       <div class="section-title"><i class="ti ti-arrows-exchange"></i>${t('transferts_en_cours')}
@@ -285,7 +278,26 @@ async function renderDashboard(ttl,c,a){
   chargerTransfertsDashboard();
   chargerCommandesDashboard();
   chargerDemosDashboard();
+  chargerDemandesInfoDashboard();
 }
+
+async function chargerDemandesInfoDashboard(){
+  const el=document.getElementById('dash-demandes-info'); if(!el) return;
+  let rows=[]; try{ rows=await API.demandesInfo({}); }catch(e){ el.innerHTML=`<div style="font-size:12px;color:var(--danger);padding:6px 0">Erreur : ${esc(e.message)}</div>`; return; }
+  rows=(rows||[]).slice().sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,10);
+  if(!rows.length){ el.innerHTML=`<div style="font-size:12px;color:var(--text3);padding:6px 0">${TR('Aucune demande.')}</div>`; return; }
+  el.innerHTML=`<div class="table-wrap"><table class="t">
+      <thead><tr><th>${TR('Statut')}</th><th>${TR('Date')}</th><th>${TR('Distributeur')}</th><th>${TR('Contact')}</th><th>${TR('Ville / CP')}</th></tr></thead>
+      <tbody>${rows.map(d=>`<tr style="cursor:pointer" onclick="setView('demandes')">
+        <td>${diBadge(d.statut)}</td>
+        <td style="white-space:nowrap">${_dfd(d.date_transmission)}</td>
+        <td>${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>
+        <td>${esc(d.nom||'')}${d.telephone?`<div class="mono" style="color:var(--text3);font-size:11px">${esc(d.telephone)}</div>`:''}</td>
+        <td style="white-space:nowrap">${esc(d.ville||'')}${d.cp?' '+esc(d.cp):''}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+}
+window.chargerDemandesInfoDashboard = chargerDemandesInfoDashboard;
 
 async function chargerDemosDashboard(){
   const el=document.getElementById('dash-demos'); if(!el) return;
