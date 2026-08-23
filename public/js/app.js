@@ -111,8 +111,10 @@ function toast(msg,icon='ti-check',color=''){
   $('toast-area').innerHTML=`<div class="toast" style="${color?'background:'+color:''}">${icon?`<i class="ti ${icon}"></i>`:''} ${esc(msg)}</div>`;
   setTimeout(()=>{$('toast-area').innerHTML='';},3000);
 }
-function showModal(html){$('modal-area').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`;}
+function showModal(html){$('modal-area').innerHTML=`<div class="modal-overlay"><div class="modal">${html}</div></div>`;}
 function closeModal(){$('modal-area').innerHTML='';}
+// Fermeture des fenêtres uniquement via les boutons ou la touche Échap (jamais par un clic en dehors)
+document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ var ma=document.getElementById('modal-area'); if(ma && ma.innerHTML.trim()){ closeModal(); } } });
 
 // ── Dark mode ─────────────────────────────────────────────────────
 function toggleDark(){
@@ -6154,6 +6156,7 @@ function popupCarte(p) {
     (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:11px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
     (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> '+TR("Voir la fiche complète →")+'</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px">'+TR("Voir ses commandes →")+'</button>' : '') +
+    '<button onclick="nouvelleDemandeDepuisCarte(' + (p.client_id||'null') + ',\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:12px;cursor:pointer;margin-bottom:8px"><i class="ti ti-address-book"></i> '+TR("Nouvelle demande d'info →")+'</button>' +
     (typeof canWriteCarte==='function' && canWriteCarte() ? '<div style="margin-top:6px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:6px 0;font-size:12px;cursor:pointer"><i class="ti ti-edit"></i> '+TR("Modifier")+'</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
     '</div>';
 }
@@ -6261,6 +6264,13 @@ function ouvrirFicheDistrib(clientId){
   setView('client', { clientId: clientId });
 }
 window.ouvrirFicheDistrib = ouvrirFicheDistrib;
+// Depuis la carte : créer une demande d'info pour ce distributeur (client qui a appelé)
+function nouvelleDemandeDepuisCarte(clientId, nom){
+  if (_carteMap) _carteMap.closePopup();
+  setView('demandes');
+  setTimeout(function(){ if (typeof modalDemande==='function') modalDemande(clientId||null, nom||''); }, 500);
+}
+window.nouvelleDemandeDepuisCarte = nouvelleDemandeDepuisCarte;
 
 function filtrerParDistrib(nom) {
   if (typeof STATE !== 'undefined') STATE.view = 'commandes';
@@ -7993,6 +8003,7 @@ async function chargerDemandesParDistrib(){
         ${ntBadge}
         <span style="background:var(--bg2,#eef1f4);border:1px solid var(--border);border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none" title="${TR('Nombre de demandes')}">${g.items.length}</span>
         <span style="flex:1"></span>
+        ${g.client_id?`<button class="btn sm" title="${TR('Ouvrir la fiche du distributeur (ventes, adresse…)')}" onclick="event.stopPropagation();ouvrirFicheDistrib(${g.client_id})"><i class="ti ti-user"></i></button>`:''}
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
