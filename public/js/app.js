@@ -8052,19 +8052,42 @@ async function relancerContact(id, email){
 }
 window.relancerContact = relancerContact;
 async function reaffecterGroupe(nom){
+  // Fenêtre de rattachement / renommage avec autocomplétion des fiches Clients
   const g = (window._DI_GROUPS||{})[nom]; if(!g){ return; }
-  const nouveau = prompt(TR('Déplacer les ')+g.items.length+TR(' demande(s) de « ')+nom+TR(' » vers quel distributeur ?\n(le nom sera lié à la fiche s\'il existe)'), '');
-  if(nouveau==null) return;
-  const nn = nouveau.trim(); if(!nn){ toast(TR('Nom vide'),'ti-alert-circle','var(--warning)'); return; }
-  if(nn===nom){ return; }
+  await ensureClientsCache();
+  if(!window._DISTRIB_NOMS){ try{ window._DISTRIB_NOMS = await API.distributeursReferences(); }catch(e){ window._DISTRIB_NOMS=[]; } }
+  const clientNoms=(window._clientsCache||[]).map(c=>c.nom).filter(Boolean);
+  const noms=[...new Set([...clientNoms, ...(window._DISTRIB_NOMS||[])])].filter(n=>n&&n.trim()&&n.trim()!=='0').sort((a,b)=>_diKey(a)<_diKey(b)?-1:_diKey(a)>_diKey(b)?1:0);
+  window._DI_NOMS_LISTE = noms;
+  showModal(`<div class="modal-header"><i class="ti ti-arrow-move-right" style="color:var(--accent)"></i><h2>${TR('Rattacher / renommer le distributeur')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="di-client-id" value="${g.client_id||''}">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px"><strong>${g.items.length}</strong> ${TR('demande(s) actuellement sous')} « <strong>${esc(nom)}</strong> ».</div>
+      <div class="form-group"><label class="form-label">${TR('Rattacher à ce distributeur (fiche Clients) ou nouveau nom')}</label>
+        <div style="position:relative">
+          <input class="form-input" id="di-distrib" autocomplete="off" value="${esc(nom)}" placeholder="${TR('Nom du distributeur')}" oninput="diDistribInput(this.value)" onfocus="diDistribInput(this.value)" onblur="setTimeout(diDistribHideDrop,200)">
+          <div id="di-distrib-drop" style="display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 2px);max-height:240px;overflow:auto;background:rgba(255,255,255,0.98);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(30,60,110,.18)"></div>
+        </div>
+        <div id="di-distrib-lien" style="font-size:12px;margin-top:4px"></div></div>
+      <div style="font-size:11px;color:var(--text3)">${TR('Choisissez une fiche existante dans la liste pour un rattachement correct, ou tapez un nouveau nom.')}</div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="confirmerReaffectation('${nom.replace(/'/g,'&#39;')}')"><i class="ti ti-check"></i> ${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
+  setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); },0);
+}
+window.reaffecterGroupe = reaffecterGroupe;
+async function confirmerReaffectation(nom){
+  const g = (window._DI_GROUPS||{})[nom]; if(!g){ return; }
+  const nn = (gv('di-distrib')||'').trim(); if(!nn){ toast(TR('Nom vide'),'ti-alert-circle','var(--warning)'); return; }
+  const clientId = gv('di-client-id') || null;
   try{
-    const r = await API.reaffecterDemandes({ ids: g.items.map(x=>x.id), nouveau_nom: nn });
+    const r = await API.reaffecterDemandes({ ids: g.items.map(x=>x.id), nouveau_nom: nn, client_id: clientId });
+    closeModal();
     toast(`${r.deplaces} ${TR('demande(s) déplacée(s) vers')} « ${nn} »${r.lie_client?(' — '+TR('lié à la fiche')):''}`,'ti-check','var(--success)');
     window._DISTRIB_NOMS = null;
     chargerDemandesParDistrib();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
-window.reaffecterGroupe = reaffecterGroupe;
+window.confirmerReaffectation = confirmerReaffectation;
 function voirDemandesDistrib(nom){ DEMANDES_FILTRE={statut:'',non_traitees:false,q:nom}; DEMANDES_VUE='liste'; render(); }
 window.voirDemandesDistrib = voirDemandesDistrib;
 

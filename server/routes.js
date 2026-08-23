@@ -6870,9 +6870,17 @@ router.post('/demandes-info/reaffecter', requireAuth, async (req, res) => {
     const b = req.body || {};
     const nouveau = (b.nouveau_nom || '').trim();
     if (!nouveau) return res.status(400).json({ error: 'Nouveau nom de distributeur requis' });
-    // Trouver la fiche client correspondant au nouveau nom (lien automatique)
-    const match = await db.get('SELECT id FROM clients WHERE LOWER(nom) = LOWER($1) LIMIT 1', [nouveau]);
-    const clientId = match ? match.id : null;
+    // Fiche client cible : soit celle explicitement choisie (client_id), soit rapprochée par nom exact
+    let clientId = null;
+    const cidRaw = b.client_id != null ? parseInt(b.client_id) : NaN;
+    if (!isNaN(cidRaw)) {
+      const c = await db.get('SELECT id, nom FROM clients WHERE id=$1', [cidRaw]);
+      if (c) clientId = c.id;
+    }
+    if (!clientId) {
+      const match = await db.get('SELECT id FROM clients WHERE LOWER(nom) = LOWER($1) LIMIT 1', [nouveau]);
+      clientId = match ? match.id : null;
+    }
     let ids = Array.isArray(b.ids) ? b.ids.map(x => parseInt(x)).filter(x => !isNaN(x)) : [];
     let moved = [];
     if (ids.length) {
