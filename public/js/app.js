@@ -1,7 +1,7 @@
 // public/js/app.js v2
 
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
-let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'' };
+let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'', type:'' };
 let _cmdReqId = 0; // anti-race condition pour la recherche commandes
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
 const CMD_COLS_DEFAULT = { num_annuel: false, paiement: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
@@ -515,10 +515,12 @@ window.dessinerAdresses = dessinerAdresses;
 async function renderClients(ttl,c,a){
   ttl.textContent=t('nav_clients');
   if(!window._clientsQ) window._clientsQ = '';
-  a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
-    <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(window._clientsQ)}" style="max-width:260px">
+  a.innerHTML=`<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="clients-search" class="search-bar" placeholder="${t('cat_search')||'Rechercher…'}" value="${esc(window._clientsQ)}" style="max-width:260px">
+      <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
+    </div>
     ${(typeof isAdmin==='function' && isAdmin()) ? '<button class="btn" onclick="modalCompleterAdresses()"><i class="ti ti-map-pin-cog"></i>'+TR("Compléter les adresses")+'</button>' : ''}
-    <button class="btn primary" onclick="modalNewClient()"><i class="ti ti-plus"></i>${t('clients_new')}</button>
   </div>`;
   document.getElementById('clients-search')?.addEventListener('input', e => {
     window._clientsQ = e.target.value;
@@ -535,15 +537,113 @@ async function chargerListeClients(){
   const list = await API.clients(window._clientsQ||'');
   if(reqId !== _clientsReqId) return; // réponse périmée — une requête plus récente a pris le relais
   el.innerHTML=`<div class="table-wrap"><table class="t">
-    <thead><tr><th>${t('col_distributeur')}</th><th>${t('col_contact')}</th><th>Adresse</th><th>${t('col_fauteuils')}</th><th>${t('col_interventions')}</th><th></th></tr></thead>
-    <tbody>${list.map(cl=>`<tr onclick="setView('client',{clientId:${cl.id}})">
+    <thead><tr>
+      <th>${t('col_distributeur')}</th>
+      <th>${TR('Adresse complète')}</th>
+      <th>${TR('Téléphone')}</th>
+      <th>${TR('Mail contact')}</th>
+      <th style="text-align:center">${TR('Dernière cmd')}</th>
+      <th style="text-align:center" title="${TR('Fauteuils vendus')}">${TR('Fauteuils')}</th>
+      <th style="text-align:center">${TR('Interv.')}</th>
+      <th style="text-align:center">${TR('Dem. infos')}</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${list.map(cl=>{
+      const adr=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays&&cl.pays!=='France'?cl.pays:''].filter(Boolean).join(', ');
+      const tel=cl.tel||cl.portable||'';
+      return `<tr onclick="setView('client',{clientId:${cl.id}})">
       <td><div style="font-weight:600">${esc(cl.nom)}</div><div style="font-size:11px;color:var(--text3)">${esc(cl.type)}</div></td>
-      <td><div>${esc(cl.contact||'')}</div><div style="font-size:11px;color:var(--text3)">${esc(cl.email||'')}</div></td>
-      <td>${cl.adresse?`<div style="font-size:11px;color:var(--text3)">${esc(cl.adresse)}</div>`:''}<div>${esc([cl.cp,cl.ville].filter(Boolean).join(' ')||'—')}</div></td><td>${cl.nb_fauteuils}</td><td>${cl.nb_interventions}</td>
+      <td style="font-size:12px;color:var(--text2);max-width:260px">${adr?esc(adr):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-size:12px">${tel?esc(tel):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-size:12px;color:var(--text2)">${cl.email?esc(cl.email):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="text-align:center;font-size:12px;white-space:nowrap">${cl.derniere_commande?fd((''+cl.derniere_commande).slice(0,10)):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="text-align:center;font-weight:600">${cl.nb_fauteuils_vendus||0}</td>
+      <td style="text-align:center">${cl.nb_interventions||0}</td>
+      <td style="text-align:center">${cl.nb_demandes_info?`<span class="badge ouvert">${cl.nb_demandes_info}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
       <td><button class="btn sm" onclick="event.stopPropagation();setView('client',{clientId:${cl.id}})"><i class="ti ti-arrow-right"></i></button></td>
-    </tr>`).join('')}</tbody>
+    </tr>`;}).join('')}</tbody>
   </table></div>`;
 }
+
+// Bloc « Fiche distributeur » — présentation pratique et lisible.
+// Ordre demandé : adresse complète, téléphone, mail, contact, type, groupe,
+// voir carte, OpenStreetMap, carte (si coché), EDI (si coché), annotation.
+function ficheDistributeurBloc(cl){
+  const nomEsc = esc(cl.nom).replace(/'/g,'&#39;');
+  const lignes=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
+  const adrTxt=lignes.join(', ');
+  const q=encodeURIComponent(adrTxt);
+  const row=(icon,label,val)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:0.5px solid var(--border)">
+      <i class="ti ${icon}" style="font-size:15px;color:var(--accent);width:18px;text-align:center;margin-top:1px"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:600">${label}</div>
+        <div style="font-size:13px;font-weight:500;word-break:break-word">${val}</div>
+      </div>
+    </div>`;
+  const typeBadge=`<span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;background:${cl.type==='Particulier'?'#e0e7ff;color:#3730a3':'#dcfce7;color:#166534'}">${esc(cl.type||'Distributeur')}</span>`;
+  // Adresse : bloc principal mis en avant
+  const adresseBloc = lignes.length
+    ? `<div style="background:rgba(59,130,246,.06);border:0.5px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:10px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:600;margin-bottom:3px"><i class="ti ti-map-pin" style="font-size:12px"></i> ${TR('Adresse complète')}</div>
+        <div style="font-size:13px;font-weight:600;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}</div>
+        <div style="margin-top:7px;display:flex;gap:12px;flex-wrap:wrap;font-size:11px">
+          <span onclick="voirDistributeurSurCarte(${cl.id},'${nomEsc}')" style="color:var(--accent);cursor:pointer;font-weight:600"><i class="ti ti-map-pin" style="font-size:12px"></i> ${TR("Voir sur la carte")}</span>
+          <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:12px"></i> OpenStreetMap</a>
+          <span onclick="copierAdresse(this,'${esc(adrTxt).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:12px"></i> ${TR("Copier")}</span>
+        </div>
+      </div>`
+    : `<div style="background:rgba(245,158,11,.08);border:0.5px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:10px;font-size:12px;color:var(--text2)">
+        <i class="ti ti-map-pin-off" style="font-size:13px"></i> ${TR('Adresse')} — ${TR('(à compléter)')}</div>`;
+  // Chips d'état : carte (si coché), EDI (si coché), site public, priorité, facturation
+  const chips=[];
+  if(cl.sur_carte) chips.push(`<span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${nomEsc}')" title="${TR('Affiché sur la carte distributeurs')}"><i class="ti ti-map-2"></i> ${TR('Sur la carte distributeurs')}</span>`);
+  if(cl.edi) chips.push(`<span class="badge ouvert" title="${TR('Prélèvement EDI')}"><i class="ti ti-credit-card"></i> ${TR('EDI — Prélèvement')}</span>`);
+  if(cl.public_site) chips.push(`<span class="badge hg" title="Visible sur la carte publique eloflex.fr"><i class="ti ti-world"></i> ${TR('Site public')}</span>`);
+  if(cl.priorite) chips.push(`<span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${TR('Priorité')} ${cl.priorite}</span>`);
+  if(cl.entite_facturation_id) chips.push(`<span class="badge ouvert"><i class="ti ti-receipt"></i> ${TR('Facturé à')} ${esc(cl.entite_facturation_nom||'—')}</span>`);
+  const annEsc = cl.annotation ? esc(cl.annotation) : '';
+  return `<div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+      <div class="section-title" style="margin:0"><i class="ti ti-building-store"></i>${TR("Fiche distributeur")}</div>
+      ${typeBadge}
+    </div>
+    ${adresseBloc}
+    <div>
+      ${row('ti-phone', TR('Téléphone'), cl.tel?`<a href="tel:${esc(cl.tel)}" style="color:inherit;text-decoration:none">${esc(cl.tel)}</a>`:'<span style="color:var(--text3)">—</span>')}
+      ${cl.portable?row('ti-device-mobile', TR('Portable'), `<a href="tel:${esc(cl.portable)}" style="color:inherit;text-decoration:none">${esc(cl.portable)}</a>`):''}
+      ${row('ti-mail', TR('Mail'), cl.email?`<a href="mailto:${esc(cl.email)}" style="color:var(--accent);text-decoration:none">${esc(cl.email)}</a>`:'<span style="color:var(--text3)">—</span>')}
+      ${row('ti-user', TR('Personne de contact'), cl.contact?esc(cl.contact):'<span style="color:var(--text3)">—</span>')}
+      ${row('ti-users-group', TR("Groupe d'appartenance"), cl.reseau_carte?esc(cl.reseau_carte):'<span style="color:var(--text3)">—</span>')}
+    </div>
+    ${chips.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">${chips.join('')}</div>`:''}
+    <div style="margin-top:12px;background:rgba(250,204,21,.08);border:0.5px solid var(--border);border-radius:12px;padding:10px 12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:700"><i class="ti ti-note" style="font-size:12px"></i> ${TR('Annotation — information spécifique')}</div>
+        <button class="btn sm" id="annot-save-${cl.id}" onclick="saveAnnotationDistrib(${cl.id})" style="display:none"><i class="ti ti-check"></i>${TR('Enregistrer')}</button>
+      </div>
+      <textarea id="annot-${cl.id}" class="form-input" rows="2" placeholder="${TR('Note libre sur ce distributeur…')}" style="width:100%;font-size:13px;resize:vertical" oninput="document.getElementById('annot-save-${cl.id}').style.display='inline-flex'">${annEsc}</textarea>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:6px">
+      <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
+      <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>${TR('Fusionner')}</button>
+    </div>
+  </div>`;
+}
+
+async function saveAnnotationDistrib(id){
+  const ta=document.getElementById('annot-'+id); if(!ta) return;
+  const btn=document.getElementById('annot-save-'+id);
+  try{
+    if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i>'; }
+    await API.put(`/clients/${id}/annotation`, { annotation: ta.value });
+    if(btn){ btn.innerHTML='<i class="ti ti-check"></i>'+TR('Enregistré'); btn.style.display='none'; }
+    toast&&toast(TR('Annotation enregistrée'));
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-check"></i>'+TR('Enregistrer'); }
+    alert('Erreur : '+e.message);
+  }
+}
+window.saveAnnotationDistrib=saveAnnotationDistrib;
 
 async function renderClient(ttl,c,a){
   const cl=await API.client(STATE.clientId);
@@ -559,34 +659,7 @@ async function renderClient(ttl,c,a){
   c.innerHTML=`
     <div class="breadcrumb"><span onclick="setView('clients')">Clients</span><i class="ti ti-chevron-right" style="font-size:11px"></i>${esc(cl.nom)}</div>
     <div class="grid-2" style="margin-bottom:12px">
-      <div class="card">
-        <div class="section-title"><i class="ti ti-user"></i>${TR("Fiche distributeur")}</div>
-        <table style="width:100%;font-size:12px">
-          ${[['Contact',cl.contact],['Email',cl.email],['Téléphone',cl.tel],['Portable',cl.portable],['Type',cl.type]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${k}</td><td style="font-weight:500">${esc(v||'—')}</td></tr>`).join('')}
-          ${(()=>{
-            const lignes=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays].filter(Boolean);
-            if(!lignes.length) return `<tr><td style="color:var(--text3);padding:3px 0;width:100px">Adresse</td><td style="color:var(--text3)">— <span style="font-size:11px">${TR('(à compléter)')}</span></td></tr>`;
-            const q=encodeURIComponent(lignes.join(', '));
-            return `<tr><td style="color:var(--text3);padding:5px 0;width:100px;vertical-align:top">Adresse</td>
-              <td style="font-weight:500;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}
-                <div style="margin-top:4px;display:flex;gap:8px;font-size:11px;font-weight:400">
-                  <span onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')" style="color:var(--accent);cursor:pointer"><i class="ti ti-map-pin" style="font-size:11px"></i> ${TR("Voir sur la carte")}</span>
-                  <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> OpenStreetMap</a>
-                  <span onclick="copierAdresse(this,'${esc(lignes.join(', ')).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:11px"></i> ${TR("Copier")}</span>
-                </div>
-              </td></tr>`;
-          })()}
-          ${cl.edi?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Paiement</td><td><span class="badge ouvert">${TR('💳 EDI — Prélèvement')}</span></td></tr>`:''}
-          ${cl.sur_carte?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Carte</td><td><span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${esc(cl.nom).replace(/'/g,'&#39;')}')">${TR('🗺️ Affiché sur la carte distributeurs')}</span></td></tr>`:''}
-          ${cl.public_site?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Site public</td><td><span class="badge hg" title="Visible sur la carte publique eloflex.fr">🌐 Visible sur le site public</span></td></tr>`:''}
-          ${cl.priorite?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">${TR('Priorité')}</td><td><span style="font-size:11px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${cl.priorite}</span></td></tr>`:''}
-          ${cl.entite_facturation_id?`<tr><td style="color:var(--text3);padding:3px 0;width:100px">Facturation</td><td><span class="badge ouvert">🧾 Facturé à ${esc(cl.entite_facturation_nom||'—')}</span></td></tr>`:''}
-        </table>
-        <div style="margin-top:10px;display:flex;gap:6px">
-          <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
-          <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>${TR('Fusionner')}</button>
-        </div>
-      </div>
+      ${ficheDistributeurBloc(cl)}
       <div class="card">
         <div class="section-title"><i class="ti ti-chart-bar"></i>Bilan SAV</div>
         <div class="grid-2">
@@ -930,11 +1003,7 @@ function majLienSuiviModal(){
 async function renderCommandes(ttl,c,a){
   ttl.textContent=t('cmd_title')||'Suivi des commandes';
   a.innerHTML=`<button class="btn success" onclick="API.exportExcel('commandes')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')||'Excel'}</button>
-    <button class="btn" onclick="syncCommandesVF()"><i class="ti ti-refresh"></i>${t('cmd_sync_vf')||'Synchroniser VosFactures'}</button>
-    <button class="btn" id="btn-kanban-toggle" onclick="CMD_VIEW=CMD_VIEW==='liste'?'kanban':'liste';renderCommandesView()" title="Basculer liste / Kanban">
-      <i class="ti ${CMD_VIEW==='kanban'?'ti-list':'ti-layout-kanban'}"></i> ${CMD_VIEW==='kanban'?'Liste':'Kanban'}
-    </button>
-    <button class="btn primary" onclick="modalNouvelleCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>`;
+    <button class="btn" onclick="syncCommandesVF()"><i class="ti ti-refresh"></i>${t('cmd_sync_vf')||'Synchroniser VosFactures'}</button>`;
 
   // Stats filtrées par l'année sélectionnée (ou année en cours par défaut pour les compteurs)
   const anneeFiltre = CMD_FILTERS.annee ? parseInt(CMD_FILTERS.annee) : new Date().getFullYear();
@@ -955,17 +1024,28 @@ async function renderCommandes(ttl,c,a){
       <div class="stat-card"><div class="stat-label">${TR('🔄 Démos')}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
       <div class="stat-card"><div class="stat-label">${TR('Problème')}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-      <input class="form-input" style="max-width:220px;padding:6px 10px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;clearTimeout(window._cmdSearchTimer);window._cmdSearchTimer=setTimeout(()=>renderCommandesTable(1),300)">
-      <select class="form-input" style="width:auto;padding:6px 10px" id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;CMD_FILTERS.mois='';render()">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+      <button class="btn" id="btn-kanban-toggle" onclick="CMD_VIEW=CMD_VIEW==='liste'?'kanban':'liste';renderCommandesView()" title="Basculer liste / Kanban">
+        <i class="ti ${CMD_VIEW==='kanban'?'ti-list':'ti-layout-kanban'}"></i> ${CMD_VIEW==='kanban'?'Liste':'Kanban'}
+      </button>
+      <button class="btn primary" onclick="modalNouvelleCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+      <input class="form-input" style="max-width:240px;padding:10px 12px;font-size:14px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;clearTimeout(window._cmdSearchTimer);window._cmdSearchTimer=setTimeout(()=>renderCommandesTable(1),300)">
+      <select class="form-input" style="width:auto;padding:10px 12px;font-size:14px" id="cmd-f-type" onchange="CMD_FILTERS.type=this.value;renderCommandesTable(1)">
+        <option value="" ${!CMD_FILTERS.type?'selected':''}>${TR('Toutes les commandes')}</option>
+        <option value="fauteuil" ${CMD_FILTERS.type==='fauteuil'?'selected':''}>♿ ${TR('Fauteuils')}</option>
+        <option value="accessoire" ${CMD_FILTERS.type==='accessoire'?'selected':''}>📦 ${TR('Accessoires')}</option>
+      </select>
+      <select class="form-input" style="width:auto;padding:10px 12px;font-size:14px" id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;CMD_FILTERS.mois='';render()">
         <option value="">${t('cmd_toutes_annees')||'Toutes années'}</option>
         ${years.map(y=>`<option value="${y}" ${CMD_FILTERS.annee==y?'selected':''}>${y}</option>`).join('')}
       </select>
-      <select class="form-input" style="width:auto;padding:6px 10px" id="cmd-f-mois" onchange="CMD_FILTERS.mois=this.value;renderCommandesTable(1)">
+      <select class="form-input" style="width:auto;padding:10px 12px;font-size:14px" id="cmd-f-mois" onchange="CMD_FILTERS.mois=this.value;renderCommandesTable(1)">
         <option value="">Tous les mois</option>
         ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'].map((m,i)=>`<option value="${i+1}" ${CMD_FILTERS.mois==i+1?'selected':''}>${m}</option>`).join('')}
       </select>
-      <select class="form-input" style="width:auto;padding:6px 10px" id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
+      <select class="form-input" style="width:auto;padding:10px 12px;font-size:14px" id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
         <option value="">${t('cmd_tous_statuts')||'Tous statuts'}</option>
         <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ ${t('cmd_en_attente')||'En attente'}</option>
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
@@ -977,10 +1057,10 @@ async function renderCommandes(ttl,c,a){
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
-      <input class="form-input" style="width:auto;max-width:180px;padding:6px 10px" id="cmd-f-distrib" placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)">
+      <input class="form-input" style="width:auto;max-width:180px;padding:10px 12px;font-size:14px" id="cmd-f-distrib" placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)">
       <button class="btn sm" onclick="toggleColsPanel()" title="Colonnes visibles"><i class="ti ti-layout-columns"></i></button>
-      ${CMD_FILTERS.distributeur||CMD_FILTERS.statut||CMD_FILTERS.q||CMD_FILTERS.mois
-        ? `<button class="btn sm" onclick="CMD_FILTERS={annee:CMD_FILTERS.annee,mois:'',statut:'',groupe:'',distributeur:'',q:''};render()" title="Effacer filtres"><i class="ti ti-x"></i></button>`:''}
+      ${CMD_FILTERS.distributeur||CMD_FILTERS.statut||CMD_FILTERS.q||CMD_FILTERS.mois||CMD_FILTERS.type
+        ? `<button class="btn sm" onclick="CMD_FILTERS={annee:CMD_FILTERS.annee,mois:'',statut:'',groupe:'',distributeur:'',q:'',type:''};render()" title="Effacer filtres"><i class="ti ti-x"></i></button>`:''}
     </div>
     <div id="cmd-cols-panel" style="display:none;padding:10px 14px;margin-bottom:8px;background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:var(--radius);backdrop-filter:blur(12px)">
       <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Colonnes optionnelles</div>
@@ -1019,8 +1099,8 @@ async function renderCommandesTable(page=1){
   wrap.innerHTML=`<div class="empty" style="padding-top:30px"><i class="ti ti-loader-2"></i>${t('msg_chargement')}</div>`;
   const PER_PAGE = 100;
   const res = await API.commandes({
-    annee: CMD_FILTERS.annee, statut: CMD_FILTERS.statut,
-    distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q,
+    annee: CMD_FILTERS.annee, mois: CMD_FILTERS.mois, statut: CMD_FILTERS.statut,
+    distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, type: CMD_FILTERS.type,
     per_page: PER_PAGE, page
   });
   const list = res.rows||[];
@@ -1616,8 +1696,12 @@ async function modalCommande(id, prefill){
           </div>
         </div>
         ${id?`<div style="padding-top:12px;margin-top:12px;border-top:0.5px solid var(--border-s)">
-          <button class="btn sm" onclick="chercherFacturesVF(${id},'${esc(cm.num_facture||'')}')" type="button"><i class="ti ti-search"></i> ${t('cmd_chercher_vf_rattacher')||'Chercher une facture VosFactures à rattacher'}</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn sm" onclick="chercherFacturesVF(${id},'${esc(cm.num_facture||'')}')" type="button"><i class="ti ti-search"></i> ${t('cmd_chercher_vf_rattacher')||'Chercher une facture VosFactures à rattacher'}</button>
+            <button class="btn sm" onclick="chercherFacturesPennylane(${id},'${esc(cm.num_facture_pennylane||'')}')" type="button"><i class="ti ti-search"></i> ${TR('Chercher une facture Pennylane à rattacher')}</button>
+          </div>
           <div id="cmd-vf-suggest-list" style="margin-top:10px"></div>
+          <div id="cmd-pl-suggest-list" style="margin-top:10px"></div>
         </div>`:''}
       </div>
     </div>
@@ -1782,6 +1866,43 @@ function appliquerFactureVF(i){
   if($('cmd-facture-vfid')) $('cmd-facture-vfid').value = f.id || '';
   toast(t('cmd_vf_applique')||'Facture rattachée — vérifie puis enregistre');
 }
+
+// ── Rattachement d'une facture Pennylane (complément de VosFactures) ─────────
+async function chercherFacturesPennylane(id, numFacture){
+  const zone=$('cmd-pl-suggest-list'); if(!zone) return;
+  zone.innerHTML=`<div style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${t('msg_chargement')||'Chargement…'}</div>`;
+  const numFact = numFacture || gv('cmd-facture-pl') || '';
+  const url = `/commandes/${id}/factures-pennylane-suggestions${numFact?'?num_facture='+encodeURIComponent(numFact):''}`;
+  try{
+    const r = await API.get(url);
+    if(!r.configured){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${TR('Pennylane non configuré')}</div>`; return; }
+    if(r.reason){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${esc(r.reason)}</div>`; return; }
+    if(!r.factures||!r.factures.length){ zone.innerHTML=`<div style="font-size:12px;color:var(--text2)">${TR('Aucune facture Pennylane trouvée pour ce distributeur')}</div>`; return; }
+    zone.innerHTML=`<div class="form-label" style="margin-bottom:8px"><i class="ti ti-brand-stripe" style="color:#6772e5"></i> ${TR('Choisis la facture Pennylane correspondante (rattachement manuel) :')}</div>
+      <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto">
+        ${r.factures.map((f,i)=>{
+          window._PL_SUGGEST=window._PL_SUGGEST||{}; window._PL_SUGGEST[i]=f;
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:0.5px solid var(--border-s);border-radius:var(--radius)">
+            <div>
+              <div style="font-size:13px;font-weight:600">${esc(f.numero||('#'+f.id))}${f.date?' — '+fd((''+f.date).slice(0,10)):''}</div>
+              <div style="font-size:11px;color:var(--text3)">${f.distributeur?esc(f.distributeur)+' · ':''}${f.num_serie?('N° série : '+esc(f.num_serie)):(t('cmd_vf_sans_serie')||'Pas de série détectée')}${f.montant_ttc!=null?' · '+parseFloat(f.montant_ttc).toFixed(2)+' €':''}</div>
+            </div>
+            <button class="btn sm" type="button" onmousedown="appliquerFacturePennylane(${i})">${t('cmd_vf_utiliser')||'Utiliser'}</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }catch(e){ zone.innerHTML=`<div style="font-size:12px;color:var(--danger)">${esc(e.message)}</div>`; }
+}
+
+function appliquerFacturePennylane(i){
+  const f = (window._PL_SUGGEST||{})[i]; if(!f) return;
+  if($('cmd-facture-pl')) $('cmd-facture-pl').value = f.numero || '';
+  if(f.num_serie && $('cmd-serie') && !gv('cmd-serie')) $('cmd-serie').value = f.num_serie;
+  if(typeof majStatutBadge==='function') majStatutBadge();
+  toast(t('cmd_vf_applique')||'Facture rattachée — vérifie puis enregistre');
+}
+window.chercherFacturesPennylane=chercherFacturesPennylane;
+window.appliquerFacturePennylane=appliquerFacturePennylane;
 
 async function lookupBdcVF(){
   const numero = gv('cmd-bdc').trim();

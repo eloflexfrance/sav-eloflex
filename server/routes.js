@@ -322,10 +322,20 @@ router.get('/clients', async (req, res) => {
     const rows = await db.all(
       `SELECT c.*,
         COALESCE(nf.n, 0) AS nb_fauteuils,
-        COALESCE(ni.n, 0) AS nb_interventions
+        COALESCE(ni.n, 0) AS nb_interventions,
+        COALESCE(nc.n_fauteuils, 0) AS nb_fauteuils_vendus,
+        nc.derniere_commande,
+        COALESCE(nd.n, 0) AS nb_demandes_info
        FROM clients c
        LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM fauteuils GROUP BY client_id) nf ON nf.client_id = c.id
        LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM interventions GROUP BY client_id) ni ON ni.client_id = c.id
+       LEFT JOIN (
+         SELECT client_id,
+                MAX(date_commande) AS derniere_commande,
+                COUNT(*) FILTER (WHERE commande_type='fauteuil' OR type_fauteuil_neuf=TRUE OR type_fauteuil_demo=TRUE OR modele ILIKE '%eloflex%')::int AS n_fauteuils
+         FROM commandes GROUP BY client_id
+       ) nc ON nc.client_id = c.id
+       LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM demandes_info GROUP BY client_id) nd ON nd.client_id = c.id
        WHERE c.nom ILIKE $1 OR c.contact ILIKE $1 OR c.ville ILIKE $1
           OR c.adresse ILIKE $1 OR c.cp ILIKE $1 OR c.email ILIKE $1
        ORDER BY c.nom`,
@@ -433,16 +443,16 @@ router.get('/clients/:id', async (req, res) => {
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite, annotation } = req.body;
     if (!nom) return res.status(400).json({ error: 'Nom requis' });
     const token = crypto.randomBytes(20).toString('hex');
     const cl = await db.run(
       `INSERT INTO clients (nom,contact,email,tel,portable,ville,type,token_portail,edi,sur_carte,reseau_carte,
-                            adresse,adresse2,cp,pays,entite_facturation_id,public_site,priorite)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+                            adresse,adresse2,cp,pays,entite_facturation_id,public_site,priorite,annotation)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
       [nom, contact||null, email||null, tel||null, portable||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
-       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null]
+       adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null, annotation||null]
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
@@ -453,16 +463,18 @@ router.post('/clients', async (req, res) => {
 router.put('/clients/:id', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
-            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite } = req.body;
+            adresse, adresse2, cp, pays, entite_facturation_id, public_site, priorite, annotation } = req.body;
     const avant = await db.get('SELECT ville, adresse, cp, lat, lng FROM clients WHERE id=$1', [req.params.id]);
     const cl = await db.run(
       `UPDATE clients SET nom=$1,contact=$2,email=$3,tel=$4,portable=$5,ville=$6,type=$7,
        edi=$8,sur_carte=$9,reseau_carte=$10,
-       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,priorite=$17,updated_at=NOW() WHERE id=$18 RETURNING *`,
+       adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,priorite=$17,
+       annotation=COALESCE($18,annotation),updated_at=NOW() WHERE id=$19 RETURNING *`,
       [nom, contact, email, tel, portable||null, ville, type, !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null,
        (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
        !!public_site, priorite||null,
+       (annotation===undefined?null:annotation),
        req.params.id]
     );
     // Adresse modifiée : les anciennes coordonnées ne valent plus rien
@@ -471,6 +483,17 @@ router.put('/clients/:id', async (req, res) => {
     }
     const carte = await syncClientCarte(req.params.id);
     res.json({ ...cl, carte });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Enregistre uniquement l'annotation (information spécifique) d'une fiche ──
+router.put('/clients/:id/annotation', async (req, res) => {
+  try {
+    const annotation = (req.body && typeof req.body.annotation === 'string') ? req.body.annotation : '';
+    const row = await db.run('UPDATE clients SET annotation=$1, updated_at=NOW() WHERE id=$2 RETURNING id, annotation',
+      [annotation.trim() || null, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Fiche introuvable' });
+    res.json({ ok: true, annotation: row.annotation });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2468,12 +2491,19 @@ router.get('/commandes', async (req, res) => {
       conds.push(`(cmd.distributeur_nom ILIKE $${++idx} OR cmd.bdc ILIKE $${idx} OR cmd.num_serie ILIKE $${idx} OR cmd.num_suivi ILIKE $${idx} OR cmd.client_final ILIKE $${idx} OR cmd.num_facture ILIKE $${idx} OR cmd.modele ILIKE $${idx} OR cmd.accessoire ILIKE $${idx})`);
       p.push(qq);
     }
+    const mois = req.query.mois ? parseInt(req.query.mois) : null;
+    if (mois) { conds.push(`EXTRACT(MONTH FROM cmd.date_commande::date)=$${++idx}`); p.push(mois); }
+    // Filtre type d'affichage : fauteuils vs accessoires
+    const FAUTEUIL_EXPR = `(cmd.commande_type='fauteuil' OR cmd.type_fauteuil_neuf=TRUE OR cmd.type_fauteuil_demo=TRUE OR cmd.modele ILIKE '%eloflex%')`;
+    if (req.query.type === 'fauteuil') {
+      conds.push(FAUTEUIL_EXPR);
+    } else if (req.query.type === 'accessoire') {
+      conds.push(`(NOT ${FAUTEUIL_EXPR})`);
+    }
     if (conds.length) sql += ' WHERE ' + conds.join(' AND ');
     sql += ' ORDER BY cmd.date_commande DESC NULLS LAST, cmd.id DESC';
     let rows = await db.all(sql, p);
     rows = rows.map(r => ({ ...r, statut_calc: statutCommande(r) }));
-    const mois = req.query.mois ? parseInt(req.query.mois) : null;
-    if (mois) { conds.push(`EXTRACT(MONTH FROM cmd.date_commande::date)=$${++idx}`); p.push(mois); }
     const total = rows.length;
     const pp = Math.min(parseInt(per_page) || 100, 500);
     const startIdx = (Math.max(parseInt(page) || 1, 1) - 1) * pp;
@@ -3655,6 +3685,18 @@ router.get('/commandes/:id/factures-vf-suggestions', async (req, res) => {
     }
 
     res.json({ factures, configured: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Suggestions de factures Pennylane à rattacher (complément de VosFactures) ──
+router.get('/commandes/:id/factures-pennylane-suggestions', async (req, res) => {
+  try {
+    const cmd = await db.get(`SELECT * FROM commandes WHERE id=$1`, [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    const numFact = req.query.num_facture || cmd.num_facture_pennylane || '';
+    const { suggestFacturesPennylane } = require('../scripts/sync-pennylane');
+    const r = await suggestFacturesPennylane(cmd.distributeur_nom || '', numFact);
+    res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

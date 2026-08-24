@@ -67,7 +67,7 @@ async function syncClients() {
         INSERT INTO clients (nom, contact, email, tel, ville, type, vf_id, token_portail)
         VALUES ($1,$2,$3,$4,$5,$6,$7,md5(random()::text))
         ON CONFLICT (vf_id) DO UPDATE SET
-          nom=EXCLUDED.nom, contact=EXCLUDED.contact,
+          contact=EXCLUDED.contact,
           email=EXCLUDED.email, tel=EXCLUDED.tel,
           ville=EXCLUDED.ville, updated_at=NOW()
         WHERE clients.vf_ignore = FALSE
@@ -368,7 +368,7 @@ async function syncCommandesVF(fullHistory = false) {
           try {
             const r = await client.query(
               `INSERT INTO clients (nom, type, token_portail, vf_id) VALUES ($1,'Distributeur',md5(random()::text),$2)
-               ON CONFLICT (vf_id) DO UPDATE SET nom=EXCLUDED.nom RETURNING id`,
+               ON CONFLICT (vf_id) DO UPDATE SET updated_at=NOW() RETURNING id`,
               [nomDistrib, detail.client_id || null]
             );
             clientId = r.rows[0]?.id || null;

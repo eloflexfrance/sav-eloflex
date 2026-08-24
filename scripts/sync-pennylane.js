@@ -472,9 +472,106 @@ async function genererFacturePennylane(cmd, lignes) {
   return data;
 }
 
+// ── Suggestions de factures Pennylane à rattacher à une commande ────────────
+// Renvoie les factures récentes du distributeur (ou correspondant au n° saisi),
+// pour rattachement MANUEL (aucun lien automatique). Format aligné sur les
+// suggestions VosFactures : { configured, factures:[{id,numero,date,montant_ttc,distributeur,num_serie}] }.
+async function suggestFacturesPennylane(distributeurNom, numFacture) {
+  const token = process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN;
+  if (!token) return { configured: false, factures: [] };
+  const api = plApi();
+  const SERIE_RE = /\b(EL\d{6,}|A\d{2}L?\d{10,}|DE\d{2,}L?\d{10,}|T\d{2}\d{8,}|A\d{12,})\b/i;
+  const mapDoc = (d) => {
+    const cands = docNumberCandidates(d);
+    const distrib = (d.customer && (d.customer.name || d.customer.company_name || d.customer.label))
+                 || d.customer_name || (d.client && d.client.name) || null;
+    return {
+      id: d.id,
+      numero: d.invoice_number || d.number || d.label || cands[0] || ('#' + d.id),
+      date: (d.date || d.issue_date || d.emitted_at || d.created_at || '') ? String(d.date || d.issue_date || d.emitted_at || d.created_at).slice(0, 10) : null,
+      montant_ttc: _plNum(d.currency_amount != null ? d.currency_amount : (d.amount != null ? d.amount : d.total_amount)),
+      distributeur: distrib,
+      num_serie: null,
+    };
+  };
+  let docs = [];
+  try {
+    // 1) Recherche directe par numéro saisi (exact ou préfixe suffixé -1/-2/-3)
+    if (numFacture) {
+      const cibleN = _norm(numFacture);
+      try {
+        const { data } = await api.get('/customer_invoices', {
+          params: { filter: JSON.stringify([{ field: 'invoice_number', operator: 'eq', value: numFacture }]), limit: 5 }
+        });
+        docs.push(...(data.items || data.customer_invoices || []));
+      } catch (_) {}
+      // Balayage limité pour capter les variantes de numéro
+      if (!docs.length && cibleN.length >= 3) {
+        let cursor = null;
+        for (let pg = 0; pg < 3; pg++) {
+          const { data: d } = await api.get('/customer_invoices', { params: { limit: 100, ...(cursor ? { cursor } : {}) } });
+          const recents = d.items || d.customer_invoices || [];
+          for (const rd of recents) {
+            if (docNumberCandidates(rd).some(c => { const cn = _norm(c); return cn && cn.startsWith(cibleN); })) docs.push(rd);
+          }
+          cursor = d.next_cursor || null;
+          if (!cursor || docs.length >= 10) break;
+        }
+      }
+    }
+    // 2) Sinon (ou en complément) : factures récentes du distributeur
+    if (!docs.length && distributeurNom) {
+      const cible = distributeurNom.toLowerCase().trim();
+      const corr = c => {
+        const n = (c.name || c.company_name || c.label || '').toLowerCase();
+        return n && (n === cible || n.includes(cible.slice(0, 8)) || cible.includes(n.slice(0, 8)));
+      };
+      let customerId = null;
+      try {
+        const { data } = await api.get('/customers', {
+          params: { filter: JSON.stringify([{ field: 'name', operator: 'start_with', value: distributeurNom.slice(0, 6) }]), limit: 20 }
+        });
+        const match = (data.items || []).find(corr);
+        if (match) customerId = match.id;
+      } catch (_) {}
+      if (customerId) {
+        try {
+          const { data } = await api.get('/customer_invoices', {
+            params: { filter: JSON.stringify([{ field: 'customer_id', operator: 'eq', value: customerId }]), limit: 15 }
+          });
+          docs.push(...(data.items || data.customer_invoices || []));
+        } catch (_) {}
+      }
+    }
+  } catch (e) {
+    return { configured: true, factures: [], reason: (e.response && e.response.status) ? `HTTP ${e.response.status}` : e.message };
+  }
+  // Dédoublonne par id, limite à 10
+  const seen = new Set();
+  const factures = [];
+  for (const d of docs) {
+    if (seen.has(String(d.id))) continue;
+    seen.add(String(d.id));
+    factures.push(mapDoc(d));
+    if (factures.length >= 10) break;
+  }
+  // Tente d'extraire un n° de série depuis les lignes de chaque facture
+  for (const f of factures) {
+    try {
+      const { data: dl } = await api.get(`/customer_invoices/${f.id}/invoice_lines`);
+      const lignes = dl.items || dl.invoice_lines || [];
+      const texte = lignes.map(l => [l.label || '', l.description || '', l.serial_number || ''].join(' ')).join(' ');
+      const m = texte.match(SERIE_RE);
+      f.num_serie = m ? m[0].trim() : (lignes.find(l => l.serial_number) ? lignes.find(l => l.serial_number).serial_number : null);
+    } catch (_) { f.num_serie = null; }
+  }
+  return { configured: true, factures };
+}
+
 module.exports = {
   checkStatus,
   syncCommandesPennylane,
   lookupDocumentPennylane,
   genererFacturePennylane,
+  suggestFacturesPennylane,
 };

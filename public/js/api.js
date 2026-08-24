@@ -31,9 +31,21 @@ const API = {
     if(!text) return {};
     try { return JSON.parse(text); } catch(_) { return {}; }
   },
-  async put(p,b){const r=await fetch(this.base+p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  async patch(p,b){const r=await fetch(this.base+p,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
-  async del(p){const r=await fetch(this.base+p,{method:'DELETE'});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
+  async patch(p,b){
+    const r = await fetch(this.base+p,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+    const text = await r.text(); let data;
+    try { data = JSON.parse(text); } catch(_) { throw new Error(r.status===429?'VosFactures : trop de requêtes, réessayez dans quelques secondes.':'Réponse invalide ('+r.status+'): '+text.slice(0,120)); }
+    if(!r.ok) throw new Error(data.error||data.message||r.statusText);
+    return data;
+  },
+  async del(p){
+    const r = await fetch(this.base+p,{method:'DELETE'});
+    const text = await r.text(); if(!text) return {};
+    let data;
+    try { data = JSON.parse(text); } catch(_) { throw new Error(r.status===429?'VosFactures : trop de requêtes, réessayez dans quelques secondes.':'Réponse invalide ('+r.status+'): '+text.slice(0,120)); }
+    if(!r.ok) throw new Error(data.error||data.message||r.statusText);
+    return data;
+  },
   stats:()=>API.get('/stats'),
   clients:(q)=>API.get('/clients'+(q?`?q=${encodeURIComponent(q)}`:'')),
   client:(id)=>API.get(`/clients/${id}`),
