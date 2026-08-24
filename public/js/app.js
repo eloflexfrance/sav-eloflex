@@ -12,6 +12,22 @@ let TMP_PRODUITS = [];
 let CURRENT_USER = null; // Chargé au démarrage via /api/auth/me
 
 const fd  = d => { if(!d)return'—'; const[y,m,day]=d.split('-'); return`${day}/${m}/${y}`; };
+// Formatage universel des numéros de téléphone → « 09 67 66 51 29 » (paires espacées).
+// Gère 0967665129, 09.67.66.51.29, +33967665129, 0033967665129. Idempotent.
+function fmtTel(v){
+  if(v==null) return '';
+  const raw=String(v).trim(); if(!raw) return '';
+  let d=raw.replace(/[^\d+]/g,''); let plus=false;
+  if(/^\+33/.test(d)) d='0'+d.slice(3);
+  else if(/^0033/.test(d)) d='0'+d.slice(4);
+  else if(d[0]==='+'){ plus=true; d=d.slice(1); }
+  d=d.replace(/\D/g,''); if(!d) return raw;
+  const pairs=d.match(/\d{1,2}/g)||[];
+  return (plus?'+':'')+pairs.join(' ');
+}
+// Version pour l'attribut href="tel:" (chiffres + éventuel +).
+function telHref(v){ return String(v==null?'':v).replace(/[^\d+]/g,''); }
+window.fmtTel=fmtTel; window.telHref=telHref;
 const moisLabel = ym => {
   const[y,m]=ym.split('-');
   const namesFr=['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
@@ -54,10 +70,11 @@ const MODULES = [
   { key:'dashboard',     label:'Tableau de bord' },
   { key:'clients',       label:'Clients / Distributeurs' },
   { key:'carte',         label:'Carte distributeurs' },
+  { key:'demandes',      label:"Demandes d'infos" },
   { key:'interventions', label:'Interventions SAV' },
-  { key:'expeditions',   label:'Expéditions SAV' },
   { key:'commandes',     label:'Suivi commandes' },
   { key:'catalogue',     label:'Catalogue pièces' },
+  { key:'prets',         label:'Prêts' },
   { key:'rapports',      label:'Rapports & exports' },
   { key:'alertes',       label:'Alertes' },
   { key:'retours_suede', label:'Retours Suède' },
@@ -75,6 +92,7 @@ const PERM_FALLBACK = {
 };
 
 function hasAccess(module) {
+  if (module === 'logs') return true; // Journal d'activité : accessible à tous les utilisateurs
   if (isAdmin()) return true;
   const perms = CURRENT_USER?.permissions || {};
   let p = perms[module];
@@ -127,7 +145,7 @@ if(localStorage.getItem('dark')==='1') document.body.classList.add('dark');
 
 // ── Navigation (filtrée par rôle) ────────────────────────────────
 const NAV_ROLES = {
-  operateur:    ['dashboard','clients','interventions','expeditions','commandes','catalogue','alertes','retours_suede','transferts'],
+  operateur:    ['dashboard','clients','interventions','commandes','catalogue','alertes','retours_suede','transferts'],
   consultation: ['dashboard'],
 };
 
@@ -186,6 +204,7 @@ async function render(){
     else if(STATE.view==='retours-suede')  await renderRetoursSuede(ttl,c,a);
     else if(STATE.view==='transferts')     await renderTransferts(ttl,c,a);
     else if(STATE.view==='prets')          await renderPrets(ttl,c,a);
+    else if(STATE.view==='logs')           await renderLogs(ttl,c,a);
   }catch(e){c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`;}
 }
 
@@ -219,14 +238,70 @@ async function refreshDiscussionsBadge(){
 
 async function refreshBadges(){
   try{
-    const[alertes,exp,cat]=await Promise.all([API.alertes(),API.expeditions(),API.catalogue()]);
+    const[alertes,cat]=await Promise.all([API.alertes(),API.catalogue()]);
     const nb=alertes.length;
     const bdot=$('badge-alertes'); if(bdot){bdot.style.display=nb>0?'block':'none';}
-    const bexp=$('badge-exp'); if(bexp){bexp.style.display=exp.length>0?'inline-flex':'none';bexp.textContent=exp.length;}
     const bstock=$('badge-stock'); const nbs=cat.filter(p=>p.stock<=p.stock_alerte).length;
     if(bstock){bstock.style.display=nbs>0?'inline-flex':'none';bstock.textContent=nbs;}
   }catch(e){}
 }
+
+// ── LOGS / JOURNAL D'ACTIVITÉ (accessible à tous) ────────────────
+let _LOGS_F = { q:'', module:'', action:'' };
+function _logModLabel(k){ const m=MODULES.find(x=>x.key===k); return m?m.label:(k||'—'); }
+function _logActionBadge(a){
+  const map={ 'Ajout':'g', 'Modification':'attente', 'Suppression':'urgent' };
+  const ic ={ 'Ajout':'ti-plus', 'Modification':'ti-edit', 'Suppression':'ti-trash' };
+  return `<span class="badge ${map[a]||''}"><i class="ti ${ic[a]||'ti-point'}"></i> ${esc(a||'—')}</span>`;
+}
+function _logDate(v){
+  if(!v) return '—';
+  const s=String(v); const d=s.slice(0,10).split('-'); const h=s.slice(11,16);
+  return d.length===3 ? `${d[2]}/${d[1]}/${d[0]}${h?' '+h:''}` : s.slice(0,16).replace('T',' ');
+}
+async function renderLogs(ttl,c,a){
+  ttl.textContent=TR("Logs d'activité");
+  a.innerHTML=`<button class="btn sm" onclick="chargerLogs()"><i class="ti ti-refresh"></i>${TR('Actualiser')}</button>`;
+  c.innerHTML=`
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+      <input class="form-input" id="logs-q" placeholder="${TR('Rechercher (utilisateur…)')}" value="${esc(_LOGS_F.q)}" style="max-width:240px;padding:10px 12px" oninput="_LOGS_F.q=this.value;clearTimeout(window._logT);window._logT=setTimeout(chargerLogs,300)">
+      <select class="form-input" id="logs-module" style="width:auto;padding:10px 12px" onchange="_LOGS_F.module=this.value;chargerLogs()">
+        <option value="">${TR('Tous les modules')}</option>
+        ${MODULES.map(m=>`<option value="${m.key}" ${_LOGS_F.module===m.key?'selected':''}>${esc(m.label)}</option>`).join('')}
+      </select>
+      <select class="form-input" id="logs-action" style="width:auto;padding:10px 12px" onchange="_LOGS_F.action=this.value;chargerLogs()">
+        <option value="">${TR('Toutes les actions')}</option>
+        <option value="Ajout" ${_LOGS_F.action==='Ajout'?'selected':''}>${TR('Ajout')}</option>
+        <option value="Modification" ${_LOGS_F.action==='Modification'?'selected':''}>${TR('Modification')}</option>
+        <option value="Suppression" ${_LOGS_F.action==='Suppression'?'selected':''}>${TR('Suppression')}</option>
+      </select>
+    </div>
+    <div id="logs-body"><div style="color:var(--text2);font-size:13px;padding:20px 0">${t('msg_chargement')}</div></div>`;
+  chargerLogs();
+}
+async function chargerLogs(){
+  const el=document.getElementById('logs-body'); if(!el) return;
+  let rows=[]; try{ rows=await API.logs({ q:_LOGS_F.q, module:_LOGS_F.module, action:_LOGS_F.action, limit:300 }); }
+  catch(e){ el.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
+  if(!rows.length){ el.innerHTML=`<div class="empty"><i class="ti ti-history"></i>${TR('Aucune activité enregistrée.')}</div>`; return; }
+  el.innerHTML=`<div class="table-wrap"><table class="t">
+    <thead><tr>
+      <th style="white-space:nowrap">${TR('Date / heure')}</th>
+      <th>${TR('Utilisateur')}</th>
+      <th>${TR('Action')}</th>
+      <th>${TR('Module')}</th>
+      <th>${TR('Référence')}</th>
+    </tr></thead>
+    <tbody>${rows.map(l=>`<tr>
+      <td style="white-space:nowrap;font-size:12px;color:var(--text2)">${_logDate(l.created_at)}</td>
+      <td style="font-weight:600">${esc(l.user_nom||'—')}</td>
+      <td>${_logActionBadge(l.action)}</td>
+      <td>${esc(_logModLabel(l.module))}</td>
+      <td style="font-size:12px;color:var(--text3)">${l.cible_id?('#'+esc(l.cible_id)):''} <span class="mono" style="font-size:11px">${esc(l.chemin||'')}</span></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+window.renderLogs=renderLogs; window.chargerLogs=chargerLogs;
 
 // ── DASHBOARD ────────────────────────────────────────────────────
 
@@ -255,7 +330,6 @@ async function renderDashboard(ttl,c,a){
       <div class="stat-card"><div class="stat-label">${t('db_interventions')}</div><div class="stat-value">${s.nb_interventions}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_ouvertes')}</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
       <div class="stat-card"><div class="stat-label">${t('db_attente')}</div><div class="stat-value" style="color:var(--warning)">${s.attente}</div></div>
-      <div class="stat-card"><div class="stat-label">${t('db_expeditions')}</div><div class="stat-value" style="color:var(--accent)">${s.expeditions_cours}</div></div>
     </div>
     <div class="grid-4" style="margin-bottom:14px">
       <div class="stat-card"><div class="stat-label">${t('db_garantie')}</div><div class="stat-value" style="color:var(--success)">${s.garantie}</div></div>
@@ -263,12 +337,12 @@ async function renderDashboard(ttl,c,a){
       <div class="stat-card"><div class="stat-label">${t('db_pieces_alerte')}</div><div class="stat-value" style="color:${s.pieces_alerte>0?'var(--danger)':'var(--text)'}">${s.pieces_alerte}</div></div>
       <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">${t('db_alertes')}</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
     </div>
-    <div class="card">
+    ${hasAccess('demandes')?`<div class="card">
       <div class="section-title"><i class="ti ti-address-book"></i>${t('db_dernieres_demandes')||"Dernières demandes d'informations"}
         <button class="btn sm" style="margin-left:auto" onclick="setView('demandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir tout'}</button>
       </div>
       <div id="dash-demandes-info">${t('msg_chargement')}</div>
-    </div>
+    </div>`:''}
     <div class="card" style="margin-top:14px">
       <div class="section-title"><i class="ti ti-arrows-exchange"></i>${t('transferts_en_cours')}
         <button class="btn sm" style="margin-left:auto" onclick="setView('transferts')"><i class="ti ti-arrow-right"></i>${t('transferts_voir_tout')}</button>
@@ -278,7 +352,7 @@ async function renderDashboard(ttl,c,a){
   chargerTransfertsDashboard();
   chargerCommandesDashboard();
   chargerDemosDashboard();
-  chargerDemandesInfoDashboard();
+  if(hasAccess('demandes')) chargerDemandesInfoDashboard();
 }
 
 async function chargerDemandesInfoDashboard(){
@@ -292,7 +366,7 @@ async function chargerDemandesInfoDashboard(){
         <td>${diBadge(d.statut)}</td>
         <td style="white-space:nowrap">${_dfd(d.date_transmission)}</td>
         <td>${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>
-        <td>${esc(d.nom||'')}${d.telephone?`<div class="mono" style="color:var(--text3);font-size:11px">${esc(d.telephone)}</div>`:''}</td>
+        <td>${esc(d.nom||'')}${d.telephone?`<div class="mono" style="color:var(--text3);font-size:11px">${esc(fmtTel(d.telephone))}</div>`:''}</td>
         <td style="white-space:nowrap">${esc(d.ville||'')}${d.cp?' '+esc(d.cp):''}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
@@ -554,7 +628,7 @@ async function chargerListeClients(){
       return `<tr onclick="setView('client',{clientId:${cl.id}})">
       <td><div style="font-weight:600">${esc(cl.nom)}</div><div style="font-size:11px;color:var(--text3)">${esc(cl.type)}</div></td>
       <td style="font-size:12px;color:var(--text2);max-width:260px">${adr?esc(adr):'<span style="color:var(--text3)">—</span>'}</td>
-      <td style="font-size:12px">${tel?esc(tel):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-size:12px">${tel?esc(fmtTel(tel)):'<span style="color:var(--text3)">—</span>'}</td>
       <td style="font-size:12px;color:var(--text2)">${cl.email?esc(cl.email):'<span style="color:var(--text3)">—</span>'}</td>
       <td style="text-align:center;font-size:12px;white-space:nowrap">${cl.derniere_commande?fd((''+cl.derniere_commande).slice(0,10)):'<span style="color:var(--text3)">—</span>'}</td>
       <td style="text-align:center;font-weight:600">${cl.nb_fauteuils_vendus||0}</td>
@@ -609,8 +683,8 @@ function ficheDistributeurBloc(cl){
     </div>
     ${adresseBloc}
     <div>
-      ${row('ti-phone', TR('Téléphone'), cl.tel?`<a href="tel:${esc(cl.tel)}" style="color:inherit;text-decoration:none">${esc(cl.tel)}</a>`:'<span style="color:var(--text3)">—</span>')}
-      ${cl.portable?row('ti-device-mobile', TR('Portable'), `<a href="tel:${esc(cl.portable)}" style="color:inherit;text-decoration:none">${esc(cl.portable)}</a>`):''}
+      ${row('ti-phone', TR('Téléphone'), cl.tel?`<a href="tel:${esc(telHref(cl.tel))}" style="color:inherit;text-decoration:none">${esc(fmtTel(cl.tel))}</a>`:'<span style="color:var(--text3)">—</span>')}
+      ${cl.portable?row('ti-device-mobile', TR('Portable'), `<a href="tel:${esc(telHref(cl.portable))}" style="color:inherit;text-decoration:none">${esc(fmtTel(cl.portable))}</a>`):''}
       ${row('ti-mail', TR('Mail'), cl.email?`<a href="mailto:${esc(cl.email)}" style="color:var(--accent);text-decoration:none">${esc(cl.email)}</a>`:'<span style="color:var(--text3)">—</span>')}
       ${row('ti-user', TR('Personne de contact'), cl.contact?esc(cl.contact):'<span style="color:var(--text3)">—</span>')}
       ${row('ti-users-group', TR("Groupe d'appartenance"), cl.reseau_carte?esc(cl.reseau_carte):'<span style="color:var(--text3)">—</span>')}
@@ -1585,7 +1659,7 @@ async function modalCommande(id, prefill){
               </div>
               <div class="form-group">
                 <label class="form-label">${TR('Téléphone')}</label>
-                <input class="form-input" id="cf-tel" type="tel" value="${esc(cm.cf_tel||'')}" placeholder="06 00 00 00 00">
+                <input class="form-input" id="cf-tel" type="tel" value="${esc(fmtTel(cm.cf_tel||''))}" placeholder="06 00 00 00 00">
               </div>
               <div class="form-group">
                 <label class="form-label">Email</label>
@@ -2290,7 +2364,6 @@ async function renderRapports(ttl,c,a){
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
           <button class="btn success" onclick="exportExcel('interventions')"><i class="ti ti-tool"></i>Interventions</button>
           <button class="btn success" onclick="exportExcel('catalogue')"><i class="ti ti-box"></i>${TR('Catalogue pièces')}</button>
-          <button class="btn success" onclick="exportExcel('expeditions')"><i class="ti ti-truck-delivery"></i>${TR('Expéditions')}</button>
           <button class="btn success" onclick="exportExcel('clients')"><i class="ti ti-users"></i>Clients</button>
           <button class="btn primary" onclick="exportExcel('complet')"><i class="ti ti-file-zip"></i>Export complet (tous les onglets)</button>
         </div>
@@ -3357,8 +3430,8 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Distributeur','Revendeur','Particulier'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
   <div class="form-group"><label class="form-label">Contact</label><input class="form-input" id="f-contact" value="${esc(d.contact||'')}"></div>
   <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" value="${esc(d.email||'')}"></div>
-  <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="f-tel" value="${esc(d.tel||'')}"></div>
-  <div class="form-group"><label class="form-label">Portable</label><input class="form-input" id="f-portable" value="${esc(d.portable||'')}"></div>
+  <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="f-tel" value="${esc(fmtTel(d.tel||''))}"></div>
+  <div class="form-group"><label class="form-label">Portable</label><input class="form-input" id="f-portable" value="${esc(fmtTel(d.portable||''))}"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse</label><input class="form-input" id="f-adresse" placeholder="12 rue des Lilas" value="${esc(d.adresse||'')}"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR("Complément d'adresse")}</label><input class="form-input" id="f-adresse2" placeholder="${TR("Bâtiment B, ZI de la Plaine…")}" value="${esc(d.adresse2||'')}"></div>
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
@@ -3832,10 +3905,10 @@ async function loadPennylaneStatus(){
   }
 }
 
-async function syncVosFactures(){  const btn=$('btn-sync');btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i>Sync…';
+async function syncVosFactures(){  const btn=$('btn-sync');if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i>Sync…';}
   try{const r=await API.vfSync();toast(`Sync OK — ${r.results.clients} clients, ${r.results.products} produits`,'ti-refresh');CACHE.catalogue=[];render();}
   catch(e){toast(TR('Erreur sync : ')+e.message,'ti-alert-circle','var(--danger)');}
-  finally{btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>Sync VosFactures';loadVfStatus();}
+  finally{if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>Sync VosFactures';}loadVfStatus();}
 }
 async function loadVfStatus(){
   try{const s=await API.vfStatus();const el=$('vf-status');if(!el)return;
@@ -6277,8 +6350,8 @@ function popupCarte(p) {
       ((p.adresse && p.adresse.trim().toLowerCase() !== String(p.nom||'').trim().toLowerCase()) ? _esc(p.adresse) + '<br>' : '') +
       (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
       (p.pays && p.pays !== 'France' ? '<span style="font-weight:600">' + libellePays(p.pays) + '</span><br>' : '') +
-      (telTxt ? '<a href="tel:' + telHref + '" style="color:var(--accent);text-decoration:none;font-size:14.5px;font-weight:600"><i class="ti ti-phone" style="font-size:13px"></i> ' + _esc(telTxt) + '</a><br>' : '') +
-      (mobTxt ? '<a href="tel:' + mobHref + '" style="color:var(--accent);text-decoration:none;font-size:14.5px;font-weight:600"><i class="ti ti-device-mobile" style="font-size:13px"></i> ' + _esc(mobTxt) + '</a><br>' : '') +
+      (telTxt ? '<a href="tel:' + telHref + '" style="color:var(--accent);text-decoration:none;font-size:14.5px;font-weight:600"><i class="ti ti-phone" style="font-size:13px"></i> ' + _esc(fmtTel(telTxt)) + '</a><br>' : '') +
+      (mobTxt ? '<a href="tel:' + mobHref + '" style="color:var(--accent);text-decoration:none;font-size:14.5px;font-weight:600"><i class="ti ti-device-mobile" style="font-size:13px"></i> ' + _esc(fmtTel(mobTxt)) + '</a><br>' : '') +
       (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:12px;font-weight:500;word-break:break-all"><i class="ti ti-mail" style="font-size:12px"></i> ' + _esc(emailTxt) + '</a>' : '') +
     '</div>' +
     (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:13px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:12px"></i> ' + prioLib + '</span></div>' : '') +
@@ -6844,8 +6917,8 @@ function modalPointCarte(id) {
         '<div style="display:flex;gap:8px"><div style="width:110px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Code postal</label><input id="pc-cp" value="' + (p&&p.cp?_esc(p.cp):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Pays</label><select id="pc-pays" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' + optionsPays(p ? p.pays : 'France') + '</select></div>' +
-        '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Téléphone")+'</label><input id="pc-tel" value="' + (p&&p.tel?_esc(p.tel):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
-        '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Portable</label><input id="pc-portable" value="' + (p&&p.portable?_esc(p.portable):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
+        '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Téléphone")+'</label><input id="pc-tel" value="' + (p&&p.tel?_esc(fmtTel(p.tel)):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
+        '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Portable</label><input id="pc-portable" value="' + (p&&p.portable?_esc(fmtTel(p.portable)):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div></div>' +
         '<div><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px"></div>' +
         '<div style="display:flex;gap:8px">' +
           '<div style="flex:1"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">'+TR("Priorité")+'</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:13px">' +
@@ -7212,7 +7285,7 @@ async function modalPret(id, prefillClientId){
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Contact')}</label><input class="form-input" id="pret-contact" value="${esc(p.contact||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Email')}</label><input class="form-input" id="pret-email" type="email" value="${esc(p.email||'')}"></div>
-        <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="pret-tel" value="${esc(p.tel||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="pret-tel" value="${esc(fmtTel(p.tel||''))}"></div>
         <div class="form-group"><label class="form-label">${TR('Formule')}</label>
           <select class="form-input" id="pret-formule" onchange="pretMajRetour()">
             <option value="essai_court" ${p.formule!=='long_terme'?'selected':''}>${PRET_FORMULES.essai_court}</option>
@@ -7550,7 +7623,7 @@ function pretBonHTML(p){
     <div style="text-align:center;font-style:italic;color:#666;font-size:12px;margin:0 0 10px;padding-bottom:7px;border-bottom:2px solid #1F5C8C">ELOFLEX SAS — Offre de prêt / essai (non valable sur les accessoires)</div>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
       <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top;width:50%"><b style="color:#1F5C8C">PRÊTEUR</b><br><b>ELOFLEX SAS</b><br>Contact SAV : ${esc(CURRENT_USER&&CURRENT_USER.nom||'')}</td>
-      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top;width:50%"><b style="color:#1F5C8C">DISTRIBUTEUR EMPRUNTEUR</b><br><b>${esc(p.distributeur_nom||'—')}</b><br>${esc(p.adresse||'')}<br>${esc(p.contact||'')} ${esc(p.tel||'')}<br>${esc(p.email||'')}${p.livraison_autre?`<br><span style="color:#1F5C8C">📦 Livraison : ${esc(p.livraison_nom||'')}${p.livraison_adresse?' — '+esc(p.livraison_adresse):''}</span>`:''}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top;width:50%"><b style="color:#1F5C8C">DISTRIBUTEUR EMPRUNTEUR</b><br><b>${esc(p.distributeur_nom||'—')}</b><br>${esc(p.adresse||'')}<br>${esc(p.contact||'')} ${esc(fmtTel(p.tel||''))}<br>${esc(p.email||'')}${p.livraison_autre?`<br><span style="color:#1F5C8C">📦 Livraison : ${esc(p.livraison_nom||'')}${p.livraison_adresse?' — '+esc(p.livraison_adresse):''}</span>`:''}</td>
     </tr></table>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
       <td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;color:#1F5C8C;font-weight:bold;width:50%">FORMULE : ${esc(formuleTxt)}</td>
@@ -7968,7 +8041,7 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
     <td style="padding:8px 10px">${esc(d.nom||'')}</td>
-    <td style="padding:8px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
+    <td style="padding:8px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(telHref(d.telephone))}" style="color:inherit;text-decoration:none">${esc(fmtTel(d.telephone))}</a>`:'—'}</td>
     <td style="padding:8px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
     <td style="padding:8px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
     <td style="padding:8px 10px;font-size:12px">${esc(d.demande_client||'')}</td>
@@ -8130,7 +8203,7 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:12px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
       <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.nom||'')}</td>
-      <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(d.telephone)}" style="color:inherit;text-decoration:none">${esc(d.telephone)}</a>`:'—'}</td>
+      <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(telHref(d.telephone))}" style="color:inherit;text-decoration:none">${esc(fmtTel(d.telephone))}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:12px">${esc(d.email)}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
       <td style="padding:7px 10px;font-size:12px;word-break:break-word">${esc(d.demande_client||'')}</td>
@@ -8269,7 +8342,7 @@ async function modalDemande(clientId, distribNom, id){
         <div id="di-distrib-lien" style="font-size:12px;margin-top:4px"></div></div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
-        <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="di-tel" value="${esc(d.telephone||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="di-tel" value="${esc(fmtTel(d.telephone||''))}"></div>
         <div class="form-group"><label class="form-label">${TR('Ville')}</label><input class="form-input" id="di-ville" value="${esc(d.ville||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Code postal')}</label><input class="form-input" id="di-cp" value="${esc(d.cp||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('E-mail')}</label><input class="form-input" id="di-email" value="${esc(d.email||'')}"></div>

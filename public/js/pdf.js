@@ -127,7 +127,7 @@ const PDF = {
     doc.text('DOSSIER CLIENT SAV — ELOFLEX', 105, y, { align: 'center' });
     y += 4; doc.setDrawColor(200,200,200); doc.line(15, y+3, 195, y+3); y += 11;
     doc.setFontSize(10);
-    [['Nom', cl.nom], ['Contact', cl.contact||'—'], ['Email', cl.email||'—'], ['Téléphone', cl.tel||'—'], ['Ville', cl.ville||'—'], ['Type', cl.type||'—']].forEach(([k,v]) => {
+    [['Nom', cl.nom], ['Contact', cl.contact||'—'], ['Email', cl.email||'—'], ['Téléphone', (window.fmtTel?window.fmtTel(cl.tel):cl.tel)||'—'], ['Ville', cl.ville||'—'], ['Type', cl.type||'—']].forEach(([k,v]) => {
       doc.setFont('helvetica', 'bold'); doc.text(k+' :', 15, y);
       doc.setFont('helvetica', 'normal'); doc.text(v, 55, y); y += 6;
     });
@@ -167,7 +167,7 @@ const PDF = {
     doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.text('Prêteur : ', L, y); doc.setFont('helvetica','normal'); doc.text('ELOFLEX SAS', L+22, y); y += 5.5;
     line2('Distributeur', p.distributeur_nom || p.client_nom_actuel || '—');
     line2('Adresse', p.adresse || '—');
-    line2('Contact', [p.contact, p.tel, p.email].filter(Boolean).join(' — ') || '—');
+    line2('Contact', [p.contact, (window.fmtTel?window.fmtTel(p.tel):p.tel), p.email].filter(Boolean).join(' — ') || '—');
     if (p.livraison_autre) line2('Livraison', [p.livraison_nom, p.livraison_adresse].filter(Boolean).join(' — ') || '—');
     y += 2;
 

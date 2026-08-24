@@ -74,12 +74,28 @@ router.use((req, res, next) => {
   next();
 });
 
+// ── Formatage universel des numéros de téléphone → « 09 67 66 51 29 » ──────
+// Appliqué à l'enregistrement pour que toutes les bases stockent le même format.
+function fmtTel(v) {
+  if (v == null) return v;
+  const raw = String(v).trim(); if (!raw) return raw;
+  let d = raw.replace(/[^\d+]/g, ''); let plus = false;
+  if (/^\+33/.test(d)) d = '0' + d.slice(3);
+  else if (/^0033/.test(d)) d = '0' + d.slice(4);
+  else if (d[0] === '+') { plus = true; d = d.slice(1); }
+  d = d.replace(/\D/g, ''); if (!d) return raw;
+  const pairs = d.match(/\d{1,2}/g) || [];
+  return (plus ? '+' : '') + pairs.join(' ');
+}
+
 // ── Helpers de permission ──────────────────────────────────────────
 // Détermine le module depuis le chemin de la route
 function moduleFromPath(p) {
   if (p.startsWith('/carte'))                       return 'carte';
   if (p.startsWith('/clients'))                     return 'clients';
   if (p.startsWith('/fauteuils')||p.startsWith('/interventions')) return 'interventions';
+  if (p.startsWith('/demandes-info'))               return 'demandes';
+  if (p.startsWith('/prets'))                       return 'prets';
   if (p.startsWith('/expeditions'))                 return 'expeditions';
   if (p.startsWith('/commandes'))                   return 'commandes';
   if (p.startsWith('/produits')||p.startsWith('/catalogue')) return 'catalogue';
@@ -114,6 +130,33 @@ router.use((req, res, next) => {
   next();
 });
 
+// ── Journal d'activité : enregistre chaque écriture réussie (POST/PUT/PATCH/DELETE) ──
+// Placé APRÈS le contrôle de permissions : on ne journalise que les actions autorisées.
+const LOG_SKIP = ['/login', '/logout', '/me', '/setup', '/session', '/logs'];
+router.use((req, res, next) => {
+  const method = req.method;
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return next();
+  const chemin = req.path;
+  if (LOG_SKIP.some(s => chemin === s || chemin.startsWith(s + '/'))) return next();
+  res.on('finish', () => {
+    try {
+      if (res.statusCode >= 400) return; // n'enregistre que les opérations réussies
+      const user = res.locals.user || {};
+      let module = moduleFromPath(chemin);
+      if (!module) { const seg = chemin.split('/').filter(Boolean)[0]; module = seg || 'autre'; }
+      const action = method === 'POST' ? 'Ajout' : method === 'DELETE' ? 'Suppression' : 'Modification';
+      const m = chemin.match(/\/(\d+)(?:\/|$)/);
+      const cible = m ? m[1] : null;
+      db.run(
+        `INSERT INTO activity_logs (user_id, user_nom, action, module, methode, chemin, cible_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [user.id || null, user.nom || user.email || '—', action, module, method, chemin, cible]
+      ).catch(() => {});
+    } catch (_) {}
+  });
+  next();
+});
+
 function requireRole(...roles) {
   return (req, res, next) => {
     const userRole = res.locals.user?.role;
@@ -138,6 +181,21 @@ const carteWrite = (req, res, next) => {
   if (perm === 'write') return next();
   return res.status(403).json({ error: 'Accès en écriture refusé sur le module "carte".' });
 };
+
+// ── Journal d'activité (logs) — lecture accessible à tout utilisateur connecté ──
+router.get('/logs', requireAuth, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 200, 500);
+    const conds = [], p = []; let i = 0;
+    if (req.query.module) { conds.push(`module=$${++i}`); p.push(req.query.module); }
+    if (req.query.action) { conds.push(`action=$${++i}`); p.push(req.query.action); }
+    if (req.query.user)   { conds.push(`user_nom ILIKE $${++i}`); p.push('%' + req.query.user + '%'); }
+    if (req.query.q)      { conds.push(`(user_nom ILIKE $${++i} OR module ILIKE $${i} OR chemin ILIKE $${i})`); p.push('%' + req.query.q + '%'); }
+    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const rows = await db.all(`SELECT * FROM activity_logs ${where} ORDER BY created_at DESC LIMIT ${limit}`, p);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ── Gestion des utilisateurs (admin only) ─────────────────────────
 router.get('/users', adminOnly, async (req, res) => {
@@ -450,7 +508,7 @@ router.post('/clients', async (req, res) => {
       `INSERT INTO clients (nom,contact,email,tel,portable,ville,type,token_portail,edi,sur_carte,reseau_carte,
                             adresse,adresse2,cp,pays,entite_facturation_id,public_site,priorite,annotation)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
-      [nom, contact||null, email||null, tel||null, portable||null, ville||null, type||'Distributeur', token,
+      [nom, contact||null, email||null, fmtTel(tel)||null, fmtTel(portable)||null, ville||null, type||'Distributeur', token,
        !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null, annotation||null]
     );
@@ -470,7 +528,7 @@ router.put('/clients/:id', async (req, res) => {
        edi=$8,sur_carte=$9,reseau_carte=$10,
        adresse=$11,adresse2=$12,cp=$13,pays=$14,entite_facturation_id=$15,public_site=$16,priorite=$17,
        annotation=COALESCE($18,annotation),updated_at=NOW() WHERE id=$19 RETURNING *`,
-      [nom, contact, email, tel, portable||null, ville, type, !!edi, !!sur_carte, reseau_carte||null,
+      [nom, contact, email, fmtTel(tel), fmtTel(portable)||null, ville, type, !!edi, !!sur_carte, reseau_carte||null,
        adresse||null, adresse2||null, cp||null, pays||null,
        (entite_facturation_id && parseInt(entite_facturation_id) !== parseInt(req.params.id)) ? entite_facturation_id : null,
        !!public_site, priorite||null,
@@ -6181,7 +6239,7 @@ router.post('/prets', requireAuth, async (req, res) => {
         livraison_autre, livraison_client_id, livraison_nom, livraison_adresse,
         date_remise, date_retour_prevue, prorogation_date, observations, statut, token_signature, cree_par)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
-      [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, d.tel || null,
+      [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, fmtTel(d.tel) || null,
        d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
        d.valeur_ht || null, d.bdc_vf || null, d.bdc_vf_id || null, d.articles ? JSON.stringify(d.articles) : null,
        !!d.livraison_autre, d.livraison_client_id || null, d.livraison_nom || null, d.livraison_adresse || null,
@@ -6201,7 +6259,7 @@ router.put('/prets/:id', requireAuth, async (req, res) => {
         livraison_autre=$14, livraison_client_id=$15, livraison_nom=$16, livraison_adresse=$17,
         date_remise=$18, date_retour_prevue=$19, prorogation_date=$20, observations=$21, statut=$22,
         updated_at=NOW() WHERE id=$23 RETURNING *`,
-      [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, d.tel || null,
+      [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, fmtTel(d.tel) || null,
        d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
        d.valeur_ht || null, d.bdc_vf || null, d.bdc_vf_id || null, d.articles ? JSON.stringify(d.articles) : null,
        !!d.livraison_autre, d.livraison_client_id || null, d.livraison_nom || null, d.livraison_adresse || null,
@@ -6619,7 +6677,7 @@ router.post('/demandes-info', requireAuth, async (req, res) => {
     const row = await db.run(
       `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par, demande_client, relance_mail_date, relance_tel_date)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [d.client_id||null, d.distributeur_nom||null, d.nom||null, d.ville||null, d.cp||null, d.telephone||null,
+      [d.client_id||null, d.distributeur_nom||null, d.nom||null, d.ville||null, d.cp||null, fmtTel(d.telephone)||null,
        d.email||null, d.annotation||null, statut, d.date_transmission||new Date().toISOString().slice(0,10),
        d.date_retour||null, (req.session.user && req.session.user.id)||null,
        d.demande_client||null, d.relance_mail_date||null, d.relance_tel_date||null]);
@@ -6635,7 +6693,7 @@ router.put('/demandes-info/:id', requireAuth, async (req, res) => {
       `UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, annotation=$6,
         statut=$7, date_transmission=$8, date_retour=COALESCE($9::date, date_retour), demande_client=$10,
         relance_mail_date=$11, relance_tel_date=$12, updated_at=NOW() WHERE id=$13 RETURNING *`,
-      [d.nom||null, d.ville||null, d.cp||null, d.telephone||null, d.email||null, d.annotation||null,
+      [d.nom||null, d.ville||null, d.cp||null, fmtTel(d.telephone)||null, d.email||null, d.annotation||null,
        statut, d.date_transmission||null, d.date_retour||null, d.demande_client||null,
        d.relance_mail_date||null, d.relance_tel_date||null, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Demande introuvable' });
@@ -6819,7 +6877,7 @@ router.post('/demandes-info/relance', requireAuth, async (req, res) => {
     if (!dmd.length) return res.status(400).json({ error: 'Aucune demande en attente pour ce distributeur' });
     const lignes = dmd.map(d => `<tr>
         <td style="border:1px solid #e5e7eb;padding:6px 9px">${d.date_transmission || ''}</td>
-        <td style="border:1px solid #e5e7eb;padding:6px 9px">${(d.nom||'')}${d.ville?(' — '+d.ville):''}${d.telephone?(' — '+d.telephone):''}</td>
+        <td style="border:1px solid #e5e7eb;padding:6px 9px">${(d.nom||'')}${d.ville?(' — '+d.ville):''}${d.telephone?(' — '+fmtTel(d.telephone)):''}</td>
         <td style="border:1px solid #e5e7eb;padding:6px 9px">${d.annotation || ''}</td></tr>`).join('');
     await envoyerEmailPret({
       to: dest,
@@ -6874,7 +6932,7 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
         <p>Nous vous avons transmis les coordonnées d'un contact potentiel le ${frDate(d.date_transmission)} dont voici les coordonnées :</p>
         <div style="margin:10px 0 14px;padding-left:2px">
           ${ligne(d.nom)}
-          ${ligne(d.telephone)}
+          ${ligne(fmtTel(d.telephone))}
           ${ligne(d.email)}
           ${ligne(villeCp)}
           ${ligne(d.demande_client)}

@@ -366,6 +366,20 @@ async function initDB() {
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS priorite TEXT`);
       // Annotation libre (information spécifique) sur la fiche distributeur
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS annotation TEXT`);
+      // Journal d'activité (logs) : qui a ajouté / modifié / supprimé quoi
+      await client.query(`CREATE TABLE IF NOT EXISTS activity_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        user_nom TEXT,
+        action TEXT,
+        module TEXT,
+        methode TEXT,
+        chemin TEXT,
+        cible_id TEXT,
+        resume TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at DESC)`);
       // Adresse postale complète des clients / distributeurs
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse2 TEXT`);
