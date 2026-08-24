@@ -287,6 +287,22 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
 async function lookupDocumentPennylane(numero) {
   const api = plApi();
   const debug = [];
+  // Suggestions : documents dont le numéro commence par le numéro cherché (Pennylane ajoute un suffixe -1/-2/-3)
+  const cibleN = _norm(numero);
+  const suggestions = [];
+  const seenSug = new Set();
+  function collectSuggestion(rd, kind) {
+    if (!rd || cibleN.length < 3) return;
+    const cands = docNumberCandidates(rd);
+    const hit = cands.find(c => { const cn = _norm(c); return cn && cn !== cibleN && cn.startsWith(cibleN); });
+    if (!hit) return;
+    const key = String(rd.id);
+    if (seenSug.has(key)) return;
+    seenSug.add(key);
+    const distrib = (rd.customer && (rd.customer.name || rd.customer.company_name || rd.customer.label))
+                 || rd.customer_name || (rd.client && rd.client.name) || null;
+    suggestions.push({ numero: hit, id: rd.id, kind, distributeur: distrib });
+  }
 
   for (const endpoint of ['/quotes', '/commercial_documents', '/customer_invoices']) {
     const dbg = { endpoint, scanned: 0, filter_error: null, echantillon: [] };
@@ -299,6 +315,8 @@ async function lookupDocumentPennylane(numero) {
         items = data.items || data.quotes || data.customer_invoices || data.commercial_documents || [];
       } catch (e) { dbg.filter_error = (e.response && e.response.status) ? `HTTP ${e.response.status}` : e.message; }
 
+      const kind = endpoint.replace('/', '');
+      for (const it of items) collectSuggestion(it, kind);
       let doc = items.find(d => docMatchesNumber(d, numero));
 
       if (!doc) {
@@ -310,6 +328,7 @@ async function lookupDocumentPennylane(numero) {
           if (dbg.echantillon.length < 5) {
             for (const rd of recents.slice(0, 5)) dbg.echantillon.push(docNumberCandidates(rd).map(_norm).join(' | ') || `#${rd.id}`);
           }
+          for (const rd of recents) collectSuggestion(rd, kind);
           doc = recents.find(rd => docMatchesNumber(rd, numero));
           cursor = d.next_cursor || null;
           if (!cursor) break;
@@ -400,7 +419,8 @@ async function lookupDocumentPennylane(numero) {
     debug.push(dbg);
   }
 
-  return { configured: true, found: false, numero, debug };
+  suggestions.sort((a, b) => String(a.numero).localeCompare(String(b.numero)));
+  return { configured: true, found: false, numero, suggestions: suggestions.slice(0, 10), debug };
 }
 
 // ── Génération d'une facture (brouillon) ────────────────────────────────────

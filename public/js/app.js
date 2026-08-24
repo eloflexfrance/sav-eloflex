@@ -1234,6 +1234,13 @@ async function importerNouvelleCommande(){
       else if(r.modele){ prefill.type_pieces=true; }
       closeModal();
       modalCommande(null, prefill);
+    } else if(r && r.suggestions && r.suggestions.length){
+      // Numéro sans suffixe : Pennylane numérote avec -1/-2/-3 → proposer les documents correspondants
+      var chips=r.suggestions.map(function(sg){
+        var lbl=esc(sg.numero)+(sg.distributeur?(' — '+esc(sg.distributeur)):'');
+        return '<button class="btn sm" type="button" style="margin:2px;text-align:left" onclick="ncChoisirNumero(\''+String(sg.numero).replace(/[^A-Za-z0-9_-]/g,'')+'\')"><i class="ti ti-file-invoice"></i> '+lbl+'</button>';
+      }).join('');
+      if(msg) msg.innerHTML='<div style="color:var(--warning);margin-bottom:6px">'+TR('Numéro incomplet — Pennylane ajoute un suffixe. Choisissez le bon document :')+'</div><div style="display:flex;flex-direction:column;gap:2px">'+chips+'</div>';
     } else {
       // Introuvable → formulaire vide avec le numéro pré-rempli (saisie manuelle)
       if(msg) msg.innerHTML='<span style="color:var(--warning)">Introuvable dans '+(src==='pennylane'?'Pennylane':'VosFactures')+' — ouverture en saisie manuelle…</span>';
@@ -1275,6 +1282,8 @@ async function ouvrirBdcDans(sys){
   ouvrirDansVF((src==='vf' && docid) ? docid : null, bdc);
 }
 window.ouvrirBdcDans=ouvrirBdcDans;
+function ncChoisirNumero(n){ var el=document.getElementById('nc-numero'); if(el){ el.value=n; } importerNouvelleCommande(); }
+window.ncChoisirNumero=ncChoisirNumero;
 window.modalNouvelleCommande=modalNouvelleCommande; window.ncSetSource=ncSetSource; window.importerNouvelleCommande=importerNouvelleCommande; window.ouvrirBdcSource=ouvrirBdcSource;
 
 async function modalCommande(id, prefill){
