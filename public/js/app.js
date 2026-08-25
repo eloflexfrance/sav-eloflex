@@ -2097,8 +2097,17 @@ function majStatutBadge(){
   if(hint)  hint.textContent = '← calculé automatiquement';
 }
 
-function ouvrirAvoirVF(num){
-  const account = window._VF_ACCOUNT;
+// Récupère le nom du compte VosFactures (pour construire les liens), en le
+// chargeant à la volée si le boot ne l'a pas encore mis en cache.
+async function vfAccount(){
+  if(window._VF_ACCOUNT) return window._VF_ACCOUNT;
+  try{ const s = await API.vfStatus(); if(s && s.account){ window._VF_ACCOUNT = s.account; return s.account; } }catch(_){}
+  return null;
+}
+window.vfAccount = vfAccount;
+
+async function ouvrirAvoirVF(num){
+  const account = await vfAccount();
   if(!account){ toast(TR('Compte VosFactures non configuré'),'ti-alert-circle','var(--warning)'); return; }
   window.open(`https://${account}.vosfactures.fr/invoices?search_text=${encodeURIComponent(num)}`, '_blank', 'noopener');
 }
@@ -2868,7 +2877,7 @@ async function envoyerEmailConfirmation(id){
 // Le champ peut contenir un ID (ou une URL warehouse_documents…), ou un simple numéro
 // de document — dans ce cas on retrouve la pièce par son numéro et on ouvre le document exact.
 async function ouvrirBordereauVF(num){
-  const account = window._VF_ACCOUNT;
+  const account = await vfAccount();
   num = (num == null ? '' : String(num)).trim();
   if(!account){ toast(TR('Compte VosFactures non configuré'),'ti-alert-circle','var(--warning)'); return; }
   if(!num){ return; }
@@ -2905,7 +2914,7 @@ async function genererFactureVF(id){
 }
 
 async function ouvrirDansVF(vfId, bdc){
-  const account = window._VF_ACCOUNT;
+  const account = await vfAccount();
   if(!account){ toast(TR('Compte VosFactures non configuré'),'ti-alert-circle','var(--warning)'); return; }
   // Si on a l'ID VosFactures → lien direct vers le document
   if(vfId){
@@ -3911,8 +3920,9 @@ async function syncVosFactures(){  const btn=$('btn-sync');if(btn){btn.disabled=
   finally{if(btn){btn.disabled=false;btn.innerHTML='<i class="ti ti-refresh"></i>Sync VosFactures';}loadVfStatus();}
 }
 async function loadVfStatus(){
-  try{const s=await API.vfStatus();const el=$('vf-status');if(!el)return;
-    if(s.account) window._VF_ACCOUNT=s.account; // Stocké pour construire les liens VF
+  try{const s=await API.vfStatus();
+    if(s.account) window._VF_ACCOUNT=s.account; // Stocké pour construire les liens VF (toujours, même sans widget vf-status)
+    const el=$('vf-status');if(!el)return;
     if(!s.configured){el.textContent='⚠ VosFactures non configuré';el.className='vf-status err';}
     else if(s.last_sync){el.textContent=`✓ Sync ${s.last_sync.created_at?.slice(0,10)}`;el.className='vf-status ok';}
     else{el.textContent=`Compte : ${s.account}`;el.className='vf-status';}
