@@ -4166,10 +4166,41 @@ function selectClientTransfert(id,nom,which){
 }
 
 async function saveTransfert(id){
-  const fauteuilId=parseInt(gv('tr-fauteuil-id'));
-  const departId=parseInt(gv('tr-depart-id'));
-  const arriveeId=parseInt(gv('tr-arrivee-id'));
-  if(!fauteuilId||!departId||!arriveeId){alert(t('transferts_fauteuil')+' / '+t('transferts_client_depart')+' / '+t('transferts_client_arrivee'));return;}
+  let fauteuilId=parseInt(gv('tr-fauteuil-id'))||null;
+  let departId=parseInt(gv('tr-depart-id'))||null;
+  let arriveeId=parseInt(gv('tr-arrivee-id'))||null;
+  // ── Résolution de secours : l'utilisateur a saisi un nom/série sans cliquer
+  // dans la liste déroulante (piège classique). On tente de retrouver l'ID.
+  if(!fauteuilId){
+    const q=(gv('tr-fauteuil-search')||'').trim();
+    if(q){ try{
+      const fs=((await API.recherche(q)).fauteuils)||[];
+      const norm=s=>(s||'').toString().trim().toLowerCase();
+      const exact=fs.filter(f=>norm(f.serie)===norm(q) || norm(f.modele+' — '+f.serie)===norm(q));
+      const cand=exact.length?exact:fs;
+      if(cand.length===1) fauteuilId=cand[0].id;
+    }catch(_){}}
+  }
+  async function resolveClient(field){
+    const q=(gv('tr-'+field+'-search')||'').trim(); if(!q) return {id:null,ambig:false};
+    try{
+      const list=(await API.clients(q))||[];
+      const norm=s=>(s||'').toString().trim().toLowerCase();
+      const exact=list.filter(c=>norm(c.nom)===norm(q));
+      const cand=exact.length?exact:list;
+      if(cand.length===1) return {id:cand[0].id,ambig:false};
+      if(cand.length>1)   return {id:null,ambig:true};
+    }catch(_){}
+    return {id:null,ambig:false};
+  }
+  if(!departId){ const r=await resolveClient('depart');  if(r.ambig){alert(TR('Plusieurs distributeurs portent ce nom au départ — choisissez-le dans la liste déroulante.'));return;} departId=r.id; }
+  if(!arriveeId){ const r=await resolveClient('arrivee'); if(r.ambig){alert(TR('Plusieurs distributeurs portent ce nom à l’arrivée — choisissez-le dans la liste déroulante.'));return;} arriveeId=r.id; }
+  // Champs encore introuvables → message clair ne listant que ce qui manque
+  const manque=[];
+  if(!fauteuilId) manque.push(t('transferts_fauteuil'));
+  if(!departId)   manque.push(t('transferts_client_depart'));
+  if(!arriveeId)  manque.push(t('transferts_client_arrivee'));
+  if(manque.length){ alert(TR('À sélectionner dans la liste déroulante : ')+manque.join(' / ')); return; }
   const data={
     fauteuil_id:fauteuilId, client_depart_id:departId, client_arrivee_id:arriveeId,
     date_depart:gv('tr-date-depart')||null, date_arrivee:gv('tr-date-arrivee')||null,
