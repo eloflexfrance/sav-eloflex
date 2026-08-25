@@ -4025,14 +4025,26 @@ async function renderTransferts(ttl,c,a){
 // ══════════════════════════════════════════════════════════════════
 const _SNZ = s => (s||'').toString().toUpperCase().replace(/[^A-Z0-9]/g,'');
 const _PRET_ACTIF = ['signe','en_cours','prolonge','retard'];
-let PARC_SHOW_CONCLUES = false;   // masquer par défaut les démos vendues / retournées
+let PARC_SHOW_CONCLUES = false;   // masquer par défaut les démos VENDUES (elles seules quittent le parc)
 function parcToggleConclues(v){ PARC_SHOW_CONCLUES = !!v; render(); }
 window.parcToggleConclues = parcToggleConclues;
+// Seule la VENTE fait sortir une démo du parc. Un retour à Éloflex France la garde
+// dans le parc, « Disponible » pour un nouvel essai.
 function parcDemoStatut(d){
   if(d.demo_suivi_resultat==='facture') return {l:'Vendu',c:'#15803d',ic:'ti-cash'};
-  if(d.demo_suivi_resultat==='retour')  return {l:'Retourné',c:'#374151',ic:'ti-package-import'};
+  if(d.demo_suivi_resultat==='retour')  return {l:'Disponible',c:'#2563eb',ic:'ti-home-check'};
   if(d.rappel_echu)                     return {l:'Rappel échu',c:'#dc2626',ic:'ti-clock-exclamation'};
   return {l:'En démo',c:'#0d9488',ic:'ti-wheelchair'};
+}
+// Normalise un libellé de modèle vers sa famille (Modèle H2, D2, P, F, R…) pour le comptage.
+function demoModele(m){
+  const s=(m||'').toString();
+  const mm=s.match(/mod[eè]le\s+([A-Za-z]?[0-9]?[A-Za-z0-9]{0,2})/i);
+  if(mm) return 'Modèle '+mm[1].toUpperCase();
+  const known=['H2','D2','C3','P','F','R','K','X','L'];
+  const hit=s.toUpperCase().split(/[^A-Z0-9]+/).find(tk=>known.includes(tk));
+  if(hit) return 'Modèle '+hit;
+  return s.trim()||'—';
 }
 async function renderParcDemo(ttl,c,a){
   ttl.textContent = TR('Parc démo');
@@ -4046,33 +4058,62 @@ async function renderParcDemo(ttl,c,a){
   }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
 
   const fdate = d => d ? fd((''+d).slice(0,10)) : '—';
-  const actives = demos.filter(d=>!d.demo_suivi_resultat);
-  const echues  = actives.filter(d=>d.rappel_echu);
+  const parcActif = demos.filter(d=>d.demo_suivi_resultat!=='facture');  // tout sauf vendues
+  const enEssai   = demos.filter(d=>!d.demo_suivi_resultat);             // sorties chez un distributeur
+  const disponibles = demos.filter(d=>d.demo_suivi_resultat==='retour'); // revenues à Éloflex FR
+  const echues  = enEssai.filter(d=>d.rappel_echu);
   const vendues = demos.filter(d=>d.demo_suivi_resultat==='facture');
-  const retours = demos.filter(d=>d.demo_suivi_resultat==='retour');
   const transEnCours = transferts.filter(tr=>tr.statut!=='Arrivé' && tr.statut!=='Annulé');
   const pretsActifs  = prets.filter(p=>_PRET_ACTIF.includes(p.statut));
-  // séries en transfert (pour signaler une démo en mouvement)
   const serieEnTransit = new Set(transEnCours.map(tr=>_SNZ(tr.serie)).filter(Boolean));
 
   const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px">
-    <div class="stat-card"><div class="stat-label">${TR('Démos actives')}</div><div class="stat-value" style="color:#0d9488">${actives.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('Parc démo (actif)')}</div><div class="stat-value" style="color:#0d9488">${parcActif.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('En essai')}</div><div class="stat-value" style="color:#0d9488">${enEssai.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('Disponibles')}</div><div class="stat-value" style="color:#2563eb">${disponibles.length}</div></div>
     <div class="stat-card"><div class="stat-label">${TR('Rappels échus')}</div><div class="stat-value" style="color:${echues.length?'var(--danger)':'var(--text)'}">${echues.length}</div></div>
     <div class="stat-card"><div class="stat-label">${TR('Transferts en cours')}</div><div class="stat-value" style="color:#2563eb">${transEnCours.length}</div></div>
-    <div class="stat-card"><div class="stat-label">${TR('Prêts / essais actifs')}</div><div class="stat-value" style="color:#7c3aed">${pretsActifs.length}</div></div>
     <div class="stat-card"><div class="stat-label">${TR('Vendues')}</div><div class="stat-value" style="color:#15803d">${vendues.length}</div></div>
-    <div class="stat-card"><div class="stat-label">${TR('Retournées')}</div><div class="stat-value">${retours.length}</div></div>
   </div>`;
 
-  // Par défaut on n'affiche que les démos ACTIVES ; les vendues / retournées
-  // sortent du parc (mais restent dans le Suivi commandes). Interrupteur pour les revoir.
-  const demosVues = PARC_SHOW_CONCLUES ? demos : actives;
-  const nbConclues = vendues.length + retours.length;
+  // ── Compteur par modèle (parc actif) : En essai / Disponibles / Total + vendues (cumul) ──
+  const grp = {};
+  parcActif.forEach(d=>{ const k=demoModele(d.modele); const g=grp[k]||(grp[k]={modele:k,essai:0,dispo:0}); if(d.demo_suivi_resultat==='retour') g.dispo++; else g.essai++; });
+  const venduGrp = {};
+  vendues.forEach(d=>{ const k=demoModele(d.modele); venduGrp[k]=(venduGrp[k]||0)+1; });
+  const grpList = Object.values(grp).sort((x,y)=>(y.essai+y.dispo)-(x.essai+x.dispo));
+  const compteurModele = grpList.length ? `<div class="card" style="margin-bottom:14px">
+    <div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Compteur par modèle')}</div>
+    <div class="table-wrap"><table class="t">
+      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('Total parc')}</th><th style="text-align:center">${TR('Vendues (cumul)')}</th></tr></thead>
+      <tbody>${grpList.map(g=>`<tr>
+        <td style="font-weight:600">${esc(g.modele)}</td>
+        <td style="text-align:center;color:#0d9488;font-weight:600">${g.essai}</td>
+        <td style="text-align:center;color:#2563eb;font-weight:600">${g.dispo}</td>
+        <td style="text-align:center;font-weight:700">${g.essai+g.dispo}</td>
+        <td style="text-align:center;color:var(--text3)">${venduGrp[g.modele]||0}</td>
+      </tr>`).join('')}
+      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td>
+        <td style="text-align:center;font-weight:700">${enEssai.length}</td>
+        <td style="text-align:center;font-weight:700">${disponibles.length}</td>
+        <td style="text-align:center;font-weight:700">${parcActif.length}</td>
+        <td style="text-align:center;font-weight:700;color:var(--text3)">${vendues.length}</td></tr>
+      </tbody>
+    </table></div>
+  </div>` : '';
+
+  // Par défaut on affiche le parc ACTIF (en essai + disponibles) ; seules les
+  // démos VENDUES quittent le parc (mais restent dans le Suivi commandes). Interrupteur pour les revoir.
+  const demosVues = PARC_SHOW_CONCLUES ? demos : parcActif;
+  const nbConclues = vendues.length;
   const demoRows = demosVues.map(d=>{
     const s = parcDemoStatut(d);
     const sn = _SNZ(d.num_serie);
     const enMvt = sn && serieEnTransit.has(sn);
-    const detenteur = d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—';
+    // Un retour à Éloflex France = disponible pour un autre essai : détenteur = Éloflex France.
+    const detenteur = d.demo_suivi_resultat==='retour'
+      ? 'Éloflex France'
+      : (d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—');
     const mise = d.date_livraison || d.date_commande;
     const cle = (d.modele||'')+' '+(d.num_serie||'')+' '+(detenteur||'')+' '+(d.demo_origine_nom||'');
     const serieCell = d.num_serie
@@ -4093,7 +4134,7 @@ async function renderParcDemo(ttl,c,a){
   const demoTable = demosVues.length ? `
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
       <input class="form-input" id="parc-q" placeholder="${TR('Rechercher (modèle, série, distributeur…)')}" style="max-width:320px;padding:9px 12px" oninput="parcDemoFiltrer(this.value)">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--text2)"><input type="checkbox" ${PARC_SHOW_CONCLUES?'checked':''} onchange="parcToggleConclues(this.checked)"> ${TR('Inclure vendues / retournées')}${nbConclues?` (${nbConclues})`:''}</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--text2)"><input type="checkbox" ${PARC_SHOW_CONCLUES?'checked':''} onchange="parcToggleConclues(this.checked)"> ${TR('Inclure les vendues')}${nbConclues?` (${nbConclues})`:''}</label>
       <span style="flex:1"></span>
       <span style="font-size:12px;color:var(--text3)">${demosVues.length} ${PARC_SHOW_CONCLUES?TR('démo(s) déclarée(s)'):TR('démo(s) active(s)')}</span>
     </div>
@@ -4101,7 +4142,7 @@ async function renderParcDemo(ttl,c,a){
       <thead><tr><th>${TR('Statut')}</th><th>${TR('Modèle')}</th><th>${TR('N° série')}</th><th>${TR('Détenteur actuel')}</th><th>${TR('Origine')}</th><th>${TR('Mise en démo')}</th><th>${TR('Échéance rappel')}</th><th></th></tr></thead>
       <tbody>${demoRows}</tbody>
     </table></div>`
-    : `<div class="empty"><i class="ti ti-wheelchair"></i>${TR('Aucune démo active.')}${nbConclues?`<br><span style="font-size:12px;color:var(--text3)"><label style="cursor:pointer"><input type="checkbox" onchange="parcToggleConclues(this.checked)"> ${TR('Afficher les')} ${nbConclues} ${TR('vendues / retournées')}</label></span>`:''}</div>`;
+    : `<div class="empty"><i class="ti ti-wheelchair"></i>${TR('Aucune démo active.')}${nbConclues?`<br><span style="font-size:12px;color:var(--text3)"><label style="cursor:pointer"><input type="checkbox" onchange="parcToggleConclues(this.checked)"> ${TR('Afficher les')} ${nbConclues} ${TR('vendue(s)')}</label></span>`:''}</div>`;
 
   const scT={'En préparation':'attente','En transit':'ouvert','Arrivé':'g','Annulé':'urgent'};
   const transTable = transferts.length ? `<div class="table-wrap"><table class="t">
