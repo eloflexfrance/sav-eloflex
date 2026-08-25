@@ -19,6 +19,7 @@ const TRANSLATIONS = {
     nav_carte: 'Carte',
     nav_discussions: 'Discussions',
     nav_retours_suede: 'Retours Suède',
+    nav_parc_demo: 'Parc de démo',
     nav_prets: 'Prêts',
     nav_dark: 'Mode sombre',
 
@@ -603,6 +604,7 @@ const TRANSLATIONS = {
     nav_carte: 'Map',
     nav_discussions: 'Discussions',
     nav_retours_suede: 'Sweden returns',
+    nav_parc_demo: 'Demo fleet',
     nav_prets: 'Loans',
     nav_dark: 'Dark mode',
 

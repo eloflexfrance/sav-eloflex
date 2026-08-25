@@ -3647,6 +3647,8 @@ router.get('/demos/parc', async (req, res) => {
               cmd.demo_origine_nom, cmd.demo_localisation_actuelle,
               cmd.demo_rappel_date, cmd.demo_suivi_resultat,
               cmd.num_facture, cmd.facture_paiement_statut,
+              cmd.num_avoir,
+              (((cmd.num_avoir IS NOT NULL AND cmd.num_avoir <> '')) OR (cmd.informations ILIKE '%avoir%')) AS a_avoir,
               (cmd.demo_rappel_date IS NOT NULL AND cmd.demo_rappel_date <= to_char(NOW(),'YYYY-MM-DD')) AS rappel_echu
        FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id
        WHERE cmd.modele_demo = TRUE

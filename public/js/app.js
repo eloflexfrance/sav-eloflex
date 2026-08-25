@@ -4038,8 +4038,9 @@ async function renderTransferts(ttl,c,a){
 // ══════════════════════════════════════════════════════════════════
 const _SNZ = s => (s||'').toString().toUpperCase().replace(/[^A-Z0-9]/g,'');
 const _PRET_ACTIF = ['signe','en_cours','prolonge','retard'];
-let PARC_SHOW_CONCLUES = false;   // masquer par défaut les démos VENDUES (elles seules quittent le parc)
+let PARC_SHOW_CONCLUES = false;   // (obsolète) — remplacé par les onglets du Parc de démo
 function parcToggleConclues(v){ PARC_SHOW_CONCLUES = !!v; render(); }
+let PARC_TAB = 'demo';            // onglet actif du Parc de démo : 'demo' | 'dispo' | 'hist'
 window.parcToggleConclues = parcToggleConclues;
 // Seule la VENTE fait sortir une démo du parc. Un retour à Éloflex France la garde
 // dans le parc, « Disponible » pour un nouvel essai.
@@ -4060,7 +4061,7 @@ function demoModele(m){
   return s.trim()||'—';
 }
 async function renderParcDemo(ttl,c,a){
-  ttl.textContent = TR('Parc démo');
+  ttl.textContent = TR('Parc de démo');
   a.innerHTML = `<button class="btn sm" onclick="render()"><i class="ti ti-refresh"></i>${TR('Actualiser')}</button>`;
   c.innerHTML = `<div style="color:var(--text2);font-size:13px;padding:16px 0"><i class="ti ti-loader-2"></i> ${t('msg_chargement')||'Chargement…'}</div>`;
   let demos=[], prets=[], transferts=[];
@@ -4104,6 +4105,10 @@ async function renderParcDemo(ttl,c,a){
   const transParSerie = new Map();  // série normalisée -> transfert en cours
   transEnCours.forEach(tr=>{ const sn=_SNZ(tr.serie); if(sn && !transParSerie.has(sn)) transParSerie.set(sn, tr); });
   const sansSerie = parcActif.filter(u=>!u.sn).length;
+  const _aAvoir = d => !!(d && (d.a_avoir || (d.num_avoir && (''+d.num_avoir).trim())));
+  // Démos marquées « Vendues » alors qu'un avoir existe : une vente annulée par avoir
+  // devrait normalement être clôturée en « Retour ». À vérifier par l'utilisateur.
+  const venduAvecAvoir = vendues.filter(u=>_aAvoir(u.rep)).length;
 
   const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px">
     <div class="stat-card"><div class="stat-label">${TR('Parc démo (actif)')}</div><div class="stat-value" style="color:#0d9488">${parcActif.length}</div></div>
@@ -4140,24 +4145,23 @@ async function renderParcDemo(ttl,c,a){
     </table></div>
   </div>` : '';
 
-  // Par défaut on affiche le parc ACTIF (en essai + disponibles) ; seules les
-  // démos VENDUES quittent le parc (mais restent dans le Suivi commandes). Interrupteur pour les revoir.
-  const demosVues = PARC_SHOW_CONCLUES ? unites : parcActif;
-  const nbConclues = vendues.length;
-  const demoRows = demosVues.map(u=>{
-    const d = u.rep;                                    // épisode le plus récent = état courant
-    const s = parcDemoStatut(d);
+  // ── Trois onglets : En démo (en essai) · Disponibles (revenus) · Historique ──
+  // Une unité vit dans « En démo » tant qu'elle est en essai, bascule en
+  // « Disponibles » à son retour ; chaque stint terminé (stint antérieur =
+  // changement de main, ou vente) est journalisé dans « Historique ».
+  function parcRow(u, ep, mode){
+    const d = ep;
     const sn = u.sn;
-    const enMvt = sn && serieEnTransit.has(sn);
-    const pretLie = sn ? pretParSerie.get(sn) : null;   // prêt actif rattaché à cette unité (par n° de série)
+    const isHist = mode==='hist';
+    const supersede = isHist && !d.demo_suivi_resultat;   // épisode passé non clôturé = changement de main
+    const s = supersede ? {l:TR('Changé de main'),c:'#6b7280',ic:'ti-arrows-exchange'} : parcDemoStatut(d);
+    const enMvt = !isHist && sn && serieEnTransit.has(sn);
+    const pretLie = (!isHist && sn) ? pretParSerie.get(sn) : null;   // prêt actif rattaché (par n° de série)
     const pretHolder = pretLie ? (pretLie.client_nom_actuel || pretLie.distributeur_nom || '') : '';
-    // Détenteur physique : un prêt actif fait foi (le fauteuil est chez l'emprunteur) ;
-    // un retour à Éloflex France = disponible pour un autre essai.
     const detenteur = d.demo_suivi_resultat==='retour'
       ? 'Éloflex France'
       : (pretHolder || d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—');
-    // Échéance : celle du prêt actif prime si renseignée, sinon le rappel démo.
-    const echeance = (pretLie && pretLie.date_retour_prevue) ? (''+pretLie.date_retour_prevue).slice(0,10) : d.demo_rappel_date;
+    const echeance = (!isHist && pretLie && pretLie.date_retour_prevue) ? (''+pretLie.date_retour_prevue).slice(0,10) : (isHist ? null : d.demo_rappel_date);
     const echEchue = echeance && (''+echeance).slice(0,10) <= _today && d.demo_suivi_resultat!=='facture';
     const mise = d.date_livraison || d.date_commande;
     // Parcours de l'unité (épisodes chronologiques) pour l'info-bulle.
@@ -4165,42 +4169,67 @@ async function renderParcDemo(ttl,c,a){
     const parcoursTxt = histSorted.map(h=>{
       const who = h.demo_localisation_actuelle||h.client_nom||h.distributeur_nom||'?';
       const r = h.demo_suivi_resultat==='facture'?TR('vendu'):h.demo_suivi_resultat==='retour'?TR('retour'):TR('en démo');
-      return who+' ('+r+')';
+      return who+' ('+r+(_aAvoir(h)?', '+TR('avoir'):'')+')';
     }).join('  →  ');
     const cle = (d.modele||'')+' '+(d.num_serie||'')+' '+(detenteur||'')+' '+(d.demo_origine_nom||'')+' '+(pretHolder||'')+' '+parcoursTxt;
-    const histBadge = u.hist.length>1
+    const histBadge = (!isHist && u.hist.length>1)
       ? ` <span class="badge" style="background:var(--surface-2,#eef1f4);color:var(--text2);border:0.5px solid var(--border-s);font-size:10px;cursor:help" title="${TR('Parcours de l’unité')} : ${esc(parcoursTxt)}"><i class="ti ti-history" style="font-size:11px;margin-right:2px"></i>${u.hist.length} ${TR('épisodes')}</span>`
       : '';
     const serieCell = d.num_serie
       ? `<span class="mono">${esc(d.num_serie)}</span>`
       : `<span class="badge" style="background:var(--warning-bg);color:var(--warning);border:0.5px solid rgba(180,85,31,.3);font-size:10px" title="${TR('Renseignez le n° de série pour suivre l’unité physique et ses transferts')}"><i class="ti ti-alert-triangle" style="font-size:11px;margin-right:2px"></i>${TR('à renseigner')}</span>`;
-    const pretBadge = pretLie
+    const pretBadgeHtml = pretLie
       ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:10px;cursor:pointer" title="${TR('Prêt actif rattaché à cette unité')} — ${esc(PRET_FORMULES[pretLie.formule]||pretLie.formule||'')}${pretLie.date_retour_prevue?' · '+TR('retour prévu')+' '+fdate(pretLie.date_retour_prevue):''}" onclick="modalPret(${pretLie.id})"><i class="ti ti-file-certificate" style="font-size:11px;margin-right:2px"></i>${TR('prêt')}</span>`
       : '';
+    const aAvoir = _aAvoir(d);
+    const avoirBadge = (d.demo_suivi_resultat==='facture' && aAvoir)
+      ? ` <span class="badge" style="background:#dc262618;color:#dc2626;border:0.5px solid #dc262644;font-size:10px;cursor:pointer" title="${TR('Marquée Vendue mais un avoir existe')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''} — ${TR('une vente annulée par avoir devrait être clôturée en « Retour ». À vérifier.')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-alert-triangle" style="font-size:11px;margin-right:2px"></i>${TR('avoir ?')}</span>`
+      : (aAvoir ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:10px" title="${TR('Un avoir est enregistré sur cette commande')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''}"><i class="ti ti-receipt-refund" style="font-size:11px;margin-right:2px"></i>${TR('avoir')}</span>` : '');
+    const voirBtn = `<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="CMD_FILTERS.q='${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}';setView('commandes')"><i class="ti ti-arrow-right"></i></button>`;
+    const actions = isHist
+      ? voirBtn
+      : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}${voirBtn}`;
     return `<tr data-k="${esc(cle.toLowerCase())}">
-      <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:12px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}</td>
+      <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:12px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
       <td style="font-size:11px">${serieCell}</td>
-      <td>${esc(detenteur)}${pretBadge}</td>
+      <td>${esc(detenteur)}${pretBadgeHtml}</td>
       <td style="font-size:12px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
       <td style="white-space:nowrap">${fdate(mise)}</td>
       <td style="white-space:nowrap;${echEchue?'color:var(--danger);font-weight:600':''}">${echeance?fdate(echeance):'—'}</td>
-      <td style="white-space:nowrap">${d.demo_suivi_resultat!=='facture' ? `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="CMD_FILTERS.q='${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}';setView('commandes')"><i class="ti ti-arrow-right"></i></button></td>
+      <td style="white-space:nowrap">${actions}</td>
     </tr>`;
-  }).join('');
+  }
 
-  const demoTable = demosVues.length ? `
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-      <input class="form-input" id="parc-q" placeholder="${TR('Rechercher (modèle, série, distributeur…)')}" style="max-width:320px;padding:9px 12px" oninput="parcDemoFiltrer(this.value)">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--text2)"><input type="checkbox" ${PARC_SHOW_CONCLUES?'checked':''} onchange="parcToggleConclues(this.checked)"> ${TR('Inclure les vendues')}${nbConclues?` (${nbConclues})`:''}</label>
-      <span style="flex:1"></span>
-      <span style="font-size:12px;color:var(--text3)">${demosVues.length} ${PARC_SHOW_CONCLUES?TR('démo(s) déclarée(s)'):TR('démo(s) active(s)')}</span>
-    </div>
-    <div class="table-wrap"><table class="t" id="parc-demo-tbl">
-      <thead><tr><th>${TR('Statut')}</th><th>${TR('Modèle')}</th><th>${TR('N° série')}</th><th>${TR('Détenteur actuel')}</th><th>${TR('Origine')}</th><th>${TR('Mise en démo')}</th><th>${TR('Échéance rappel')}</th><th></th></tr></thead>
-      <tbody>${demoRows}</tbody>
-    </table></div>`
-    : `<div class="empty"><i class="ti ti-wheelchair"></i>${TR('Aucune démo active.')}${nbConclues?`<br><span style="font-size:12px;color:var(--text3)"><label style="cursor:pointer"><input type="checkbox" onchange="parcToggleConclues(this.checked)"> ${TR('Afficher les')} ${nbConclues} ${TR('vendue(s)')}</label></span>`:''}</div>`;
+  const enDemoUnits = enEssai;                 // unités en essai (état courant)
+  const dispoUnits  = disponibles;             // unités revenues, disponibles pour un autre essai
+  // Historique : stints antérieurs (changements de main) + ventes (épisode terminal).
+  const histList = [];
+  unites.forEach(u=>{
+    u.hist.forEach(ep=>{
+      if(ep===u.rep){ if(_stU(u)==='facture') histList.push({u,ep}); }  // vente = terminal → historique
+      else histList.push({u,ep});                                       // stint antérieur → historique
+    });
+  });
+  histList.sort((a,b)=> _recence(b.ep).localeCompare(_recence(a.ep)));
+
+  const tableHead = `<thead><tr><th>${TR('Statut')}</th><th>${TR('Modèle')}</th><th>${TR('N° série')}</th><th>${TR('Détenteur')}</th><th>${TR('Origine')}</th><th>${TR('Date')}</th><th>${TR('Échéance')}</th><th></th></tr></thead>`;
+  const mkTable = (rowsHtml, emptyMsg) => rowsHtml
+    ? `<div class="table-wrap"><table class="t parc-tbl">${tableHead}<tbody>${rowsHtml}</tbody></table></div>`
+    : `<div class="empty" style="padding:20px"><i class="ti ti-wheelchair"></i>${emptyMsg}</div>`;
+
+  const tabDemoHtml  = mkTable(enDemoUnits.map(u=>parcRow(u,u.rep,'actif')).join(''), TR('Aucun fauteuil en essai actuellement.'));
+  const tabDispoHtml = mkTable(dispoUnits.map(u=>parcRow(u,u.rep,'actif')).join(''), TR('Aucun fauteuil disponible (revenu) pour le moment.'));
+  const tabHistHtml  = mkTable(histList.map(x=>parcRow(x.u,x.ep,'hist')).join(''), TR('Aucune démo dans l’historique.'));
+
+  const _TABS=[['demo','ti-wheelchair',TR('En démo'),enDemoUnits.length],['dispo','ti-home-check',TR('Disponibles'),dispoUnits.length],['hist','ti-history',TR('Historique'),histList.length]];
+  const tabsBar = `<div style="display:flex;gap:2px;border-bottom:0.5px solid var(--border-s);margin-bottom:12px;flex-wrap:wrap">${_TABS.map(([k,ic,lbl,n])=>`<button class="parc-tab-btn" data-tab="${k}" onclick="parcSetTab('${k}')" style="cursor:pointer;border:none;border-bottom:2px solid ${PARC_TAB===k?'var(--accent)':'transparent'};background:none;color:${PARC_TAB===k?'var(--accent)':'var(--text2)'};font-weight:${PARC_TAB===k?'700':'500'};padding:9px 14px;font-size:13px"><i class="ti ${ic}" style="margin-right:5px"></i>${lbl} <span style="opacity:.6">(${n})</span></button>`).join('')}</div>`;
+
+  const demoTable = `${tabsBar}
+    <div style="margin-bottom:10px"><input class="form-input" id="parc-q" placeholder="${TR('Rechercher (modèle, série, distributeur…)')}" style="max-width:320px;padding:9px 12px" oninput="parcDemoFiltrer(this.value)"></div>
+    <div class="parc-pane" data-tab="demo" style="${PARC_TAB==='demo'?'':'display:none'}">${tabDemoHtml}</div>
+    <div class="parc-pane" data-tab="dispo" style="${PARC_TAB==='dispo'?'':'display:none'}">${tabDispoHtml}</div>
+    <div class="parc-pane" data-tab="hist" style="${PARC_TAB==='hist'?'':'display:none'}">${tabHistHtml}</div>`;
 
   const scT={'En préparation':'attente','En transit':'ouvert','Arrivé':'g','Annulé':'urgent'};
   const transTable = transferts.length ? `<div class="table-wrap"><table class="t">
@@ -4236,19 +4265,29 @@ async function renderParcDemo(ttl,c,a){
     <i class="ti ti-alert-triangle" style="font-size:15px"></i>
     <span><b>${sansSerie}</b> ${TR('démo(s) sans n° de série')} — ${TR('renseignez-le dans la fiche commande pour suivre l’unité physique et la rattacher automatiquement aux prêts et transferts.')}</span>
   </div>` : '';
+  const bannerAvoir = venduAvecAvoir ? `<div style="display:flex;align-items:center;gap:8px;background:#dc262614;border:0.5px solid #dc262644;color:#b91c1c;border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:12.5px">
+    <i class="ti ti-alert-triangle" style="font-size:15px"></i>
+    <span><b>${venduAvecAvoir}</b> ${TR('démo(s) marquée(s) « Vendue » avec un avoir')} — ${TR('à vérifier : une vente annulée par avoir devrait être clôturée en « Retour ». Ouvrez l’onglet « Historique » pour les voir et les requalifier.')}</span>
+  </div>` : '';
   c.innerHTML = tiles
-    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${bannerSerie}${demoTable}</div>`
+    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${bannerAvoir}${bannerSerie}${demoTable}</div>`
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
     + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`;
 }
 window.renderParcDemo = renderParcDemo;
 function parcDemoFiltrer(v){
   const q=(v||'').toLowerCase().trim();
-  document.querySelectorAll('#parc-demo-tbl tbody tr').forEach(tr=>{
+  document.querySelectorAll('.parc-tbl tbody tr').forEach(tr=>{
     tr.style.display = (!q || (tr.getAttribute('data-k')||'').includes(q)) ? '' : 'none';
   });
 }
 window.parcDemoFiltrer = parcDemoFiltrer;
+function parcSetTab(k){
+  PARC_TAB = k;
+  document.querySelectorAll('.parc-pane').forEach(p=>{ p.style.display = (p.getAttribute('data-tab')===k)?'':'none'; });
+  document.querySelectorAll('.parc-tab-btn').forEach(b=>{ const on=b.getAttribute('data-tab')===k; b.style.borderBottom='2px solid '+(on?'var(--accent)':'transparent'); b.style.color=on?'var(--accent)':'var(--text2)'; b.style.fontWeight=on?'700':'500'; });
+}
+window.parcSetTab = parcSetTab;
 
 async function modalTransfert(id){
   const d = id ? await API.transfert(id) : {};
