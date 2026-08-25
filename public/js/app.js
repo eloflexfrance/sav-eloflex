@@ -89,6 +89,7 @@ const PERM_FALLBACK = {
   'carte':      'clients',     // Carte : par défaut, qui gère les clients voit/modifie la carte
   'devis':      'commandes',   // Devis hérite de commandes
   'dashboard':  'commandes',   // Tableau de bord toujours accessible si commandes
+  'parc-demo':  'commandes',   // Parc démo : visible si accès au suivi commandes
 };
 
 function hasAccess(module) {
@@ -203,6 +204,7 @@ async function render(){
     else if(STATE.view==='parametres')    await renderParametres(ttl,c,a);
     else if(STATE.view==='retours-suede')  await renderRetoursSuede(ttl,c,a);
     else if(STATE.view==='transferts')     await renderTransferts(ttl,c,a);
+    else if(STATE.view==='parc-demo')       await renderParcDemo(ttl,c,a);
     else if(STATE.view==='prets')          await renderPrets(ttl,c,a);
     else if(STATE.view==='logs')           await renderLogs(ttl,c,a);
   }catch(e){c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`;}
@@ -4017,6 +4019,123 @@ async function renderTransferts(ttl,c,a){
   </table></div>`;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// PARC DÉMO — vue consolidée (lecture seule) : démos déclarées +
+// transferts + prêts/essais, pour piloter le parc de démonstration.
+// ══════════════════════════════════════════════════════════════════
+const _SNZ = s => (s||'').toString().toUpperCase().replace(/[^A-Z0-9]/g,'');
+const _PRET_ACTIF = ['signe','en_cours','prolonge','retard'];
+function parcDemoStatut(d){
+  if(d.demo_suivi_resultat==='facture') return {l:'Vendu',c:'#15803d',ic:'ti-cash'};
+  if(d.demo_suivi_resultat==='retour')  return {l:'Retourné',c:'#374151',ic:'ti-package-import'};
+  if(d.rappel_echu)                     return {l:'Rappel échu',c:'#dc2626',ic:'ti-clock-exclamation'};
+  return {l:'En démo',c:'#0d9488',ic:'ti-wheelchair'};
+}
+async function renderParcDemo(ttl,c,a){
+  ttl.textContent = TR('Parc démo');
+  a.innerHTML = `<button class="btn sm" onclick="render()"><i class="ti ti-refresh"></i>${TR('Actualiser')}</button>`;
+  c.innerHTML = `<div style="color:var(--text2);font-size:13px;padding:16px 0"><i class="ti ti-loader-2"></i> ${t('msg_chargement')||'Chargement…'}</div>`;
+  let demos=[], prets=[], transferts=[];
+  try{
+    demos = await API.demosParc();
+    prets = await API.prets().catch(()=>[]);
+    transferts = await API.transferts().catch(()=>[]);
+  }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
+
+  const fdate = d => d ? fd((''+d).slice(0,10)) : '—';
+  const actives = demos.filter(d=>!d.demo_suivi_resultat);
+  const echues  = actives.filter(d=>d.rappel_echu);
+  const vendues = demos.filter(d=>d.demo_suivi_resultat==='facture');
+  const retours = demos.filter(d=>d.demo_suivi_resultat==='retour');
+  const transEnCours = transferts.filter(tr=>tr.statut!=='Arrivé' && tr.statut!=='Annulé');
+  const pretsActifs  = prets.filter(p=>_PRET_ACTIF.includes(p.statut));
+  // séries en transfert (pour signaler une démo en mouvement)
+  const serieEnTransit = new Set(transEnCours.map(tr=>_SNZ(tr.serie)).filter(Boolean));
+
+  const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px">
+    <div class="stat-card"><div class="stat-label">${TR('Démos actives')}</div><div class="stat-value" style="color:#0d9488">${actives.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('Rappels échus')}</div><div class="stat-value" style="color:${echues.length?'var(--danger)':'var(--text)'}">${echues.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('Transferts en cours')}</div><div class="stat-value" style="color:#2563eb">${transEnCours.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('Prêts / essais actifs')}</div><div class="stat-value" style="color:#7c3aed">${pretsActifs.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('Vendues')}</div><div class="stat-value" style="color:#15803d">${vendues.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${TR('Retournées')}</div><div class="stat-value">${retours.length}</div></div>
+  </div>`;
+
+  const demoRows = demos.map(d=>{
+    const s = parcDemoStatut(d);
+    const sn = _SNZ(d.num_serie);
+    const enMvt = sn && serieEnTransit.has(sn);
+    const detenteur = d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—';
+    const mise = d.date_livraison || d.date_commande;
+    const cle = (d.modele||'')+' '+(d.num_serie||'')+' '+(detenteur||'')+' '+(d.demo_origine_nom||'');
+    return `<tr data-k="${esc(cle.toLowerCase())}">
+      <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:12px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}</td>
+      <td style="font-weight:600">${esc(d.modele||'—')}</td>
+      <td class="mono" style="font-size:11px">${d.num_serie?esc(d.num_serie):'<span style="color:var(--text3)">—</span>'}</td>
+      <td>${esc(detenteur)}</td>
+      <td style="font-size:12px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
+      <td style="white-space:nowrap">${fdate(mise)}</td>
+      <td style="white-space:nowrap;${d.rappel_echu?'color:var(--danger);font-weight:600':''}">${d.demo_rappel_date?fdate(d.demo_rappel_date):'—'}</td>
+      <td><button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="CMD_FILTERS.q='${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}';setView('commandes')"><i class="ti ti-arrow-right"></i></button></td>
+    </tr>`;
+  }).join('');
+
+  const demoTable = demos.length ? `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <input class="form-input" id="parc-q" placeholder="${TR('Rechercher (modèle, série, distributeur…)')}" style="max-width:320px;padding:9px 12px" oninput="parcDemoFiltrer(this.value)">
+      <span style="flex:1"></span>
+      <span style="font-size:12px;color:var(--text3)">${demos.length} ${TR('démo(s) déclarée(s)')}</span>
+    </div>
+    <div class="table-wrap"><table class="t" id="parc-demo-tbl">
+      <thead><tr><th>${TR('Statut')}</th><th>${TR('Modèle')}</th><th>${TR('N° série')}</th><th>${TR('Détenteur actuel')}</th><th>${TR('Origine')}</th><th>${TR('Mise en démo')}</th><th>${TR('Échéance rappel')}</th><th></th></tr></thead>
+      <tbody>${demoRows}</tbody>
+    </table></div>`
+    : `<div class="empty"><i class="ti ti-wheelchair"></i>${TR('Aucune démo déclarée.')}</div>`;
+
+  const scT={'En préparation':'attente','En transit':'ouvert','Arrivé':'g','Annulé':'urgent'};
+  const transTable = transferts.length ? `<div class="table-wrap"><table class="t">
+      <thead><tr><th>${TR('Modèle')}</th><th>${TR('N° série')}</th><th>${TR('Départ')}</th><th>${TR('Arrivée')}</th><th>${TR('Statut')}</th><th>${TR('Départ')}</th><th>${TR('Arrivée')}</th></tr></thead>
+      <tbody>${transferts.map(tr=>`<tr style="cursor:pointer" onclick="modalTransfert(${tr.id})">
+        <td style="font-weight:600">${esc(tr.modele||'—')}</td>
+        <td class="mono" style="font-size:11px">${esc(tr.serie||'—')}</td>
+        <td>${esc(tr.client_depart_nom||'—')}</td>
+        <td>${esc(tr.client_arrivee_nom||'—')}</td>
+        <td><span class="badge ${scT[tr.statut]||''}">${esc(tr.statut||'')}</span></td>
+        <td style="white-space:nowrap">${tr.date_depart?fd(tr.date_depart):'—'}</td>
+        <td style="white-space:nowrap">${tr.date_arrivee?fd(tr.date_arrivee):'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`
+    : `<div style="font-size:12px;color:var(--text3);padding:8px 0">${TR('Aucun transfert enregistré.')}</div>`;
+
+  const pretsTable = pretsActifs.length ? `<div class="table-wrap"><table class="t">
+      <thead><tr><th>${TR('Distributeur')}</th><th>${TR('Matériel')}</th><th>${TR('Formule')}</th><th>${TR('Statut')}</th><th>${TR('Remise')}</th><th>${TR('Retour prévu')}</th></tr></thead>
+      <tbody>${pretsActifs.map(p=>{
+        const arts=pretArticlesOf(p); const mat=esc(arts.map(x=>x.designation).filter(Boolean).join(', ')||p.designation||'—');
+        return `<tr style="cursor:pointer" onclick="modalPret(${p.id})">
+        <td style="font-weight:600">${esc(p.client_nom_actuel||p.distributeur_nom||'—')}</td>
+        <td>${mat}</td>
+        <td style="font-size:12px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
+        <td>${pretBadge(p.statut)}</td>
+        <td style="white-space:nowrap">${p.date_remise?fd((''+p.date_remise).slice(0,10)):'—'}</td>
+        <td style="white-space:nowrap">${p.date_retour_prevue?fd((''+p.date_retour_prevue).slice(0,10)):'—'}</td>
+      </tr>`;}).join('')}</tbody>
+    </table></div>`
+    : `<div style="font-size:12px;color:var(--text3);padding:8px 0">${TR('Aucun prêt / essai actif.')}</div>`;
+
+  c.innerHTML = tiles
+    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${demoTable}</div>`
+    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
+    + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`;
+}
+window.renderParcDemo = renderParcDemo;
+function parcDemoFiltrer(v){
+  const q=(v||'').toLowerCase().trim();
+  document.querySelectorAll('#parc-demo-tbl tbody tr').forEach(tr=>{
+    tr.style.display = (!q || (tr.getAttribute('data-k')||'').includes(q)) ? '' : 'none';
+  });
+}
+window.parcDemoFiltrer = parcDemoFiltrer;
+
 async function modalTransfert(id){
   const d = id ? await API.transfert(id) : {};
   TMP_CLIENTS = await API.clients();
@@ -4166,41 +4285,10 @@ function selectClientTransfert(id,nom,which){
 }
 
 async function saveTransfert(id){
-  let fauteuilId=parseInt(gv('tr-fauteuil-id'))||null;
-  let departId=parseInt(gv('tr-depart-id'))||null;
-  let arriveeId=parseInt(gv('tr-arrivee-id'))||null;
-  // ── Résolution de secours : l'utilisateur a saisi un nom/série sans cliquer
-  // dans la liste déroulante (piège classique). On tente de retrouver l'ID.
-  if(!fauteuilId){
-    const q=(gv('tr-fauteuil-search')||'').trim();
-    if(q){ try{
-      const fs=((await API.recherche(q)).fauteuils)||[];
-      const norm=s=>(s||'').toString().trim().toLowerCase();
-      const exact=fs.filter(f=>norm(f.serie)===norm(q) || norm(f.modele+' — '+f.serie)===norm(q));
-      const cand=exact.length?exact:fs;
-      if(cand.length===1) fauteuilId=cand[0].id;
-    }catch(_){}}
-  }
-  async function resolveClient(field){
-    const q=(gv('tr-'+field+'-search')||'').trim(); if(!q) return {id:null,ambig:false};
-    try{
-      const list=(await API.clients(q))||[];
-      const norm=s=>(s||'').toString().trim().toLowerCase();
-      const exact=list.filter(c=>norm(c.nom)===norm(q));
-      const cand=exact.length?exact:list;
-      if(cand.length===1) return {id:cand[0].id,ambig:false};
-      if(cand.length>1)   return {id:null,ambig:true};
-    }catch(_){}
-    return {id:null,ambig:false};
-  }
-  if(!departId){ const r=await resolveClient('depart');  if(r.ambig){alert(TR('Plusieurs distributeurs portent ce nom au départ — choisissez-le dans la liste déroulante.'));return;} departId=r.id; }
-  if(!arriveeId){ const r=await resolveClient('arrivee'); if(r.ambig){alert(TR('Plusieurs distributeurs portent ce nom à l’arrivée — choisissez-le dans la liste déroulante.'));return;} arriveeId=r.id; }
-  // Champs encore introuvables → message clair ne listant que ce qui manque
-  const manque=[];
-  if(!fauteuilId) manque.push(t('transferts_fauteuil'));
-  if(!departId)   manque.push(t('transferts_client_depart'));
-  if(!arriveeId)  manque.push(t('transferts_client_arrivee'));
-  if(manque.length){ alert(TR('À sélectionner dans la liste déroulante : ')+manque.join(' / ')); return; }
+  const fauteuilId=parseInt(gv('tr-fauteuil-id'));
+  const departId=parseInt(gv('tr-depart-id'));
+  const arriveeId=parseInt(gv('tr-arrivee-id'));
+  if(!fauteuilId||!departId||!arriveeId){alert(t('transferts_fauteuil')+' / '+t('transferts_client_depart')+' / '+t('transferts_client_arrivee'));return;}
   const data={
     fauteuil_id:fauteuilId, client_depart_id:departId, client_arrivee_id:arriveeId,
     date_depart:gv('tr-date-depart')||null, date_arrivee:gv('tr-date-arrivee')||null,
@@ -7247,13 +7335,51 @@ window._delNote = _delNote;
 // ══════════════════════════════════════════════════════════════════
 // MODULE PRÊTS — bons de prêt / essai de fauteuils aux distributeurs
 // ══════════════════════════════════════════════════════════════════
+// Statuts de prêt : couleur (c) + icône (ic). Les icônes sont personnalisables ici,
+// en un seul endroit (noms d'icônes Tabler : https://tabler.io/icons).
 const PRET_STATUTS_UI = {
-  brouillon:{l:'Brouillon',c:'#6b7280'}, envoye:{l:'Envoyé',c:'#2563eb'}, signe:{l:'Signé',c:'#16a34a'},
-  en_cours:{l:'En cours',c:'#0d9488'}, retard:{l:'En retard',c:'#dc2626'}, prolonge:{l:'Prolongé',c:'#d97706'},
-  cloture:{l:'Clôturé',c:'#374151'}, rachete:{l:'Racheté',c:'#7c3aed'}
+  brouillon:{l:'Brouillon',c:'#6b7280',ic:'ti-pencil'},
+  envoye:   {l:'Envoyé',   c:'#2563eb',ic:'ti-send'},
+  signe:    {l:'Signé',    c:'#16a34a',ic:'ti-writing-sign'},
+  en_cours: {l:'En cours', c:'#0d9488',ic:'ti-clock-play'},
+  retard:   {l:'En retard',c:'#dc2626',ic:'ti-alert-triangle'},
+  prolonge: {l:'Prolongé', c:'#d97706',ic:'ti-calendar-plus'},
+  cloture:  {l:'Clôturé',  c:'#374151',ic:'ti-circle-check'},
+  rachete:  {l:'Racheté',  c:'#7c3aed',ic:'ti-cash'}
 };
 const PRET_FORMULES = { essai_court:'Essai court (15–30 j)', long_terme:'Prêt long terme (≥ 3 mois)' };
 function pretBadge(s){ const u=PRET_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:600;color:#fff;background:${u.c}">${u.l}</span>`; }
+
+// Sélecteur de statut en icônes (façon « Demandes d'infos ») : l'icône colorée = statut
+// actuel, les grisées = les autres ; clic = change le statut.
+function pretStatutIcons(p){
+  return `<span style="display:inline-flex;align-items:center;gap:1px;white-space:nowrap">${Object.keys(PRET_STATUTS_UI).map(k=>{
+    const u=PRET_STATUTS_UI[k], on=(p.statut===k);
+    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setPretStatutInline(${p.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:25px;height:25px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:14px"></i></span>`;
+    return `<span onclick="event.stopPropagation();setPretStatutInline(${p.id},'${k}')" title="${u.l}" style="cursor:pointer;width:23px;height:25px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:16px;color:var(--text3);opacity:.35"></i></span>`;
+  }).join('')}</span>`;
+}
+window.pretStatutIcons = pretStatutIcons;
+
+// Change le statut d'un prêt en un clic. Cas particuliers : « Prolongé » demande une date,
+// « Signé » ouvre la fenêtre de signature (pour saisir la date). Les autres sont directs.
+async function setPretStatutInline(id, statut){
+  try{
+    if(statut==='prolonge'){
+      const d = prompt(TR('Prorogation accordée jusqu\'au (AAAA-MM-JJ) :'));
+      if(!d) return;
+      await API.setPretStatut(id, 'prolonge', {prorogation_date:d});
+    } else if(statut==='signe'){
+      modalPretSigneMail(id);   // saisie de la date de signature
+      return;
+    } else {
+      await API.setPretStatut(id, statut, null);
+    }
+    toast(TR('Statut mis à jour'),'ti-check','var(--success)');
+    if(STATE.view==='prets') render();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.setPretStatutInline = setPretStatutInline;
 
 async function renderPrets(ttl,c,a){
   ttl.textContent = TR('Prêts') || 'Prêts';
@@ -7274,14 +7400,13 @@ async function renderPrets(ttl,c,a){
       <td style="font-size:12px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
       <td style="white-space:nowrap">${fdate(p.date_remise)}</td>
       <td style="white-space:nowrap">${fdate(p.date_retour_prevue)}</td>
-      <td style="white-space:nowrap">${pretBadge(p.statut)}${sign}</td>
+      <td style="white-space:nowrap">${pretStatutIcons(p)}${sign}</td>
       <td style="text-align:right;white-space:nowrap">
         <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
         <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
         <button class="btn sm" title="Lien de signature (test, sans e-mail)" onclick="montrerLienSignature(location.origin+'/pret/'+'${p.token_signature||''}')"><i class="ti ti-link"></i></button>
         <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
         <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
-        <button class="btn sm" title="Statut" onclick="menuPretStatut(${p.id})"><i class="ti ti-adjustments"></i></button>
         <button class="btn sm danger" title="Supprimer" onclick="supprPret(${p.id})"><i class="ti ti-trash"></i></button>
       </td></tr>`;
   }).join('');

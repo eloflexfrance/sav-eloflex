@@ -3635,6 +3635,28 @@ router.post('/admin/fauteuils-resync', adminOnly, async (req, res) => {
 });
 
 // ── Suivi des fauteuils de démonstration (rappels J+30) ──────────────
+// ── Parc démo : liste complète des fauteuils déclarés en démo (modele_demo),
+// avec leurs infos de suivi. Non plafonné, toutes années confondues. ─────────
+router.get('/demos/parc', async (req, res) => {
+  try {
+    const rows = await db.all(
+      `SELECT cmd.id, cmd.modele, cmd.num_serie, cmd.bdc,
+              cmd.distributeur_nom, cmd.client_id,
+              c.nom AS client_nom, c.ville AS client_ville,
+              cmd.date_commande, cmd.date_livraison,
+              cmd.demo_origine_nom, cmd.demo_localisation_actuelle,
+              cmd.demo_rappel_date, cmd.demo_suivi_resultat,
+              cmd.num_facture, cmd.facture_paiement_statut,
+              (cmd.demo_rappel_date IS NOT NULL AND cmd.demo_rappel_date <= to_char(NOW(),'YYYY-MM-DD')) AS rappel_echu
+       FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id
+       WHERE cmd.modele_demo = TRUE
+       ORDER BY (cmd.demo_suivi_resultat IS NOT NULL),
+                cmd.demo_rappel_date ASC NULLS LAST,
+                cmd.date_commande DESC NULLS LAST, cmd.id DESC`);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/demos/suivi', async (req, res) => {
   try {
     const rows = await db.all(
