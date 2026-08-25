@@ -1552,7 +1552,7 @@ async function modalCommande(id, prefill){
               <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede();majBdcConfirme()">${t('cmd_type_fauteuil_neuf')||'Fauteuil Neuf'}
             </label>
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
-              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede();majBdcConfirme()">${t('cmd_type_fauteuil_demo')||'Fauteuil Démo'}
+              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede();majBdcConfirme();majSerieDemoHint()">${t('cmd_type_fauteuil_demo')||'Fauteuil Démo'}
             </label>
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px">
               <input type="checkbox" id="cmd-type-pieces" ${cm.type_pieces||(cm.commande_type==='pieces')?'checked':''} style="width:15px;height:15px;accent-color:var(--text2)" onchange="majBdcConfirme()">${t('cmd_type_pieces')||'Pièces détachées'}
@@ -1695,7 +1695,8 @@ async function modalCommande(id, prefill){
             </div>
           </div>
           <div class="form-group"><label class="form-label">${TR('N° série')}</label>
-            <input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}" placeholder="${t('cmd_num_serie_placeholder')||'Numéro de série'}">
+            <input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}" placeholder="${t('cmd_num_serie_placeholder')||'Numéro de série'}" oninput="majSerieDemoHint()">
+            <div id="cmd-serie-demo-hint" style="display:none;font-size:11.5px;color:var(--warning);margin-top:4px"><i class="ti ti-info-circle" style="font-size:12px;margin-right:2px"></i>${TR('Fauteuil démo : renseignez le n° de série pour le suivre dans le Parc démo et le rattacher aux prêts / transferts.')}</div>
           </div>
         </div>
         <div id="cmd-preuve-zone"></div>
@@ -1799,7 +1800,7 @@ async function modalCommande(id, prefill){
   window._CMD_CONF_DATE = cm.date_confirmation || null;
   TMP_CMD_LIGNES = (cm.lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
   TMP_RETOUR_LIGNES = (cm.retour_lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
-  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majZonePreuveLivraison(); if(!id && cm.distributeur_nom) prefillGroupeDepuisDistrib(); }, 60);
+  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majZonePreuveLivraison(); majSerieDemoHint(); if(!id && cm.distributeur_nom) prefillGroupeDepuisDistrib(); }, 60);
 }
 
 function toggleDateConfirmation(el){
@@ -2169,6 +2170,16 @@ function majTypeSuede(){
   if(sec) sec.style.display = (neuf||demo) ? '' : 'none';
 }
 
+// Astuce n° de série : visible tant qu'un fauteuil démo n'a pas de série renseignée.
+function majSerieDemoHint(){
+  const hint = document.getElementById('cmd-serie-demo-hint');
+  if(!hint) return;
+  const demo = !!document.getElementById('cmd-type-fauteuil-demo')?.checked;
+  const serie = (document.getElementById('cmd-serie')?.value||'').trim();
+  hint.style.display = (demo && !serie) ? '' : 'none';
+}
+window.majSerieDemoHint = majSerieDemoHint;
+
 function renderTopbarPays(){
   const el = document.getElementById('pays-switcher');
   if(!el) return;
@@ -2454,9 +2465,11 @@ async function demoProlonger(id, cur){
   try{ await API.demoProlonger(id, d.trim()); toast(TR('Rappel prolongé au ')+d.trim(),'ti-calendar-plus'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 async function demoCloturer(id, resultat){
-  const lbl = resultat==='facture' ? 'facturée / vendue' : 'en retour organisé';
-  if(!confirm(TR('Marquer cette démo comme ')+lbl+' ? Elle sort du suivi.')) return;
-  try{ await API.demoCloturer(id, resultat); toast(TR('Démo clôturée (')+lbl+')','ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
+  const vendu = resultat==='facture';
+  const lbl = vendu ? TR('vendue / facturée') : TR('de retour à Éloflex France');
+  const suite = vendu ? TR('Elle sort du parc démo (conservée dans le Suivi commandes).') : TR('Elle reste dans le parc, marquée « Disponible » pour un autre essai.');
+  if(!confirm(TR('Marquer cette démo comme ')+lbl+' ? '+suite)) return;
+  try{ await API.demoCloturer(id, resultat); toast(vendu?TR('Démo marquée vendue'):TR('Démo de retour — disponible'),'ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 window.demoProlonger=demoProlonger; window.demoCloturer=demoCloturer;
 
@@ -4058,14 +4071,39 @@ async function renderParcDemo(ttl,c,a){
   }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
 
   const fdate = d => d ? fd((''+d).slice(0,10)) : '—';
-  const parcActif = demos.filter(d=>d.demo_suivi_resultat!=='facture');  // tout sauf vendues
-  const enEssai   = demos.filter(d=>!d.demo_suivi_resultat);             // sorties chez un distributeur
-  const disponibles = demos.filter(d=>d.demo_suivi_resultat==='retour'); // revenues à Éloflex FR
-  const echues  = enEssai.filter(d=>d.rappel_echu);
-  const vendues = demos.filter(d=>d.demo_suivi_resultat==='facture');
+  const _today = new Date().toISOString().slice(0,10);
+  const _recence = d => (''+(d.date_livraison||d.date_commande||'0000-00-00')).slice(0,10) + '#' + String(d.id||0).padStart(12,'0');
+
+  // ── Regroupement par n° de série = unité physique ──────────────────────────
+  // Une même unité peut enchaîner plusieurs épisodes de démo (distributeurs
+  // successifs, retours, reconditionnements). L'ÉPISODE LE PLUS RÉCENT définit
+  // l'état courant de l'unité : ainsi un fauteuil revendu par un 2ᵉ distributeur
+  // sort du parc même si un ancien épisode « retour » subsiste. Les démos sans
+  // n° de série restent comptées individuellement (unité non traçable).
+  const _bySerie = new Map();
+  const unites = [];                       // { rep, hist:[], sn }
+  demos.forEach(d=>{
+    const sn=_SNZ(d.num_serie);
+    if(!sn){ unites.push({rep:d, hist:[d], sn:null}); return; }
+    if(!_bySerie.has(sn)){ const u={rep:d, hist:[d], sn}; _bySerie.set(sn,u); unites.push(u); }
+    else { const u=_bySerie.get(sn); u.hist.push(d); if(_recence(d) > _recence(u.rep)) u.rep=d; }
+  });
+  const _stU = u => u.rep.demo_suivi_resultat;                 // état courant = épisode le plus récent
+  const parcActif   = unites.filter(u=>_stU(u)!=='facture');   // tout sauf vendues
+  const enEssai     = unites.filter(u=>!_stU(u));              // sorties chez un distributeur
+  const disponibles = unites.filter(u=>_stU(u)==='retour');   // revenues à Éloflex FR
+  const echues      = enEssai.filter(u=>u.rep.rappel_echu);
+  const vendues     = unites.filter(u=>_stU(u)==='facture');
   const transEnCours = transferts.filter(tr=>tr.statut!=='Arrivé' && tr.statut!=='Annulé');
   const pretsActifs  = prets.filter(p=>_PRET_ACTIF.includes(p.statut));
   const serieEnTransit = new Set(transEnCours.map(tr=>_SNZ(tr.serie)).filter(Boolean));
+
+  // ── Pivot n° de série : rattacher les prêts actifs et transferts à chaque unité ──
+  const pretParSerie = new Map();   // série normalisée -> prêt actif (le plus récent rattaché)
+  pretsActifs.forEach(p=>{ pretArticlesOf(p).forEach(ar=>{ const sn=_SNZ(ar.num_serie); if(sn && !pretParSerie.has(sn)) pretParSerie.set(sn, p); }); });
+  const transParSerie = new Map();  // série normalisée -> transfert en cours
+  transEnCours.forEach(tr=>{ const sn=_SNZ(tr.serie); if(sn && !transParSerie.has(sn)) transParSerie.set(sn, tr); });
+  const sansSerie = parcActif.filter(u=>!u.sn).length;
 
   const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px">
     <div class="stat-card"><div class="stat-label">${TR('Parc démo (actif)')}</div><div class="stat-value" style="color:#0d9488">${parcActif.length}</div></div>
@@ -4078,9 +4116,9 @@ async function renderParcDemo(ttl,c,a){
 
   // ── Compteur par modèle (parc actif) : En essai / Disponibles / Total + vendues (cumul) ──
   const grp = {};
-  parcActif.forEach(d=>{ const k=demoModele(d.modele); const g=grp[k]||(grp[k]={modele:k,essai:0,dispo:0}); if(d.demo_suivi_resultat==='retour') g.dispo++; else g.essai++; });
+  parcActif.forEach(u=>{ const k=demoModele(u.rep.modele); const g=grp[k]||(grp[k]={modele:k,essai:0,dispo:0}); if(_stU(u)==='retour') g.dispo++; else g.essai++; });
   const venduGrp = {};
-  vendues.forEach(d=>{ const k=demoModele(d.modele); venduGrp[k]=(venduGrp[k]||0)+1; });
+  vendues.forEach(u=>{ const k=demoModele(u.rep.modele); venduGrp[k]=(venduGrp[k]||0)+1; });
   const grpList = Object.values(grp).sort((x,y)=>(y.essai+y.dispo)-(x.essai+x.dispo));
   const compteurModele = grpList.length ? `<div class="card" style="margin-bottom:14px">
     <div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Compteur par modèle')}</div>
@@ -4104,30 +4142,50 @@ async function renderParcDemo(ttl,c,a){
 
   // Par défaut on affiche le parc ACTIF (en essai + disponibles) ; seules les
   // démos VENDUES quittent le parc (mais restent dans le Suivi commandes). Interrupteur pour les revoir.
-  const demosVues = PARC_SHOW_CONCLUES ? demos : parcActif;
+  const demosVues = PARC_SHOW_CONCLUES ? unites : parcActif;
   const nbConclues = vendues.length;
-  const demoRows = demosVues.map(d=>{
+  const demoRows = demosVues.map(u=>{
+    const d = u.rep;                                    // épisode le plus récent = état courant
     const s = parcDemoStatut(d);
-    const sn = _SNZ(d.num_serie);
+    const sn = u.sn;
     const enMvt = sn && serieEnTransit.has(sn);
-    // Un retour à Éloflex France = disponible pour un autre essai : détenteur = Éloflex France.
+    const pretLie = sn ? pretParSerie.get(sn) : null;   // prêt actif rattaché à cette unité (par n° de série)
+    const pretHolder = pretLie ? (pretLie.client_nom_actuel || pretLie.distributeur_nom || '') : '';
+    // Détenteur physique : un prêt actif fait foi (le fauteuil est chez l'emprunteur) ;
+    // un retour à Éloflex France = disponible pour un autre essai.
     const detenteur = d.demo_suivi_resultat==='retour'
       ? 'Éloflex France'
-      : (d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—');
+      : (pretHolder || d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—');
+    // Échéance : celle du prêt actif prime si renseignée, sinon le rappel démo.
+    const echeance = (pretLie && pretLie.date_retour_prevue) ? (''+pretLie.date_retour_prevue).slice(0,10) : d.demo_rappel_date;
+    const echEchue = echeance && (''+echeance).slice(0,10) <= _today && d.demo_suivi_resultat!=='facture';
     const mise = d.date_livraison || d.date_commande;
-    const cle = (d.modele||'')+' '+(d.num_serie||'')+' '+(detenteur||'')+' '+(d.demo_origine_nom||'');
+    // Parcours de l'unité (épisodes chronologiques) pour l'info-bulle.
+    const histSorted = u.hist.slice().sort((x,y)=>_recence(x).localeCompare(_recence(y)));
+    const parcoursTxt = histSorted.map(h=>{
+      const who = h.demo_localisation_actuelle||h.client_nom||h.distributeur_nom||'?';
+      const r = h.demo_suivi_resultat==='facture'?TR('vendu'):h.demo_suivi_resultat==='retour'?TR('retour'):TR('en démo');
+      return who+' ('+r+')';
+    }).join('  →  ');
+    const cle = (d.modele||'')+' '+(d.num_serie||'')+' '+(detenteur||'')+' '+(d.demo_origine_nom||'')+' '+(pretHolder||'')+' '+parcoursTxt;
+    const histBadge = u.hist.length>1
+      ? ` <span class="badge" style="background:var(--surface-2,#eef1f4);color:var(--text2);border:0.5px solid var(--border-s);font-size:10px;cursor:help" title="${TR('Parcours de l’unité')} : ${esc(parcoursTxt)}"><i class="ti ti-history" style="font-size:11px;margin-right:2px"></i>${u.hist.length} ${TR('épisodes')}</span>`
+      : '';
     const serieCell = d.num_serie
       ? `<span class="mono">${esc(d.num_serie)}</span>`
       : `<span class="badge" style="background:var(--warning-bg);color:var(--warning);border:0.5px solid rgba(180,85,31,.3);font-size:10px" title="${TR('Renseignez le n° de série pour suivre l’unité physique et ses transferts')}"><i class="ti ti-alert-triangle" style="font-size:11px;margin-right:2px"></i>${TR('à renseigner')}</span>`;
+    const pretBadge = pretLie
+      ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:10px;cursor:pointer" title="${TR('Prêt actif rattaché à cette unité')} — ${esc(PRET_FORMULES[pretLie.formule]||pretLie.formule||'')}${pretLie.date_retour_prevue?' · '+TR('retour prévu')+' '+fdate(pretLie.date_retour_prevue):''}" onclick="modalPret(${pretLie.id})"><i class="ti ti-file-certificate" style="font-size:11px;margin-right:2px"></i>${TR('prêt')}</span>`
+      : '';
     return `<tr data-k="${esc(cle.toLowerCase())}">
       <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:12px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}</td>
-      <td style="font-weight:600">${esc(d.modele||'—')}</td>
+      <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
       <td style="font-size:11px">${serieCell}</td>
-      <td>${esc(detenteur)}</td>
+      <td>${esc(detenteur)}${pretBadge}</td>
       <td style="font-size:12px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
       <td style="white-space:nowrap">${fdate(mise)}</td>
-      <td style="white-space:nowrap;${d.rappel_echu?'color:var(--danger);font-weight:600':''}">${d.demo_rappel_date?fdate(d.demo_rappel_date):'—'}</td>
-      <td><button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="CMD_FILTERS.q='${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}';setView('commandes')"><i class="ti ti-arrow-right"></i></button></td>
+      <td style="white-space:nowrap;${echEchue?'color:var(--danger);font-weight:600':''}">${echeance?fdate(echeance):'—'}</td>
+      <td style="white-space:nowrap">${d.demo_suivi_resultat!=='facture' ? `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="CMD_FILTERS.q='${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}';setView('commandes')"><i class="ti ti-arrow-right"></i></button></td>
     </tr>`;
   }).join('');
 
@@ -4174,8 +4232,12 @@ async function renderParcDemo(ttl,c,a){
     </table></div>`
     : `<div style="font-size:12px;color:var(--text3);padding:8px 0">${TR('Aucun prêt / essai actif.')}</div>`;
 
+  const bannerSerie = sansSerie ? `<div style="display:flex;align-items:center;gap:8px;background:var(--warning-bg);border:0.5px solid rgba(180,85,31,.3);color:var(--warning);border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:12.5px">
+    <i class="ti ti-alert-triangle" style="font-size:15px"></i>
+    <span><b>${sansSerie}</b> ${TR('démo(s) sans n° de série')} — ${TR('renseignez-le dans la fiche commande pour suivre l’unité physique et la rattacher automatiquement aux prêts et transferts.')}</span>
+  </div>` : '';
   c.innerHTML = tiles
-    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${demoTable}</div>`
+    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${bannerSerie}${demoTable}</div>`
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
     + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`;
 }
@@ -7535,6 +7597,7 @@ async function modalPret(id, prefillClientId){
         <div style="display:grid;grid-template-columns:1fr 90px 120px 90px 30px;gap:6px;font-size:11px;color:var(--text3);margin-bottom:4px;padding:0 2px">
           <span>${TR('Désignation / Modèle')}</span><span>${TR('Réf.')}</span><span>${TR('N° de série')}</span><span>${TR('Prix HT (€)')}</span><span></span></div>
         <div id="pret-articles"></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:5px"><i class="ti ti-info-circle" style="font-size:12px;margin-right:2px;color:var(--accent)"></i>${TR('Renseignez le n° de série du fauteuil : le prêt est alors rattaché à l’unité dans le Parc démo (détenteur et échéance suivis automatiquement).')}</div>
         <div style="text-align:right;font-size:13px;margin-top:6px">${TR('Total HT')} : <b id="pret-total">0,00 €</b></div>
       </div>
       <div class="grid-2">
