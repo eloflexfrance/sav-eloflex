@@ -4025,6 +4025,9 @@ async function renderTransferts(ttl,c,a){
 // ══════════════════════════════════════════════════════════════════
 const _SNZ = s => (s||'').toString().toUpperCase().replace(/[^A-Z0-9]/g,'');
 const _PRET_ACTIF = ['signe','en_cours','prolonge','retard'];
+let PARC_SHOW_CONCLUES = false;   // masquer par défaut les démos vendues / retournées
+function parcToggleConclues(v){ PARC_SHOW_CONCLUES = !!v; render(); }
+window.parcToggleConclues = parcToggleConclues;
 function parcDemoStatut(d){
   if(d.demo_suivi_resultat==='facture') return {l:'Vendu',c:'#15803d',ic:'ti-cash'};
   if(d.demo_suivi_resultat==='retour')  return {l:'Retourné',c:'#374151',ic:'ti-package-import'};
@@ -4061,17 +4064,24 @@ async function renderParcDemo(ttl,c,a){
     <div class="stat-card"><div class="stat-label">${TR('Retournées')}</div><div class="stat-value">${retours.length}</div></div>
   </div>`;
 
-  const demoRows = demos.map(d=>{
+  // Par défaut on n'affiche que les démos ACTIVES ; les vendues / retournées
+  // sortent du parc (mais restent dans le Suivi commandes). Interrupteur pour les revoir.
+  const demosVues = PARC_SHOW_CONCLUES ? demos : actives;
+  const nbConclues = vendues.length + retours.length;
+  const demoRows = demosVues.map(d=>{
     const s = parcDemoStatut(d);
     const sn = _SNZ(d.num_serie);
     const enMvt = sn && serieEnTransit.has(sn);
     const detenteur = d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—';
     const mise = d.date_livraison || d.date_commande;
     const cle = (d.modele||'')+' '+(d.num_serie||'')+' '+(detenteur||'')+' '+(d.demo_origine_nom||'');
+    const serieCell = d.num_serie
+      ? `<span class="mono">${esc(d.num_serie)}</span>`
+      : `<span class="badge" style="background:var(--warning-bg);color:var(--warning);border:0.5px solid rgba(180,85,31,.3);font-size:10px" title="${TR('Renseignez le n° de série pour suivre l’unité physique et ses transferts')}"><i class="ti ti-alert-triangle" style="font-size:11px;margin-right:2px"></i>${TR('à renseigner')}</span>`;
     return `<tr data-k="${esc(cle.toLowerCase())}">
       <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:12px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}</td>
-      <td class="mono" style="font-size:11px">${d.num_serie?esc(d.num_serie):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-size:11px">${serieCell}</td>
       <td>${esc(detenteur)}</td>
       <td style="font-size:12px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
       <td style="white-space:nowrap">${fdate(mise)}</td>
@@ -4080,17 +4090,18 @@ async function renderParcDemo(ttl,c,a){
     </tr>`;
   }).join('');
 
-  const demoTable = demos.length ? `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+  const demoTable = demosVues.length ? `
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
       <input class="form-input" id="parc-q" placeholder="${TR('Rechercher (modèle, série, distributeur…)')}" style="max-width:320px;padding:9px 12px" oninput="parcDemoFiltrer(this.value)">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--text2)"><input type="checkbox" ${PARC_SHOW_CONCLUES?'checked':''} onchange="parcToggleConclues(this.checked)"> ${TR('Inclure vendues / retournées')}${nbConclues?` (${nbConclues})`:''}</label>
       <span style="flex:1"></span>
-      <span style="font-size:12px;color:var(--text3)">${demos.length} ${TR('démo(s) déclarée(s)')}</span>
+      <span style="font-size:12px;color:var(--text3)">${demosVues.length} ${PARC_SHOW_CONCLUES?TR('démo(s) déclarée(s)'):TR('démo(s) active(s)')}</span>
     </div>
     <div class="table-wrap"><table class="t" id="parc-demo-tbl">
       <thead><tr><th>${TR('Statut')}</th><th>${TR('Modèle')}</th><th>${TR('N° série')}</th><th>${TR('Détenteur actuel')}</th><th>${TR('Origine')}</th><th>${TR('Mise en démo')}</th><th>${TR('Échéance rappel')}</th><th></th></tr></thead>
       <tbody>${demoRows}</tbody>
     </table></div>`
-    : `<div class="empty"><i class="ti ti-wheelchair"></i>${TR('Aucune démo déclarée.')}</div>`;
+    : `<div class="empty"><i class="ti ti-wheelchair"></i>${TR('Aucune démo active.')}${nbConclues?`<br><span style="font-size:12px;color:var(--text3)"><label style="cursor:pointer"><input type="checkbox" onchange="parcToggleConclues(this.checked)"> ${TR('Afficher les')} ${nbConclues} ${TR('vendues / retournées')}</label></span>`:''}</div>`;
 
   const scT={'En préparation':'attente','En transit':'ouvert','Arrivé':'g','Annulé':'urgent'};
   const transTable = transferts.length ? `<div class="table-wrap"><table class="t">
