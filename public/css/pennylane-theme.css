@@ -1,0 +1,131 @@
+/* ================================================================
+   THÈME « PENNYLANE » — surcharge posée après le thème d'origine.
+   Reprend les codes couleur / typo de Pennylane :
+   fond clair neutre, cartes blanches, barre latérale sombre à
+   pastille verte, boutons vert foncé, accents émeraude.
+   ================================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Fond clair neutre (fini le dégradé bleu) */
+  --bg-gradient: #F5F6F3;
+  --bg-mesh: none;
+
+  /* Surfaces solides (fini le verre givré) */
+  --glass-1:     #FFFFFF;
+  --glass-2:     #FFFFFF;
+  --glass-3:     #FFFFFF;
+  --glass-4:     #FBFBF9;
+  --glass-input: #FFFFFF;
+  --blur-sm: none; --blur-md: none; --blur-lg: none;
+
+  /* Bordures neutres chaudes */
+  --border:      #E7E8E2;
+  --border-s:    #ECEDE7;
+  --border-glow: #F1F2EC;
+  --border-dark: #E7E8E2;
+
+  /* Ombres discrètes et neutres */
+  --shadow-card:  0 1px 2px rgba(20,30,25,.05);
+  --shadow-modal: 0 24px 70px rgba(15,36,29,.22);
+  --shadow-btn:   none;
+
+  /* Texte */
+  --text:  #16211E;
+  --text2: #565C58;
+  --text3: #8A908B;
+
+  /* Accent vert Pennylane */
+  --accent:       #0B7A4B;   /* liens, actifs, petits accents (lisible sur blanc) */
+  --accent-dark:  #0C5C3C;   /* boutons pleins */
+  --accent-bg:    rgba(18,183,106,0.14);
+  --accent-soft:  rgba(18,183,106,0.08);
+
+  /* Sémantique alignée Pennylane */
+  --success:      #0C7A4B;
+  --success-bg:   rgba(12,122,75,0.12);
+  --warning:      #B4551F;
+  --warning-bg:   rgba(194,98,47,0.13);
+  --danger:       #DA4A3D;
+  --danger-bg:    rgba(218,74,61,0.12);
+
+  --radius:    12px;
+  --radius-sm: 8px;
+}
+
+/* Police + fond */
+body { font-family: 'Manrope','Segoe UI',system-ui,-apple-system,sans-serif; background: #F5F6F3; }
+body::before { background: #F5F6F3 !important; }
+body::after  { background: none !important; }
+
+/* ─────────── BARRE LATÉRALE SOMBRE ───────────
+   On redéfinit les variables DANS la sidebar : tous les styles
+   inline en var(--text2)/var(--accent)… deviennent clairs sans
+   toucher au JS. */
+.sidebar {
+  background: #0F241D !important;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  border-right: 1px solid #1C3A31;
+  box-shadow: none;
+  --text:  #EAF1EE;
+  --text2: #C7D0CC;
+  --text3: #7E8F88;
+  --accent: #12B76A;
+  --border: #21382F;
+  --border-dark: #21382F;
+}
+.sidebar-logo { color: #FFFFFF; border-bottom: 1px solid #21382F; background: none; }
+.sidebar-logo i { color: #12B76A; }
+.nav-label { color: #61706A; }
+.nav-item { margin: 1px 8px; border-radius: 9px; padding: 9px 12px; }
+.nav-item:hover { background: #1C3A31; color: #EAF1EE; }
+.nav-item.active {
+  background: #12B76A !important; color: #06231A !important; font-weight: 700;
+  box-shadow: none !important;
+}
+.nav-item.active i { color: #06231A; }
+.nav-badge { background: #2A4A40; color: #B9F5D6; }
+.nav-badge.danger { background: #7a2f2a; color: #ffd9d5; }
+.sidebar-footer { border-top: 1px solid #21382F; }
+.sidebar .btn {
+  background: transparent; border: 1px solid #274038; color: #C7D0CC;
+  box-shadow: none;
+}
+.sidebar .btn:hover { background: #1C3A31; border-color: #35594d; transform: none; }
+
+/* ─────────── TOPBAR (claire) ─────────── */
+.topbar { background: #FFFFFF; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; border-bottom: 1px solid var(--border); }
+
+/* ─────────── BOUTONS ─────────── */
+.btn {
+  background: #FFFFFF; border: 1px solid var(--border);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  box-shadow: none; color: #3A403C; font-weight: 600;
+}
+.btn:hover { background: #F4F5F1; border-color: #DADBD3; transform: none; box-shadow: none; }
+.btn.primary {
+  background: var(--accent-dark); border-color: var(--accent-dark); color: #fff;
+  box-shadow: none;
+}
+.btn.primary:hover { background: #0A4E33; box-shadow: none; }
+.btn.success { background: var(--success-bg); border-color: rgba(12,122,75,.30); color: var(--success); }
+.btn.danger  { background: var(--danger-bg);  border-color: rgba(218,74,61,.30);  color: var(--danger); }
+
+/* ─────────── CARTES / STAT / MODAL / FORM ─────────── */
+.card { background: #FFFFFF; backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-card); }
+.stat-card { background: #FBFBF9; backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--border); border-radius: 10px; box-shadow: none; }
+.stat-card:hover { transform: none; box-shadow: none; border-color: #DADBD3; }
+.modal-overlay { background: rgba(15,36,29,.35); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+.modal { background: #FFFFFF; backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-modal); }
+.modal-header { background: none; border-bottom: 1px solid var(--border); }
+.modal-footer { background: #FAFAF8; border-top: 1px solid var(--border); }
+.form-input { background: #FFFFFF; backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid #DCDDD5; }
+.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18,183,106,.15); background: #FFFFFF; }
+
+/* ─────────── TABLEAUX ─────────── */
+table.t th { background: #FAFAF8; border-bottom: 1px solid var(--border); color: var(--text3); }
+table.t td { border-bottom: 1px solid var(--border-s); }
+table.t tbody tr:hover td { background: #FAFAF7; }
+
+/* ─────────── BADGES (coins un peu moins ronds façon Pennylane) ─────────── */
+.badge { border-radius: 8px; }
