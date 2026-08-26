@@ -2492,6 +2492,13 @@ async function demoCloturer(id, resultat){
   try{ await API.demoCloturer(id, resultat); toast(okMsg,'ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 window.demoProlonger=demoProlonger; window.demoCloturer=demoCloturer;
+async function reserverDemoRetour(id, prefill){
+  const nom = prompt(TR('Réserver cette unité, à son retour, pour quel distributeur ? (videz le champ pour retirer la réservation)'), prefill||'');
+  if(nom===null) return;                       // annulé
+  const v = nom.trim();
+  try{ await API.demoReserver(id, v); toast(v?TR('Réservé au retour pour ')+v:TR('Réservation retirée'),'ti-bookmark'); render(); }catch(e){ alert(e.message); }
+}
+window.reserverDemoRetour=reserverDemoRetour;
 
 // ── PARAMÈTRES ────────────────────────────────────────────────────
 
@@ -4208,6 +4215,10 @@ async function renderParcDemo(ttl,c,a){
     const pretBadgeHtml = pretLie
       ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:10px;cursor:pointer" title="${TR('Prêt actif rattaché à cette unité')} — ${esc(PRET_FORMULES[pretLie.formule]||pretLie.formule||'')}${pretLie.date_retour_prevue?' · '+TR('retour prévu')+' '+fdate(pretLie.date_retour_prevue):''}" onclick="modalPret(${pretLie.id})"><i class="ti ti-file-certificate" style="font-size:11px;margin-right:2px"></i>${TR('prêt')}</span>`
       : '';
+    // Réservation : unité promise à un distributeur en attente, à son retour.
+    const resaBadge = (!isHist && d.demo_reservation)
+      ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:10px;cursor:pointer" title="${TR('Réservée au retour — cliquez pour modifier / retirer')}" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark" style="font-size:11px;margin-right:2px"></i>${TR('réservé')} : ${esc(d.demo_reservation)}</span>`
+      : '';
     const aAvoir = _aAvoir(d);
     const avoirBadge = (d.demo_suivi_resultat==='facture' && aAvoir)
       ? ` <span class="badge" style="background:#dc262618;color:#dc2626;border:0.5px solid #dc262644;font-size:10px;cursor:pointer" title="${TR('Marquée Vendue mais un avoir existe')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''} — ${TR('vente annulée par avoir : cliquez pour la clôturer en « Avoir » (sort du parc).')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-alert-triangle" style="font-size:11px;margin-right:2px"></i>${TR('avoir ?')}</span>`
@@ -4220,7 +4231,7 @@ async function renderParcDemo(ttl,c,a){
       <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:12px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
       <td style="font-size:11px">${serieCell}</td>
-      <td>${esc(detenteur)}${pretBadgeHtml}</td>
+      <td>${esc(detenteur)}${pretBadgeHtml}${resaBadge}</td>
       <td style="font-size:12px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
       <td style="white-space:nowrap">${fdate(mise)}</td>
       <td style="white-space:nowrap;${echEchue?'color:var(--danger);font-weight:600':''}">${echeance?fdate(echeance):'—'}</td>
@@ -4335,7 +4346,38 @@ async function renderParcDemo(ttl,c,a){
     </div>
   </div>`;
 
+  // ── Modèles « sous tension » : 0 exemplaire disponible alors qu'au moins un est en essai ──
+  // C'est le cas d'une 2ᵉ demande sur un modèle déjà sorti : on affiche la prochaine
+  // libération (échéance de l'unité qui revient le plus tôt) et on propose de réserver
+  // cette unité au retour, ou de commander un neuf à la Suède.
+  const tensGrp = {};
+  const _fam = m => demoModele(m).replace(/^Modèle\s+/i,'').trim().toUpperCase();
+  enEssai.forEach(u=>{ if(_fam(u.rep.modele)==='S1') return; const k=demoModele(u.rep.modele); (tensGrp[k]||(tensGrp[k]={modele:k,essai:[],dispo:0})).essai.push(u); });
+  disponibles.forEach(u=>{ if(_fam(u.rep.modele)==='S1') return; const k=demoModele(u.rep.modele); (tensGrp[k]||(tensGrp[k]={modele:k,essai:[],dispo:0})).dispo++; });
+  const tension = Object.values(tensGrp).filter(g=>g.dispo===0 && g.essai.length>=1).map(g=>{
+    const tri = g.essai.slice().sort((a,b)=>{ const da=a.rep.demo_rappel_date||'9999', db=b.rep.demo_rappel_date||'9999'; return (''+da).localeCompare(''+db); });
+    return { modele:g.modele, nb:g.essai.length, next:tri[0].rep, essais:tri };
+  }).sort((a,b)=> (a.next.demo_rappel_date||'9999').localeCompare(b.next.demo_rappel_date||'9999'));
+  const tensionCard = tension.length ? `<div class="card" style="margin-bottom:14px;border-left:3px solid #b45309">
+    <div class="section-title"><i class="ti ti-alert-triangle" style="color:#b45309"></i>${TR('Modèles sous tension')}
+      <span style="margin-left:auto;font-size:12px;font-weight:400;color:var(--text3)">${TR('aucun exemplaire disponible — 2ᵉ demande à arbitrer')}</span></div>
+    ${tension.map(tg=>{
+      const d=tg.next; const holder = d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—';
+      const dateTxt = d.demo_rappel_date ? fdate(d.demo_rappel_date) : TR('date non renseignée');
+      const resa = d.demo_reservation ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:10px;cursor:pointer" title="${TR('Modifier / retirer la réservation')}" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark" style="font-size:11px;margin-right:2px"></i>${TR('réservé')} : ${esc(d.demo_reservation)}</span>` : '';
+      return `<div style="display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap">
+        <div style="min-width:220px"><b style="font-size:13px">${esc(tg.modele)}</b> <span style="color:var(--text3);font-size:12px">— ${tg.nb} ${TR('en essai')}, 0 ${TR('dispo')}</span><br>
+          <span style="font-size:12px;color:var(--text2)"><i class="ti ti-clock-hour-4" style="font-size:12px"></i> ${TR('prochaine libération')} : <b${d.demo_rappel_date?'':' style="color:var(--warning)"'}>${dateTxt}</b> ${TR('chez')} ${esc(holder)}</span>${resa}</div>
+        <span style="flex:1"></span>
+        <button class="btn sm" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark"></i>${TR('Réserver au retour')}</button>
+        <button class="btn sm primary" onclick="setView('commande-suede')"><i class="ti ti-truck-delivery"></i>${TR('Commander à la Suède')}</button>
+      </div>`;
+    }).join('')}
+    <div style="margin-top:8px;font-size:11px;color:var(--text3)">${TR('Astuce : si l’essai en cours est en long terme ou que le distributeur ne peut pas attendre, commandez un neuf ; sinon réservez l’unité et planifiez le transfert à son retour.')}</div>
+  </div>` : '';
+
   c.innerHTML = tiles
+    + tensionCard
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${bannerAvoir}${bannerSerie}${demoTable}</div>`
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
     + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`

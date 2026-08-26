@@ -16,17 +16,22 @@ async function renderDevis(ttl, c, a){
   c.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
       ${['ouvert','converti','ignoré'].map(s=>`
-        <button onclick="DEVIS_FILTRE='${s}';renderDevis(document.querySelector('.topbar-title'),document.querySelector('.content'),document.querySelector('.topbar-actions'))"
+        <button onclick="setDevisFiltre('${s}')"
           class="btn${DEVIS_FILTRE===s?' primary':''}" style="font-size:12px">${s==='ouvert'?(t('devis_ouverts')||'📋 Ouverts'):s==='converti'?(t('devis_convertis')||'✅ Convertis'):(t('devis_ignores')||(t('devis_ignores')||'🚫 Ignorés'))}</button>`).join('')}
     </div>
     <div id="devis-list"><div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>`;
-  
+
   await chargerDevis();
+  // Auto-sync VosFactures UNIQUEMENT à l'ouverture de la vue (en arrière-plan, si > 6h).
+  // Ne jamais le déclencher depuis chargerDevis : sinon chaque « convertir / ignorer »
+  // relance une synchro lente qui bloque le rafraîchissement de la liste (bug « à retardement »).
+  syncDevisVF(false);
 }
+function setDevisFiltre(s){ DEVIS_FILTRE = s; render(); }
+window.setDevisFiltre = setDevisFiltre;
 
 async function chargerDevis(){
   const el = document.getElementById('devis-list'); if(!el) return;
-  syncDevisVF(false); // auto-sync si > 6h
   try{
     const list = await API.devis(DEVIS_FILTRE);
     if(!list.length){
@@ -81,9 +86,11 @@ async function syncDevisVF(manuel=false){
 }
 
 async function changerStatutDevis(id, statut){
-  await API.devisStatut(id, statut);
-  toast(statut==='converti'?(t('devis_converti_ok')||(t('devis_converti_ok')||'Devis marqué converti ✓')):(t('devis_ignore_ok')||(t('devis_ignore_ok')||'Devis ignoré')),'ti-check');
-  chargerDevis();
+  try{
+    await API.devisStatut(id, statut);
+    toast(statut==='converti'?(t('devis_converti_ok')||(t('devis_converti_ok')||'Devis marqué converti ✓')):(t('devis_ignore_ok')||(t('devis_ignore_ok')||'Devis ignoré')),'ti-check');
+    await chargerDevis();   // rafraîchit tout de suite la liste (sans relancer la synchro)
+  }catch(e){ toast(e.message||'Erreur','ti-alert-circle','var(--danger)'); }
 }
 
 function modalRelanceDevis(id, email, nom){

@@ -3647,7 +3647,7 @@ router.get('/demos/parc', async (req, res) => {
               cmd.distributeur_nom, cmd.client_id,
               c.nom AS client_nom, c.ville AS client_ville,
               cmd.date_commande, cmd.date_livraison,
-              cmd.demo_origine_nom, cmd.demo_localisation_actuelle,
+              cmd.demo_origine_nom, cmd.demo_localisation_actuelle, cmd.demo_reservation,
               cmd.demo_rappel_date, cmd.demo_suivi_resultat,
               cmd.num_facture, cmd.facture_paiement_statut,
               cmd.num_avoir,
@@ -3696,6 +3696,16 @@ router.post('/commandes/:id/demo-cloturer', async (req, res) => {
     const row = r === 'avoir'
       ? await db.run("UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat='avoir', statut='Avoir', updated_at=NOW() WHERE id=$1 RETURNING id, demo_suivi_resultat", [req.params.id])
       : await db.run('UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat=$1, updated_at=NOW() WHERE id=$2 RETURNING id, demo_suivi_resultat', [r, req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Commande introuvable' });
+    res.json({ ok: true, ...row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Réserver l'unité de démo pour un distributeur en attente (à son retour), ou effacer la réservation (valeur vide).
+router.post('/commandes/:id/demo-reserver', async (req, res) => {
+  try {
+    const resa = (req.body.reservation != null ? String(req.body.reservation).trim() : '') || null;
+    const row = await db.run('UPDATE commandes SET demo_reservation=$1, updated_at=NOW() WHERE id=$2 RETURNING id, demo_reservation', [resa, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
     res.json({ ok: true, ...row });
   } catch (e) { res.status(500).json({ error: e.message }); }
