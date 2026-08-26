@@ -168,6 +168,16 @@ function setView(v, extra={}){
   // Réinitialiser les recherches locales quand on change de vue
   if(v !== 'clients')   window._clientsQ = '';
   if(v !== 'catalogue') { STATE.q = ''; }
+  // Suivi commandes : on repart d'une recherche vierge à chaque entrée dans la vue.
+  // Un appelant peut pré-remplir un filtre via extra (ex. depuis le Parc de démo).
+  if(v === 'commandes'){
+    CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'', type:'' };
+    if(extra.q!=null)            CMD_FILTERS.q = extra.q;
+    if(extra.statut!=null)       CMD_FILTERS.statut = extra.statut;
+    if(extra.distributeur!=null) CMD_FILTERS.distributeur = extra.distributeur;
+    if(extra.groupe!=null)       CMD_FILTERS.groupe = extra.groupe;
+    if(extra.type!=null)         CMD_FILTERS.type = extra.type;
+  }
   STATE={view:v, clientId:extra.clientId||null, fauteuilId:extra.fauteuilId||null, q:''};
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===v));
   render();
@@ -4202,7 +4212,7 @@ async function renderParcDemo(ttl,c,a){
     const avoirBadge = (d.demo_suivi_resultat==='facture' && aAvoir)
       ? ` <span class="badge" style="background:#dc262618;color:#dc2626;border:0.5px solid #dc262644;font-size:10px;cursor:pointer" title="${TR('Marquée Vendue mais un avoir existe')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''} — ${TR('vente annulée par avoir : cliquez pour la clôturer en « Avoir » (sort du parc).')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-alert-triangle" style="font-size:11px;margin-right:2px"></i>${TR('avoir ?')}</span>`
       : ((aAvoir && d.demo_suivi_resultat!=='avoir') ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:10px" title="${TR('Un avoir est enregistré sur cette commande')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''}"><i class="ti ti-receipt-refund" style="font-size:11px;margin-right:2px"></i>${TR('avoir')}</span>` : '');
-    const voirBtn = `<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="CMD_FILTERS.q='${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}';setView('commandes')"><i class="ti ti-arrow-right"></i></button>`;
+    const voirBtn = `<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="setView('commandes',{q:'${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}'})"><i class="ti ti-arrow-right"></i></button>`;
     const actions = isHist
       ? voirBtn
       : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Clôturer en avoir (annulation — sort du parc)')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-receipt-refund"></i></button>${voirBtn}`;
@@ -4286,10 +4296,50 @@ async function renderParcDemo(ttl,c,a){
     <i class="ti ti-alert-triangle" style="font-size:15px"></i>
     <span><b>${venduAvecAvoir}</b> ${TR('démo(s) marquée(s) « Vendue » avec un avoir')} — ${TR('à vérifier : une vente annulée par avoir devrait être clôturée en « Retour ». Ouvrez l’onglet « Historique » pour les voir et les requalifier.')}</span>
   </div>` : '';
+
+  // ── Fauteuils de démo EN NOTRE POSSESSION, par modèle (hors S1) ──────────────
+  // Parc actif = en essai + disponibles = les unités que nous possédons réellement.
+  // Sert à voir d'un coup d'œil s'il faut recommander des modèles de démo à la Suède.
+  const possGrp = {};
+  parcActif.forEach(u=>{
+    const k = demoModele(u.rep.modele);
+    const fam = k.replace(/^Modèle\s+/i,'').trim().toUpperCase();
+    if(fam==='S1') return;                        // exclusion du modèle S1
+    const g = possGrp[k] || (possGrp[k]={modele:k, essai:0, dispo:0});
+    if(_stU(u)==='retour') g.dispo++; else g.essai++;
+  });
+  const possList  = Object.values(possGrp).sort((a,b)=>(b.essai+b.dispo)-(a.essai+a.dispo) || a.modele.localeCompare(b.modele));
+  const possTotal = possList.reduce((s,g)=>s+g.essai+g.dispo,0);
+  const possDispo = possList.reduce((s,g)=>s+g.dispo,0);
+  const possMax   = Math.max(1, ...possList.map(g=>g.essai+g.dispo));
+  const possessionCard = `<div class="card" style="margin-top:14px">
+    <div class="section-title"><i class="ti ti-packages"></i>${TR('Fauteuils de démo en notre possession')}
+      <span style="margin-left:auto;font-size:12px;font-weight:400;color:var(--text3)">${possTotal} ${TR('fauteuil(s)')} · ${possDispo} ${TR('dispo')} · ${TR('hors S1')}</span></div>
+    ${possList.length ? possList.map(g=>{
+      const tot=g.essai+g.dispo; const w=Math.round(tot/possMax*100); const wd=tot?Math.round(g.dispo/tot*100):0;
+      const reco = g.dispo===0 ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:10px" title="${TR('Aucun exemplaire disponible chez nous — à recommander à la Suède si besoin')}">${TR('à recommander ?')}</span>` : '';
+      return `<div style="display:flex;align-items:center;gap:10px;margin:7px 0">
+        <div style="width:100px;font-weight:600;font-size:13px">${esc(g.modele)}</div>
+        <div style="flex:1;background:var(--surface-2,#eef1f4);border-radius:6px;height:22px;overflow:hidden">
+          <div style="height:100%;width:${w}%;min-width:26px;display:flex">
+            <div style="width:${wd}%;background:#2563eb"></div>
+            <div style="flex:1;background:#0d9488"></div>
+          </div>
+        </div>
+        <div style="width:210px;font-size:12px;color:var(--text2);white-space:nowrap;text-align:right"><b style="color:var(--text)">${tot}</b> ${TR('total')} · ${g.dispo} ${TR('dispo')} · ${g.essai} ${TR('en essai')}${reco}</div>
+      </div>`;
+    }).join('') : `<div style="font-size:12px;color:var(--text3)">${TR('Aucun fauteuil de démo actif.')}</div>`}
+    <div style="margin-top:12px;display:flex;gap:16px;font-size:11px;color:var(--text3);border-top:0.5px solid var(--border-s);padding-top:8px">
+      <span><span style="display:inline-block;width:10px;height:10px;background:#2563eb;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('Disponibles (chez nous)')}</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:#0d9488;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('En essai (sortis chez un distributeur)')}</span>
+    </div>
+  </div>`;
+
   c.innerHTML = tiles
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${bannerAvoir}${bannerSerie}${demoTable}</div>`
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
-    + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`;
+    + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:12px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`
+    + possessionCard;
 }
 window.renderParcDemo = renderParcDemo;
 function parcDemoFiltrer(v){
@@ -4538,7 +4588,7 @@ function showQuickResults(res,q){
         <button class="btn sm" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${f.client_id}});clearQuickSearch()"><i class="ti ti-eye"></i>${TR("Voir la fiche")}</button>
         <button class="btn sm" onclick="${f.commande_id
           ? `setView('commandes');clearQuickSearch();setTimeout(()=>modalCommande(${f.commande_id}),300)`
-          : `CMD_FILTERS.q=${JSON.stringify(f.serie||'')};setView('commandes');clearQuickSearch()`
+          : `setView('commandes',{q:${JSON.stringify(f.serie||'')}});clearQuickSearch()`
         }"><i class="ti ti-clipboard-list"></i>${TR('Commande')}</button>
       </div>
     </div>`).join('');
