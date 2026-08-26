@@ -2441,6 +2441,7 @@ async function renderAlertes(ttl,c,a){
             <button class="btn sm" onclick="demoCloturer(${d.id},'retour')" title="${TR("Retour organisé")}"><i class="ti ti-truck-return"></i></button>
             <button class="btn sm" onclick="demoProlonger(${d.id},'${d.demo_rappel_date}')" title="Prolonger le rappel"><i class="ti ti-calendar-plus"></i></button>
             <button class="btn sm success" onclick="demoCloturer(${d.id},'facture')" title="${TR("Facturé / vendu")}"><i class="ti ti-file-euro"></i></button>
+            <button class="btn sm" onclick="demoCloturer(${d.id},'avoir')" title="${TR("Clôturer en avoir (annulation)")}"><i class="ti ti-receipt-refund"></i></button>
           </td></tr>`).join('')}</tbody>
       </table></div>
     </div>` : '';
@@ -2465,11 +2466,17 @@ async function demoProlonger(id, cur){
   try{ await API.demoProlonger(id, d.trim()); toast(TR('Rappel prolongé au ')+d.trim(),'ti-calendar-plus'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 async function demoCloturer(id, resultat){
-  const vendu = resultat==='facture';
-  const lbl = vendu ? TR('vendue / facturée') : TR('de retour à Éloflex France');
-  const suite = vendu ? TR('Elle sort du parc démo (conservée dans le Suivi commandes).') : TR('Elle reste dans le parc, marquée « Disponible » pour un autre essai.');
+  const lbl = resultat==='facture' ? TR('vendue / facturée')
+            : resultat==='avoir'   ? TR('annulée par avoir')
+            : TR('de retour à Éloflex France');
+  const suite = resultat==='facture' ? TR('Elle sort du parc démo (conservée dans le Suivi commandes).')
+              : resultat==='avoir'   ? TR('Elle sort du parc démo (annulation) et n’apparaît plus que dans l’Historique.')
+              : TR('Elle reste dans le parc, marquée « Disponible » pour un autre essai.');
   if(!confirm(TR('Marquer cette démo comme ')+lbl+' ? '+suite)) return;
-  try{ await API.demoCloturer(id, resultat); toast(vendu?TR('Démo marquée vendue'):TR('Démo de retour — disponible'),'ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
+  const okMsg = resultat==='facture' ? TR('Démo marquée vendue')
+              : resultat==='avoir'   ? TR('Démo clôturée par avoir')
+              : TR('Démo de retour — disponible');
+  try{ await API.demoCloturer(id, resultat); toast(okMsg,'ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 window.demoProlonger=demoProlonger; window.demoCloturer=demoCloturer;
 
@@ -4046,6 +4053,7 @@ window.parcToggleConclues = parcToggleConclues;
 // dans le parc, « Disponible » pour un nouvel essai.
 function parcDemoStatut(d){
   if(d.demo_suivi_resultat==='facture') return {l:'Vendu',c:'#15803d',ic:'ti-cash'};
+  if(d.demo_suivi_resultat==='avoir')   return {l:'Avoir',c:'#6b7280',ic:'ti-receipt-refund'};
   if(d.demo_suivi_resultat==='retour')  return {l:'Disponible',c:'#2563eb',ic:'ti-home-check'};
   if(d.rappel_echu)                     return {l:'Rappel échu',c:'#dc2626',ic:'ti-clock-exclamation'};
   return {l:'En démo',c:'#0d9488',ic:'ti-wheelchair'};
@@ -4090,11 +4098,13 @@ async function renderParcDemo(ttl,c,a){
     else { const u=_bySerie.get(sn); u.hist.push(d); if(_recence(d) > _recence(u.rep)) u.rep=d; }
   });
   const _stU = u => u.rep.demo_suivi_resultat;                 // état courant = épisode le plus récent
-  const parcActif   = unites.filter(u=>_stU(u)!=='facture');   // tout sauf vendues
+  const _TERMINAL = ['facture','avoir'];                       // états qui sortent l'unité du parc actif
+  const parcActif   = unites.filter(u=>!_TERMINAL.includes(_stU(u)));  // en essai + disponibles
   const enEssai     = unites.filter(u=>!_stU(u));              // sorties chez un distributeur
   const disponibles = unites.filter(u=>_stU(u)==='retour');   // revenues à Éloflex FR
   const echues      = enEssai.filter(u=>u.rep.rappel_echu);
   const vendues     = unites.filter(u=>_stU(u)==='facture');
+  const avoirs      = unites.filter(u=>_stU(u)==='avoir');    // clôturées par avoir (annulation)
   const transEnCours = transferts.filter(tr=>tr.statut!=='Arrivé' && tr.statut!=='Annulé');
   const pretsActifs  = prets.filter(p=>_PRET_ACTIF.includes(p.statut));
   const serieEnTransit = new Set(transEnCours.map(tr=>_SNZ(tr.serie)).filter(Boolean));
@@ -4183,12 +4193,12 @@ async function renderParcDemo(ttl,c,a){
       : '';
     const aAvoir = _aAvoir(d);
     const avoirBadge = (d.demo_suivi_resultat==='facture' && aAvoir)
-      ? ` <span class="badge" style="background:#dc262618;color:#dc2626;border:0.5px solid #dc262644;font-size:10px;cursor:pointer" title="${TR('Marquée Vendue mais un avoir existe')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''} — ${TR('une vente annulée par avoir devrait être clôturée en « Retour ». À vérifier.')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-alert-triangle" style="font-size:11px;margin-right:2px"></i>${TR('avoir ?')}</span>`
-      : (aAvoir ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:10px" title="${TR('Un avoir est enregistré sur cette commande')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''}"><i class="ti ti-receipt-refund" style="font-size:11px;margin-right:2px"></i>${TR('avoir')}</span>` : '');
+      ? ` <span class="badge" style="background:#dc262618;color:#dc2626;border:0.5px solid #dc262644;font-size:10px;cursor:pointer" title="${TR('Marquée Vendue mais un avoir existe')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''} — ${TR('vente annulée par avoir : cliquez pour la clôturer en « Avoir » (sort du parc).')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-alert-triangle" style="font-size:11px;margin-right:2px"></i>${TR('avoir ?')}</span>`
+      : ((aAvoir && d.demo_suivi_resultat!=='avoir') ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:10px" title="${TR('Un avoir est enregistré sur cette commande')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''}"><i class="ti ti-receipt-refund" style="font-size:11px;margin-right:2px"></i>${TR('avoir')}</span>` : '');
     const voirBtn = `<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="CMD_FILTERS.q='${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}';setView('commandes')"><i class="ti ti-arrow-right"></i></button>`;
     const actions = isHist
       ? voirBtn
-      : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}${voirBtn}`;
+      : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Clôturer en avoir (annulation — sort du parc)')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-receipt-refund"></i></button>${voirBtn}`;
     return `<tr data-k="${esc(cle.toLowerCase())}">
       <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:12px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
@@ -4207,7 +4217,7 @@ async function renderParcDemo(ttl,c,a){
   const histList = [];
   unites.forEach(u=>{
     u.hist.forEach(ep=>{
-      if(ep===u.rep){ if(_stU(u)==='facture') histList.push({u,ep}); }  // vente = terminal → historique
+      if(ep===u.rep){ if(_TERMINAL.includes(_stU(u))) histList.push({u,ep}); }  // vente / avoir = terminal → historique
       else histList.push({u,ep});                                       // stint antérieur → historique
     });
   });

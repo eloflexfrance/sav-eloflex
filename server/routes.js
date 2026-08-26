@@ -3688,7 +3688,7 @@ router.post('/commandes/:id/demo-prolonger', async (req, res) => {
 router.post('/commandes/:id/demo-cloturer', async (req, res) => {
   try {
     const r = String(req.body.resultat || '').toLowerCase();
-    if (!['retour', 'facture'].includes(r)) return res.status(400).json({ error: "resultat doit être 'retour' ou 'facture'" });
+    if (!['retour', 'facture', 'avoir'].includes(r)) return res.status(400).json({ error: "resultat doit être 'retour', 'facture' ou 'avoir'" });
     const row = await db.run('UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat=$1, updated_at=NOW() WHERE id=$2 RETURNING id, demo_suivi_resultat', [r, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
     res.json({ ok: true, ...row });
