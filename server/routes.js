@@ -2535,6 +2535,7 @@ router.get('/commandes', async (req, res) => {
     if (statut && statut !== 'Tous') {
       // Filtre sur statut calculé (miroir de statut_calc JS)
       const statutExpr = `CASE
+        WHEN cmd.statut = 'Avoir' THEN 'Avoir'
         WHEN cmd.facture_paiement_statut IN ('paye','payé','paid') THEN 'Payé'
         WHEN cmd.facture_paiement_statut IN ('impaye','impayé') THEN 'Impayé'
         WHEN cmd.statut IS NOT NULL AND cmd.statut != 'Auto' THEN cmd.statut

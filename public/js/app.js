@@ -1131,6 +1131,7 @@ async function renderCommandes(ttl,c,a){
         <option value="Facturé" ${CMD_FILTERS.statut==='Facturé'?'selected':''}>${t('cmd_facture_statut')||'Facturé'}</option>
         <option value="Payé" ${CMD_FILTERS.statut==='Payé'?'selected':''}>${TR('✅ Payé')}</option>
         <option value="Impayé" ${CMD_FILTERS.statut==='Impayé'?'selected':''}>${TR('⚠️ Impayé')}</option>
+        <option value="Avoir" ${CMD_FILTERS.statut==='Avoir'?'selected':''}>${t('cmd_avoir_statut')||'Avoir'}</option>
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
@@ -1494,6 +1495,7 @@ async function modalCommande(id, prefill){
         <option value="Facturé" ${cm.statut==='Facturé'?'selected':''}>${t('cmd_facture_statut')||'Facturé'}</option>
         <option value="Payé" ${cm.statut==='Payé'?'selected':''}>${TR('✅ Payé')}</option>
         <option value="Impayé" ${cm.statut==='Impayé'?'selected':''}>${TR('⚠️ Impayé')}</option>
+        <option value="Avoir" ${cm.statut==='Avoir'?'selected':''}>${t('cmd_avoir_statut')||'Avoir'}</option>
         <option value="Problème" ${cm.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
