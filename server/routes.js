@@ -2480,6 +2480,8 @@ function isRealTracking(s) {
 }
 
 function statutCommande(cmd) {
+  // Un avoir (annulation) est un choix manuel explicite : il prime sur tout, y compris le paiement.
+  if (cmd.statut === 'Avoir') return 'Avoir';
   // Paiement VF prime sur tout (même sur statut manuel Facturé)
   const fp = cmd.facture_paiement_statut;
   if (fp === 'paye' || fp === 'payé' || fp === 'paid') return 'Payé';
@@ -3640,7 +3642,7 @@ router.post('/admin/fauteuils-resync', adminOnly, async (req, res) => {
 router.get('/demos/parc', async (req, res) => {
   try {
     const rows = await db.all(
-      `SELECT cmd.id, cmd.modele, cmd.num_serie, cmd.bdc,
+      `SELECT cmd.id, cmd.modele, cmd.num_serie, cmd.bdc, cmd.statut,
               cmd.distributeur_nom, cmd.client_id,
               c.nom AS client_nom, c.ville AS client_ville,
               cmd.date_commande, cmd.date_livraison,
@@ -3689,7 +3691,10 @@ router.post('/commandes/:id/demo-cloturer', async (req, res) => {
   try {
     const r = String(req.body.resultat || '').toLowerCase();
     if (!['retour', 'facture', 'avoir'].includes(r)) return res.status(400).json({ error: "resultat doit être 'retour', 'facture' ou 'avoir'" });
-    const row = await db.run('UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat=$1, updated_at=NOW() WHERE id=$2 RETURNING id, demo_suivi_resultat', [r, req.params.id]);
+    // Clôture par avoir : on aligne aussi le statut de commande sur « Avoir » (les deux vues restent cohérentes).
+    const row = r === 'avoir'
+      ? await db.run("UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat='avoir', statut='Avoir', updated_at=NOW() WHERE id=$1 RETURNING id, demo_suivi_resultat", [req.params.id])
+      : await db.run('UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat=$1, updated_at=NOW() WHERE id=$2 RETURNING id, demo_suivi_resultat', [r, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
     res.json({ ok: true, ...row });
   } catch (e) { res.status(500).json({ error: e.message }); }

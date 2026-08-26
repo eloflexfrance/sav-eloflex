@@ -936,7 +936,7 @@ async function renderExpeditions(ttl,c,a){
 }
 
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
-const cmdStatutClass = s => s==='Payé'?'g':s==='Livré'?'g':s==='Facturé'?'facture':s==='Impayé'?'urgent':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='En attente confirmation'?'ouvert':'ouvert';
+const cmdStatutClass = s => s==='Payé'?'g':s==='Livré'?'g':s==='Facturé'?'facture':s==='Impayé'?'urgent':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='Avoir'?'hg':s==='En attente confirmation'?'ouvert':'ouvert';
 // Commande contenant un fauteuil roulant (vs pièces détachées uniquement)
 const estCmdFauteuil = cm => !!(cm.type_fauteuil_neuf || cm.type_fauteuil_demo || cm.commande_type==='fauteuil' || /eloflex/i.test(cm.modele||''));
 
@@ -956,6 +956,7 @@ function tStatut(s){
     'Expédié':        t('cmd_expedie')||'Expédié',
     'Livré':          t('cmd_livre')||'Livré',
     'Facturé':        t('cmd_facture_statut')||'Facturé',
+    'Avoir':          t('cmd_avoir_statut')||'Avoir',
     'Problème':       t('cmd_probleme')||'Problème',
     'Annulé':         t('cmd_annule')||'Annulé',
   };
@@ -2222,7 +2223,7 @@ function clientFinalBadge(cm) {
   return '<span title="'+esc(cm.client_final)+'" style="display:inline-flex;align-items:center;gap:3px;background:'+bg+';color:'+col+';border-radius:99px;padding:1px 6px;font-size:10px;font-weight:600">'+icon+' '+esc(cm.client_final)+'</span>';
 }
 
-const STATUTS_LISTE = ['Auto','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Problème','Annulé'];
+const STATUTS_LISTE = ['Auto','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Avoir','Problème','Annulé'];
 
 function toggleStatutMenu(e, id, statutActuel){
   // Fermer tout menu ouvert
@@ -4078,6 +4079,10 @@ async function renderParcDemo(ttl,c,a){
     prets = await API.prets().catch(()=>[]);
     transferts = await API.transferts().catch(()=>[]);
   }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
+
+  // Le statut de commande « Avoir » fait autorité : la démo est une annulation → résultat 'avoir'
+  // (sort du parc actif), même si elle avait été marquée « Vendue » auparavant.
+  demos.forEach(d=>{ if((d.statut||'')==='Avoir') d.demo_suivi_resultat='avoir'; });
 
   const fdate = d => d ? fd((''+d).slice(0,10)) : '—';
   const _today = new Date().toISOString().slice(0,10);
