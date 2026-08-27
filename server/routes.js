@@ -3647,7 +3647,7 @@ router.get('/demos/parc', async (req, res) => {
               cmd.distributeur_nom, cmd.client_id,
               c.nom AS client_nom, c.ville AS client_ville,
               cmd.date_commande, cmd.date_livraison,
-              cmd.demo_origine_nom, cmd.demo_localisation_actuelle, cmd.demo_reservation,
+              cmd.demo_origine_nom, cmd.demo_localisation_actuelle, cmd.demo_reservation, cmd.updated_at,
               cmd.demo_rappel_date, cmd.demo_suivi_resultat,
               cmd.num_facture, cmd.facture_paiement_statut,
               cmd.num_avoir,

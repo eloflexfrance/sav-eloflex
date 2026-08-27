@@ -4068,6 +4068,8 @@ const _PRET_ACTIF = ['signe','en_cours','prolonge','retard'];
 let PARC_SHOW_CONCLUES = false;   // (obsolète) — remplacé par les onglets du Parc de démo
 function parcToggleConclues(v){ PARC_SHOW_CONCLUES = !!v; render(); }
 let PARC_TAB = 'demo';            // onglet actif du Parc de démo : 'demo' | 'dispo' | 'hist'
+let PARC_PLANNING = false;        // planning (Gantt) des indisponibilités : affiché ou non
+let PARC_PLANNING_HIST = false;   // inclure les essais terminés dans le planning
 window.parcToggleConclues = parcToggleConclues;
 // Seule la VENTE fait sortir une démo du parc. Un retour à Éloflex France la garde
 // dans le parc, « Disponible » pour un nouvel essai.
@@ -4347,6 +4349,40 @@ async function renderParcDemo(ttl,c,a){
       : `<div style="font-size:13px;color:var(--text3)">${TR('Aucun fauteuil de démo actif.')}</div>`}
   </div>`;
 
+  // ── Planning (Gantt) des indisponibilités : un fauteuil en essai est indisponible
+  // de sa mise en démo jusqu'à son échéance de retour. Repliable (affiché ou non). ──
+  const planningUnits = enEssai.map(u=>{ const d=u.rep; return {
+    modele: demoModele(d.modele),
+    serie: d.num_serie || '',
+    bdc: d.bdc || '',
+    who: d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '',
+    start: d.date_livraison || d.date_commande || '',
+    end: d.demo_rappel_date || '',
+    echu: !!d.rappel_echu, finished:false
+  };});
+  // Essais TERMINÉS (retour / vendu / avoir / changement de main) — période close.
+  // Fin = échéance si connue, sinon date de clôture (updated_at).
+  const _resLbl = ep => ep.demo_suivi_resultat==='facture'?TR('vendu'):ep.demo_suivi_resultat==='avoir'?TR('avoir'):ep.demo_suivi_resultat==='retour'?TR('retour'):TR('changé de main');
+  const planningHistUnits = histList.map(x=>{ const d=x.ep; return {
+    modele: demoModele(d.modele),
+    serie: d.num_serie || '',
+    bdc: d.bdc || '',
+    who: d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '',
+    start: d.date_livraison || d.date_commande || '',
+    end: d.demo_rappel_date || (d.updated_at ? (''+d.updated_at).slice(0,10) : ''),
+    echu:false, finished:true, resultat:_resLbl(d)
+  };}).filter(u=>u.start);
+  window._PARC_PLAN = { cur: planningUnits, hist: planningHistUnits };
+  const _planInit = PARC_PLANNING_HIST ? planningUnits.concat(planningHistUnits) : planningUnits;
+  const planningCard = `<div class="card" style="margin-top:14px">
+    <div class="section-title"><i class="ti ti-timeline"></i>${TR('Planning des indisponibilités')}
+      <span style="margin-left:auto"><button class="btn sm" id="parc-planning-btn" onclick="parcTogglePlanning()"><i class="ti ti-${PARC_PLANNING?'eye-off':'timeline'}"></i>${PARC_PLANNING?TR('Masquer le planning'):TR('Afficher le planning')}</button></span></div>
+    <div id="parc-planning-body" style="${PARC_PLANNING?'':'display:none'}">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--text2);margin-bottom:10px"><input type="checkbox" ${PARC_PLANNING_HIST?'checked':''} onchange="parcToggleHist(this.checked)"> ${TR('Inclure les essais terminés')}${planningHistUnits.length?` (${planningHistUnits.length})`:''}</label>
+      <div id="parc-planning-content">${buildParcPlanning(_planInit)}</div>
+    </div>
+  </div>`;
+
   // ── Modèles « sous tension » : 0 exemplaire disponible alors qu'au moins un est en essai ──
   // C'est le cas d'une 2ᵉ demande sur un modèle déjà sorti : on affiche la prochaine
   // libération (échéance de l'unité qui revient le plus tôt) et on propose de réserver
@@ -4382,7 +4418,8 @@ async function renderParcDemo(ttl,c,a){
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${bannerAvoir}${bannerSerie}${demoTable}</div>`
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:13px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
     + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:13px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`
-    + possessionCard;
+    + possessionCard
+    + planningCard;
 }
 window.renderParcDemo = renderParcDemo;
 function parcDemoFiltrer(v){
@@ -4398,6 +4435,85 @@ function parcSetTab(k){
   document.querySelectorAll('.parc-tab-btn').forEach(b=>{ const on=b.getAttribute('data-tab')===k; b.style.borderBottom='2px solid '+(on?'var(--accent)':'transparent'); b.style.color=on?'var(--accent)':'var(--text2)'; b.style.fontWeight=on?'700':'500'; });
 }
 window.parcSetTab = parcSetTab;
+
+function parcTogglePlanning(){
+  PARC_PLANNING = !PARC_PLANNING;
+  const el = document.getElementById('parc-planning-body');
+  const btn = document.getElementById('parc-planning-btn');
+  if(el) el.style.display = PARC_PLANNING ? '' : 'none';
+  if(btn) btn.innerHTML = `<i class="ti ti-${PARC_PLANNING?'eye-off':'timeline'}"></i>${PARC_PLANNING?TR('Masquer le planning'):TR('Afficher le planning')}`;
+}
+window.parcTogglePlanning = parcTogglePlanning;
+
+// Bascule l'inclusion des essais terminés dans le planning, sans recharger la vue.
+function parcToggleHist(on){
+  PARC_PLANNING_HIST = !!on;
+  parcRenderPlanningBody();
+}
+window.parcToggleHist = parcToggleHist;
+function parcRenderPlanningBody(){
+  const host = document.getElementById('parc-planning-content');
+  if(!host || !window._PARC_PLAN) return;
+  const P = window._PARC_PLAN;
+  const units = PARC_PLANNING_HIST ? P.cur.concat(P.hist) : P.cur;
+  host.innerHTML = buildParcPlanning(units);
+}
+window.parcRenderPlanningBody = parcRenderPlanningBody;
+
+// Construit le planning (Gantt) des périodes d'indisponibilité des démos en essai.
+// units: [{modele, serie, bdc, who, start, end, echu}]
+function buildParcPlanning(units){
+  const _MOIS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  const _d = s => s ? new Date((''+s).slice(0,10)+'T00:00:00') : null;
+  const rows = units.filter(u=>u.start).map(u=>({...u, sd:_d(u.start), ed: u.end?_d(u.end):null}))
+                    .sort((a,b)=> (a.modele||'').localeCompare(b.modele||'') || a.sd-b.sd);
+  if(!rows.length) return `<div style="font-size:13px;color:var(--text3);padding:12px">${TR('Aucune période d’indisponibilité à afficher (aucun fauteuil en essai avec date).')}</div>`;
+  const today = new Date(new Date().toISOString().slice(0,10)+'T00:00:00');
+  const times = rows.flatMap(r=>[r.sd.getTime(), (r.ed||r.sd).getTime()]).concat([today.getTime()]);
+  let min = new Date(Math.min(...times)), max = new Date(Math.max(...times));
+  min = new Date(min.getFullYear(), min.getMonth(), 1);
+  max = new Date(max.getFullYear(), max.getMonth()+1, 0);
+  const span = (max - min) || 1;
+  const pos = d => ((d - min) / span) * 100;
+  // largeur mini : ~70px par mois pour rester lisible
+  let months=0; { let c=new Date(min); while(c<=max){ months++; c=new Date(c.getFullYear(), c.getMonth()+1, 1); } }
+  const trackMin = Math.max(560, months*70);
+  // graduations mensuelles
+  let ticks=''; { let c=new Date(min.getFullYear(), min.getMonth(), 1);
+    while(c<=max){ const p=pos(c); ticks += `<div style="position:absolute;left:${p}%;top:0;bottom:0;border-left:1px solid var(--border-s)"></div>`
+      + `<div style="position:absolute;left:${p}%;top:0;font-size:11px;color:var(--text3);padding-left:3px;white-space:nowrap">${_MOIS[c.getMonth()]} ${(''+c.getFullYear()).slice(2)}</div>`;
+      c=new Date(c.getFullYear(), c.getMonth()+1, 1); } }
+  const todayP = pos(today);
+  const todayLine = (today>=min && today<=max) ? `<div style="position:absolute;left:${todayP}%;top:0;bottom:0;border-left:2px solid #dc2626;z-index:2" title="${TR('Aujourd’hui')}"></div>` : '';
+  const fdt = d => d ? fd(d.toISOString().slice(0,10)) : '—';
+  const rowsHtml = rows.map(r=>{
+    const left = Math.max(0, pos(r.sd));
+    const endD = r.ed || max;                          // sans échéance → jusqu'au bord
+    const width = Math.max(1.2, pos(endD) - left);
+    const col = r.finished ? '#94a3b8' : (r.echu ? '#dc2626' : '#0d9488');   // gris = essai terminé
+    const openEnd = !r.ed;
+    const tip = `${r.who||'—'} · ${TR('Série')} : ${r.serie||'—'} · ${TR('BDC')} : ${r.bdc||'—'} · ${fdt(r.sd)} → ${r.ed?fdt(r.ed):TR('sans échéance')}${r.finished&&r.resultat?' · '+r.resultat:''}`;
+    const bar = `<div style="position:absolute;left:${left}%;width:${width}%;top:5px;height:20px;border-radius:5px;background:${openEnd&&!r.finished?`repeating-linear-gradient(45deg,${col},${col} 6px,${col}bb 6px,${col}bb 12px)`:col};opacity:${r.finished?'.7':'1'};cursor:default;box-shadow:0 1px 2px rgba(0,0,0,.15)" title="${esc(tip)}"></div>`;
+    return `<div style="display:flex;align-items:stretch;border-top:0.5px solid var(--border-s)">
+      <div style="width:150px;flex:none;padding:6px 8px;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${r.finished?'color:var(--text2)':''}" title="${esc((r.modele||'')+' · '+(r.serie||''))}">${esc(r.modele||'—')}${r.serie?` <span style="color:var(--text3);font-weight:400">${esc(r.serie)}</span>`:''}</div>
+      <div style="position:relative;flex:1;min-width:${trackMin}px;height:30px">${bar}</div>
+    </div>`;
+  }).join('');
+  return `<div style="overflow-x:auto">
+    <div style="min-width:${150+trackMin}px">
+      <div style="display:flex"><div style="width:150px;flex:none"></div><div style="position:relative;flex:1;min-width:${trackMin}px;height:20px">${ticks}</div></div>
+      <div style="position:relative">${todayLine}${rowsHtml}</div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:16px;font-size:11px;color:var(--text3);flex-wrap:wrap">
+      <span><span style="display:inline-block;width:14px;height:9px;background:#0d9488;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('Indisponible (en essai)')}</span>
+      <span><span style="display:inline-block;width:14px;height:9px;background:#dc2626;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('Échéance dépassée')}</span>
+      <span><span style="display:inline-block;width:14px;height:9px;background:repeating-linear-gradient(45deg,#0d9488,#0d9488 3px,#0d9488bb 3px,#0d9488bb 6px);border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('Sans échéance renseignée')}</span>
+      <span><span style="display:inline-block;width:14px;height:9px;background:#94a3b8;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('Essai terminé')}</span>
+      <span style="color:#dc2626">| ${TR('Aujourd’hui')}</span>
+    </div>
+  </div>`;
+}
+window.buildParcPlanning = buildParcPlanning;
 
 async function modalTransfert(id){
   const d = id ? await API.transfert(id) : {};

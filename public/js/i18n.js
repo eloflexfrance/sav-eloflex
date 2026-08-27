@@ -1917,6 +1917,22 @@ const EN_STR = {
   "à renseigner": "to fill in",
   "à vérifier : une vente annulée par avoir devrait être clôturée en « Retour ». Ouvrez l’onglet « Historique » pour les voir et les requalifier.": "to check: a sale cancelled by credit note should be closed as “Return”. Open the “History” tab to see them and reclassify.",
   "épisodes": "episodes",
+  "Planning des indisponibilités": "Unavailability planning",
+  "Afficher le planning": "Show the planning",
+  "Masquer le planning": "Hide the planning",
+  "Aucune période d’indisponibilité à afficher (aucun fauteuil en essai avec date).": "No unavailability period to show (no wheelchair on trial with a date).",
+  "Aujourd’hui": "Today",
+  "Série": "Serial",
+  "BDC": "PO",
+  "sans échéance": "no due date",
+  "Indisponible (en essai)": "Unavailable (on trial)",
+  "Échéance dépassée": "Overdue",
+  "Sans échéance renseignée": "No due date set",
+  "Inclure les essais terminés": "Include finished trials",
+  "Essai terminé": "Finished trial",
+  "changé de main": "changed hands",
+
+
 
 };
 function TR(s){ return (LANG==='en' && EN_STR[s]!==undefined) ? EN_STR[s] : s; }
