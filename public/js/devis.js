@@ -10,14 +10,14 @@ async function renderDevis(ttl, c, a){
   const sinceSync = _devisLastSync ? Math.round((Date.now()-_devisLastSync)/60000) : null;
   const syncLabel = sinceSync === null ? (t('devis_non_configure')||(t('devis_non_configure')||'Jamais synchronisé')) : sinceSync < 60 ? `${t('devis_sync_il_y_a')||'Sync il y a'} ${sinceSync} ${t('devis_sync_min')||'min'}` : `${t('devis_sync_il_y_a')||'Sync il y a'} ${Math.round(sinceSync/60)}${t('devis_sync_h')||'h'}`;
   a.innerHTML = `
-    <span style="font-size:13px;color:var(--text2)">${syncLabel}</span>
+    <span style="font-size:12px;color:var(--text2)">${syncLabel}</span>
     <button class="btn" onclick="syncDevisVF(true)"><i class="ti ti-refresh"></i> ${t('devis_sync_btn')||'Sync VosFactures'}</button>`;
   
   c.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
       ${['ouvert','converti','ignoré'].map(s=>`
         <button onclick="setDevisFiltre('${s}')"
-          class="btn${DEVIS_FILTRE===s?' primary':''}" style="font-size:14px">${s==='ouvert'?(t('devis_ouverts')||'📋 Ouverts'):s==='converti'?(t('devis_convertis')||'✅ Convertis'):(t('devis_ignores')||(t('devis_ignores')||'🚫 Ignorés'))}</button>`).join('')}
+          class="btn${DEVIS_FILTRE===s?' primary':''}" style="font-size:13px">${s==='ouvert'?(t('devis_ouverts')||'📋 Ouverts'):s==='converti'?(t('devis_convertis')||'✅ Convertis'):(t('devis_ignores')||(t('devis_ignores')||'🚫 Ignorés'))}</button>`).join('')}
     </div>
     <div id="devis-list"><div style="color:var(--text2);padding:20px"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>`;
 
@@ -44,13 +44,13 @@ async function chargerDevis(){
         const jours = Math.round((Date.now()-new Date(d.date_devis).getTime())/86400000);
         const montant = parseFloat(d.montant||0).toLocaleString('fr-FR',{style:'currency',currency:d.devise||'EUR'});
         return `<tr>
-          <td><strong>${esc(d.distributeur_nom)}</strong>${d.client_email?`<br><span style="font-size:12px;color:var(--text3)">${esc(d.client_email)}</span>`:''}</td>
+          <td><strong>${esc(d.distributeur_nom)}</strong>${d.client_email?`<br><span style="font-size:11px;color:var(--text3)">${esc(d.client_email)}</span>`:''}</td>
           <td class="mono">${esc(d.numero||'')}</td>
           <td>${d.date_devis?fd(d.date_devis):'—'}</td>
           <td><span class="badge ${jours>60?'urgent':jours>30?'hg':'ouvert'}">${jours}j</span></td>
           <td style="font-weight:600">${montant}</td>
           <td style="text-align:center">${d.nb_relances||0}</td>
-          <td style="font-size:13px;color:var(--text2)">${d.derniere_relance?fd(d.derniere_relance.slice(0,10)):'—'}</td>
+          <td style="font-size:12px;color:var(--text2)">${d.derniere_relance?fd(d.derniere_relance.slice(0,10)):'—'}</td>
           <td style="white-space:nowrap">
             ${window._VF_ACCOUNT?`<button class="btn sm" onclick="window.open('https://${window._VF_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}','_blank')" title="${t('devis_btn_ouvrir')||'Ouvrir dans VosFactures'}"><i class="ti ti-external-link"></i></button>`:''}
             <button class="btn sm" onclick="modalRelanceDevis(${d.id},'${esc(d.client_email||'')}','${esc(d.distributeur_nom)}')" title="${t('devis_btn_relancer')||'Envoyer une relance'}"><i class="ti ti-mail"></i></button>
@@ -103,8 +103,8 @@ function modalRelanceDevis(id, email, nom){
       <div class="form-group"><label class="form-label">${t('devis_note_interne')||'Note interne (facultatif)'}</label>
         <textarea class="form-input" id="relance-notes" rows="2" placeholder="${t('devis_note_hint')||'Raison de la relance, contexte…'}"></textarea>
       </div>
-      <div style="font-size:14px;color:var(--text2);background:var(--glass-input);padding:8px 12px;border-radius:var(--radius-sm)">
-        <i class="ti ti-copy" style="font-size:13px"></i> ${t('devis_cc_info')||'Une copie sera envoyée à'} <strong>info@eloflex.fr</strong>
+      <div style="font-size:13px;color:var(--text2);background:var(--glass-input);padding:8px 12px;border-radius:var(--radius-sm)">
+        <i class="ti ti-copy" style="font-size:12px"></i> ${t('devis_cc_info')||'Une copie sera envoyée à'} <strong>info@eloflex.fr</strong>
       </div>
     </div>
     <div class="modal-footer">
@@ -157,9 +157,9 @@ async function voirRelancesDevis(id){
       <table class="t"><thead><tr><th>${t('devis_col_date')||'Date'}</th><th>Email</th><th>${t('devis_col_statut')||'Statut'}</th><th>${t('devis_col_note')||'Note'}</th></tr></thead>
       <tbody>${list.map(r=>`<tr>
         <td>${fd(r.date_envoi?.slice(0,10))}</td>
-        <td style="font-size:14px">${esc(r.email_dest||'')}</td>
-        <td><span class="badge g" style="font-size:12px">${esc(r.statut)}</span></td>
-        <td style="font-size:13px;color:var(--text2)">${esc(r.notes||'—')}</td>
+        <td style="font-size:13px">${esc(r.email_dest||'')}</td>
+        <td><span class="badge g" style="font-size:11px">${esc(r.statut)}</span></td>
+        <td style="font-size:12px;color:var(--text2)">${esc(r.notes||'—')}</td>
       </tr>`).join('')}</tbody></table>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR("Fermer")}</button></div>`);

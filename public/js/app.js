@@ -157,8 +157,8 @@ function appliquerNavRole(){
   });
   const userZone = $('user-zone');
   if(userZone) userZone.innerHTML = `
-    <span style="font-size:13px;color:var(--text2);flex:1">${esc(CURRENT_USER.nom)}</span>
-    ${CURRENT_USER.pays?`<span style="font-size:13px;padding:2px 7px;border-radius:10px;background:var(--accent-soft,rgba(59,130,246,.12));color:var(--accent);font-weight:600">${esc(CURRENT_USER.pays)}</span>`:''}
+    <span style="font-size:12px;color:var(--text2);flex:1">${esc(CURRENT_USER.nom)}</span>
+    ${CURRENT_USER.pays?`<span style="font-size:12px;padding:2px 7px;border-radius:10px;background:var(--accent-soft,rgba(59,130,246,.12));color:var(--accent);font-weight:600">${esc(CURRENT_USER.pays)}</span>`:''}
     <div id="pays-switcher" style="display:flex"></div>
     <button class="btn sm" onclick="seDeconnecter()" title="${TR("Se déconnecter")}" style="padding:4px 8px"><i class="ti ti-logout"></i></button>`;
 }
@@ -188,7 +188,7 @@ document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=
 async function render(){
   const ttl=$('topbar-title'),c=$('content'),a=$('topbar-actions');
   a.innerHTML='';
-  c.innerHTML=`<div class="empty" style="padding-top:60px"><i class="ti ti-loader-2" style="font-size:30px;display:block;margin-bottom:8px"></i>${t('msg_chargement')}</div>`;
+  c.innerHTML=`<div class="empty" style="padding-top:60px"><i class="ti ti-loader-2" style="font-size:29px;display:block;margin-bottom:8px"></i>${t('msg_chargement')}</div>`;
   try{
     if(STATE.view==='dashboard')     await renderDashboard(ttl,c,a);
     else if(STATE.view==='clients')  await renderClients(ttl,c,a);
@@ -288,7 +288,7 @@ async function renderLogs(ttl,c,a){
         <option value="Suppression" ${_LOGS_F.action==='Suppression'?'selected':''}>${TR('Suppression')}</option>
       </select>
     </div>
-    <div id="logs-body"><div style="color:var(--text2);font-size:15px;padding:20px 0">${t('msg_chargement')}</div></div>`;
+    <div id="logs-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')}</div></div>`;
   chargerLogs();
 }
 async function chargerLogs(){
@@ -305,11 +305,11 @@ async function chargerLogs(){
       <th>${TR('Référence')}</th>
     </tr></thead>
     <tbody>${rows.map(l=>`<tr>
-      <td style="white-space:nowrap;font-size:14px;color:var(--text2)">${_logDate(l.created_at)}</td>
+      <td style="white-space:nowrap;font-size:13px;color:var(--text2)">${_logDate(l.created_at)}</td>
       <td style="font-weight:600">${esc(l.user_nom||'—')}</td>
       <td>${_logActionBadge(l.action)}</td>
       <td>${esc(_logModLabel(l.module))}</td>
-      <td style="font-size:14px;color:var(--text3)">${l.cible_id?('#'+esc(l.cible_id)):''} <span class="mono" style="font-size:13px">${esc(l.chemin||'')}</span></td>
+      <td style="font-size:13px;color:var(--text3)">${l.cible_id?('#'+esc(l.cible_id)):''} <span class="mono" style="font-size:12px">${esc(l.chemin||'')}</span></td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -323,9 +323,9 @@ async function renderDashboard(ttl,c,a){
   c.innerHTML=`
     <div class="quick-search-bar">
       <div style="position:relative;flex:1;max-width:560px">
-        <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:18px;pointer-events:none"></i>
+        <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:17px;pointer-events:none"></i>
         <input class="form-input" id="qs-input" placeholder="${t('qs_placeholder')}"
-          style="padding-left:34px;font-size:16px;border-radius:10px"
+          style="padding-left:34px;font-size:15px;border-radius:10px"
           oninput="quickSearch(this.value)"
           onkeydown="if(event.key==='Escape'){this.value='';clearQuickSearch();}">
         <div id="qs-results" class="qs-results" style="display:none"></div>
@@ -369,16 +369,16 @@ async function renderDashboard(ttl,c,a){
 
 async function chargerDemandesInfoDashboard(){
   const el=document.getElementById('dash-demandes-info'); if(!el) return;
-  let rows=[]; try{ rows=await API.demandesInfo({}); }catch(e){ el.innerHTML=`<div style="font-size:14px;color:var(--danger);padding:6px 0">Erreur : ${esc(e.message)}</div>`; return; }
+  let rows=[]; try{ rows=await API.demandesInfo({}); }catch(e){ el.innerHTML=`<div style="font-size:13px;color:var(--danger);padding:6px 0">Erreur : ${esc(e.message)}</div>`; return; }
   rows=(rows||[]).slice().sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,10);
-  if(!rows.length){ el.innerHTML=`<div style="font-size:14px;color:var(--text3);padding:6px 0">${TR('Aucune demande.')}</div>`; return; }
+  if(!rows.length){ el.innerHTML=`<div style="font-size:13px;color:var(--text3);padding:6px 0">${TR('Aucune demande.')}</div>`; return; }
   el.innerHTML=`<div class="table-wrap"><table class="t">
       <thead><tr><th>${TR('Statut')}</th><th>${TR('Date')}</th><th>${TR('Distributeur')}</th><th>${TR('Contact')}</th><th>${TR('Ville / CP')}</th></tr></thead>
       <tbody>${rows.map(d=>`<tr style="cursor:pointer" onclick="setView('demandes')">
         <td>${diBadge(d.statut)}</td>
         <td style="white-space:nowrap">${_dfd(d.date_transmission)}</td>
         <td>${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>
-        <td>${esc(d.nom||'')}${d.telephone?`<div class="mono" style="color:var(--text3);font-size:13px">${esc(fmtTel(d.telephone))}</div>`:''}</td>
+        <td>${esc(d.nom||'')}${d.telephone?`<div class="mono" style="color:var(--text3);font-size:12px">${esc(fmtTel(d.telephone))}</div>`:''}</td>
         <td style="white-space:nowrap">${esc(d.ville||'')}${d.cp?' '+esc(d.cp):''}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
@@ -395,7 +395,7 @@ async function chargerDemosDashboard(){
       <div class="section-title"><i class="ti ti-wheelchair"></i> ${dues.length} démo(s) à suivre (rappel échu)
         <button class="btn sm" style="margin-left:auto" onclick="setView('alertes')"><i class="ti ti-arrow-right"></i>Traiter</button>
       </div>
-      <div style="font-size:14px;color:var(--text2)">${dues.slice(0,6).map(d=>esc((d.client_nom||d.distributeur_nom||'')+' — '+(d.modele||'')+(d.num_serie?' ('+d.num_serie+')':''))).join(' · ')}${dues.length>6?' …':''}</div>
+      <div style="font-size:13px;color:var(--text2)">${dues.slice(0,6).map(d=>esc((d.client_nom||d.distributeur_nom||'')+' — '+(d.modele||'')+(d.num_serie?' ('+d.num_serie+')':''))).join(' · ')}${dues.length>6?' …':''}</div>
     </div>`;
   }catch(_){ el.innerHTML=''; }
 }
@@ -415,7 +415,7 @@ async function chargerCommandesDashboard(){
     ]);
     const list = res.rows||[];
     el.innerHTML=`
-      <div style="font-size:13px;color:var(--text2);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Année ${anneeEnCours}</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Année ${anneeEnCours}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
         <div class="stat-card"><div class="stat-label">${t('cmd_total')||'Total'}</div><div class="stat-value">${stats.total}</div></div>
         <div class="stat-card"><div class="stat-label">${TR('🦽 Avec N° série')}</div><div class="stat-value" style="color:var(--accent)">${stats.fauteuils_serie||0}</div></div>
@@ -428,7 +428,7 @@ async function chargerCommandesDashboard(){
         <div class="stat-card"><div class="stat-label">🔄 ${t('cmd_demo_count')||'Démos'}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
         <div class="stat-card"><div class="stat-label">${t('cmd_probleme')||'Problème'}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
       </div>
-      ${!list.length?`<div style="font-size:14px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
+      ${!list.length?`<div style="font-size:13px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
       <div class="table-wrap"><table class="t">
         <thead><tr>
           ${CMD_COLS.num_annuel?'<th style="width:40px;text-align:center;color:var(--text3)">#</th>':''}
@@ -443,18 +443,18 @@ async function chargerCommandesDashboard(){
         <tbody>${list.map(cm=>{
           const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
           return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
-            ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:13px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
+            ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:12px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
         <td>${fd(cm.date_commande)}</td>
-            <td><span style="font-size:13px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
+            <td><span style="font-size:12px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
             <td>${esc(cm.distributeur_nom)}</td>
-            <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:13px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
+            <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
             <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
             <td class="mono" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
             <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>`}`;
-  }catch(e){ el.innerHTML=`<div style="font-size:14px;color:var(--danger)">${esc(e.message)}</div>`; }
+  }catch(e){ el.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 async function chargerTransfertsDashboard(){  const el=document.getElementById('dash-transferts');
@@ -464,20 +464,20 @@ async function chargerTransfertsDashboard(){  const el=document.getElementById('
   }
   try{
     const list=(await API.transferts()).filter(tr=>tr.statut!=='Arrivé'&&tr.statut!=='Annulé');
-    if(!list.length){ el.innerHTML=`<div style="font-size:14px;color:var(--text3)">${t('transferts_empty')}</div>`; return; }
+    if(!list.length){ el.innerHTML=`<div style="font-size:13px;color:var(--text3)">${t('transferts_empty')}</div>`; return; }
     const scT={'En préparation':'attente','En transit':'ouvert'};
     const stTr={'En préparation':t('transferts_statut_prep'),'En transit':t('transferts_statut_transit')};
     el.innerHTML=`<div class="table-wrap"><table class="t">
       <thead><tr><th>${t('transferts_fauteuil')}</th><th>${t('transferts_depart')}</th><th>${t('transferts_arrivee')}</th><th>${t('transferts_num_suivi')}</th><th>${t('col_statut')}</th></tr></thead>
       <tbody>${list.slice(0,5).map(tr=>`<tr onclick="modalTransfert(${tr.id})" style="cursor:pointer">
-        <td><div>${esc(tr.modele||'')}</div><div class="mono" style="color:var(--text3);font-size:13px">${esc(tr.serie||'')}</div></td>
+        <td><div>${esc(tr.modele||'')}</div><div class="mono" style="color:var(--text3);font-size:12px">${esc(tr.serie||'')}</div></td>
         <td>${esc(tr.client_depart_nom||'—')}</td>
         <td>${esc(tr.client_arrivee_nom||'—')}</td>
-        <td class="mono" style="font-size:13px">${tr.num_suivi?`${esc(tr.num_suivi)} <a href="${lienhSuiviInter(tr.transporteur,tr.num_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'—'}</td>
+        <td class="mono" style="font-size:12px">${tr.num_suivi?`${esc(tr.num_suivi)} <a href="${lienhSuiviInter(tr.transporteur,tr.num_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'—'}</td>
         <td><span class="badge ${scT[tr.statut]||''}">${stTr[tr.statut]||esc(tr.statut)}</span></td>
       </tr>`).join('')}</tbody>
     </table></div>`;
-  }catch(e){ el.innerHTML=`<div style="font-size:14px;color:var(--danger)">${esc(e.message)}</div>`; }
+  }catch(e){ el.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 // ── CLIENTS ───────────────────────────────────────────────────────
@@ -486,9 +486,9 @@ async function chargerTransfertsDashboard(){  const el=document.getElementById('
 // Récupère les distributeurs à adresse incomplète, propose les adresses
 // VosFactures, laisse corriger à la main, puis enregistre en masse.
 async function modalCompleterAdresses(){
-  showModal(`<div class="modal-header"><i class="ti ti-map-pin-cog" style="font-size:20px;color:var(--accent)"></i><h2>${TR('Compléter les adresses')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-map-pin-cog" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Compléter les adresses')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="max-width:900px">
-      <div id="adr-body"><div style="color:var(--text2);font-size:15px;padding:20px 0">${TR('Analyse des distributeurs et récupération des adresses VosFactures…')}</div></div>
+      <div id="adr-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${TR('Analyse des distributeurs et récupération des adresses VosFactures…')}</div></div>
     </div>`);
   try {
     const r = await API.adressesIncompletes();
@@ -496,7 +496,7 @@ async function modalCompleterAdresses(){
     dessinerAdresses(r);
   } catch(e) {
     const b = document.getElementById('adr-body');
-    if (b) b.innerHTML = '<div style="color:var(--danger);font-size:15px">Erreur : '+esc(e.message)+'</div>';
+    if (b) b.innerHTML = '<div style="color:var(--danger);font-size:14px">Erreur : '+esc(e.message)+'</div>';
   }
 }
 
@@ -505,14 +505,14 @@ function dessinerAdresses(r){
   if (!b) return;
   const lignes = window._ADR_LIGNES || [];
   if (!lignes.length) {
-    b.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--text2)"><i class="ti ti-circle-check" style="font-size:34px;color:#16a34a;display:block;margin-bottom:8px"></i>'+TR("Tous les distributeurs ont déjà une adresse renseignée.")+'</div>';
+    b.innerHTML = '<div style="text-align:center;padding:30px 0;color:var(--text2)"><i class="ti ti-circle-check" style="font-size:33px;color:#16a34a;display:block;margin-bottom:8px"></i>'+TR("Tous les distributeurs ont déjà une adresse renseignée.")+'</div>';
     return;
   }
   const infoVF = r.configured
     ? `<span style="color:#16a34a">${r.avec_suggestion}</span> adresse(s) trouvée(s) dans VosFactures sur ${r.total} distributeur(s) à compléter.`
     : `VosFactures non configuré — saisie manuelle uniquement (${r.total} distributeur(s)).`;
   b.innerHTML = `
-    <div style="font-size:14px;color:var(--text2);margin-bottom:10px">${infoVF} Vérifiez et corrigez avant d'enregistrer. Les lignes vides seront ignorées.</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${infoVF} Vérifiez et corrigez avant d'enregistrer. Les lignes vides seront ignorées.</div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
       <button class="btn sm" onclick="appliquerSuggestionsVF()"><i class="ti ti-download"></i>Reprendre toutes les adresses VosFactures</button>
       <button class="btn sm" onclick="viderAdressesSaisies()"><i class="ti ti-eraser"></i>Tout vider</button>
@@ -528,12 +528,12 @@ function dessinerAdresses(r){
       <tbody>${lignes.map((l,i)=>{
         const sugg = l.suggestion_dispo
           ? `<button class="btn sm" title="Reprendre : ${esc(l.vf_street)} ${esc(l.vf_post_code)} ${esc(l.vf_city)}" onclick="reprendreLigneVF(${i})"><i class="ti ti-arrow-left"></i>Reprendre</button>`
-          : '<span style="font-size:13px;color:var(--text3)">—</span>';
+          : '<span style="font-size:12px;color:var(--text3)">—</span>';
         return `<tr>
-          <td style="font-weight:600;font-size:14px">${esc(l.nom)}</td>
-          <td><input class="form-input" id="adr-rue-${i}" value="${esc(l._adresse||'')}" placeholder="${l.suggestion_dispo?esc(l.vf_street):'N° et rue'}" style="padding:4px 7px;font-size:14px;width:100%"></td>
-          <td><input class="form-input" id="adr-cp-${i}" value="${esc(l._cp!==undefined?l._cp:(l.cp||''))}" placeholder="${l.vf_post_code?esc(l.vf_post_code):''}" style="padding:4px 7px;font-size:14px;width:80px"></td>
-          <td><input class="form-input" id="adr-ville-${i}" value="${esc(l._ville!==undefined?l._ville:(l.ville||''))}" placeholder="${l.vf_city?esc(l.vf_city):''}" style="padding:4px 7px;font-size:14px;width:100%"></td>
+          <td style="font-weight:600;font-size:13px">${esc(l.nom)}</td>
+          <td><input class="form-input" id="adr-rue-${i}" value="${esc(l._adresse||'')}" placeholder="${l.suggestion_dispo?esc(l.vf_street):'N° et rue'}" style="padding:4px 7px;font-size:13px;width:100%"></td>
+          <td><input class="form-input" id="adr-cp-${i}" value="${esc(l._cp!==undefined?l._cp:(l.cp||''))}" placeholder="${l.vf_post_code?esc(l.vf_post_code):''}" style="padding:4px 7px;font-size:13px;width:80px"></td>
+          <td><input class="form-input" id="adr-ville-${i}" value="${esc(l._ville!==undefined?l._ville:(l.ville||''))}" placeholder="${l.vf_city?esc(l.vf_city):''}" style="padding:4px 7px;font-size:13px;width:100%"></td>
           <td>${sugg}</td>
         </tr>`;
       }).join('')}</tbody></table>
@@ -612,7 +612,7 @@ async function renderClients(ttl,c,a){
     window._clientsQ = e.target.value;
     clearTimeout(window._CLT); window._CLT = setTimeout(() => chargerListeClients(), 250);
   });
-  c.innerHTML=`<div id="clients-list-body"><div style="color:var(--text2);font-size:15px;padding:20px 0">${t('msg_chargement')}</div></div>`;
+  c.innerHTML=`<div id="clients-list-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')}</div></div>`;
   chargerListeClients();
 }
 
@@ -638,11 +638,11 @@ async function chargerListeClients(){
       const adr=[cl.adresse,cl.adresse2,[cl.cp,cl.ville].filter(Boolean).join(' '),cl.pays&&cl.pays!=='France'?cl.pays:''].filter(Boolean).join(', ');
       const tel=cl.tel||cl.portable||'';
       return `<tr onclick="setView('client',{clientId:${cl.id}})">
-      <td><div style="font-weight:600">${esc(cl.nom)}</div><div style="font-size:13px;color:var(--text3)">${esc(cl.type)}</div></td>
-      <td style="font-size:14px;color:var(--text2);max-width:260px">${adr?esc(adr):'<span style="color:var(--text3)">—</span>'}</td>
-      <td style="font-size:14px">${tel?esc(fmtTel(tel)):'<span style="color:var(--text3)">—</span>'}</td>
-      <td style="font-size:14px;color:var(--text2)">${cl.email?esc(cl.email):'<span style="color:var(--text3)">—</span>'}</td>
-      <td style="text-align:center;font-size:14px;white-space:nowrap">${cl.derniere_commande?fd((''+cl.derniere_commande).slice(0,10)):'<span style="color:var(--text3)">—</span>'}</td>
+      <td><div style="font-weight:600">${esc(cl.nom)}</div><div style="font-size:12px;color:var(--text3)">${esc(cl.type)}</div></td>
+      <td style="font-size:13px;color:var(--text2);max-width:260px">${adr?esc(adr):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-size:13px">${tel?esc(fmtTel(tel)):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-size:13px;color:var(--text2)">${cl.email?esc(cl.email):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="text-align:center;font-size:13px;white-space:nowrap">${cl.derniere_commande?fd((''+cl.derniere_commande).slice(0,10)):'<span style="color:var(--text3)">—</span>'}</td>
       <td style="text-align:center;font-weight:600">${cl.nb_fauteuils_vendus||0}</td>
       <td style="text-align:center">${cl.nb_interventions||0}</td>
       <td style="text-align:center">${cl.nb_demandes_info?`<span class="badge ouvert">${cl.nb_demandes_info}</span>`:'<span style="color:var(--text3)">—</span>'}</td>
@@ -660,32 +660,32 @@ function ficheDistributeurBloc(cl){
   const adrTxt=lignes.join(', ');
   const q=encodeURIComponent(adrTxt);
   const row=(icon,label,val)=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:0.5px solid var(--border)">
-      <i class="ti ${icon}" style="font-size:17px;color:var(--accent);width:18px;text-align:center;margin-top:1px"></i>
+      <i class="ti ${icon}" style="font-size:16px;color:var(--accent);width:18px;text-align:center;margin-top:1px"></i>
       <div style="flex:1;min-width:0">
-        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:600">${label}</div>
-        <div style="font-size:15px;font-weight:500;word-break:break-word">${val}</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:600">${label}</div>
+        <div style="font-size:14px;font-weight:500;word-break:break-word">${val}</div>
       </div>
     </div>`;
-  const typeBadge=`<span style="font-size:13px;font-weight:700;padding:2px 9px;border-radius:99px;background:${cl.type==='Particulier'?'#e0e7ff;color:#3730a3':'#dcfce7;color:#166534'}">${esc(cl.type||'Distributeur')}</span>`;
+  const typeBadge=`<span style="font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px;background:${cl.type==='Particulier'?'#e0e7ff;color:#3730a3':'#dcfce7;color:#166534'}">${esc(cl.type||'Distributeur')}</span>`;
   // Adresse : bloc principal mis en avant
   const adresseBloc = lignes.length
     ? `<div style="background:rgba(59,130,246,.06);border:0.5px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:10px">
-        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:600;margin-bottom:3px"><i class="ti ti-map-pin" style="font-size:14px"></i> ${TR('Adresse complète')}</div>
-        <div style="font-size:15px;font-weight:600;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}</div>
-        <div style="margin-top:7px;display:flex;gap:12px;flex-wrap:wrap;font-size:13px">
-          <span onclick="voirDistributeurSurCarte(${cl.id},'${nomEsc}')" style="color:var(--accent);cursor:pointer;font-weight:600"><i class="ti ti-map-pin" style="font-size:14px"></i> ${TR("Voir sur la carte")}</span>
-          <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:14px"></i> OpenStreetMap</a>
-          <span onclick="copierAdresse(this,'${esc(adrTxt).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:14px"></i> ${TR("Copier")}</span>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:600;margin-bottom:3px"><i class="ti ti-map-pin" style="font-size:13px"></i> ${TR('Adresse complète')}</div>
+        <div style="font-size:14px;font-weight:600;line-height:1.5">${lignes.map(l=>esc(l)).join('<br>')}</div>
+        <div style="margin-top:7px;display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
+          <span onclick="voirDistributeurSurCarte(${cl.id},'${nomEsc}')" style="color:var(--accent);cursor:pointer;font-weight:600"><i class="ti ti-map-pin" style="font-size:13px"></i> ${TR("Voir sur la carte")}</span>
+          <a href="https://www.openstreetmap.org/search?query=${q}" target="_blank" rel="noopener" style="color:var(--text3);text-decoration:none"><i class="ti ti-external-link" style="font-size:13px"></i> OpenStreetMap</a>
+          <span onclick="copierAdresse(this,'${esc(adrTxt).replace(/'/g,'&#39;')}')" style="color:var(--text3);cursor:pointer"><i class="ti ti-copy" style="font-size:13px"></i> ${TR("Copier")}</span>
         </div>
       </div>`
-    : `<div style="background:rgba(245,158,11,.08);border:0.5px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:10px;font-size:14px;color:var(--text2)">
-        <i class="ti ti-map-pin-off" style="font-size:15px"></i> ${TR('Adresse')} — ${TR('(à compléter)')}</div>`;
+    : `<div style="background:rgba(245,158,11,.08);border:0.5px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:10px;font-size:13px;color:var(--text2)">
+        <i class="ti ti-map-pin-off" style="font-size:14px"></i> ${TR('Adresse')} — ${TR('(à compléter)')}</div>`;
   // Chips d'état : carte (si coché), EDI (si coché), site public, priorité, facturation
   const chips=[];
   if(cl.sur_carte) chips.push(`<span class="badge ouvert" style="cursor:pointer" onclick="voirDistributeurSurCarte(${cl.id},'${nomEsc}')" title="${TR('Affiché sur la carte distributeurs')}"><i class="ti ti-map-2"></i> ${TR('Sur la carte distributeurs')}</span>`);
   if(cl.edi) chips.push(`<span class="badge ouvert" title="${TR('Prélèvement EDI')}"><i class="ti ti-credit-card"></i> ${TR('EDI — Prélèvement')}</span>`);
   if(cl.public_site) chips.push(`<span class="badge hg" title="Visible sur la carte publique eloflex.fr"><i class="ti ti-world"></i> ${TR('Site public')}</span>`);
-  if(cl.priorite) chips.push(`<span style="font-size:13px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${TR('Priorité')} ${cl.priorite}</span>`);
+  if(cl.priorite) chips.push(`<span style="font-size:12px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${TR('Priorité')} ${cl.priorite}</span>`);
   if(cl.entite_facturation_id) chips.push(`<span class="badge ouvert"><i class="ti ti-receipt"></i> ${TR('Facturé à')} ${esc(cl.entite_facturation_nom||'—')}</span>`);
   const annEsc = cl.annotation ? esc(cl.annotation) : '';
   return `<div class="card">
@@ -704,10 +704,10 @@ function ficheDistributeurBloc(cl){
     ${chips.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">${chips.join('')}</div>`:''}
     <div style="margin-top:12px;background:rgba(250,204,21,.08);border:0.5px solid var(--border);border-radius:12px;padding:10px 12px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:700"><i class="ti ti-note" style="font-size:14px"></i> ${TR('Annotation — information spécifique')}</div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--text3);font-weight:700"><i class="ti ti-note" style="font-size:13px"></i> ${TR('Annotation — information spécifique')}</div>
         <button class="btn sm" id="annot-save-${cl.id}" onclick="saveAnnotationDistrib(${cl.id})" style="display:none"><i class="ti ti-check"></i>${TR('Enregistrer')}</button>
       </div>
-      <textarea id="annot-${cl.id}" class="form-input" rows="2" placeholder="${TR('Note libre sur ce distributeur…')}" style="width:100%;font-size:15px;resize:vertical" oninput="document.getElementById('annot-save-${cl.id}').style.display='inline-flex'">${annEsc}</textarea>
+      <textarea id="annot-${cl.id}" class="form-input" rows="2" placeholder="${TR('Note libre sur ce distributeur…')}" style="width:100%;font-size:14px;resize:vertical" oninput="document.getElementById('annot-save-${cl.id}').style.display='inline-flex'">${annEsc}</textarea>
     </div>
     <div style="margin-top:10px;display:flex;gap:6px">
       <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
@@ -743,7 +743,7 @@ async function renderClient(ttl,c,a){
     <button class="btn sm primary" onclick="modalNewIntervention(null,${cl.id})"><i class="ti ti-plus"></i>Intervention</button>`;
   const s=cl.stats||{};
   c.innerHTML=`
-    <div class="breadcrumb"><span onclick="setView('clients')">Clients</span><i class="ti ti-chevron-right" style="font-size:13px"></i>${esc(cl.nom)}</div>
+    <div class="breadcrumb"><span onclick="setView('clients')">Clients</span><i class="ti ti-chevron-right" style="font-size:12px"></i>${esc(cl.nom)}</div>
     <div class="grid-2" style="margin-bottom:12px">
       ${ficheDistributeurBloc(cl)}
       <div class="card">
@@ -761,13 +761,13 @@ async function renderClient(ttl,c,a){
       ${cl.fauteuils.length===0?`<div class="empty"><i class="ti ti-wheelchair"></i>${t('msg_aucun_fauteuil')}</div>`:cl.fauteuils.map(f=>`
         <div class="fauteuil-card" onclick="setView('fauteuil',{fauteuilId:${f.id},clientId:${cl.id}})">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-            <div style="font-weight:700;font-size:15px"><i class="ti ti-wheelchair" style="font-size:15px;margin-right:3px"></i>${esc(f.modele)}</div>
+            <div style="font-weight:700;font-size:14px"><i class="ti ti-wheelchair" style="font-size:14px;margin-right:3px"></i>${esc(f.modele)}</div>
             <button class="btn sm" onclick="event.stopPropagation();exportFauteuilPDF(${f.id})"><i class="ti ti-file-type-pdf"></i></button>
           </div>
-          <div style="font-size:13px;color:var(--text3)">${TR('Série :')} <span class="mono">${esc(f.serie)}</span></div>
-          <div style="font-size:13px;color:var(--text3)">Année : ${f.annee||'—'}</div>
-          ${f.date_achat?`<div style="font-size:13px;color:var(--text3)">Achat : ${fd(f.date_achat)}</div>`:''}
-          ${f.num_facture?`<div style="font-size:13px;margin:3px 0;display:flex;align-items:center;gap:4px"><i class="ti ti-receipt" style="font-size:14px;color:var(--accent)"></i><span style="color:var(--accent)" class="mono">${esc(f.num_facture)}</span></div>`:''}
+          <div style="font-size:12px;color:var(--text3)">${TR('Série :')} <span class="mono">${esc(f.serie)}</span></div>
+          <div style="font-size:12px;color:var(--text3)">Année : ${f.annee||'—'}</div>
+          ${f.date_achat?`<div style="font-size:12px;color:var(--text3)">Achat : ${fd(f.date_achat)}</div>`:''}
+          ${f.num_facture?`<div style="font-size:12px;margin:3px 0;display:flex;align-items:center;gap:4px"><i class="ti ti-receipt" style="font-size:13px;color:var(--accent)"></i><span style="color:var(--accent)" class="mono">${esc(f.num_facture)}</span></div>`:''}
           <div style="margin-top:6px">${garantieChip(f)}</div>
           <div style="display:flex;gap:5px;margin-top:6px">
             <span class="badge g">${f.nb_garantie||0} garantie</span>
@@ -776,7 +776,7 @@ async function renderClient(ttl,c,a){
         </div>`).join('')}
     </div>
     <div class="section-title" style="margin:16px 0 8px"><i class="ti ti-clipboard-list"></i>Commandes</div>
-    <div id="client-commandes-list" style="margin-bottom:20px"><div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
+    <div id="client-commandes-list" style="margin-bottom:20px"><div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
     ${cl.type!=='Particulier'?`<div id="client-demandes" data-client="${cl.id}" data-nom="${esc(cl.nom)}" data-email="${esc(cl.email||'')}" style="margin-bottom:20px"></div>`:''}`;
   chargerCommandesClient(cl.id);
   if(cl.type!=='Particulier') chargerDemandesFiche(cl.id);
@@ -791,7 +791,7 @@ async function chargerCommandesClient(clientId){
     const res = await API.commandes({ client_id: clientId, per_page: 200 });
     const list = res.rows||[];
     if(!list.length){
-      el.innerHTML=`<div style="font-size:14px;color:var(--text3)">${TR('Aucune commande pour ce distributeur.')}</div>`;
+      el.innerHTML=`<div style="font-size:13px;color:var(--text3)">${TR('Aucune commande pour ce distributeur.')}</div>`;
       return;
     }
     el.innerHTML=`<div class="table-wrap"><table class="t">
@@ -807,17 +807,17 @@ async function chargerCommandesClient(clientId){
       <tbody>${list.map(cm=>{
         const lien = lienSuiviColis(cm.transporteur, cm.num_suivi);
         return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
-          ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:13px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
+          ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:12px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
         <td>${fd(cm.date_commande)}</td>
-          <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:13px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
-          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}${cm.modele_demo?` <span class="badge hg" style="font-size:12px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
+          <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
+          <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}${cm.modele_demo?` <span class="badge hg" style="font-size:11px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
           <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
           <td class="mono">${esc(cm.num_serie||'')}</td>
           <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span>${cm.reliquat?` <i class="ti ti-clock-exclamation" style="color:var(--warning)" title="Reliquat"></i>`:''}${cm.informations?` <i class="ti ti-info-circle" style="color:var(--accent)" title="${esc(cm.informations)}"></i>`:''}</td>
         </tr>`;
       }).join('')}</tbody>
     </table></div>`;
-  }catch(e){ el.innerHTML=`<div style="font-size:14px;color:var(--danger)">${esc(e.message)}</div>`; }
+  }catch(e){ el.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 function garantieChip(f){
@@ -825,10 +825,10 @@ function garantieChip(f){
   if(f.garantie_active===true||f.garantie_active===null){
     const exp=new Date(f.date_achat); exp.setMonth(exp.getMonth()+(f.duree_garantie_mois||24));
     const j=Math.ceil((exp-new Date())/86400000);
-    if(f.garantie_active===null||j>0) return `<span class="garantie-chip active"><i class="ti ti-shield-check" style="font-size:14px"></i>Garantie active (${j>0?j+' j':fd(exp.toISOString().slice(0,10))})</span>`;
+    if(f.garantie_active===null||j>0) return `<span class="garantie-chip active"><i class="ti ti-shield-check" style="font-size:13px"></i>Garantie active (${j>0?j+' j':fd(exp.toISOString().slice(0,10))})</span>`;
   }
   const exp=new Date(f.date_achat); exp.setMonth(exp.getMonth()+(f.duree_garantie_mois||24));
-  return `<span class="garantie-chip expired"><i class="ti ti-shield-x" style="font-size:14px"></i>Garantie expirée le ${fd(exp.toISOString().slice(0,10))}</span>`;
+  return `<span class="garantie-chip expired"><i class="ti ti-shield-x" style="font-size:13px"></i>Garantie expirée le ${fd(exp.toISOString().slice(0,10))}</span>`;
 }
 
 async function renderFauteuil(ttl,c,a){
@@ -842,14 +842,14 @@ async function renderFauteuil(ttl,c,a){
   c.innerHTML=`
     <div class="breadcrumb">
       <span onclick="setView('clients')">Clients</span>
-      <i class="ti ti-chevron-right" style="font-size:13px"></i>
+      <i class="ti ti-chevron-right" style="font-size:12px"></i>
       <span ${f.client_id?`onclick="setView('client',{clientId:${f.client_id}})"`:''}>${esc(f.client_nom||'—')}</span>
-      <i class="ti ti-chevron-right" style="font-size:13px"></i>${esc(f.modele)}
+      <i class="ti ti-chevron-right" style="font-size:12px"></i>${esc(f.modele)}
     </div>
     <div class="grid-2" style="margin-bottom:12px">
       <div class="card">
         <div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Fauteuil')}</div>
-        <table style="width:100%;font-size:14px">
+        <table style="width:100%;font-size:13px">
           ${[['Modèle',f.modele],['N° de série',f.serie],['Année',f.annee],['Couleur',f.couleur]].map(([k,v])=>`<tr><td style="color:var(--text3);padding:3px 0;width:110px">${k}</td><td style="font-weight:500">${esc(String(v||'—'))}</td></tr>`).join('')}
           ${f.date_achat?`<tr><td style="color:var(--text3);padding:3px 0">Date d'achat</td><td>${fd(f.date_achat)}</td></tr>`:''}
           ${f.num_facture?`<tr><td style="color:var(--text3);padding:3px 0">${TR('Facture')}</td><td><span class="mono" style="color:var(--accent)">${esc(f.num_facture)}</span></td></tr>`:''}
@@ -869,17 +869,17 @@ async function renderFauteuil(ttl,c,a){
       ${inters.length===0?`<div class="empty"><i class="ti ti-tool"></i>${t('msg_aucune_inter')}</div>`:inters.map(i=>`
         <div style="padding:10px;border-bottom:0.5px solid var(--border);cursor:pointer" onclick="viewIntervention(${i.id})" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
-            <span style="font-weight:700;font-size:15px">${traduireType(i.type)}</span>
+            <span style="font-weight:700;font-size:14px">${traduireType(i.type)}</span>
             <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('garantie_expiree')}</span>
             <span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span>
-            <span style="margin-left:auto;font-size:13px;color:var(--text3)">${fd(i.date)}</span>
+            <span style="margin-left:auto;font-size:12px;color:var(--text3)">${fd(i.date)}</span>
           </div>
-          <div style="font-size:14px;color:var(--text2)">${esc(i.description||'')}</div>
-          <div style="font-size:13px;color:var(--text3);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">
+          <div style="font-size:13px;color:var(--text2)">${esc(i.description||'')}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap">
             <span>${i.produits?.length||0} pièce${(i.produits?.length||0)!==1?'s':''}</span>
-            ${i.nb_photos?`<span><i class="ti ti-photo" style="font-size:13px"></i> ${i.nb_photos} photo${i.nb_photos>1?'s':''}</span>`:''}
-            ${i.nb_commentaires?`<span><i class="ti ti-message" style="font-size:13px"></i> ${i.nb_commentaires}</span>`:''}
-            ${i.envoi_numero?`<span><i class="ti ti-send" style="font-size:13px"></i> ${esc(i.envoi_numero)}</span>`:''}
+            ${i.nb_photos?`<span><i class="ti ti-photo" style="font-size:12px"></i> ${i.nb_photos} photo${i.nb_photos>1?'s':''}</span>`:''}
+            ${i.nb_commentaires?`<span><i class="ti ti-message" style="font-size:12px"></i> ${i.nb_commentaires}</span>`:''}
+            ${i.envoi_numero?`<span><i class="ti ti-send" style="font-size:12px"></i> ${esc(i.envoi_numero)}</span>`:''}
           </div>
         </div>`).join('')}
     </div>`;
@@ -900,24 +900,24 @@ async function renderInterventions(ttl,c,a){
   c.innerHTML=`<div class="table-wrap"><table class="t">
     <thead><tr><th>N° SAV</th><th>${t('col_date')}</th><th>${t('col_client')}</th><th>${t('col_modele')} / ${t('col_serie')}</th><th>${t('col_type')}</th><th>${t('col_description')}</th><th>${t('col_garantie')}</th><th>${t('col_statut')}</th><th>${t('col_technicien')}</th><th style="text-align:center">  </th></tr></thead>
     <tbody>${list.map(i=>`<tr onclick="viewIntervention(${i.id})">
-      <td class="mono" style="color:var(--accent);font-size:13px">${esc(i.num_sav||'—')}</td><td>${fd(i.date)}</td><td>${esc(i.client_nom||'')}</td>
+      <td class="mono" style="color:var(--accent);font-size:12px">${esc(i.num_sav||'—')}</td><td>${fd(i.date)}</td><td>${esc(i.client_nom||'')}</td>
       <td><div>${esc(i.modele)}</div><div class="mono" style="color:var(--text3)">${esc(i.serie)}</div></td>
       <td>${esc(traduireType(i.type))}</td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.description||'')}</td>
       <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('garantie_expiree')}</span></td>
       <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
       <td>${esc(i.technicien||'')}</td>
-      <td style="text-align:center;color:var(--text3);font-size:13px">${i.nb_photos||''}</td>
-      <td style="font-size:13px">${esc(i.envoi_transporteur||'—')}</td>
-      <td style="font-size:13px">
+      <td style="text-align:center;color:var(--text3);font-size:12px">${i.nb_photos||''}</td>
+      <td style="font-size:12px">${esc(i.envoi_transporteur||'—')}</td>
+      <td style="font-size:12px">
         ${i.envoi_numero
           ? `<a href="${lienhSuiviInter(i.envoi_transporteur, i.envoi_numero)}" target="_blank" rel="noopener"
                style="color:var(--accent);font-family:monospace;text-decoration:none" title="Suivre le colis">
-               <i class="ti ti-external-link" style="font-size:12px"></i> ${esc(i.envoi_numero)}
+               <i class="ti ti-external-link" style="font-size:11px"></i> ${esc(i.envoi_numero)}
              </a>`
           : '—'}
       </td>
-      <td style="font-size:13px">${i.envoi_date ? fd(i.envoi_date) : '—'}</td>
+      <td style="font-size:12px">${i.envoi_date ? fd(i.envoi_date) : '—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -929,7 +929,7 @@ async function renderExpeditions(ttl,c,a){
   a.innerHTML=`<button class="btn success" onclick="API.exportExcel('expeditions')"><i class="ti ti-file-spreadsheet"></i>${t('rap_export_excel')}</button>`;
   const list=await API.expeditions();
   c.innerHTML=`
-    <div style="font-size:14px;color:var(--text2);margin-bottom:12px">${t('exp_subtitle')}</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${t('exp_subtitle')}</div>
     ${list.length===0?`<div class="empty"><i class="ti ti-truck-delivery"></i>${t('exp_empty')}</div>`:`
     <div class="table-wrap"><table class="t">
       <thead><tr><th>N°</th><th>${t('col_client')}</th><th>${t('inter_fauteuil').replace(' *','')}</th><th>${t('col_transporteur')||'Transporteur'}</th><th>${t('col_suivi')||'N° Suivi'}</th><th>${t('col_date_envoi')||'Date envoi'}</th></tr></thead>
@@ -978,10 +978,10 @@ let TMP_CMD_LIGNES = []; // Lignes de la commande en cours d'édition
 function renderCmdLignes(){
   const el=$('cmd-lignes-list'); if(!el) return;
   if(!TMP_CMD_LIGNES.length){
-    el.innerHTML=`<div style="font-size:14px;color:var(--text3);padding:8px 0">${t('cmd_lignes_empty')||'Aucune ligne — importe un BDC ou ajoute une ligne manuellement.'}</div>`;
+    el.innerHTML=`<div style="font-size:13px;color:var(--text3);padding:8px 0">${t('cmd_lignes_empty')||'Aucune ligne — importe un BDC ou ajoute une ligne manuellement.'}</div>`;
     return;
   }
-  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:4px">
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:4px">
     <thead><tr style="background:var(--bg)">
       <th style="padding:5px 8px;text-align:left;color:var(--text2);font-weight:600">${t('col_designation_court')||'Désignation'}</th>
       <th style="padding:5px 8px;text-align:left;color:var(--text2);font-weight:600;width:130px">${t('col_ref_short')||'Référence'}</th>
@@ -991,7 +991,7 @@ function renderCmdLignes(){
     <tbody>${TMP_CMD_LIGNES.map((l,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
       <td style="padding:4px 6px">
         <div style="position:relative">
-          <input class="form-input cmd-ligne-search" style="font-size:14px;padding:4px 7px"
+          <input class="form-input cmd-ligne-search" style="font-size:13px;padding:4px 7px"
             value="${esc(l.designation)}"
             placeholder="${t('cat_search_catalogue')||'Taper nom ou référence catalogue…'}"
             oninput="TMP_CMD_LIGNES[${i}].designation=this.value;searchCmdPieces(${i},this.value)"
@@ -1002,14 +1002,14 @@ function renderCmdLignes(){
       </td>
       <td style="padding:4px 6px">
         <div style="position:relative">
-          <input class="form-input mono cmd-ligne-ref" style="font-size:13px;padding:4px 7px" value="${esc(l.reference||'')}" placeholder="${TR("Réf.")}"
+          <input class="form-input mono cmd-ligne-ref" style="font-size:12px;padding:4px 7px" value="${esc(l.reference||'')}" placeholder="${TR("Réf.")}"
             oninput="TMP_CMD_LIGNES[${i}].reference=this.value;searchCmdPieces(${i},this.value,'ref')"
             onfocus="searchCmdPieces(${i},this.value,'ref')"
             onblur="setTimeout(()=>{const d=document.getElementById('cmd-piece-drop-ref-${i}');if(d)d.style.display='none'},150)">
           <div id="cmd-piece-drop-ref-${i}" class="piece-dropdown" style="display:none"></div>
         </div>
       </td>
-      <td style="padding:4px 6px"><input class="form-input" type="number" min="1" style="font-size:14px;padding:4px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_CMD_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
+      <td style="padding:4px 6px"><input class="form-input" type="number" min="1" style="font-size:13px;padding:4px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_CMD_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
       <td style="padding:4px 2px"><button class="btn sm danger" onclick="removeCmdLigne(${i})" style="padding:4px 6px"><i class="ti ti-x"></i></button></td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -1039,8 +1039,8 @@ function searchCmdPieces(idx, q, field){
   window._CMD_PIECE_RESULTS = window._CMD_PIECE_RESULTS || {};
   window._CMD_PIECE_RESULTS[field+'-'+idx] = results;
   drop.innerHTML = results.map((p,ri) => `<div class="piece-option" onmousedown="event.preventDefault();selectCmdPieceResult(${idx},${ri},'${field}')">
-    <div style="font-size:14px;font-weight:600">${esc(p.designation)}</div>
-    <div style="font-size:13px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref||'')}</span></div>
+    <div style="font-size:13px;font-weight:600">${esc(p.designation)}</div>
+    <div style="font-size:12px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref||'')}</span></div>
   </div>`).join('');
   drop.style.display = 'block';
 }
@@ -1118,21 +1118,21 @@ async function renderCommandes(ttl,c,a){
       <button class="btn primary" onclick="modalNouvelleCommande()"><i class="ti ti-plus"></i>${t('cmd_add')||'Nouvelle commande'}</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
-      <input class="form-input" style="max-width:240px;padding:10px 12px;font-size:16px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;clearTimeout(window._cmdSearchTimer);window._cmdSearchTimer=setTimeout(()=>renderCommandesTable(1),300)">
-      <select class="form-input" style="width:auto;padding:10px 12px;font-size:16px" id="cmd-f-type" onchange="CMD_FILTERS.type=this.value;renderCommandesTable(1)">
+      <input class="form-input" style="max-width:240px;padding:10px 12px;font-size:15px" placeholder="${t('cmd_search')||'Rechercher (distributeur, bdc, série...)'}" value="${esc(CMD_FILTERS.q)}" oninput="CMD_FILTERS.q=this.value;clearTimeout(window._cmdSearchTimer);window._cmdSearchTimer=setTimeout(()=>renderCommandesTable(1),300)">
+      <select class="form-input" style="width:auto;padding:10px 12px;font-size:15px" id="cmd-f-type" onchange="CMD_FILTERS.type=this.value;renderCommandesTable(1)">
         <option value="" ${!CMD_FILTERS.type?'selected':''}>${TR('Toutes les commandes')}</option>
         <option value="fauteuil" ${CMD_FILTERS.type==='fauteuil'?'selected':''}>♿ ${TR('Fauteuils')}</option>
         <option value="accessoire" ${CMD_FILTERS.type==='accessoire'?'selected':''}>📦 ${TR('Accessoires')}</option>
       </select>
-      <select class="form-input" style="width:auto;padding:10px 12px;font-size:16px" id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;CMD_FILTERS.mois='';render()">
+      <select class="form-input" style="width:auto;padding:10px 12px;font-size:15px" id="cmd-f-annee" onchange="CMD_FILTERS.annee=this.value;CMD_FILTERS.mois='';render()">
         <option value="">${t('cmd_toutes_annees')||'Toutes années'}</option>
         ${years.map(y=>`<option value="${y}" ${CMD_FILTERS.annee==y?'selected':''}>${y}</option>`).join('')}
       </select>
-      <select class="form-input" style="width:auto;padding:10px 12px;font-size:16px" id="cmd-f-mois" onchange="CMD_FILTERS.mois=this.value;renderCommandesTable(1)">
+      <select class="form-input" style="width:auto;padding:10px 12px;font-size:15px" id="cmd-f-mois" onchange="CMD_FILTERS.mois=this.value;renderCommandesTable(1)">
         <option value="">Tous les mois</option>
         ${['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'].map((m,i)=>`<option value="${i+1}" ${CMD_FILTERS.mois==i+1?'selected':''}>${m}</option>`).join('')}
       </select>
-      <select class="form-input" style="width:auto;padding:10px 12px;font-size:16px" id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
+      <select class="form-input" style="width:auto;padding:10px 12px;font-size:15px" id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
         <option value="">${t('cmd_tous_statuts')||'Tous statuts'}</option>
         <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ ${t('cmd_en_attente')||'En attente'}</option>
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
@@ -1145,30 +1145,30 @@ async function renderCommandes(ttl,c,a){
         <option value="Problème" ${CMD_FILTERS.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${CMD_FILTERS.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
-      <input class="form-input" style="width:auto;max-width:180px;padding:10px 12px;font-size:16px" id="cmd-f-distrib" placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)">
+      <input class="form-input" style="width:auto;max-width:180px;padding:10px 12px;font-size:15px" id="cmd-f-distrib" placeholder="${t('cmd_filtre_distrib')||'Filtrer distributeur'}" value="${esc(CMD_FILTERS.distributeur)}" oninput="CMD_FILTERS.distributeur=this.value;renderCommandesTable(1)">
       <button class="btn sm" onclick="toggleColsPanel()" title="Colonnes visibles"><i class="ti ti-layout-columns"></i></button>
       ${CMD_FILTERS.distributeur||CMD_FILTERS.statut||CMD_FILTERS.q||CMD_FILTERS.mois||CMD_FILTERS.type
         ? `<button class="btn sm" onclick="CMD_FILTERS={annee:CMD_FILTERS.annee,mois:'',statut:'',groupe:'',distributeur:'',q:'',type:''};render()" title="Effacer filtres"><i class="ti ti-x"></i></button>`:''}
     </div>
     <div id="cmd-cols-panel" style="display:none;padding:10px 14px;margin-bottom:8px;background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:var(--radius);backdrop-filter:blur(12px)">
-      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Colonnes optionnelles</div>
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Colonnes optionnelles</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.num_annuel?'checked':''} onchange="CMD_COLS.num_annuel=this.checked;saveCmdCols();renderCommandesTable(1)"> # N° annuel</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.paiement?'checked':''} onchange="CMD_COLS.paiement=this.checked;saveCmdCols();renderCommandesTable(1)"> 💳 Paiement VF</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.facture?'checked':''} onchange="CMD_COLS.facture=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('N° Facture')}</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.date_facture?'checked':''} onchange="CMD_COLS.date_facture=this.checked;saveCmdCols();renderCommandesTable(1)"> Date facturation</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('🔄 Origine démo')}</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.edi?'checked':''} onchange="CMD_COLS.edi=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('💳 EDI (prélèvement)')}</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.pays?'checked':''} onchange="CMD_COLS.pays=this.checked;saveCmdCols();renderCommandesTable(1)"> 🌍 Pays</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.retour?'checked':''} onchange="CMD_COLS.retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('↩ Retour')}</label>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px"><input type="checkbox" ${CMD_COLS.date_retour?'checked':''} onchange="CMD_COLS.date_retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR("📅 Date retour")}</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.num_annuel?'checked':''} onchange="CMD_COLS.num_annuel=this.checked;saveCmdCols();renderCommandesTable(1)"> # N° annuel</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.paiement?'checked':''} onchange="CMD_COLS.paiement=this.checked;saveCmdCols();renderCommandesTable(1)"> 💳 Paiement VF</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.facture?'checked':''} onchange="CMD_COLS.facture=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('N° Facture')}</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.date_facture?'checked':''} onchange="CMD_COLS.date_facture=this.checked;saveCmdCols();renderCommandesTable(1)"> Date facturation</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.demo_origine?'checked':''} onchange="CMD_COLS.demo_origine=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('🔄 Origine démo')}</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.edi?'checked':''} onchange="CMD_COLS.edi=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('💳 EDI (prélèvement)')}</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.pays?'checked':''} onchange="CMD_COLS.pays=this.checked;saveCmdCols();renderCommandesTable(1)"> 🌍 Pays</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.retour?'checked':''} onchange="CMD_COLS.retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('↩ Retour')}</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.date_retour?'checked':''} onchange="CMD_COLS.date_retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR("📅 Date retour")}</label>
       </div>
     </div>
       ${CMD_FILTERS.distributeur
-        ? `<span style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--accent-bg);border:0.5px solid var(--accent);border-radius:var(--radius);font-size:14px;color:var(--accent);font-weight:600">
-            <i class="ti ti-building-store" style="font-size:14px"></i>
+        ? `<span style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--accent-bg);border:0.5px solid var(--accent);border-radius:var(--radius);font-size:13px;color:var(--accent);font-weight:600">
+            <i class="ti ti-building-store" style="font-size:13px"></i>
             ${esc(CMD_FILTERS.distributeur)}
-            <button onclick="CMD_FILTERS.distributeur='';renderCommandesTable(1)" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0;line-height:1;font-size:16px" title="Retirer ce filtre">×</button>
+            <button onclick="CMD_FILTERS.distributeur='';renderCommandesTable(1)" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0;line-height:1;font-size:15px" title="Retirer ce filtre">×</button>
            </span>`
         : ''}
     </div>
@@ -1199,13 +1199,13 @@ async function renderCommandesTable(page=1){
 
   // Navigation pagination
   const nav = nbPages > 1 ? `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 14px;background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:12px;backdrop-filter:blur(8px);font-size:15px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 14px;background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:12px;backdrop-filter:blur(8px);font-size:14px">
       <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(1)" title="${TR("Première page")}"><i class="ti ti-chevron-left-pipe"></i></button>
       <button class="btn sm" ${page<=1?'disabled':''} onclick="renderCommandesTable(${page-1})"><i class="ti ti-chevron-left"></i></button>
       <span style="color:var(--text2);display:flex;align-items:center;gap:6px">
         Page <b>${page}</b> /
         <input type="number" min="1" max="${nbPages}" value="${page}"
-          style="width:52px;padding:3px 6px;border:0.5px solid var(--border-dark);border-radius:6px;background:rgba(255,255,255,.7);font-size:14px;font-weight:600;text-align:center;color:var(--text)"
+          style="width:52px;padding:3px 6px;border:0.5px solid var(--border-dark);border-radius:6px;background:rgba(255,255,255,.7);font-size:13px;font-weight:600;text-align:center;color:var(--text)"
           onkeydown="if(event.key==='Enter'){const p=parseInt(this.value);if(p>=1&&p<=${nbPages})renderCommandesTable(p);}"
           onblur="const p=parseInt(this.value);if(p>=1&&p<=${nbPages})renderCommandesTable(p);"
           onclick="this.select()">
@@ -1213,8 +1213,8 @@ async function renderCommandesTable(page=1){
       </span>
       <button class="btn sm" ${page>=nbPages?'disabled':''} onclick="renderCommandesTable(${page+1})"><i class="ti ti-chevron-right"></i></button>
       <button class="btn sm" ${page>=nbPages?'disabled':''} onclick="renderCommandesTable(${nbPages})" title="${TR("Dernière page")}"><i class="ti ti-chevron-right-pipe"></i></button>
-      <span style="color:var(--text3);font-size:14px">${total} résultat(s)</span>
-    </div>` : `<div style="font-size:14px;color:var(--text2);margin-bottom:8px">${total} ${t('cmd_resultats')||'résultat(s)'}</div>`;
+      <span style="color:var(--text3);font-size:13px">${total} résultat(s)</span>
+    </div>` : `<div style="font-size:13px;color:var(--text2);margin-bottom:8px">${total} ${t('cmd_resultats')||'résultat(s)'}</div>`;
 
   wrap.innerHTML=`${nav}
     <div class="table-wrap"><table class="t">
@@ -1235,41 +1235,41 @@ async function renderCommandesTable(page=1){
         <th>${t('col_statut')||'Statut'}</th><th></th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
-        ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:13px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
+        ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:12px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
         <td>${fd(cm.date_commande)}</td>
-        <td><span style="font-size:13px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
-        ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:13px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
-        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="${TR("Filtrer par ce distributeur")}">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="${TR("Ouvrir la fiche client")}" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:13px"></i></button>`:`<span title="${TR("Commande non rattachée à une fiche client")}" style="color:var(--border-s);padding:1px 3px;font-size:13px"><i class="ti ti-user-off"></i></span>`}</td>
-        <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:13px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
+        <td><span style="font-size:12px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
+        ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:12px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
+        <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="${TR("Filtrer par ce distributeur")}">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="${TR("Ouvrir la fiche client")}" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:12px"></i></button>`:`<span title="${TR("Commande non rattachée à une fiche client")}" style="color:var(--border-s);padding:1px 3px;font-size:12px"><i class="ti ti-user-off"></i></span>`}</td>
+        <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td style="text-align:center">${estCmdFauteuil(cm)
-          ? `<i class="ti ti-wheelchair" style="color:var(--accent);font-size:18px" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"></i>`
-          : `<i class="ti ti-box" style="color:var(--text3);font-size:15px" title="${TR("Pièces détachées")}"></i>`}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:12px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:12px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:12px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
+          ? `<i class="ti ti-wheelchair" style="color:var(--accent);font-size:17px" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"></i>`
+          : `<i class="ti ti-box" style="color:var(--text3);font-size:14px" title="${TR("Pièces détachées")}"></i>`}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:11px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
           if(isRealTracking(cm.num_suivi)){
             const l=lienSuiviColis(cm.transporteur,cm.num_suivi);
             return esc(cm.num_suivi)+(l?` <a href="${l}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'');
           }
-          return `<span style="color:var(--text3);font-size:13px" title="${esc(cm.num_suivi)}">${esc(cm.num_suivi)}</span>`;
+          return `<span style="color:var(--text3);font-size:12px" title="${esc(cm.num_suivi)}">${esc(cm.num_suivi)}</span>`;
         })()}</td>
-        <td style="font-size:14px;color:var(--text2)">${cm.date_livraison?fd(cm.date_livraison):'—'}</td>
+        <td style="font-size:13px;color:var(--text2)">${cm.date_livraison?fd(cm.date_livraison):'—'}</td>
         <td class="mono">${esc(cm.num_serie||'')}</td>
-        ${CMD_COLS.facture?`<td class="mono" style="font-size:13px">${esc(cm.num_facture||'')}</td>`:''}
-        ${CMD_COLS.date_facture?`<td style="font-size:13px;color:var(--text2)">${cm.date_livraison&&cm.num_facture?fd(cm.date_livraison):'—'}</td>`:''}
-        ${CMD_COLS.demo_origine?`<td style="font-size:13px">${cm.demo_origine_nom?`<span class="badge hg" title="${TR("Origine démo")}">🔄 ${esc(cm.demo_origine_nom)}</span>`:'—'}</td>`:''}
-        ${CMD_COLS.edi?`<td>${cm.client_edi?'<span class="badge ouvert" style="font-size:12px">💳 EDI</span>':'—'}</td>`:''}
+        ${CMD_COLS.facture?`<td class="mono" style="font-size:12px">${esc(cm.num_facture||'')}</td>`:''}
+        ${CMD_COLS.date_facture?`<td style="font-size:12px;color:var(--text2)">${cm.date_livraison&&cm.num_facture?fd(cm.date_livraison):'—'}</td>`:''}
+        ${CMD_COLS.demo_origine?`<td style="font-size:12px">${cm.demo_origine_nom?`<span class="badge hg" title="${TR("Origine démo")}">🔄 ${esc(cm.demo_origine_nom)}</span>`:'—'}</td>`:''}
+        ${CMD_COLS.edi?`<td>${cm.client_edi?'<span class="badge ouvert" style="font-size:11px">💳 EDI</span>':'—'}</td>`:''}
         ${CMD_COLS.paiement?`<td>${cm.facture_paiement_statut?
-  `<span class="badge ${(cm.facture_paiement_statut==='paye'||cm.facture_paiement_statut==='payé'||cm.facture_paiement_statut==='paid')?'g':(cm.facture_paiement_statut==='impaye'||cm.facture_paiement_statut==='impayé')?'urgent':cm.facture_paiement_statut==='partiel'?'hg':'attente'}" style="font-size:12px">${
+  `<span class="badge ${(cm.facture_paiement_statut==='paye'||cm.facture_paiement_statut==='payé'||cm.facture_paiement_statut==='paid')?'g':(cm.facture_paiement_statut==='impaye'||cm.facture_paiement_statut==='impayé')?'urgent':cm.facture_paiement_statut==='partiel'?'hg':'attente'}" style="font-size:11px">${
     (cm.facture_paiement_statut==='paye'||cm.facture_paiement_statut==='payé'||cm.facture_paiement_statut==='paid')?'✅ Payé':
     (cm.facture_paiement_statut==='impaye'||cm.facture_paiement_statut==='impayé')?'⚠️ Impayé':
     cm.facture_paiement_statut==='partiel'?'🔸 Partiel':'⏳ En attente'
-  }${cm.facture_date_echeance&&cm.facture_paiement_statut!=='payé'?` <span style="font-size:11px;opacity:.8">${fd(cm.facture_date_echeance)}</span>`:''}</span>`
+  }${cm.facture_date_echeance&&cm.facture_paiement_statut!=='payé'?` <span style="font-size:10px;opacity:.8">${fd(cm.facture_date_echeance)}</span>`:''}</span>`
   :'—'}</td>`:''}
-        ${CMD_COLS.retour?`<td class="mono" style="font-size:13px">${esc(cm.num_retour||'—')}</td>`:''}
-        ${CMD_COLS.date_retour?`<td style="font-size:13px;color:var(--text2)">${cm.date_retour?fd(cm.date_retour):'—'}</td>`:''}
+        ${CMD_COLS.retour?`<td class="mono" style="font-size:12px">${esc(cm.num_retour||'—')}</td>`:''}
+        ${CMD_COLS.date_retour?`<td style="font-size:12px;color:var(--text2)">${cm.date_retour?fd(cm.date_retour):'—'}</td>`:''}
         <td onclick="event.stopPropagation()" style="position:relative">
-          <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:11px;opacity:.6"></i></span>
+          <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:10px;opacity:.6"></i></span>
         </td>
         <td style="text-align:center">
           ${cm.client_final ? clientFinalBadge(cm) : ''}
@@ -1304,8 +1304,8 @@ function searchCmdDistrib(q){
   ).slice(0,15);
   if(!results.length){ drop.style.display='none'; return; }
   drop.innerHTML = results.map(c => `<div class="piece-option" onmousedown="event.preventDefault();selectCmdDistrib(${c.id},'${(c.nom||'').replace(/'/g,"\\'")}')">
-    <div style="font-size:14px;font-weight:600">${esc(c.nom||'')}</div>
-    <div style="font-size:13px;color:var(--text3)">${esc(c.ville||'')}${c.cp?' ('+esc(c.cp)+')':''}</div>
+    <div style="font-size:13px;font-weight:600">${esc(c.nom||'')}</div>
+    <div style="font-size:12px;color:var(--text3)">${esc(c.ville||'')}${c.cp?' ('+esc(c.cp)+')':''}</div>
   </div>`).join('');
   drop.style.display = 'block';
 }
@@ -1344,12 +1344,12 @@ function modalNouvelleCommande(){
   window._NC_SOURCE = 'vf';
   showModal(`
     <div class="modal-header">
-      <i class="ti ti-clipboard-plus" style="font-size:20px;color:var(--accent)"></i>
+      <i class="ti ti-clipboard-plus" style="font-size:19px;color:var(--accent)"></i>
       <h2 style="flex:1">${t('cmd_add')||'Nouvelle commande'}</h2>
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button>
     </div>
     <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
-      <div style="font-size:15px;color:var(--text2)">${TR('Importer une commande depuis son numéro :')}</div>
+      <div style="font-size:14px;color:var(--text2)">${TR('Importer une commande depuis son numéro :')}</div>
       <div style="display:flex;gap:8px">
         <button type="button" id="nc-src-vf" class="btn" onclick="ncSetSource('vf')" style="flex:1"><i class="ti ti-file-invoice"></i> VosFactures</button>
         <button type="button" id="nc-src-pl" class="btn" onclick="ncSetSource('pennylane')" style="flex:1"><i class="ti ti-brand-stripe"></i> Pennylane</button>
@@ -1358,7 +1358,7 @@ function modalNouvelleCommande(){
         <label class="form-label">${TR('Numéro de commande (BDC / devis)')}</label>
         <input class="form-input mono" id="nc-numero" placeholder="${TR("Numéro VosFactures ou Pennylane")}" onkeydown="if(event.key==='Enter')importerNouvelleCommande()" style="width:100%">
       </div>
-      <div id="nc-msg" style="font-size:14px;color:var(--text3);min-height:16px"></div>
+      <div id="nc-msg" style="font-size:13px;color:var(--text3);min-height:16px"></div>
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:4px">
         <button class="btn" type="button" onclick="closeModal();modalCommande()"><i class="ti ti-edit"></i> Saisie manuelle</button>
         <button class="btn primary" type="button" onclick="importerNouvelleCommande()"><i class="ti ti-download"></i> Importer</button>
@@ -1470,7 +1470,7 @@ async function modalCommande(id, prefill){
 
   const tabBtn = (key, label, icon, dot) =>
     `<button id="tab-btn-${key}" onclick="switchCmdTab('${key}')"
-      style="flex:1;padding:10px 6px;border:none;background:none;cursor:pointer;font-size:15px;font-weight:600;
+      style="flex:1;padding:10px 6px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;
              border-bottom:2px solid ${key===initTab?'var(--accent)':'transparent'};
              color:${key===initTab?'var(--accent)':'var(--text2)'};display:flex;align-items:center;justify-content:center;gap:5px">
       <i class="ti ${icon}"></i>${label}${dot?`<span style="width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:2px"></span>`:''}
@@ -1478,11 +1478,11 @@ async function modalCommande(id, prefill){
 
   showModal(`
     <div class="modal-header">
-      <i class="ti ti-clipboard-list" style="font-size:20px;color:var(--accent)"></i>
-      <h2 style="flex:1">${id?(t('cmd_edit')||'Modifier'):(t('cmd_add')||'Nouvelle commande')}${cm.distributeur_nom?` <span style="font-weight:400;color:var(--text2);font-size:17px">— ${esc(cm.distributeur_nom)}</span>`:''}</h2>
-      ${cm.client_edi?`<span class="badge ouvert" style="font-size:13px;margin-right:4px">💳 EDI</span>`:''}
-      ${/avoir/i.test(cm.informations||'')?`<span class="badge urgent" style="font-size:13px;margin-right:4px" title="${esc((cm.informations||'').replace(/"/g,'&quot;').slice(0,140))}">${TR('↩ Avoir / Retour')}</span>`:''}
-      ${id&&cm.origine==='sav'?`<span class="badge hg" style="font-size:13px;margin-right:4px" title="Commande issue d'un SAV facturé — exclue des stats de ventes et de la numérotation">${TR('🛠️ SAV facturé')}</span>`:''}
+      <i class="ti ti-clipboard-list" style="font-size:19px;color:var(--accent)"></i>
+      <h2 style="flex:1">${id?(t('cmd_edit')||'Modifier'):(t('cmd_add')||'Nouvelle commande')}${cm.distributeur_nom?` <span style="font-weight:400;color:var(--text2);font-size:16px">— ${esc(cm.distributeur_nom)}</span>`:''}</h2>
+      ${cm.client_edi?`<span class="badge ouvert" style="font-size:12px;margin-right:4px">💳 EDI</span>`:''}
+      ${/avoir/i.test(cm.informations||'')?`<span class="badge urgent" style="font-size:12px;margin-right:4px" title="${esc((cm.informations||'').replace(/"/g,'&quot;').slice(0,140))}">${TR('↩ Avoir / Retour')}</span>`:''}
+      ${id&&cm.origine==='sav'?`<span class="badge hg" style="font-size:12px;margin-right:4px" title="Commande issue d'un SAV facturé — exclue des stats de ventes et de la numérotation">${TR('🛠️ SAV facturé')}</span>`:''}
       ${id?(cm.intervention_id
         ? `<button class="btn sm" onclick="ouvrirInterventionLiee(${cm.intervention_id})" title="${TR("Voir le SAV lié")}"><i class="ti ti-tool"></i> ${TR('SAV lié')}</button>`
         : `<button class="btn sm" onclick="basculerCommandeVersSAV(${id})" title="${TR("Créer un SAV lié pour cette commande")}"><i class="ti ti-tool"></i> ${TR('Créer SAV')}</button>`):''}
@@ -1495,8 +1495,8 @@ async function modalCommande(id, prefill){
       ${tabBtn('notes','Notes 💬','ti-message-circle',false)}
     </div>
     <div style="display:flex;align-items:center;gap:10px;padding:10px 22px;background:var(--bg);border-bottom:0.5px solid var(--border-s)">
-      <span style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">${t('cmd_statut_label')||'STATUT'}</span>
-      <select id="cmd-statut" onchange="majZonePreuveLivraison();majStatutBadge()" style="font-size:14px;padding:4px 8px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:var(--surface);cursor:pointer">
+      <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2)">${t('cmd_statut_label')||'STATUT'}</span>
+      <select id="cmd-statut" onchange="majZonePreuveLivraison();majStatutBadge()" style="font-size:13px;padding:4px 8px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:var(--surface);cursor:pointer">
         <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto_option')||t('cmd_auto_option')||'Auto (calculé)'}</option>
         <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
         <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
@@ -1509,8 +1509,8 @@ async function modalCommande(id, prefill){
         <option value="Problème" ${cm.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
-      <span id="cmd-statut-badge" class="badge ${cmdStatutClass(cm.statut_calc||'En préparation')}" style="font-size:13px">${tStatut(cm.statut_calc||'En préparation')}</span>
-      <span style="font-size:13px;color:var(--text3)" id="cmd-statut-auto-hint">${(cm.statut||'Auto')==='Auto'?t('cmd_auto_hint')||'← calculé automatiquement':''}</span>
+      <span id="cmd-statut-badge" class="badge ${cmdStatutClass(cm.statut_calc||'En préparation')}" style="font-size:12px">${tStatut(cm.statut_calc||'En préparation')}</span>
+      <span style="font-size:12px;color:var(--text3)" id="cmd-statut-auto-hint">${(cm.statut||'Auto')==='Auto'?t('cmd_auto_hint')||'← calculé automatiquement':''}</span>
     </div>
     <div class="modal-body" style="padding-top:16px">
 
@@ -1527,7 +1527,7 @@ async function modalCommande(id, prefill){
               <div id="cmd-distrib-drop" class="piece-dropdown" style="display:none"></div>
             </div>
           </div>
-          ${cm.facturation_nom?`<div class="form-group" style="grid-column:1/-1;margin:-2px 0 6px"><div style="font-size:14px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border-s);border-radius:6px;padding:7px 10px">${TR('🧾 Facturé à :')} <strong>${esc(cm.facturation_nom)}</strong> <span style="color:var(--text3)">${TR('— défini sur la fiche distributeur')}</span></div></div>`:''}
+          ${cm.facturation_nom?`<div class="form-group" style="grid-column:1/-1;margin:-2px 0 6px"><div style="font-size:13px;color:var(--text2);background:var(--bg);border:0.5px solid var(--border-s);border-radius:6px;padding:7px 10px">${TR('🧾 Facturé à :')} <strong>${esc(cm.facturation_nom)}</strong> <span style="color:var(--text3)">${TR('— défini sur la fiche distributeur')}</span></div></div>`:''}
           <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
             <select class="form-input" id="cmd-groupe">
               <option value="">${TR("— Choisir —")}</option>
@@ -1548,7 +1548,7 @@ async function modalCommande(id, prefill){
             <div style="display:flex;gap:5px">
               <input class="form-input mono" id="cmd-bdc" value="${esc(cm.bdc||'')}" style="flex:1" placeholder="${t('cmd_num_bdc_placeholder')||'Numéro BDC ou Devis'}" oninput="majStatutBadge()">
               ${cm.origine==='sav'
-                ? `<span title="Commande issue d'un SAV : le contenu (lignes, série, facture, suivi) est repris automatiquement du SAV lié — pas d'import VosFactures ici" style="color:var(--text3);font-size:13px;align-self:center;white-space:nowrap;padding:0 6px"><i class="ti ti-tool"></i> SAV</span>`
+                ? `<span title="Commande issue d'un SAV : le contenu (lignes, série, facture, suivi) est repris automatiquement du SAV lié — pas d'import VosFactures ici" style="color:var(--text3);font-size:12px;align-self:center;white-space:nowrap;padding:0 6px"><i class="ti ti-tool"></i> SAV</span>`
                 : `<button class="btn sm" type="button" title="Importer depuis Pennylane / VosFactures" onmousedown="lookupBdcVF()"><i class="ti ti-download"></i></button>`}
               <button class="btn sm" type="button" title="${TR("Ouvrir dans VosFactures")}" onclick="ouvrirBdcDans('vf')"><i class="ti ti-file-invoice"></i></button>
               <button class="btn sm" type="button" title="${TR("Ouvrir dans Pennylane")}" onclick="ouvrirBdcDans('pennylane')"><i class="ti ti-brand-stripe"></i></button>
@@ -1559,15 +1559,15 @@ async function modalCommande(id, prefill){
           </div>
         </div>
         <div style="background:var(--bg);border:0.5px solid var(--border-s);border-radius:var(--radius);padding:12px;margin-bottom:12px">
-          <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:10px">${t('cmd_type_label')||'TYPE DE COMMANDE'}</div>
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:10px">${t('cmd_type_label')||'TYPE DE COMMANDE'}</div>
           <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:15px">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
               <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede();majBdcConfirme()">${t('cmd_type_fauteuil_neuf')||'Fauteuil Neuf'}
             </label>
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:15px">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
               <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede();majBdcConfirme();majSerieDemoHint()">${t('cmd_type_fauteuil_demo')||'Fauteuil Démo'}
             </label>
-            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:15px">
+            <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
               <input type="checkbox" id="cmd-type-pieces" ${cm.type_pieces||(cm.commande_type==='pieces')?'checked':''} style="width:15px;height:15px;accent-color:var(--text2)" onchange="majBdcConfirme()">${t('cmd_type_pieces')||'Pièces détachées'}
             </label>
           </div>
@@ -1580,20 +1580,20 @@ async function modalCommande(id, prefill){
           <div id="cmd-type-section-pieces" style="${cm.type_pieces||(cm.commande_type==='pieces')?'':'display:none'}"></div>
           <div id="cmd-bdc-confirme-section" style="${cm.type_fauteuil_neuf||cm.type_fauteuil_demo||cm.type_pieces||cm.commande_type?'':'display:none'}">
             <div style="border-top:0.5px solid var(--border-s);margin-top:8px;padding-top:8px">
-              <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:6px">${t('cmd_bdc_confirme_par')||'BDC confirmé par :'}</div>
+              <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">${t('cmd_bdc_confirme_par')||'BDC confirmé par :'}</div>
               <div style="display:flex;gap:14px;flex-wrap:wrap">
                 ${['mail','vosfactures','fiche de mesure'].map(m=>`
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
                   <input type="radio" name="cmd-confirmation-mode" value="${m}" ${cm.confirmation_mode===m?'checked':''} onchange="toggleDateConfirmation(this)" style="accent-color:var(--accent)">
                   ${m==='mail'?t('cmd_mail')||'✉ Mail':m==='vosfactures'?'📋 VosFactures':`📐 ${t('cmd_fiche_mesure')||'Fiche de mesure'}`}
                 </label>`).join('')}
-                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px;color:var(--text3)">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text3)">
                   <input type="radio" name="cmd-confirmation-mode" value="" ${!cm.confirmation_mode?'checked':''} onchange="toggleDateConfirmation(this)" style="accent-color:var(--text3)">
                   ${t('cmd_non_confirme')||'Non confirmé'}
                 </label>
               </div>
               <div id="cmd-date-confirmation-wrap" style="margin-top:8px;${cm.confirmation_mode?'':'display:none'}">
-                <label class="form-label" style="font-size:13px;color:var(--text2);margin-bottom:2px;display:block">${t('cmd_date_confirmation')||'Date de confirmation'}</label>
+                <label class="form-label" style="font-size:12px;color:var(--text2);margin-bottom:2px;display:block">${t('cmd_date_confirmation')||'Date de confirmation'}</label>
                 <input class="form-input" id="cmd-date-confirmation" type="date" style="max-width:180px" value="${cm.date_confirmation||new Date().toISOString().slice(0,10)}">
               </div>
             </div>
@@ -1602,7 +1602,7 @@ async function modalCommande(id, prefill){
         <div style="margin-bottom:12px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px">
             <span class="form-label" style="margin:0">${t('cmd_lignes_bdc')||'Lignes du bon de commande'}</span>
-            <label style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text2);cursor:pointer">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer">
               <input type="checkbox" id="cmd-ajout-articles" ${id?'checked':''} onchange="var w=document.getElementById('cmd-ajout-btn-wrap');if(w)w.style.display=this.checked?'':'none'"> Uniquement si oubli ou complément d'articles
             </label>
           </div>
@@ -1646,7 +1646,7 @@ async function modalCommande(id, prefill){
         </div>
         <div id="cf-form" style="${cm.client_final_type?'':'display:none'}">
           <div style="background:rgba(255,255,255,.5);border:0.5px solid var(--border);border-radius:10px;padding:14px 16px;margin-top:4px">
-            <div id="cf-titre" style="font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
+            <div id="cf-titre" style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">
               Adresse de livraison — ${cm.client_final_type==='particulier'?'🏠 Particulier':'🏢 Entreprise / Structure'}
             </div>
             <div class="grid-2">
@@ -1709,12 +1709,12 @@ async function modalCommande(id, prefill){
           </div>
           <div class="form-group"><label class="form-label">${TR('N° série')}</label>
             <input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}" placeholder="${t('cmd_num_serie_placeholder')||'Numéro de série'}" oninput="majSerieDemoHint()">
-            <div id="cmd-serie-demo-hint" style="display:none;font-size:13.5px;color:var(--warning);margin-top:4px"><i class="ti ti-info-circle" style="font-size:14px;margin-right:2px"></i>${TR('Fauteuil démo : renseignez le n° de série pour le suivre dans le Parc démo et le rattacher aux prêts / transferts.')}</div>
+            <div id="cmd-serie-demo-hint" style="display:none;font-size:12.5px;color:var(--warning);margin-top:4px"><i class="ti ti-info-circle" style="font-size:13px;margin-right:2px"></i>${TR('Fauteuil démo : renseignez le n° de série pour le suivre dans le Parc démo et le rattacher aux prêts / transferts.')}</div>
           </div>
         </div>
         <div id="cmd-preuve-zone"></div>
         <div style="margin-top:14px;padding-top:14px;border-top:0.5px solid var(--border-s)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--danger);font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--danger);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em">
             <i class="ti ti-arrow-back-up"></i> Retour produit
           </div>
           <div class="grid-2" style="gap:10px">
@@ -1731,7 +1731,7 @@ async function modalCommande(id, prefill){
               <input class="form-input" id="cmd-date-retour" type="date" value="${cm.date_retour||''}">
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end">
-              ${cm.num_retour&&lienSuiviColis(cm.transporteur_retour,cm.num_retour)?`<a href="${lienSuiviColis(cm.transporteur_retour,cm.num_retour)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i> ${TR("Suivre le retour")}</a>`:`<span style="font-size:14px;color:var(--text3)">${t('cmd_renseigne_suivi')||'Renseigne le N° pour suivre'}</span>`}
+              ${cm.num_retour&&lienSuiviColis(cm.transporteur_retour,cm.num_retour)?`<a href="${lienSuiviColis(cm.transporteur_retour,cm.num_retour)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i> ${TR("Suivre le retour")}</a>`:`<span style="font-size:13px;color:var(--text3)">${t('cmd_renseigne_suivi')||'Renseigne le N° pour suivre'}</span>`}
             </div>
           </div>
           <div style="margin-top:8px">
@@ -1754,7 +1754,7 @@ async function modalCommande(id, prefill){
               ${id&&cm.num_facture?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="${TR("Vérifier le paiement dans VosFactures")}"><i class="ti ti-refresh"></i></button>`:''}
             </div>
           </div>
-          ${cm.facture_paiement_statut?'<span class="badge '+(cm.facture_paiement_statut==="payé"?"g":cm.facture_paiement_statut==="impayé"?"urgent":"attente")+'" style="font-size:13px">'+(cm.facture_paiement_statut==="payé"?"✅ Payé":cm.facture_paiement_statut==="impayé"?"⚠️ Impayé":"⏳ En attente")+'</span>':''}
+          ${cm.facture_paiement_statut?'<span class="badge '+(cm.facture_paiement_statut==="payé"?"g":cm.facture_paiement_statut==="impayé"?"urgent":"attente")+'" style="font-size:12px">'+(cm.facture_paiement_statut==="payé"?"✅ Payé":cm.facture_paiement_statut==="impayé"?"⚠️ Impayé":"⏳ En attente")+'</span>':''}
           <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
               <input class="form-input mono" id="cmd-facture-pl" value="${esc(cm.num_facture_pennylane||'')}" placeholder="FAC-2026-..." style="flex:1" oninput="majStatutBadge()">
@@ -1768,20 +1768,20 @@ async function modalCommande(id, prefill){
         <div style="margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:${cm.reliquat?'var(--warning-bg)':'var(--surface)'}">
             <input type="checkbox" id="cmd-reliquat" ${cm.reliquat?'checked':''} onchange="majReliquatSection()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--warning)">
-            <label for="cmd-reliquat" style="font-size:15px;font-weight:600;cursor:pointer;color:var(--warning)">⚠ Reliquat en attente</label>
+            <label for="cmd-reliquat" style="font-size:14px;font-weight:600;cursor:pointer;color:var(--warning)">⚠ Reliquat en attente</label>
           </div>
           <div id="cmd-reliquat-desc" style="${cm.reliquat?'':'display:none'};margin-top:8px">
             <textarea class="form-input" id="cmd-reliquat-description" rows="2" placeholder="${t('cmd_reliquat_placeholder')||'Décrire le reliquat…'}">${esc(cm.reliquat_description||'')}</textarea>
           </div>
         </div>
         <div style="margin-top:4px;padding-top:14px;border-top:0.5px solid var(--border-s)">
-          <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin-bottom:10px"><i class="ti ti-receipt-off" style="font-size:15px"></i> ${t('cmd_avoir_titre')||'AVOIR'}</div>
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin-bottom:10px"><i class="ti ti-receipt-off" style="font-size:14px"></i> ${t('cmd_avoir_titre')||'AVOIR'}</div>
           <div class="grid-2" style="gap:10px;align-items:end">
             <div class="form-group" style="margin:0"><label class="form-label">${t('cmd_avoir_vf_label')||'N° avoir VosFactures'}</label>
               <input class="form-input mono" id="cmd-avoir" value="${esc(cm.num_avoir||'')}" placeholder="AV-2026-...">
             </div>
             <div class="form-group" style="margin:0;display:flex;align-items:flex-end;gap:6px">
-              ${cm.num_avoir?`<button class="btn sm" type="button" onclick="ouvrirAvoirVF('${esc(cm.num_avoir)}')" title="Ouvrir l'avoir dans VosFactures"><i class="ti ti-external-link"></i> ${TR("Ouvrir dans VosFactures")}</button>`:`<span style="font-size:14px;color:var(--text3)">${t('cmd_renseigne_avoir')||'Renseigne le N° pour accéder à l\'avoir'}</span>`}
+              ${cm.num_avoir?`<button class="btn sm" type="button" onclick="ouvrirAvoirVF('${esc(cm.num_avoir)}')" title="Ouvrir l'avoir dans VosFactures"><i class="ti ti-external-link"></i> ${TR("Ouvrir dans VosFactures")}</button>`:`<span style="font-size:13px;color:var(--text3)">${t('cmd_renseigne_avoir')||'Renseigne le N° pour accéder à l\'avoir'}</span>`}
             </div>
           </div>
         </div>
@@ -1884,8 +1884,8 @@ function majZonePreuveLivraison(){
       <div class="form-label" style="margin-bottom:8px">${t('cmd_preuve_livraison')||'Preuve de livraison'}</div>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:0.5px solid var(--border-s);border-radius:var(--radius)">
         <a href="${p.url}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;color:var(--accent);text-decoration:none">
-          <i class="ti ${p.mime==='application/pdf'?'ti-file-type-pdf':'ti-photo'}" style="font-size:22px"></i>
-          <span style="font-size:15px">${t('cmd_voir_preuve')||'Voir le document'}${taille}</span>
+          <i class="ti ${p.mime==='application/pdf'?'ti-file-type-pdf':'ti-photo'}" style="font-size:21px"></i>
+          <span style="font-size:14px">${t('cmd_voir_preuve')||'Voir le document'}${taille}</span>
         </a>
         <button class="btn sm danger" type="button" onmousedown="supprimerPreuveLivraison(${window._CMD_ID})"><i class="ti ti-trash"></i></button>
       </div>
@@ -1924,29 +1924,29 @@ async function supprimerPreuveLivraison(id){
 
 async function chercherFacturesVF(id, numFacture){
   const zone=$('cmd-vf-suggest-list');
-  zone.innerHTML=`<div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${t('msg_chargement')}</div>`;
+  zone.innerHTML=`<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${t('msg_chargement')}</div>`;
   // Utiliser le numéro de facture saisi si disponible
   const numFact = numFacture || gv('cmd-facture') || '';
   const url = `/commandes/${id}/factures-vf-suggestions${numFact?'?num_facture='+encodeURIComponent(numFact):''}`;
   try{
     const r = await API.get(url);
-    if(!r.configured){ zone.innerHTML=`<div style="font-size:14px;color:var(--text2)">${t('cmd_vf_non_configure')||'VosFactures non configuré'}</div>`; return; }
-    if(r.reason){ zone.innerHTML=`<div style="font-size:14px;color:var(--text2)">${esc(r.reason)}</div>`; return; }
-    if(!r.factures||!r.factures.length){ zone.innerHTML=`<div style="font-size:14px;color:var(--text2)">${t('cmd_vf_aucune')||'Aucune facture récente trouvée pour ce distributeur'}</div>`; return; }
+    if(!r.configured){ zone.innerHTML=`<div style="font-size:13px;color:var(--text2)">${t('cmd_vf_non_configure')||'VosFactures non configuré'}</div>`; return; }
+    if(r.reason){ zone.innerHTML=`<div style="font-size:13px;color:var(--text2)">${esc(r.reason)}</div>`; return; }
+    if(!r.factures||!r.factures.length){ zone.innerHTML=`<div style="font-size:13px;color:var(--text2)">${t('cmd_vf_aucune')||'Aucune facture récente trouvée pour ce distributeur'}</div>`; return; }
     zone.innerHTML=`<div class="form-label" style="margin-bottom:8px">${t('cmd_vf_choisir')||'Choisis la facture correspondante (à confirmer toi-même, aucun lien automatique fiable côté VosFactures) :'}</div>
       <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto">
         ${r.factures.map((f,i)=>{
           window._VF_SUGGEST=window._VF_SUGGEST||{}; window._VF_SUGGEST[i]=f;
           return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:0.5px solid var(--border-s);border-radius:var(--radius)">
             <div>
-              <div style="font-size:15px;font-weight:600">${esc(f.numero||('#'+f.id))} — ${fd(f.date)}</div>
-              <div style="font-size:13px;color:var(--text3)">${f.num_serie?('N° série : '+esc(f.num_serie)):(t('cmd_vf_sans_serie')||'Pas de série détectée')}${f.montant_ttc?' · '+parseFloat(f.montant_ttc).toFixed(2)+' €':''}</div>
+              <div style="font-size:14px;font-weight:600">${esc(f.numero||('#'+f.id))} — ${fd(f.date)}</div>
+              <div style="font-size:12px;color:var(--text3)">${f.num_serie?('N° série : '+esc(f.num_serie)):(t('cmd_vf_sans_serie')||'Pas de série détectée')}${f.montant_ttc?' · '+parseFloat(f.montant_ttc).toFixed(2)+' €':''}</div>
             </div>
             <button class="btn sm" type="button" onmousedown="appliquerFactureVF(${i})">${t('cmd_vf_utiliser')||'Utiliser'}</button>
           </div>`;
         }).join('')}
       </div>`;
-  }catch(e){ zone.innerHTML=`<div style="font-size:14px;color:var(--danger)">${esc(e.message)}</div>`; }
+  }catch(e){ zone.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 function appliquerFactureVF(i){
@@ -1960,28 +1960,28 @@ function appliquerFactureVF(i){
 // ── Rattachement d'une facture Pennylane (complément de VosFactures) ─────────
 async function chercherFacturesPennylane(id, numFacture){
   const zone=$('cmd-pl-suggest-list'); if(!zone) return;
-  zone.innerHTML=`<div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${t('msg_chargement')||'Chargement…'}</div>`;
+  zone.innerHTML=`<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${t('msg_chargement')||'Chargement…'}</div>`;
   const numFact = numFacture || gv('cmd-facture-pl') || '';
   const url = `/commandes/${id}/factures-pennylane-suggestions${numFact?'?num_facture='+encodeURIComponent(numFact):''}`;
   try{
     const r = await API.get(url);
-    if(!r.configured){ zone.innerHTML=`<div style="font-size:14px;color:var(--text2)">${TR('Pennylane non configuré')}</div>`; return; }
-    if(r.reason){ zone.innerHTML=`<div style="font-size:14px;color:var(--text2)">${esc(r.reason)}</div>`; return; }
-    if(!r.factures||!r.factures.length){ zone.innerHTML=`<div style="font-size:14px;color:var(--text2)">${TR('Aucune facture Pennylane trouvée pour ce distributeur')}</div>`; return; }
+    if(!r.configured){ zone.innerHTML=`<div style="font-size:13px;color:var(--text2)">${TR('Pennylane non configuré')}</div>`; return; }
+    if(r.reason){ zone.innerHTML=`<div style="font-size:13px;color:var(--text2)">${esc(r.reason)}</div>`; return; }
+    if(!r.factures||!r.factures.length){ zone.innerHTML=`<div style="font-size:13px;color:var(--text2)">${TR('Aucune facture Pennylane trouvée pour ce distributeur')}</div>`; return; }
     zone.innerHTML=`<div class="form-label" style="margin-bottom:8px"><i class="ti ti-brand-stripe" style="color:#6772e5"></i> ${TR('Choisis la facture Pennylane correspondante (rattachement manuel) :')}</div>
       <div style="display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto">
         ${r.factures.map((f,i)=>{
           window._PL_SUGGEST=window._PL_SUGGEST||{}; window._PL_SUGGEST[i]=f;
           return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:0.5px solid var(--border-s);border-radius:var(--radius)">
             <div>
-              <div style="font-size:15px;font-weight:600">${esc(f.numero||('#'+f.id))}${f.date?' — '+fd((''+f.date).slice(0,10)):''}</div>
-              <div style="font-size:13px;color:var(--text3)">${f.distributeur?esc(f.distributeur)+' · ':''}${f.num_serie?('N° série : '+esc(f.num_serie)):(t('cmd_vf_sans_serie')||'Pas de série détectée')}${f.montant_ttc!=null?' · '+parseFloat(f.montant_ttc).toFixed(2)+' €':''}</div>
+              <div style="font-size:14px;font-weight:600">${esc(f.numero||('#'+f.id))}${f.date?' — '+fd((''+f.date).slice(0,10)):''}</div>
+              <div style="font-size:12px;color:var(--text3)">${f.distributeur?esc(f.distributeur)+' · ':''}${f.num_serie?('N° série : '+esc(f.num_serie)):(t('cmd_vf_sans_serie')||'Pas de série détectée')}${f.montant_ttc!=null?' · '+parseFloat(f.montant_ttc).toFixed(2)+' €':''}</div>
             </div>
             <button class="btn sm" type="button" onmousedown="appliquerFacturePennylane(${i})">${t('cmd_vf_utiliser')||'Utiliser'}</button>
           </div>`;
         }).join('')}
       </div>`;
-  }catch(e){ zone.innerHTML=`<div style="font-size:14px;color:var(--danger)">${esc(e.message)}</div>`; }
+  }catch(e){ zone.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 function appliquerFacturePennylane(i){
@@ -2050,10 +2050,10 @@ let TMP_RETOUR_LIGNES = [];
 function renderRetourLignes(){
   const el=$('cmd-retour-lignes-list'); if(!el) return;
   if(!TMP_RETOUR_LIGNES.length){
-    el.innerHTML=`<div style="font-size:14px;color:var(--text3);padding:6px 0">${t('cmd_retour_articles_empty')||'Aucun article retourné — cliquez "+ Ajouter"'}</div>`;
+    el.innerHTML=`<div style="font-size:13px;color:var(--text3);padding:6px 0">${t('cmd_retour_articles_empty')||'Aucun article retourné — cliquez "+ Ajouter"'}</div>`;
     return;
   }
-  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:14px">
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="background:var(--bg)">
       <th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600">${t('col_designation_court')||'Désignation'}</th>
       <th style="padding:4px 8px;text-align:left;color:var(--text2);font-weight:600;width:120px">${t('col_ref_short')||'Référence'}</th>
@@ -2061,9 +2061,9 @@ function renderRetourLignes(){
       <th style="width:28px"></th>
     </tr></thead>
     <tbody>${TMP_RETOUR_LIGNES.map((l,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
-      <td style="padding:3px 6px"><input class="form-input" style="font-size:14px;padding:3px 7px" value="${esc(l.designation)}" oninput="TMP_RETOUR_LIGNES[${i}].designation=this.value" placeholder="${TR("Désignation *")}"></td>
-      <td style="padding:3px 6px"><input class="form-input mono" style="font-size:13px;padding:3px 7px" value="${esc(l.reference||'')}" oninput="TMP_RETOUR_LIGNES[${i}].reference=this.value" placeholder="${TR("Réf.")}"></td>
-      <td style="padding:3px 6px"><input class="form-input" type="number" min="1" style="font-size:14px;padding:3px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_RETOUR_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
+      <td style="padding:3px 6px"><input class="form-input" style="font-size:13px;padding:3px 7px" value="${esc(l.designation)}" oninput="TMP_RETOUR_LIGNES[${i}].designation=this.value" placeholder="${TR("Désignation *")}"></td>
+      <td style="padding:3px 6px"><input class="form-input mono" style="font-size:12px;padding:3px 7px" value="${esc(l.reference||'')}" oninput="TMP_RETOUR_LIGNES[${i}].reference=this.value" placeholder="${TR("Réf.")}"></td>
+      <td style="padding:3px 6px"><input class="form-input" type="number" min="1" style="font-size:13px;padding:3px 7px;text-align:center" value="${l.quantite||1}" oninput="TMP_RETOUR_LIGNES[${i}].quantite=parseInt(this.value)||1"></td>
       <td style="padding:3px 2px"><button class="btn sm danger" onclick="TMP_RETOUR_LIGNES.splice(${i},1);renderRetourLignes()" style="padding:3px 5px"><i class="ti ti-x"></i></button></td>
     </tr>`).join('')}</tbody>
   </table>`;
@@ -2138,7 +2138,7 @@ function saveCmdCols(){
 
 async function voirSuiviTracking(numero){
   const el = document.getElementById('tracking-widget');
-  if(el) el.innerHTML = '<span style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> '+TR("Chargement du suivi…")+'</span>';
+  if(el) el.innerHTML = '<span style="font-size:12px;color:var(--text2)"><i class="ti ti-loader-2"></i> '+TR("Chargement du suivi…")+'</span>';
   try{
     const r = await API.tracking(numero);
     if(!el) return;
@@ -2146,16 +2146,16 @@ async function voirSuiviTracking(numero){
       const lien = r.lien ? `<a href="${r.lien}" target="_blank" rel="noopener" class="btn sm" style="margin-top:4px">
         <i class="ti ti-external-link"></i> Suivre sur ${esc(r.transporteur||'le site')}
       </a>` : '';
-      el.innerHTML = `<div style="font-size:13px;color:var(--text3)">${r.message||'Suivi non disponible'} ${lien}</div>`;
+      el.innerHTML = `<div style="font-size:12px;color:var(--text3)">${r.message||'Suivi non disponible'} ${lien}</div>`;
       return;
     }
     const events = r.events||[];
     el.innerHTML = `<div style="background:rgba(255,255,255,.55);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:4px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px">
         <span class="badge ${r.statut==='Livré'?'g':r.statut==='Problème'?'urgent':'attente'}">${r.statut||'En cours'}</span>
         <span style="color:var(--text2)">${esc(r.transporteur||'')}</span>
       </div>
-      <div style="font-size:13px;max-height:160px;overflow-y:auto">
+      <div style="font-size:12px;max-height:160px;overflow-y:auto">
         ${events.slice(0,5).map(e=>`<div style="padding:3px 0;border-bottom:0.5px solid var(--border);display:flex;gap:8px">
           <span style="color:var(--text3);white-space:nowrap">${e.date?e.date.slice(0,10):''}</span>
           <span>${esc(e.label||'')}</span>
@@ -2164,7 +2164,7 @@ async function voirSuiviTracking(numero){
       </div>
     </div>`;
   }catch(e){
-    if(el) el.innerHTML = `<span style="font-size:13px;color:var(--danger)">${esc(e.message)}</span>`;
+    if(el) el.innerHTML = `<span style="font-size:12px;color:var(--danger)">${esc(e.message)}</span>`;
   }
 }
 
@@ -2202,7 +2202,7 @@ function renderTopbarPays(){
   const actifs = PAYS_LIST.filter(p => ['','France','Sweden'].includes(p.code));
   el.innerHTML = actifs.map(p=>`
     <button onclick="setPaysFiltre('${p.code}')" title="${p.label}" style="
-      padding:3px 8px;border:none;border-radius:12px;cursor:pointer;font-size:14px;
+      padding:3px 8px;border:none;border-radius:12px;cursor:pointer;font-size:13px;
       background:${_PAYS_FILTRE===p.code?'var(--accent)':'var(--surface)'};
       color:${_PAYS_FILTRE===p.code?'#fff':'var(--text2)'};
       border:0.5px solid ${_PAYS_FILTRE===p.code?'var(--accent)':'var(--border-s)'};
@@ -2232,7 +2232,7 @@ function clientFinalBadge(cm) {
   const icon = t==='particulier' ? '🏠' : t==='entreprise' ? '🏢' : '👤';
   const bg   = t==='particulier' ? 'rgba(124,58,237,.12)' : t==='entreprise' ? 'rgba(16,185,129,.12)' : 'rgba(46,124,246,.12)';
   const col  = t==='particulier' ? '#7c3aed' : t==='entreprise' ? '#059669' : '#2e7cf6';
-  return '<span title="'+esc(cm.client_final)+'" style="display:inline-flex;align-items:center;gap:3px;background:'+bg+';color:'+col+';border-radius:99px;padding:1px 6px;font-size:12px;font-weight:600">'+icon+' '+esc(cm.client_final)+'</span>';
+  return '<span title="'+esc(cm.client_final)+'" style="display:inline-flex;align-items:center;gap:3px;background:'+bg+';color:'+col+';border-radius:99px;padding:1px 6px;font-size:11px;font-weight:600">'+icon+' '+esc(cm.client_final)+'</span>';
 }
 
 const STATUTS_LISTE = ['Auto','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Avoir','Problème','Annulé'];
@@ -2245,10 +2245,10 @@ function toggleStatutMenu(e, id, statutActuel){
   menu.style.cssText = `position:fixed;z-index:9999;background:#fff;border:0.5px solid rgba(100,150,200,.30);border-radius:12px;box-shadow:0 8px 32px rgba(80,130,200,.20),0 1px 0 rgba(255,255,255,.9) inset;padding:4px 0;min-width:160px`;
   menu.innerHTML = STATUTS_LISTE.map(s => `
     <div onclick="changerStatutCommande(${id},'${s}');this.closest('.statut-menu').remove()"
-      style="padding:7px 14px;cursor:pointer;font-size:15px;${s===statutActuel?'font-weight:700;color:var(--accent)':''}
+      style="padding:7px 14px;cursor:pointer;font-size:14px;${s===statutActuel?'font-weight:700;color:var(--accent)':''}
       display:flex;align-items:center;gap:8px" class="statut-option">
-      ${s===statutActuel?'<i class="ti ti-check" style="font-size:14px"></i>':'<span style="width:12px"></span>'}
-      <span class="badge ${s==='Auto'?'ouvert':cmdStatutClass(s)}" style="font-size:13px">${tStatut(s)||s}</span>
+      ${s===statutActuel?'<i class="ti ti-check" style="font-size:13px"></i>':'<span style="width:12px"></span>'}
+      <span class="badge ${s==='Auto'?'ouvert':cmdStatutClass(s)}" style="font-size:12px">${tStatut(s)||s}</span>
     </div>`).join('');
   document.body.appendChild(menu);
   const rect = e.target.getBoundingClientRect();
@@ -2351,7 +2351,7 @@ async function renderCatalogue(ttl,c,a){
     <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')}</button>
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>
     ${isAdmin()?'<button class="btn" onclick="importerVFIds()" title="Lier IDs VosFactures"><i class="ti ti-plug-connected"></i> Lier VF</button>':''}
-    <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;margin-left:8px;color:var(--text2)" title="Afficher le prix d'achat fournisseur (Eloflex AB)">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-left:8px;color:var(--text2)" title="Afficher le prix d'achat fournisseur (Eloflex AB)">
       <input type="checkbox" id="cat-show-price" ${localStorage.getItem('sav_show_prix_achat')==='1'?'checked':''} onchange="localStorage.setItem('sav_show_prix_achat',this.checked?'1':'0');document.getElementById('cat-table')?.classList.toggle('show-prix',this.checked)">
       Prix achat 🇸🇪
     </label>
@@ -2360,7 +2360,7 @@ async function renderCatalogue(ttl,c,a){
     STATE.q = e.target.value;
     clearTimeout(window._CAT); window._CAT = setTimeout(() => chargerListeCatalogue(), 250);
   });
-  c.innerHTML=`<div id="catalogue-list-body"><div style="color:var(--text2);font-size:15px;padding:20px 0">${t('msg_chargement')}</div></div>`;
+  c.innerHTML=`<div id="catalogue-list-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')}</div></div>`;
   chargerListeCatalogue();
 }
 
@@ -2379,8 +2379,8 @@ async function chargerListeCatalogue(){
       <td class="mono">${esc(p.ref_fournisseur||'')}</td>
       <td class="col-prix" style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>
       <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
-      <td style="font-size:13px;color:var(--text3)">${p.stock_alerte}</td>
-      <td style="text-align:center">${p.vf_product_id?`<a href="https://eloflex.vosfactures.fr/products/${p.vf_product_id}" target="_blank" onclick="event.stopPropagation()" title="${TR("Voir sur VosFactures")}" style="color:var(--accent);font-size:15px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
+      <td style="font-size:12px;color:var(--text3)">${p.stock_alerte}</td>
+      <td style="text-align:center">${p.vf_product_id?`<a href="https://eloflex.vosfactures.fr/products/${p.vf_product_id}" target="_blank" onclick="event.stopPropagation()" title="${TR("Voir sur VosFactures")}" style="color:var(--accent);font-size:14px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
@@ -2406,7 +2406,7 @@ async function renderRapports(ttl,c,a){
       <div class="card">
         <div class="section-title"><i class="ti ti-file-type-pdf"></i>Export PDF</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="font-size:14px;color:var(--text2)">${TR('Les PDF se génèrent depuis chaque fiche client, fauteuil ou intervention via le bouton PDF correspondant.')}</div>
+          <div style="font-size:13px;color:var(--text2)">${TR('Les PDF se génèrent depuis chaque fiche client, fauteuil ou intervention via le bouton PDF correspondant.')}</div>
           <div class="divider"></div>
           <div class="section-title"><i class="ti ti-filter"></i>Filtres interventions</div>
           <div class="form-group"><label class="form-label">${TR('Statut')}</label>
@@ -2446,10 +2446,10 @@ async function renderAlertes(ttl,c,a){
       <div class="table-wrap"><table class="t">
         <thead><tr><th>${TR('Distributeur')}</th><th>${TR('Modèle / Série')}</th><th>${TR('Livraison')}</th><th>Rappel</th><th>${TR('Retour / Prolonger / Facturer')}</th></tr></thead>
         <tbody>${demos.map(d=>`<tr>
-          <td>${esc(d.client_nom||d.distributeur_nom)}${d.client_ville?` <span style="color:var(--text3);font-size:13px">${esc(d.client_ville)}</span>`:''}</td>
-          <td>${esc(d.modele||'')} ${d.num_serie?`<span class="mono" style="font-size:13px;color:var(--text3)">${esc(d.num_serie)}</span>`:''}</td>
-          <td style="font-size:14px">${esc(d.date_livraison||'—')}</td>
-          <td><span class="badge ${d.du?'urgent':'hg'}" style="font-size:13px">${esc(d.demo_rappel_date)}${d.du?' ⚠':''}</span></td>
+          <td>${esc(d.client_nom||d.distributeur_nom)}${d.client_ville?` <span style="color:var(--text3);font-size:12px">${esc(d.client_ville)}</span>`:''}</td>
+          <td>${esc(d.modele||'')} ${d.num_serie?`<span class="mono" style="font-size:12px;color:var(--text3)">${esc(d.num_serie)}</span>`:''}</td>
+          <td style="font-size:13px">${esc(d.date_livraison||'—')}</td>
+          <td><span class="badge ${d.du?'urgent':'hg'}" style="font-size:12px">${esc(d.demo_rappel_date)}${d.du?' ⚠':''}</span></td>
           <td style="white-space:nowrap">
             <button class="btn sm" onclick="demoCloturer(${d.id},'retour')" title="${TR("Retour organisé")}"><i class="ti ti-truck-return"></i></button>
             <button class="btn sm" onclick="demoProlonger(${d.id},'${d.demo_rappel_date}')" title="Prolonger le rappel"><i class="ti ti-calendar-plus"></i></button>
@@ -2465,8 +2465,8 @@ async function renderAlertes(ttl,c,a){
           <i class="ti ${icons[al.type]||'ti-bell'}"></i>
         </div>
         <div style="flex:1">
-          <div style="font-size:15px">${esc(al.message)}</div>
-          <div style="font-size:13px;color:var(--text3);margin-top:2px">${al.created_at?.slice(0,16).replace('T',' ')}</div>
+          <div style="font-size:14px">${esc(al.message)}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">${al.created_at?.slice(0,16).replace('T',' ')}</div>
         </div>
         <button class="btn sm" onclick="API.marquerAlerteLue(${al.id}).then(()=>{refreshBadges();render();})"><i class="ti ti-x"></i></button>
       </div>`).join('')}</div>`);
@@ -2511,22 +2511,22 @@ async function renderParametres(ttl,c,a){
   c.innerHTML=`
     <div class="param-section">
       <h3><i class="ti ti-database-export"></i>${TR('Sauvegarde de la base')}</h3>
-      <div style="font-size:14px;color:var(--text2);margin-bottom:12px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
         L'ensemble des données (commandes, clients, interventions, notes, points de carte…) dans un fichier unique.
         Une sauvegarde compressée part automatiquement vers info@eloflex.fr chaque lundi.
         Les mots de passe n'y figurent pas.
       </div>
-      <div id="sauvegarde-resume" style="font-size:14px;color:var(--text3);margin-bottom:12px">${TR("Chargement…")}</div>
+      <div id="sauvegarde-resume" style="font-size:13px;color:var(--text3);margin-bottom:12px">${TR("Chargement…")}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <a class="btn primary" href="/api/sauvegarde/export" download><i class="ti ti-download"></i>${TR('Télécharger la sauvegarde')}</a>
         <button class="btn" onclick="envoyerSauvegardeMaintenant(this)"><i class="ti ti-mail-forward"></i>${TR('Envoyer par courriel')}</button>
       </div>
       <div style="margin-top:16px;padding-top:14px;border-top:0.5px solid var(--border)">
-        <div style="font-size:15px;font-weight:600;margin-bottom:4px"><i class="ti ti-database-import"></i> ${TR('Restaurer une sauvegarde')}</div>
-        <div style="font-size:14px;color:var(--danger);margin-bottom:8px">${TR('⚠ Remplace TOUTES les données actuelles par celles du fichier. À utiliser sur une base vide ou pour restaurer après incident. Accepte les fichiers .json et .json.gz.')}</div>
-        <input type="file" id="restore-file" accept=".json,.gz,application/json,application/gzip" style="font-size:14px">
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px"><i class="ti ti-database-import"></i> ${TR('Restaurer une sauvegarde')}</div>
+        <div style="font-size:13px;color:var(--danger);margin-bottom:8px">${TR('⚠ Remplace TOUTES les données actuelles par celles du fichier. À utiliser sur une base vide ou pour restaurer après incident. Accepte les fichiers .json et .json.gz.')}</div>
+        <input type="file" id="restore-file" accept=".json,.gz,application/json,application/gzip" style="font-size:13px">
         <button class="btn danger" onclick="restaurerSauvegarde(this)" style="margin-left:8px"><i class="ti ti-upload"></i>${TR('Restaurer')}</button>
-        <div id="restore-result" style="font-size:14px;margin-top:8px"></div>
+        <div id="restore-result" style="font-size:13px;margin-top:8px"></div>
       </div>
     </div>
     <div class="param-section">
@@ -2540,7 +2540,7 @@ async function renderParametres(ttl,c,a){
     </div>
     <div class="param-section">
       <h3><i class="ti ti-mail"></i>${t('param_email_title')}</h3>
-      <div style="font-size:14px;color:var(--text2);margin-bottom:10px">${t('param_email_hint')}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${t('param_email_hint')}</div>
       <div class="form-group"><label class="form-label">${t('param_email_active')}</label>
         <select class="form-input" id="p-email-notif">
           <option value="0" ${p.email_notifications!=='1'?'selected':''}>${t('param_email_off')}</option>
@@ -2559,7 +2559,7 @@ async function renderParametres(ttl,c,a){
     </div>
     <div class="param-section">
       <h3><i class="ti ti-mail"></i> ${TR('Email relances devis (compte séparé)')}</h3>
-      <div style="font-size:14px;color:var(--text2);margin-bottom:10px">${TR('Utilisé pour les relances devis et BDC commercial. Laissez vide pour utiliser le même compte que SAV.')}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Utilisé pour les relances devis et BDC commercial. Laissez vide pour utiliser le même compte que SAV.')}</div>
       <div class="grid-2">
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Expéditeur relances')}</label><input class="form-input" id="p-email-from-relance" placeholder="info@eloflex.fr" value="${esc(p.email_from_relance||p.email_from||'')}"></div>
         <div class="form-group"><label class="form-label">Utilisateur SMTP relances</label><input class="form-input" id="p-smtp-user-relance" placeholder="${TR("Même que SAV si vide")}" value="${esc(p.email_smtp_user_relance||'')}"></div>
@@ -2576,7 +2576,7 @@ async function renderParametres(ttl,c,a){
       <div class="form-group"><label class="form-label">${t('param_portail')}</label>
         <select class="form-input" id="p-portail"><option value="1" ${p.portail_actif==='1'?'selected':''}>${t('param_portail_on')}</option><option value="0" ${p.portail_actif!=='1'?'selected':''}>${t('param_portail_off')}</option></select>
       </div>
-      <div style="font-size:14px;color:var(--text2)">${t('param_portail_hint')}</div>
+      <div style="font-size:13px;color:var(--text2)">${t('param_portail_hint')}</div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-moon"></i>${t('param_apparence')}</h3>
@@ -2595,7 +2595,7 @@ async function renderParametres(ttl,c,a){
     </div>
     <div class="param-section">
       <h3><i class="ti ti-file-import"></i>${t('param_import_title')}</h3>
-      <div style="font-size:14px;color:var(--text2);margin-bottom:8px">${t('param_import_hint')}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:8px">${t('param_import_hint')}</div>
       <label class="btn" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px">
         <i class="ti ti-file-import"></i>${t('param_import_choose')}
         <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importerExcel(this.files[0])">
@@ -2605,13 +2605,13 @@ async function renderParametres(ttl,c,a){
     <div class="param-section">
       <h3><i class="ti ti-refresh"></i>${t('param_vf')}</h3>
       <div class="form-group"><label class="form-label">${t('param_vf_status')}</label>
-        <div id="vf-status-detail" style="font-size:14px;color:var(--text2)">${t('param_vf_checking')}</div>
+        <div id="vf-status-detail" style="font-size:13px;color:var(--text2)">${t('param_vf_checking')}</div>
       </div>
       <button class="btn" onclick="syncVosFactures()"><i class="ti ti-refresh"></i>${t('param_vf_sync')}</button>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-link"></i> Rattrapage VosFactures</h3>
-      <p style="font-size:14px;color:var(--text2);margin-bottom:10px">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
         Parcourt toutes les commandes ayant un n° de BDC ou de facture, retrouve le document VosFactures correspondant
         (y compris les anciens, ex. 2021), puis enregistre le <b>lien</b>, le <b>${TR("statut de paiement")}</b> et les
         <b>infos manquantes</b> (série, modèle, date). Écritures sûres : rien n'est écrasé, seuls les champs vides sont
@@ -2621,8 +2621,8 @@ async function renderParametres(ttl,c,a){
       <div id="rattrapage-vf-result" style="margin-top:10px"></div>
     </div>
     <div class="param-section">
-      <h3><i class="ti ti-brand-stripe"></i> Pennylane <span id="pl-status-badge" style="font-size:13px;margin-left:8px"></span></h3>
-      <p style="font-size:14px;color:var(--text2);margin-bottom:10px">
+      <h3><i class="ti ti-brand-stripe"></i> Pennylane <span id="pl-status-badge" style="font-size:12px;margin-left:8px"></span></h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
         Intégration Pennylane V2 — parallèle à VosFactures.<br>
         Configure la variable d'environnement <code>PENNYLANE_API_KEY</code> dans Render (Environment) avec ton token API Pennylane.
       </p>
@@ -2634,13 +2634,13 @@ async function renderParametres(ttl,c,a){
     </div>
     <div class="param-section">
       <h3><i class="ti ti-copy"></i> Doublons de commandes</h3>
-      <p style="font-size:14px;color:var(--text2);margin-bottom:10px">${TR('Commandes ayant le même numéro de BDC ou devis pour le même distributeur.')}</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Commandes ayant le même numéro de BDC ou devis pour le même distributeur.')}</p>
       <button class="btn danger" onclick="supprimerTousDoublons()" id="btn-suppr-doublons"><i class="ti ti-trash"></i> ${TR('Supprimer tous les doublons')}</button>
-      <div id="param-doublons-list" style="margin-top:10px"><div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
+      <div id="param-doublons-list" style="margin-top:10px"><div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-clock-exclamation"></i> ${TR('Commandes bloquées')}</h3>
-      <p style="font-size:14px;color:var(--text2);margin-bottom:10px">${TR("Commandes \"En préparation\" sans numéro de suivi valide depuis plus de :")}</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR("Commandes \"En préparation\" sans numéro de suivi valide depuis plus de :")}</p>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
         <select class="form-input" id="blocage-seuil" style="width:auto" onchange="chargerAlertesBlocage()">
           <option value="3">3 jours</option>
@@ -2650,24 +2650,24 @@ async function renderParametres(ttl,c,a){
         </select>
         <button class="btn sm" onclick="chargerAlertesBlocage()"><i class="ti ti-refresh"></i> Actualiser</button>
       </div>
-      <div id="alertes-blocage-list"><div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
+      <div id="alertes-blocage-list"><div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-receipt-2"></i> ${TR("Migration facturation historique")}</h3>
-      <p style="font-size:14px;color:var(--text2);margin-bottom:10px">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
         Passe toutes les commandes antérieures à juin 2026 (hors Annulé et déjà Facturé) au statut <b>${TR('Facturé')}</b>.<br>
-        <span style="color:var(--danger);font-size:13px">${TR("⚠ Action irréversible — à n'exécuter qu'une seule fois.")}</span>
+        <span style="color:var(--danger);font-size:12px">${TR("⚠ Action irréversible — à n'exécuter qu'une seule fois.")}</span>
       </p>
       <button class="btn" onclick="lancerMigrationFacture()" id="btn-migration-facture"><i class="ti ti-check"></i> ${TR("Passer l'historique en Facturé")}</button>
       <div id="migration-facture-result" style="margin-top:8px"></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-database-export"></i> Nettoyage N° suivi</h3>
-      <p style="font-size:14px;color:var(--text2);margin-bottom:10px">${TR("Migre les valeurs texte (\"RETOUR BRICE\", \"SUÈDE\", \"ATTENTE VALIDATION\"…) stockées dans le champ N° suivi vers les champs appropriés : retours → N° retour, autres → Informations.")}</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR("Migre les valeurs texte (\"RETOUR BRICE\", \"SUÈDE\", \"ATTENTE VALIDATION\"…) stockées dans le champ N° suivi vers les champs appropriés : retours → N° retour, autres → Informations.")}</p>
       <button class="btn" onclick="lancerMigrationSuivi()"><i class="ti ti-arrow-merge"></i> Lancer la migration</button>
       <div id="migration-suivi-result" style="margin-top:8px"></div>
     </div>
-      <p style="font-size:14px;color:var(--text2);margin-bottom:12px">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
         Importe toutes les commandes de ton fichier Excel (onglets 2019, 2020… 2026) sans avoir besoin du terminal.
         L'import est idempotent : relancer ne crée pas de doublons.
       </p>
@@ -2685,7 +2685,7 @@ async function renderParametres(ttl,c,a){
   usersSection.id = 'section-utilisateurs';
   usersSection.innerHTML = `
     <h3><i class="ti ti-users-group"></i> ${TR('Utilisateurs & accès')}</h3>
-    <div id="users-list-wrap" style="margin-bottom:14px"><div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
+    <div id="users-list-wrap" style="margin-bottom:14px"><div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div></div>
     <button class="btn primary" onclick="modalNouvelUtilisateur()"><i class="ti ti-user-plus"></i> ${TR('Ajouter un utilisateur')}</button>`;
   c.appendChild(usersSection);
   chargerListeUtilisateurs();
@@ -2696,19 +2696,19 @@ async function renderParametres(ttl,c,a){
 
 async function chargerListeUtilisateurs(){
   const wrap = $('users-list-wrap'); if(!wrap) return;
-  wrap.innerHTML = `<div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div>`;
+  wrap.innerHTML = `<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div>`;
   try{
     const users = await API.users();
-    if(!users.length){ wrap.innerHTML=`<div style="font-size:14px;color:var(--text2)">${TR('Aucun utilisateur.')}</div>`; return; }
+    if(!users.length){ wrap.innerHTML=`<div style="font-size:13px;color:var(--text2)">${TR('Aucun utilisateur.')}</div>`; return; }
     wrap.innerHTML=`<div class="table-wrap"><table class="t">
       <thead><tr><th>Nom</th><th>E-mail</th><th>Pays</th><th>Type</th><th>${TR('Statut')}</th><th>${TR('Dernière connexion')}</th><th></th></tr></thead>
       <tbody>${users.map(u=>`<tr>
         <td style="font-weight:600">${esc(u.nom)}</td>
-        <td style="font-size:14px">${esc(u.email)}</td>
-        <td><span style="font-size:14px">${u.pays||'<span style="color:var(--text3)">🌍 Tous</span>'}</span></td>
+        <td style="font-size:13px">${esc(u.email)}</td>
+        <td><span style="font-size:13px">${u.pays||'<span style="color:var(--text3)">🌍 Tous</span>'}</span></td>
         <td><span class="badge ${u.role==='admin'?'urgent':'attente'}">${u.role==='admin'?'Administrateur':'Utilisateur'}</span></td>
         <td><span class="badge ${u.actif?'g':'hg'}">${u.actif?'Actif':'Désactivé'}</span></td>
-        <td style="font-size:13px;color:var(--text2)">${u.last_login?fd(u.last_login.slice(0,10)):'—'}</td>
+        <td style="font-size:12px;color:var(--text2)">${u.last_login?fd(u.last_login.slice(0,10)):'—'}</td>
         <td style="display:flex;gap:6px;justify-content:flex-end">
           <button class="btn sm" onclick="modalEditerUtilisateur(${u.id})" title="${TR("Modifier")}"><i class="ti ti-edit"></i></button>
           <button class="btn sm" onclick="modalResetPassword(${u.id},'${esc(u.nom)}')" title="Changer le mot de passe"><i class="ti ti-key"></i></button>
@@ -2716,12 +2716,12 @@ async function chargerListeUtilisateurs(){
         </td>
       </tr>`).join('')}</tbody>
     </table></div>`;
-  }catch(e){ wrap.innerHTML=`<div style="font-size:14px;color:var(--danger)">${esc(e.message)}</div>`; }
+  }catch(e){ wrap.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 function _permGrid(perms={}){
   return `<div style="margin-top:4px;border:0.5px solid var(--border-s);border-radius:var(--radius);overflow:hidden">
-    <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:var(--bg)">
         <th style="padding:6px 10px;text-align:left;font-weight:600;color:var(--text2)">Module</th>
         <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--success);width:100px">${TR('Accès complet')}</th>
@@ -2760,7 +2760,7 @@ function modalNouvelUtilisateur(){
       <div class="grid-2">
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Prénom et nom *')}</label><input class="form-input" id="nu-nom" placeholder="${TR("Frédéric Dijd")}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse e-mail *</label><input class="form-input" id="nu-email" type="email" placeholder="frederic@eloflex.fr"></div>
-        <div class="form-group"><label class="form-label">Mot de passe * <span style="font-size:12px;color:var(--text2)">(8 car. min.)</span></label><input class="form-input" id="nu-mdp" type="password" placeholder="••••••••"></div>
+        <div class="form-group"><label class="form-label">Mot de passe * <span style="font-size:11px;color:var(--text2)">(8 car. min.)</span></label><input class="form-input" id="nu-mdp" type="password" placeholder="••••••••"></div>
         <div class="form-group"><label class="form-label">Langue de l'interface</label>
           <select class="form-input" id="nu-langue">
             <option value="fr">${TR('🇫🇷 Français')}</option>
@@ -2780,15 +2780,15 @@ function modalNouvelUtilisateur(){
             <option value="Switzerland">🇨🇭 Suisse</option>
             <option value="Netherlands">🇳🇱 Nederland</option>
           </select>
-          <div style="font-size:13px;color:var(--text2);margin-top:4px">${TR('Laisse vide pour un accès admin à tous les pays.')}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">${TR('Laisse vide pour un accès admin à tous les pays.')}</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius)">
         <input type="checkbox" id="nu-admin" onchange="_onAdminToggle()" style="width:16px;height:16px;cursor:pointer">
-        <label for="nu-admin" style="font-size:15px;font-weight:600;color:var(--danger);cursor:pointer">${TR('Administrateur — accès complet à tout (y compris Paramètres et exports)')}</label>
+        <label for="nu-admin" style="font-size:14px;font-weight:600;color:var(--danger);cursor:pointer">${TR('Administrateur — accès complet à tout (y compris Paramètres et exports)')}</label>
       </div>
       <div id="perm-grid">
-        <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:6px">${TR("Permissions par module (cocher une case par ligne, ou aucune pour bloquer l'accès) :")}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:6px">${TR("Permissions par module (cocher une case par ligne, ou aucune pour bloquer l'accès) :")}</div>
         ${_permGrid()}
       </div>
     </div>
@@ -2849,10 +2849,10 @@ async function modalEditerUtilisateur(id){
       </div>
       <div style="display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius)">
         <input type="checkbox" id="eu-admin" onchange="_onAdminToggle()" ${user.role==='admin'?'checked':''} style="width:16px;height:16px;cursor:pointer">
-        <label for="eu-admin" style="font-size:15px;font-weight:600;color:var(--danger);cursor:pointer">${TR('Administrateur — accès complet à tout')}</label>
+        <label for="eu-admin" style="font-size:14px;font-weight:600;color:var(--danger);cursor:pointer">${TR('Administrateur — accès complet à tout')}</label>
       </div>
       <div id="perm-grid" ${user.role==='admin'?'style="display:none"':''}>
-        <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:6px">Permissions par module :</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:6px">Permissions par module :</div>
         ${_permGrid(perms)}
       </div>
     </div>
@@ -2877,8 +2877,8 @@ function modalResetPassword(id, nom){
   showModal(`
     <div class="modal-header"><i class="ti ti-key" style="color:var(--accent)"></i><h2>${TR('Nouveau mot de passe')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <div style="margin-bottom:12px;font-size:15px">${TR('Définir un nouveau mot de passe pour')} <b>${esc(nom)}</b>.</div>
-      <div class="form-group"><label class="form-label">${TR('Nouveau mot de passe')} <span style="font-size:12px;color:var(--text2)">(8 car. min.)</span></label>
+      <div style="margin-bottom:12px;font-size:14px">${TR('Définir un nouveau mot de passe pour')} <b>${esc(nom)}</b>.</div>
+      <div class="form-group"><label class="form-label">${TR('Nouveau mot de passe')} <span style="font-size:11px;color:var(--text2)">(8 car. min.)</span></label>
         <input class="form-input" id="rp-mdp" type="password" placeholder="••••••••"></div>
     </div>
     <div class="modal-footer">
@@ -3010,23 +3010,23 @@ async function renderCommandesKanban(){
   wrap.innerHTML=`<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px">
     ${COLS.map(col=>`
       <div style="min-width:220px;flex:0 0 220px">
-        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:8px;display:flex;justify-content:space-between">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:8px;display:flex;justify-content:space-between">
           <span>${tStatut(col)}</span>
-          <span class="badge ${cmdStatutClass(col)}" style="font-size:12px">${grouped[col].length}</span>
+          <span class="badge ${cmdStatutClass(col)}" style="font-size:11px">${grouped[col].length}</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px">
           ${grouped[col].map(cm=>`
-            <div onclick="modalCommande(${cm.id})" style="padding:10px 12px;background:var(--surface);border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;font-size:14px">
+            <div onclick="modalCommande(${cm.id})" style="padding:10px 12px;background:var(--surface);border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;font-size:13px">
               <div style="font-weight:700;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.distributeur_nom)}</div>
               <div style="color:var(--text2);display:flex;justify-content:space-between">
                 <span class="mono">${esc(cm.bdc||'—')}</span>
                 <span>${fd(cm.date_commande)}</span>
               </div>
-              ${cm.modele?`<div style="color:var(--text3);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px">${esc(cm.modele)}</div>`:''}
-              ${cm.reliquat?`<span class="badge hg" style="font-size:12px;margin-top:4px;display:inline-block">⏰ Reliquat</span>`:''}
-              ${cm.modele_demo?`<span class="badge hg" style="font-size:12px;margin-top:4px;display:inline-block">${TR('🔄 Démo')}</span>`:''}
+              ${cm.modele?`<div style="color:var(--text3);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px">${esc(cm.modele)}</div>`:''}
+              ${cm.reliquat?`<span class="badge hg" style="font-size:11px;margin-top:4px;display:inline-block">⏰ Reliquat</span>`:''}
+              ${cm.modele_demo?`<span class="badge hg" style="font-size:11px;margin-top:4px;display:inline-block">${TR('🔄 Démo')}</span>`:''}
             </div>`).join('')}
-          ${grouped[col].length===0?`<div style="font-size:14px;color:var(--text3);text-align:center;padding:12px 0">—</div>`:''}
+          ${grouped[col].length===0?`<div style="font-size:13px;color:var(--text3);text-align:center;padding:12px 0">—</div>`:''}
         </div>
       </div>`).join('')}
   </div>`;
@@ -3049,13 +3049,13 @@ async function chargerDoublonsBanner(){
     if(!rows.length){ banner.innerHTML=''; return; }
     banner.innerHTML=`
       <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:var(--warning-bg);border:0.5px solid var(--warning);border-radius:var(--radius);margin-bottom:14px">
-        <i class="ti ti-alert-triangle" style="color:var(--warning);font-size:20px;flex-shrink:0;margin-top:1px"></i>
+        <i class="ti ti-alert-triangle" style="color:var(--warning);font-size:19px;flex-shrink:0;margin-top:1px"></i>
         <div style="flex:1">
-          <div style="font-weight:700;font-size:15px;color:var(--warning);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-weight:700;font-size:14px;color:var(--warning);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
             <span>${rows.length} doublon${rows.length>1?'s':''} détecté${rows.length>1?'s':''} — même numéro de BDC pour plusieurs commandes</span>
             <button class="btn sm danger" onclick="supprimerTousDoublonsBanner(this)" style="margin-left:12px;white-space:nowrap"><i class="ti ti-trash"></i> ${TR('Supprimer tous')}</button>
           </div>
-          <div class="table-wrap"><table class="t" style="font-size:14px">
+          <div class="table-wrap"><table class="t" style="font-size:13px">
             <thead><tr><th>BDC</th><th>${TR('Distributeur')}</th><th style="text-align:center">Nb</th><th>Commandes</th></tr></thead>
             <tbody>${rows.map(r=>`<tr>
               <td class="mono"><b>${esc(r.bdc)}</b></td>
@@ -3078,7 +3078,7 @@ async function chargerDoublonsBanner(){
 
 async function chargerAlertesBlocage(){
   const el=$('alertes-blocage-list'); if(!el) return;
-  el.innerHTML=`<div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div>`;
+  el.innerHTML=`<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div>`;
   try{
     const jours = parseInt($('blocage-seuil')?.value)||7;
     const data = await API.commandesAlertesBlocage(jours);
@@ -3086,11 +3086,11 @@ async function chargerAlertesBlocage(){
     const nonExp  = Array.isArray(data) ? data : (data.non_expedies||[]);
     const nonFact = Array.isArray(data) ? [] : (data.non_facturees||[]);
     if(!nonExp.length && !nonFact.length){
-      el.innerHTML=`<div style="font-size:14px;color:var(--success)"><i class="ti ti-check"></i> ${TR('Aucune alerte — tout est à jour !')}</div>`;
+      el.innerHTML=`<div style="font-size:13px;color:var(--success)"><i class="ti ti-check"></i> ${TR('Aucune alerte — tout est à jour !')}</div>`;
       return;
     }
     const tableRow = (r, type) => `<tr onclick="modalCommande(${r.id})" style="cursor:pointer">
-      <td><span class="badge ${type==='non_expedie'?'attente':'urgent'}" style="font-size:12px">${type==='non_expedie'?'📦 Non expédié':'🧾 Non facturé'}</span></td>
+      <td><span class="badge ${type==='non_expedie'?'attente':'urgent'}" style="font-size:11px">${type==='non_expedie'?'📦 Non expédié':'🧾 Non facturé'}</span></td>
       <td>${esc(r.distributeur_nom)}</td>
       <td class="mono">${esc(r.bdc||'')}</td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.modele||'')}</td>
@@ -3105,7 +3105,7 @@ async function chargerAlertesBlocage(){
         ${nonFact.map(r=>tableRow(r,'non_facturee')).join('')}
       </tbody>
     </table></div>`;
-  }catch(e){ el.innerHTML=`<div style="font-size:14px;color:var(--danger)">${esc(e.message)}</div>`; }
+  }catch(e){ el.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 async function supprimerTousDoublonsBanner(btn){
@@ -3145,13 +3145,13 @@ async function chargerDoublonsParametres(){
   try{
     const rows = await API.commandesDoublons();
     if(!rows.length){
-      el.innerHTML=`<div style="font-size:14px;color:var(--success)"><i class="ti ti-check"></i> ${TR('Aucun doublon détecté.')}</div>`;
+      el.innerHTML=`<div style="font-size:13px;color:var(--success)"><i class="ti ti-check"></i> ${TR('Aucun doublon détecté.')}</div>`;
       return;
     }
-    el.innerHTML=`<div style="font-size:14px;color:var(--warning);margin-bottom:8px;font-weight:600">
+    el.innerHTML=`<div style="font-size:13px;color:var(--warning);margin-bottom:8px;font-weight:600">
       <i class="ti ti-alert-triangle"></i> ${rows.length} BDC en doublon
     </div>
-    <div class="table-wrap"><table class="t" style="font-size:14px">
+    <div class="table-wrap"><table class="t" style="font-size:13px">
       <thead><tr><th>BDC</th><th>${TR('Distributeur')}</th><th>Nb</th><th>Commandes</th></tr></thead>
       <tbody>${rows.map(r=>`<tr>
         <td class="mono"><b>${esc(r.bdc)}</b></td>
@@ -3163,7 +3163,7 @@ async function chargerDoublonsParametres(){
       </tr>`).join('')}
       </tbody>
     </table></div>`;
-  }catch(e){ el.innerHTML=`<div style="font-size:14px;color:var(--danger)">${esc(e.message)}</div>`; }
+  }catch(e){ el.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
 async function lancerMigrationFacture(){
@@ -3173,11 +3173,11 @@ async function lancerMigrationFacture(){
   try{
     const r = await API.migrationFactureHistorique();
     const msg = `✅ ${r.mises_a_jour} commande(s) passée(s) en Facturé.`;
-    $('migration-facture-result').innerHTML=`<div style="padding:8px 12px;background:var(--success-bg);border:0.5px solid var(--success);border-radius:var(--radius);font-size:14px;color:var(--success)">${msg}</div>`;
+    $('migration-facture-result').innerHTML=`<div style="padding:8px 12px;background:var(--success-bg);border:0.5px solid var(--success);border-radius:var(--radius);font-size:13px;color:var(--success)">${msg}</div>`;
     toast(msg,'ti-check');
     if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-check"></i> Migration effectuée'; }
   }catch(e){
-    $('migration-facture-result').innerHTML=`<div style="color:var(--danger);font-size:14px">❌ ${esc(e.message)}</div>`;
+    $('migration-facture-result').innerHTML=`<div style="color:var(--danger);font-size:13px">❌ ${esc(e.message)}</div>`;
     if(btn) btn.disabled=false;
   }
 }
@@ -3204,7 +3204,7 @@ async function lancerRattrapageVF(){
     if(out) out.innerHTML=
       '<div style="background:#eef2f7;border-radius:8px;overflow:hidden;height:14px;margin-bottom:8px">'+
         '<div style="width:'+pct+'%;height:100%;background:var(--success,#1b8a3a);transition:width .3s"></div></div>'+
-      '<div style="font-size:14px;color:var(--text2)">'+pct+'% — '+(S.offset||0)+'/'+(S.total||'?')+' commandes · '+
+      '<div style="font-size:13px;color:var(--text2)">'+pct+'% — '+(S.offset||0)+'/'+(S.total||'?')+' commandes · '+
         S.liens+' liens · '+S.paiements+' paiements · '+S.infos+' infos · '+
         '<b style="color:var(--danger)">'+S.introuvables.length+'</b> introuvables'+(S.errors?(' · '+S.errors+' erreurs réseau'):'')+'</div>';
   };
@@ -3230,14 +3230,14 @@ async function lancerRattrapageVF(){
     RATT_LAST=S;
     const nbFac=S.introuvables.filter(x=>x.type==='facture').length, nbBdc=S.introuvables.length-nbFac;
     if(out) out.innerHTML=
-      '<div style="background:var(--success,#1b8a3a);color:#fff;border-radius:8px;padding:12px 14px;font-size:15px;margin-bottom:8px">'+
+      '<div style="background:var(--success,#1b8a3a);color:#fff;border-radius:8px;padding:12px 14px;font-size:14px;margin-bottom:8px">'+
         '✓ Rattrapage terminé — '+S.total+' commandes · '+S.liens+' liens créés · '+S.paiements+' paiements · '+S.infos+' infos complétées.</div>'+
-      '<div style="font-size:14px;color:var(--text2);margin-bottom:8px">'+S.introuvables.length+' introuvables ('+nbBdc+' BDC, '+nbFac+
+      '<div style="font-size:13px;color:var(--text2);margin-bottom:8px">'+S.introuvables.length+' introuvables ('+nbBdc+' BDC, '+nbFac+
         ' factures) — souvent des numéros internes distributeur ou des cases multi-documents, sans correspondance VosFactures.</div>'+
       '<button class="btn sm" onclick="telechargerRapportRattrapage()"><i class="ti ti-download"></i> '+TR("Télécharger le rapport des introuvables")+'</button>';
     toast(TR('Rattrapage VosFactures terminé'),'ti-check');
   }catch(e){
-    if(out) out.innerHTML='<div style="color:var(--danger);font-size:15px">Erreur : '+esc(e.message)+
+    if(out) out.innerHTML='<div style="color:var(--danger);font-size:14px">Erreur : '+esc(e.message)+
       '. Les commandes déjà traitées sont enregistrées ; tu peux relancer pour reprendre.</div>';
     toast(e.message,'ti-alert-circle','var(--danger)');
   }finally{
@@ -3259,7 +3259,7 @@ function telechargerRapportRattrapage(){
       rows+='<tr><td>'+b+'</td><td class="num">'+e(x.numero)+'</td><td class="id">#'+e(x.id)+'</td></tr>'; }
   }
   const html='<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Rattrapage VosFactures — introuvables</title><style>'+
-    'body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f4f6f9;color:#1a2a3a}.wrap{max-width:900px;margin:0 auto;padding:24px}h1{font-size:24px;margin:0 0 4px}.sub{color:#667;margin:0 0 20px;font-size:15px}.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px}.card{background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08);flex:1;min-width:130px}.card .n{font-size:28px;font-weight:700}.card .l{font-size:14px;color:#667;text-transform:uppercase;letter-spacing:.04em}.g{color:#1b8a3a}.r{color:#b3261e}table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}td{padding:7px 12px;border-bottom:1px solid #eef1f4;font-size:15px}tr.grp td{background:#eef2f7;font-weight:700}.cnt{background:#b3261e;color:#fff;border-radius:10px;padding:1px 8px;font-size:13px;margin-left:6px}.b{display:inline-block;border-radius:4px;padding:1px 7px;font-size:13px;font-weight:600}.b-bdc{background:#e6effa;color:#1a56a0}.b-fac{background:#fdeaea;color:#b3261e}.num{font-family:ui-monospace,Menlo,monospace}.note{background:#fff8e6;border-left:4px solid #c47f00;padding:12px 16px;border-radius:6px;margin:18px 0;font-size:15px;line-height:1.5}'+
+    'body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#f4f6f9;color:#1a2a3a}.wrap{max-width:900px;margin:0 auto;padding:24px}h1{font-size:23px;margin:0 0 4px}.sub{color:#667;margin:0 0 20px;font-size:14px}.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:22px}.card{background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08);flex:1;min-width:130px}.card .n{font-size:27px;font-weight:700}.card .l{font-size:13px;color:#667;text-transform:uppercase;letter-spacing:.04em}.g{color:#1b8a3a}.r{color:#b3261e}table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}td{padding:7px 12px;border-bottom:1px solid #eef1f4;font-size:14px}tr.grp td{background:#eef2f7;font-weight:700}.cnt{background:#b3261e;color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;margin-left:6px}.b{display:inline-block;border-radius:4px;padding:1px 7px;font-size:12px;font-weight:600}.b-bdc{background:#e6effa;color:#1a56a0}.b-fac{background:#fdeaea;color:#b3261e}.num{font-family:ui-monospace,Menlo,monospace}.note{background:#fff8e6;border-left:4px solid #c47f00;padding:12px 16px;border-radius:6px;margin:18px 0;font-size:14px;line-height:1.5}'+
     '</style></head><body><div class="wrap"><h1>Rattrapage VosFactures — documents introuvables</h1><p class="sub">'+S.total+' commandes analysées</p><div class="cards">'+
     '<div class="card"><div class="n g">'+S.liens+'</div><div class="l">'+TR("Liens créés")+'</div></div><div class="card"><div class="n g">'+S.paiements+'</div><div class="l">Paiements</div></div><div class="card"><div class="n g">'+S.infos+'</div><div class="l">'+TR("Infos complétées")+'</div></div><div class="card"><div class="n r">'+S.introuvables.length+'</div><div class="l">Introuvables</div></div></div>'+
     '<div class="note"><b>'+TR("À savoir :")+'</b> '+nbBdc+' BDC et '+nbFac+' factures sans correspondance VosFactures — le plus souvent un numéro interne du distributeur, une case contenant deux documents, ou une annotation libre. Ce ne sont pas des erreurs de recherche.</div>'+
@@ -3305,7 +3305,7 @@ async function viewIntervention(id){
   const total=(i.produits||[]).reduce((s,p)=>s+parseFloat(p.pxht||0)*p.qte,0);
   showModal(`
     <div class="modal-header">
-      <i class="ti ti-tool" style="font-size:20px;color:var(--accent)"></i>
+      <i class="ti ti-tool" style="font-size:19px;color:var(--accent)"></i>
       <h2>${esc(i.num_sav||'#'+i.id)} — ${traduireType(i.type)}</h2>
       <button class="btn sm success" onclick="exportInterventionPDF(${i.id})"><i class="ti ti-file-type-pdf"></i>PDF</button>
       <button class="btn sm" onclick="envoyerEmailInter(${i.id})" title="${TR("Envoyer notification au distributeur")}"><i class="ti ti-mail"></i></button>
@@ -3315,54 +3315,54 @@ async function viewIntervention(id){
     <div class="modal-body">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
         <span class="badge ${i.garantie?'g':'hg'}">${i.garantie?'Sous garantie':'Hors garantie'}</span>
-        ${i.garantie_auto?'<span style="font-size:12px;color:var(--text3)">'+TR("détecté auto")+'</span>':''}
+        ${i.garantie_auto?'<span style="font-size:11px;color:var(--text3)">'+TR("détecté auto")+'</span>':''}
         <span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span>
-        <span style="font-size:13px;color:var(--text3);margin-left:auto">${fd(i.date)}</span>
+        <span style="font-size:12px;color:var(--text3);margin-left:auto">${fd(i.date)}</span>
       </div>
       <div style="margin-bottom:12px">
         ${i.commande_id
           ? `<button class="btn sm" onclick="ouvrirCommandeLiee(${i.commande_id})"><i class="ti ti-clipboard-list"></i> ${TR('Voir la commande liée')}</button>`
           : `<button class="btn sm" onclick="basculerSAVversCommande(${i.id})" title="${TR("Créer une commande liée « SAV facturé » dans Suivi commandes")}"><i class="ti ti-clipboard-plus"></i> ${TR("Basculer en commande")}</button>`}
       </div>
-      <div class="grid-2" style="font-size:14px;margin-bottom:12px">
+      <div class="grid-2" style="font-size:13px;margin-bottom:12px">
         <div><div class="stat-label">${TR("Client")}</div><div style="font-weight:600">${esc(i.client_nom||'')}</div></div>
         <div><div class="stat-label">${TR('Fauteuil')}</div><div style="font-weight:600">${esc(i.modele)} – <span class="mono">${esc(i.serie)}</span></div></div>
         <div>
           <div class="stat-label">Facture VosFactures
-            <button class="btn sm" style="padding:1px 6px;font-size:12px;margin-left:6px" onclick="toggleEditFacture(${i.id},'${esc(i.num_facture||'')}')"><i class="ti ti-edit" style="font-size:12px"></i></button>
+            <button class="btn sm" style="padding:1px 6px;font-size:11px;margin-left:6px" onclick="toggleEditFacture(${i.id},'${esc(i.num_facture||'')}')"><i class="ti ti-edit" style="font-size:11px"></i></button>
           </div>
           <div id="facture-display-${i.id}">
             ${i.num_facture?`<span class="mono" style="color:var(--accent)">${esc(i.num_facture)}</span>`:'<span style="color:var(--text3)">—</span>'}
           </div>
           <div id="facture-edit-${i.id}" style="display:none;display:flex;gap:6px;align-items:center;margin-top:4px">
-            <input class="form-input mono" id="facture-input-${i.id}" style="font-size:14px;padding:4px 8px;flex:1" placeholder="ex: 7574" value="${esc(i.num_facture||'')}">
+            <input class="form-input mono" id="facture-input-${i.id}" style="font-size:13px;padding:4px 8px;flex:1" placeholder="ex: 7574" value="${esc(i.num_facture||'')}">
             <button class="btn sm primary" onclick="saveFactureInter(${i.id})"><i class="ti ti-check"></i></button>
             <button class="btn sm" onclick="document.getElementById('facture-edit-${i.id}').style.display='none';document.getElementById('facture-display-${i.id}').style.display='block'"><i class="ti ti-x"></i></button>
           </div>
         </div>
         <div><div class="stat-label">Technicien</div><div>${esc(i.technicien||'—')}</div></div>
       </div>
-      <div class="form-group"><div class="form-label">Description</div><div style="font-size:14px;background:var(--bg);padding:8px;border-radius:var(--radius)">${esc(i.description||'—')}</div></div>
-      ${i.notes?`<div class="form-group"><div class="form-label">${TR('Intervention réalisée')}</div><div style="font-size:14px;color:var(--text2)">${esc(i.notes)}</div></div>`:''}
+      <div class="form-group"><div class="form-label">Description</div><div style="font-size:13px;background:var(--bg);padding:8px;border-radius:var(--radius)">${esc(i.description||'—')}</div></div>
+      ${i.notes?`<div class="form-group"><div class="form-label">${TR('Intervention réalisée')}</div><div style="font-size:13px;color:var(--text2)">${esc(i.notes)}</div></div>`:''}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-box"></i>${TR('Pièces')}</div>
-      ${(i.produits||[]).length===0?'<div style="font-size:14px;color:var(--text3)">'+TR("Aucune pièce")+'</div>':`
+      ${(i.produits||[]).length===0?'<div style="font-size:13px;color:var(--text3)">'+TR("Aucune pièce")+'</div>':`
         <table class="t"><thead><tr><th>${t('col_designation')}</th><th>${TR('Réf')}</th><th>${t('col_qte')||'Qté'}</th><th>PU HT</th><th>Total HT</th></tr></thead>
         <tbody>${(i.produits||[]).map(p=>`<tr><td>${esc(p.designation)}</td><td class="mono">${esc(p.ref||'')}</td><td>${p.qte}</td><td>${parseFloat(p.pxht||0).toFixed(2)} €</td><td style="font-weight:700">${(parseFloat(p.pxht||0)*p.qte).toFixed(2)} €</td></tr>`).join('')}</tbody></table>
-        <div style="text-align:right;padding-top:6px;font-weight:700;font-size:15px">Total HT : ${total.toFixed(2)} €</div>`}
+        <div style="text-align:right;padding-top:6px;font-weight:700;font-size:14px">Total HT : ${total.toFixed(2)} €</div>`}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-send"></i>${TR('Expédition')}</div>
-      ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:13px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Envoi</div><div style="font-size:14px">${esc(i.envoi_transporteur)} — <a href="${lienhSuiviInter(i.envoi_transporteur,i.envoi_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:12px"></i> ${esc(i.envoi_numero)}</a> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:14px;color:var(--text3)">'+TR("Aucun envoi")+'</div>'}
-      ${i.num_bordereau_vf?`<div style="margin-top:8px"><a href="#" data-bl="${esc(i.num_bordereau_vf)}" onclick="event.preventDefault();ouvrirBordereauVF(this.dataset.bl)" style="color:var(--accent);font-size:14px;text-decoration:none;cursor:pointer"><i class="ti ti-file-invoice" style="font-size:13px"></i> BL/Bordereau : ${esc(i.num_bordereau_vf)}</a></div>`:''}
+      ${i.envoi_numero?`<div class="tracking-block"><div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">Envoi</div><div style="font-size:13px">${esc(i.envoi_transporteur)} — <a href="${lienhSuiviInter(i.envoi_transporteur,i.envoi_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> ${esc(i.envoi_numero)}</a> — ${fd(i.envoi_date)}</div></div>`:'<div style="font-size:13px;color:var(--text3)">'+TR("Aucun envoi")+'</div>'}
+      ${i.num_bordereau_vf?`<div style="margin-top:8px"><a href="#" data-bl="${esc(i.num_bordereau_vf)}" onclick="event.preventDefault();ouvrirBordereauVF(this.dataset.bl)" style="color:var(--accent);font-size:13px;text-decoration:none;cursor:pointer"><i class="ti ti-file-invoice" style="font-size:12px"></i> BL/Bordereau : ${esc(i.num_bordereau_vf)}</a></div>`:''}
       <div class="section-title" style="margin-top:10px"><i class="ti ti-arrow-back-up"></i>${TR('Retour')}</div>
-      ${i.retour_numero?`<div class="tracking-block"><div style="font-size:13px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">${TR('Retour')}</div><div style="font-size:14px">${esc(i.retour_transporteur)} — <a href="${lienhSuiviInter(i.retour_transporteur,i.retour_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:12px"></i> ${esc(i.retour_numero)}</a> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:14px;color:var(--text3)">'+TR("Aucun retour")+'</div>'}
+      ${i.retour_numero?`<div class="tracking-block"><div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:5px;text-transform:uppercase">${TR('Retour')}</div><div style="font-size:13px">${esc(i.retour_transporteur)} — <a href="${lienhSuiviInter(i.retour_transporteur,i.retour_numero)}" target="_blank" style="color:var(--accent);font-family:monospace;text-decoration:none"><i class="ti ti-external-link" style="font-size:11px"></i> ${esc(i.retour_numero)}</a> — ${fd(i.retour_date)}</div></div>`:'<div style="font-size:13px;color:var(--text3)">'+TR("Aucun retour")+'</div>'}
       <div class="divider"></div>
       <div class="section-title"><i class="ti ti-photo"></i>Photos (${photos.length})</div>
       <div id="photo-gallery">${renderPhotoGallery(photos,i.id)}</div>
       <div id="photo-upload-zone" class="photo-drop-zone" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handlePhotoDrop(event,${i.id})">
-        <i class="ti ti-cloud-upload" style="font-size:28px;color:var(--text3);margin-bottom:6px"></i>
-        <div style="font-size:15px;color:var(--text2);margin-bottom:3px">${TR('Glisser-déposer des photos ici')}</div>
-        <div style="font-size:13px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div>
+        <i class="ti ti-cloud-upload" style="font-size:27px;color:var(--text3);margin-bottom:6px"></i>
+        <div style="font-size:14px;color:var(--text2);margin-bottom:3px">${TR('Glisser-déposer des photos ici')}</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div>
         <label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>${TR("Choisir des fichiers")}<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${i.id})"></label>
       </div>
       <div class="divider"></div>
@@ -3383,7 +3383,7 @@ async function viewIntervention(id){
 }
 
 function renderCommentaires(comms,interId){
-  if(!comms.length) return '<div style="font-size:14px;color:var(--text3);margin-bottom:8px">'+TR("Aucun commentaire")+'</div>';
+  if(!comms.length) return '<div style="font-size:13px;color:var(--text3);margin-bottom:8px">'+TR("Aucun commentaire")+'</div>';
   return comms.map(cm=>`<div class="commentaire-bubble">
     <div class="meta"><span style="font-weight:600">${esc(cm.auteur)}</span><span>${cm.created_at?.slice(0,16).replace('T',' ')}</span></div>
     <div>${esc(cm.texte)}</div>
@@ -3401,7 +3401,7 @@ async function addComment(interId){
 }
 
 function renderHistorique(hist){
-  if(!hist.length) return '<div style="font-size:14px;color:var(--text3)">'+TR("Aucune modification enregistrée")+'</div>';
+  if(!hist.length) return '<div style="font-size:13px;color:var(--text3)">'+TR("Aucune modification enregistrée")+'</div>';
   return hist.map(h=>`<div class="historique-row">
     <span style="color:var(--text3);min-width:120px">${h.created_at?.slice(0,16).replace('T',' ')}</span>
     <span style="font-weight:600;min-width:80px">${esc(h.auteur)}</span>
@@ -3421,7 +3421,7 @@ function toggleHistorique(id){
 // ── PHOTOS ────────────────────────────────────────────────────────
 
 function renderPhotoGallery(photos,interId){
-  if(!photos.length) return '<div style="font-size:14px;color:var(--text3);margin-bottom:10px">'+TR("Aucune photo")+'</div>';
+  if(!photos.length) return '<div style="font-size:13px;color:var(--text3);margin-bottom:10px">'+TR("Aucune photo")+'</div>';
   return `<div class="photo-grid">${photos.map((p,idx)=>`
     <div class="photo-thumb">
       <img src="/uploads/thumbs/${esc(p.filename_thumb||p.filename)}" alt="${esc(p.legende||'Photo')}"
@@ -3438,7 +3438,7 @@ function renderPhotoGallery(photos,interId){
 async function handlePhotoFiles(files,interId){
   if(!files.length)return;
   const zone=$('photo-upload-zone');
-  zone.innerHTML='<div style="text-align:center;padding:16px"><i class="ti ti-loader-2" style="font-size:24px"></i><div style="margin-top:5px;font-size:14px">Upload en cours…</div></div>';
+  zone.innerHTML='<div style="text-align:center;padding:16px"><i class="ti ti-loader-2" style="font-size:23px"></i><div style="margin-top:5px;font-size:13px">Upload en cours…</div></div>';
   try{
     await API.uploadPhotos(interId,Array.from(files));
     const photos=await API.photos(interId);
@@ -3448,7 +3448,7 @@ async function handlePhotoFiles(files,interId){
   }catch(e){zone.innerHTML=uploadZoneHTML(interId);toast(TR('Erreur upload : ')+e.message,'ti-alert-circle','var(--danger)');}
 }
 function handlePhotoDrop(e,interId){e.preventDefault();$('photo-upload-zone').classList.remove('drag-over');if(e.dataTransfer.files.length)handlePhotoFiles(e.dataTransfer.files,interId);}
-function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:28px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:15px;color:var(--text2);margin-bottom:3px">${TR('Glisser-déposer des photos ici')}</div><div style="font-size:13px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>${TR("Choisir des fichiers")}<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
+function uploadZoneHTML(interId){return `<i class="ti ti-cloud-upload" style="font-size:27px;color:var(--text3);margin-bottom:6px"></i><div style="font-size:14px;color:var(--text2);margin-bottom:3px">${TR('Glisser-déposer des photos ici')}</div><div style="font-size:12px;color:var(--text3);margin-bottom:8px">JPEG, PNG, WEBP — 15 Mo max</div><label class="btn sm primary" style="cursor:pointer"><i class="ti ti-upload"></i>${TR("Choisir des fichiers")}<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this.files,${interId})"></label>`;}
 async function deletePhoto(interId,photoId){if(!confirm(TR('Supprimer ?')))return;await API.deletePhoto(interId,photoId);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);toast(TR('Photo supprimée'),'ti-trash');}
 async function editPhotoLegende(interId,photoId,cur){const l=prompt(TR('Légende :'),cur);if(l===null)return;await API.updatePhotoLegende(interId,photoId,l);const photos=await API.photos(interId);$('photo-gallery').innerHTML=renderPhotoGallery(photos,interId);}
 
@@ -3460,12 +3460,12 @@ function showLightbox(){
   const el=document.createElement('div');el.id='lightbox-overlay';
   el.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;';
   el.innerHTML=`
-    <button onclick="closeLightbox()" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:30px;cursor:pointer"><i class="ti ti-x"></i></button>
-    <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5);font-size:14px">${LB.idx+1} / ${LB.filenames.length}</div>
-    ${LB.idx>0?`<button onclick="lbNav(-1)" style="position:absolute;left:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:26px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-left"></i></button>`:''}
-    ${LB.idx<LB.filenames.length-1?`<button onclick="lbNav(1)" style="position:absolute;right:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:26px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-right"></i></button>`:''}
+    <button onclick="closeLightbox()" style="position:absolute;top:16px;right:20px;background:none;border:none;color:#fff;font-size:29px;cursor:pointer"><i class="ti ti-x"></i></button>
+    <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5);font-size:13px">${LB.idx+1} / ${LB.filenames.length}</div>
+    ${LB.idx>0?`<button onclick="lbNav(-1)" style="position:absolute;left:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:25px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-left"></i></button>`:''}
+    ${LB.idx<LB.filenames.length-1?`<button onclick="lbNav(1)" style="position:absolute;right:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:25px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-right"></i></button>`:''}
     <img src="/uploads/${fname}" style="max-width:90vw;max-height:82vh;object-fit:contain;border-radius:6px;">
-    <a href="/uploads/${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:14px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
+    <a href="/uploads/${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:13px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
   document.body.appendChild(el);
   el.addEventListener('click',e=>{if(e.target===el)closeLightbox();});
   document.addEventListener('keydown',lbKey);
@@ -3515,22 +3515,22 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.sur_carte?'rgba(34,197,94,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-sur-carte" ${d.sur_carte?'checked':''} style="width:16px;height:16px;accent-color:#22c55e">
-      <div style="flex:1"><div style="font-size:15px;font-weight:600;color:#16a34a">🗺️ Afficher sur la carte distributeurs</div>
-      <div style="font-size:13px;color:var(--text2)">${TR('Le point est créé et positionné depuis la ville, avec le réseau choisi ci-dessus')}</div></div>
+      <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#16a34a">🗺️ Afficher sur la carte distributeurs</div>
+      <div style="font-size:12px;color:var(--text2)">${TR('Le point est créé et positionné depuis la ville, avec le réseau choisi ci-dessus')}</div></div>
     </label>
   </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.public_site?'rgba(217,119,6,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-public-site" ${d.public_site?'checked':''} style="width:16px;height:16px;accent-color:#d97706">
-      <div style="flex:1"><div style="font-size:15px;font-weight:600;color:#b45309">🌐 Visible sur le site public (eloflex.fr)</div>
-      <div style="font-size:13px;color:var(--text2)">${TR('Ce distributeur apparaîtra sur la carte publique du site (nom, adresse, téléphone uniquement). Nécessite une adresse et un positionnement.')}</div></div>
+      <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#b45309">🌐 Visible sur le site public (eloflex.fr)</div>
+      <div style="font-size:12px;color:var(--text2)">${TR('Ce distributeur apparaîtra sur la carte publique du site (nom, adresse, téléphone uniquement). Nécessite une adresse et un positionnement.')}</div></div>
     </label>
   </div>
   <div class="form-group" style="grid-column:1/-1">
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:0.5px solid var(--border-s);border-radius:var(--radius);cursor:pointer;background:${d.edi?'rgba(46,124,246,.08)':'var(--surface)'}">
       <input type="checkbox" id="f-edi" ${d.edi?'checked':''} style="width:16px;height:16px;accent-color:var(--accent)">
-      <div><div style="font-size:15px;font-weight:600;color:var(--accent)">${TR('💳 EDI — Prélèvement automatique')}</div>
-      <div style="font-size:13px;color:var(--text2)">${TR('Ce distributeur règle ses factures par prélèvement EDI')}</div></div>
+      <div><div style="font-size:14px;font-weight:600;color:var(--accent)">${TR('💳 EDI — Prélèvement automatique')}</div>
+      <div style="font-size:12px;color:var(--text2)">${TR('Ce distributeur règle ses factures par prélèvement EDI')}</div></div>
     </label>
   </div>
 </div>`;}
@@ -3539,8 +3539,8 @@ async function ensureClientsCache(){ if(!window._clientsCache){ try{ const cs = 
 window.ensureClientsCache = ensureClientsCache;
 function toggleFacturation(mode){ const w=document.getElementById('f-entite-wrap'); if(w) w.style.display=(mode==='autre')?'':'none'; }
 window.toggleFacturation = toggleFacturation;
-async function modalNewClient(){await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:20px;color:var(--accent)"></i><h2>${TR('Nouveau client')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function modalEditClient(id){const cl=await API.client(id);await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:20px;color:var(--accent)"></i><h2>${TR('Modifier client')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalNewClient(){await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Nouveau client')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditClient(id){const cl=await API.client(id);await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Modifier client')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm(cl)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteClient(${id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveClient(id){
   const surCarte = !!document.getElementById('f-sur-carte')?.checked;
   // Réseau désormais indépendant de la carte ; si affiché sur carte sans réseau choisi, défaut 'base'
@@ -3587,9 +3587,9 @@ async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;aw
 async function modalPortail(id,token){
   const base=window.location.origin;
   const url=token?`${base}/portail.html?token=${token}`:'Non disponible';
-  showModal(`<div class="modal-header"><i class="ti ti-link" style="font-size:20px;color:var(--accent)"></i><h2>${TR("Lien portail client")}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-link" style="font-size:19px;color:var(--accent)"></i><h2>${TR("Lien portail client")}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <p style="font-size:15px;color:var(--text2);margin-bottom:12px">${TR("Ce lien permet au client de suivre ses interventions en lecture seule, sans accès à l'administration.")}</p>
+      <p style="font-size:14px;color:var(--text2);margin-bottom:12px">${TR("Ce lien permet au client de suivre ses interventions en lecture seule, sans accès à l'administration.")}</p>
       <div class="portail-link"><i class="ti ti-external-link"></i><span id="portail-url">${esc(url)}</span></div>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button class="btn primary" onclick="navigator.clipboard.writeText('${esc(url)}');toast(TR('Lien copié'),'ti-copy')"><i class="ti ti-copy"></i>${TR("Copier")}</button>
@@ -3615,8 +3615,8 @@ function fauteuilForm(d={}, clients=null){const mods=['Modèle L','Modèle F','M
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR("N° facture VosFactures")}</label><input class="form-input" id="f-facture" value="${esc(d.num_facture||'')}"></div>
 </div>
 <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes">${esc(d.notes||'')}</textarea></div>`;}
-function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:20px;color:var(--accent)"></i><h2>${TR('Nouveau fauteuil')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
-async function modalEditFauteuil(id){const [f,clients]=await Promise.all([API.fauteuil(id),API.clients()]);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:20px;color:var(--accent)"></i><h2>${TR('Modifier fauteuil')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f,clients)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+function modalNewFauteuil(clientId){showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Nouveau fauteuil')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(null,${clientId})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
+async function modalEditFauteuil(id){const [f,clients]=await Promise.all([API.fauteuil(id),API.clients()]);showModal(`<div class="modal-header"><i class="ti ti-edit" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Modifier fauteuil')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${fauteuilForm(f,clients)}</div><div class="modal-footer"><button class="btn danger" onclick="deleteFauteuil(${id},${f.client_id})"><i class="ti ti-trash"></i></button><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveFauteuil(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
 async function saveFauteuil(id,clientId){const selClient=gv('f-client');const data={client_id:selClient?parseInt(selClient):clientId,modele:gv('f-modele'),serie:gv('f-serie'),annee:parseInt(gv('f-annee')),couleur:gv('f-couleur'),date_achat:gv('f-dateachat'),duree_garantie_mois:parseInt(gv('f-garduree'))||24,num_facture:gv('f-facture'),notes:gv('f-notes')};if(!data.serie){alert(TR('N° de série requis'));return;}try{if(id)await API.updateFauteuil(id,data);else await API.createFauteuil(data);toast(id?'Fauteuil mis à jour':'Fauteuil créé');closeModal();render();}catch(e){alert(e.message);}}
 async function deleteFauteuil(id,clientId){if(!confirm(t('confirm_suppr_fauteuil')))return;await API.deleteFauteuil(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('client',{clientId});}
 
@@ -3648,14 +3648,14 @@ async function modalEditIntervention(id){
 }
 
 function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){const d=i||{};const autreDistrib=clientId&&fauteuilClientId&&clientId!==fauteuilClientId;return `
-  <div class="modal-header"><i class="ti ti-tool" style="font-size:20px;color:var(--accent)"></i><h2>${i?(i.num_sav?esc(i.num_sav):'#'+i.id):t('inter_nouvelle')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <div class="modal-header"><i class="ti ti-tool" style="font-size:19px;color:var(--accent)"></i><h2>${i?(i.num_sav?esc(i.num_sav):'#'+i.id):t('inter_nouvelle')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
   <div class="modal-body" style="max-height:74vh;overflow-y:auto">
     <div class="grid-2">
       <!-- FAUTEUIL — recherche libre dans toute la base -->
       <div class="form-group" style="grid-column:1/-1">
         <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
-          <span>${TR('Fauteuil *')} <span style="font-size:13px;color:var(--text3);font-weight:400">${TR('(série, modèle ou distributeur)')}</span></span>
-          <button type="button" class="btn sm" style="font-size:12px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>${TR('Créer')}</button>
+          <span>${TR('Fauteuil *')} <span style="font-size:12px;color:var(--text3);font-weight:400">${TR('(série, modèle ou distributeur)')}</span></span>
+          <button type="button" class="btn sm" style="font-size:11px;padding:2px 7px" onclick="toggleNewFauteuilInline()"><i class="ti ti-plus"></i>${TR('Créer')}</button>
         </label>
         <div style="position:relative">
           <input class="form-input" id="f-serie-search" autocomplete="off"
@@ -3669,7 +3669,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
         </div>
         <!-- Création inline -->
         <div id="new-fauteuil-inline" style="display:none;background:var(--bg);border-radius:var(--radius);padding:10px;margin-top:8px;border:1px dashed var(--border-s)">
-          <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">${TR('Nouveau fauteuil')}</div>
+          <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px">${TR('Nouveau fauteuil')}</div>
           <div class="grid-2" style="gap:6px">
             <div class="form-group" style="margin-bottom:4px"><label class="form-label">${TR('Modèle *')}</label>
               <select class="form-input" id="nf-modele">${['Eloflex L','Eloflex F','Eloflex D2','Eloflex X','Eloflex P','Eloflex H','Eloflex C','Eloflex C3','Eloflex K','Eloflex R','Eloflex S1','Eloflex M+'].map(m=>`<option>${m}</option>`).join('')}</select>
@@ -3677,12 +3677,12 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
             <div class="form-group" style="margin-bottom:4px">
               <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
                 <span>${TR('N° de série *')}</span>
-                <label style="display:flex;align-items:center;gap:4px;font-weight:400;font-size:13px;cursor:pointer">
+                <label style="display:flex;align-items:center;gap:4px;font-weight:400;font-size:12px;cursor:pointer">
                   <input type="checkbox" id="nf-serie-absent" onchange="toggleSerieAbsent(this.checked)">Numéro absent
                 </label>
               </label>
               <input class="form-input mono" id="nf-serie" placeholder="ex: A06L2502011042">
-              <div id="nf-serie-absent-msg" style="display:none;font-size:13px;color:var(--warning);margin-top:3px"><i class="ti ti-alert-triangle" style="font-size:13px"></i> ${TR('Numéro temporaire généré automatiquement')}</div>
+              <div id="nf-serie-absent-msg" style="display:none;font-size:12px;color:var(--warning);margin-top:3px"><i class="ti ti-alert-triangle" style="font-size:12px"></i> ${TR('Numéro temporaire généré automatiquement')}</div>
             </div>
             <div class="form-group" style="margin-bottom:4px"><label class="form-label">Date d'achat</label><input class="form-input" id="nf-dateachat" type="date"></div>
             <div class="form-group" style="margin-bottom:4px"><label class="form-label">${TR('Durée garantie (mois)')}</label><input class="form-input" id="nf-garduree" type="number" value="24"></div>
@@ -3698,13 +3698,13 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
       <div class="form-group" style="grid-column:1/-1">
         <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
           <span>${TR('Distributeur')}</span>
-          <label style="display:flex;align-items:center;gap:5px;font-weight:400;font-size:13px;cursor:pointer">
+          <label style="display:flex;align-items:center;gap:5px;font-weight:400;font-size:12px;cursor:pointer">
             <input type="checkbox" id="f-autre-distrib" ${autreDistrib?"checked":""} onchange="toggleAutreDistrib(this.checked)">
             <span>${TR("Intervention chez un autre distributeur")}</span>
           </label>
         </label>
         <!-- Champ affiché par défaut : distributeur du fauteuil (lecture seule si pas coché) -->
-        <div id="distrib-readonly" style="display:${autreDistrib?'none':'flex'};align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:var(--radius);font-size:15px;border:1px solid var(--border)">
+        <div id="distrib-readonly" style="display:${autreDistrib?'none':'flex'};align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:var(--radius);font-size:14px;border:1px solid var(--border)">
           <i class="ti ti-users" style="color:var(--text3)"></i>
           <span id="distrib-readonly-nom">${esc(clients.find(c=>c.id===(clientId||d.client_id))?.nom||'— sera renseigné depuis le fauteuil —')}</span>
           <input type="hidden" id="f-client" value="${clientId||d.client_id||''}">
@@ -3719,7 +3719,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
             onblur="setTimeout(()=>{const dr=document.getElementById('client-drop');if(dr)dr.style.display='none'},150)">
           <div id="client-drop" class="piece-dropdown" style="display:none"></div>
         </div>
-        <div style="font-size:13px;color:var(--text3);margin-top:4px">
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">
           Cochez si le fauteuil est en intervention chez un distributeur différent de son propriétaire (démo, revente, SAV tiers…)
         </div>
       </div>
@@ -3731,8 +3731,8 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
     </div>
     <div class="form-group"><label class="form-label">${t('col_garantie')}</label>
       <div style="display:flex;gap:12px;margin-top:4px">
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:14px"><input type="radio" name="garantie" value="1" ${!i||i.garantie?'checked':''}> <span class="badge g">${t('inter_sous_garantie')}</span></label>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:14px"><input type="radio" name="garantie" value="0" ${i&&!i.garantie?'checked':''}> <span class="badge hg">${t('inter_hors_garantie')}</span></label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="garantie" value="1" ${!i||i.garantie?'checked':''}> <span class="badge g">${t('inter_sous_garantie')}</span></label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px"><input type="radio" name="garantie" value="0" ${i&&!i.garantie?'checked':''}> <span class="badge hg">${t('inter_hors_garantie')}</span></label>
       </div>
     </div>
     <div class="form-group"><label class="form-label">${t('inter_desc')}</label><textarea class="form-input" id="f-desc">${esc(d.description||'')}</textarea></div>
@@ -3759,7 +3759,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
     <div class="form-group" style="margin-bottom:4px">
       <label class="form-label">${TR("N° bordereau / bon de livraison VosFactures")}</label>
       <input class="form-input mono" id="f-bordereau" placeholder="ex: BL-2026-0042" value="${esc(d.num_bordereau_vf||'')}">
-      <div style="font-size:13px;color:var(--text3);margin-top:3px">${TR("Permet d'accéder directement au document dans VosFactures depuis la fiche intervention.")}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:3px">${TR("Permet d'accéder directement au document dans VosFactures depuis la fiche intervention.")}</div>
     </div>
   </div>
   <div class="modal-footer">
@@ -3801,20 +3801,20 @@ function searchPieces(idx,q){
   window._PIECE_RESULTS = window._PIECE_RESULTS || {};
   window._PIECE_RESULTS[idx] = results;
   drop.innerHTML=results.map((p,ri)=>`<div class="piece-option" onmousedown="event.preventDefault();selectPieceResult(${idx},${ri})">
-    <div style="font-size:14px;font-weight:600">${esc(p.designation)}</div>
-    <div style="font-size:13px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref)}</span><span style="margin-left:auto">${parseFloat(p.pxht||0).toFixed(2)} €</span></div>
+    <div style="font-size:13px;font-weight:600">${esc(p.designation)}</div>
+    <div style="font-size:12px;color:var(--text3);display:flex;gap:8px"><span class="mono">${esc(p.ref)}</span><span style="margin-left:auto">${parseFloat(p.pxht||0).toFixed(2)} €</span></div>
   </div>`).join('');
   drop.style.display='block';
 }
 function renderProduitsForm(){
   const el=$('produits-list');if(!el)return;
-  if(!TMP_PRODUITS.length){el.innerHTML='<div style="font-size:14px;color:var(--text3)">'+TR("Aucune pièce")+'</div>';return;}
+  if(!TMP_PRODUITS.length){el.innerHTML='<div style="font-size:13px;color:var(--text3)">'+TR("Aucune pièce")+'</div>';return;}
   el.innerHTML=TMP_PRODUITS.map((p,i)=>`
     <div style="display:grid;grid-template-columns:2fr 0.8fr 0.5fr 0.7fr auto;gap:5px;align-items:start;margin-bottom:8px">
       <div>
         ${i===0?`<div class="form-label">${t('col_designation_court')||'Désignation'}</div>`:''}
         <div style="position:relative">
-          <input class="form-input piece-search" style="font-size:14px" placeholder="${t('cat_search_placeholder')||'Taper nom ou référence…'}"
+          <input class="form-input piece-search" style="font-size:13px" placeholder="${t('cat_search_placeholder')||'Taper nom ou référence…'}"
             value="${esc(p.designation)}"
             oninput="TMP_PRODUITS[${i}].designation=this.value;searchPieces(${i},this.value)"
             onfocus="searchPieces(${i},this.value)"
@@ -3822,7 +3822,7 @@ function renderProduitsForm(){
           <div id="piece-drop-${i}" class="piece-dropdown" style="display:none"></div>
         </div>
       </div>
-      <div>${i===0?'<div class="form-label">'+TR("Réf")+'</div>':''}<input class="form-input mono" style="font-size:13px" value="${esc(p.ref)}" oninput="TMP_PRODUITS[${i}].ref=this.value"></div>
+      <div>${i===0?'<div class="form-label">'+TR("Réf")+'</div>':''}<input class="form-input mono" style="font-size:12px" value="${esc(p.ref)}" oninput="TMP_PRODUITS[${i}].ref=this.value"></div>
       <div>${i===0?`<div class="form-label">${t('col_qte')||'Qté'}</div>`:''}<input class="form-input piece-qte" type="number" min="1" value="${p.qte}" oninput="TMP_PRODUITS[${i}].qte=parseInt(this.value)||1"></div>
       <div>${i===0?'<div class="form-label">PU HT</div>':''}<input class="form-input" type="number" step="0.01" value="${parseFloat(p.pxht||0).toFixed(2)}" oninput="TMP_PRODUITS[${i}].pxht=parseFloat(this.value)||0"></div>
       <div style="${i===0?'padding-top:18px':''}"><button class="btn sm danger" onclick="removeProduit(${i})"><i class="ti ti-x"></i></button></div>
@@ -3865,7 +3865,7 @@ async function saveIntervention(id){
 
 async function modalPiece(id){
   const p=id?CACHE.catalogue.find(x=>x.id===id)||await API.catalogue().then(l=>l.find(x=>x.id===id)):null;
-  showModal(`<div class="modal-header"><i class="ti ti-box" style="font-size:20px;color:var(--accent)"></i><h2>${id?'Modifier pièce':'Nouvelle pièce'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-box" style="font-size:19px;color:var(--accent)"></i><h2>${id?'Modifier pièce':'Nouvelle pièce'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="grid-2">
       <div class="form-group"><label class="form-label">${TR('Référence *')}</label><input class="form-input mono" id="f-ref" value="${esc(p?.ref||'')}"></div>
       <div class="form-group"><label class="form-label">${TR('Réf fournisseur')}</label><input class="form-input mono" id="f-reffou" value="${esc(p?.ref_fournisseur||'')}"></div>
@@ -3894,11 +3894,11 @@ async function exportClientPDF(id){const cl=await API.client(id);const inters=aw
 async function importerHistoriqueCommandes(file){
   const el=$('import-commandes-result'); if(!el) return;
   if(!file){ el.innerHTML=''; return; }
-  el.innerHTML=`<div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> Import en cours… (peut prendre 1-3 min selon la taille du fichier)</div>`;
+  el.innerHTML=`<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> Import en cours… (peut prendre 1-3 min selon la taille du fichier)</div>`;
   try{
     const r = await API.importCommandesExcel(file);
     const annees = Object.entries(r.stats.par_annee||{}).map(([a,n])=>`${a} : ${n} nouvelles`).join(', ');
-    el.innerHTML=`<div style="padding:10px 12px;background:var(--success-bg);border:0.5px solid var(--success);border-radius:var(--radius);font-size:14px">
+    el.innerHTML=`<div style="padding:10px 12px;background:var(--success-bg);border:0.5px solid var(--success);border-radius:var(--radius);font-size:13px">
       <div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> ${TR('Import terminé !')}</div>
       <div>${TR('Onglets traités :')} <b>${r.annees?.join(', ')||'—'}</b></div>
       <div>Nouvelles commandes : <b>${r.stats.inserees}</b> ${TR('· Mises à jour :')} <b>${r.stats.maj}</b> · Nouveaux clients : <b>${r.stats.clients_crees}</b></div>
@@ -3907,9 +3907,9 @@ async function importerHistoriqueCommandes(file){
     </div>`;
     toast(`Import terminé — ${r.stats.inserees} commandes importées`,'ti-table-import');
   }catch(e){
-    el.innerHTML=`<div style="padding:10px 12px;background:var(--danger-bg);border:0.5px solid var(--danger);border-radius:var(--radius);font-size:14px;color:var(--danger)">
+    el.innerHTML=`<div style="padding:10px 12px;background:var(--danger-bg);border:0.5px solid var(--danger);border-radius:var(--radius);font-size:13px;color:var(--danger)">
       ❌ Erreur : <b>${esc(e.message)}</b><br>
-      <span style="font-size:13px;color:var(--text2)">${TR("Vérifie que tu as bien sélectionné le bon fichier Excel (Compta_Eloflex…) et recharge la page si l'erreur persiste.")}</span>
+      <span style="font-size:12px;color:var(--text2)">${TR("Vérifie que tu as bien sélectionné le bon fichier Excel (Compta_Eloflex…) et recharge la page si l'erreur persiste.")}</span>
     </div>`;
   }
 }
@@ -3932,13 +3932,13 @@ async function genererFacturePennylaneModal(id){
 
 async function syncPennylane(full = false){
   const el = $('pl-sync-result');
-  if(el) el.innerHTML = `<div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> Synchronisation en cours…</div>`;
+  if(el) el.innerHTML = `<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> Synchronisation en cours…</div>`;
   try {
     const r = await API.pennylaneSyncCommandes(full);
-    if(el) el.innerHTML = `<div style="font-size:14px;color:var(--success)"><i class="ti ti-check"></i> ${esc(r.message||'OK')}</div>`;
+    if(el) el.innerHTML = `<div style="font-size:13px;color:var(--success)"><i class="ti ti-check"></i> ${esc(r.message||'OK')}</div>`;
     toast(r.message || 'Sync Pennylane terminé', 'ti-check');
   } catch(e) {
-    if(el) el.innerHTML = `<div style="font-size:14px;color:var(--danger)">❌ ${esc(e.message)}</div>`;
+    if(el) el.innerHTML = `<div style="font-size:13px;color:var(--danger)">❌ ${esc(e.message)}</div>`;
   }
 }
 
@@ -3947,12 +3947,12 @@ async function loadPennylaneStatus(){
   try {
     const s = await API.pennylaneStatus();
     if(s.configured){
-      badge.innerHTML = `<span class="badge g" style="font-size:12px">✓ Connecté${s.account?.email?' — '+esc(s.account.email):''}</span>`;
+      badge.innerHTML = `<span class="badge g" style="font-size:11px">✓ Connecté${s.account?.email?' — '+esc(s.account.email):''}</span>`;
     } else {
-      badge.innerHTML = `<span class="badge hg" style="font-size:12px">${TR('Non configuré')}</span>`;
+      badge.innerHTML = `<span class="badge hg" style="font-size:11px">${TR('Non configuré')}</span>`;
     }
   } catch(_) {
-    badge.innerHTML = `<span class="badge hg" style="font-size:12px">${TR('Erreur')}</span>`;
+    badge.innerHTML = `<span class="badge hg" style="font-size:11px">${TR('Erreur')}</span>`;
   }
 }
 
@@ -4005,7 +4005,7 @@ async function renderRetoursSuede(ttl,c,a){
 
 async function modalRetour(id){
   const d=id?await API.retoursSuede().then(l=>l.find(r=>r.id===id)||{}):{};
-  showModal(`<div class="modal-header"><i class="ti ti-package" style="font-size:20px;color:var(--accent)"></i><h2>${id?t('retours_modal_edit'):t('retours_modal_new')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-package" style="font-size:19px;color:var(--accent)"></i><h2>${id?t('retours_modal_edit'):t('retours_modal_new')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="grid-2">
       <div class="form-group"><label class="form-label">${t('retours_num')}</label><input class="form-input mono" id="r-num" placeholder="RET-2026-001" value="${esc(d.num_retour||'')}"></div>
       <div class="form-group"><label class="form-label">${t('col_date_envoi')}</label><input class="form-input" id="r-date" type="date" value="${d.date_envoi||''}"></div>
@@ -4039,20 +4039,20 @@ async function renderTransferts(ttl,c,a){
   ttl.textContent=t('transferts_title');
   a.innerHTML=`<button class="btn primary" onclick="modalTransfert()"><i class="ti ti-plus"></i>${t('transferts_new')}</button>`;
   const list=await API.transferts();
-  c.innerHTML=`<div style="font-size:14px;color:var(--text2);margin-bottom:12px">${t('transferts_subtitle')}</div>`;
+  c.innerHTML=`<div style="font-size:13px;color:var(--text2);margin-bottom:12px">${t('transferts_subtitle')}</div>`;
   if(!list.length){c.innerHTML+=`<div class="empty"><i class="ti ti-arrows-exchange"></i><p>${t('transferts_empty')}</p></div>`;return;}
   const scT={'En préparation':'attente','En transit':'ouvert','Arrivé':'g','Annulé':'urgent'};
   const stTr={'En préparation':t('transferts_statut_prep'),'En transit':t('transferts_statut_transit'),'Arrivé':t('transferts_statut_arrive'),'Annulé':t('transferts_statut_annule')};
   c.innerHTML+=`<div class="table-wrap"><table class="t">
     <thead><tr><th>${t('transferts_fauteuil').replace(' *','')}</th><th>${t('transferts_depart')}</th><th>${t('transferts_date_depart')}</th><th>${t('transferts_arrivee')}</th><th>${t('transferts_date_arrivee')}</th><th>${t('col_transporteur')}</th><th>${t('transferts_num_suivi')}</th><th>${t('col_statut')}</th><th></th></tr></thead>
     <tbody>${list.map(tr=>`<tr onclick="modalTransfert(${tr.id})">
-      <td><div style="font-weight:600">${esc(tr.modele||'—')}</div><div class="mono" style="color:var(--text3);font-size:13px">${esc(tr.serie||'')}</div></td>
+      <td><div style="font-weight:600">${esc(tr.modele||'—')}</div><div class="mono" style="color:var(--text3);font-size:12px">${esc(tr.serie||'')}</div></td>
       <td>${esc(tr.client_depart_nom||'—')}</td>
       <td>${tr.date_depart?fd(tr.date_depart):'—'}</td>
       <td>${esc(tr.client_arrivee_nom||'—')}</td>
       <td>${tr.date_arrivee?fd(tr.date_arrivee):'—'}</td>
       <td>${esc(tr.transporteur||'—')}</td>
-      <td class="mono" style="font-size:13px">${tr.num_suivi?`${esc(tr.num_suivi)} <a href="${lienhSuiviInter(tr.transporteur,tr.num_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'—'}</td>
+      <td class="mono" style="font-size:12px">${tr.num_suivi?`${esc(tr.num_suivi)} <a href="${lienhSuiviInter(tr.transporteur,tr.num_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:'—'}</td>
       <td><span class="badge ${scT[tr.statut]||''}">${stTr[tr.statut]||esc(tr.statut)}</span></td>
       <td><button class="btn sm danger" onclick="event.stopPropagation();if(confirm(t('transferts_confirm_suppr')))API.deleteTransfert(${tr.id}).then(()=>{render();toast(t('msg_supprime'),'ti-trash')})"><i class="ti ti-trash"></i></button></td>
     </tr>`).join('')}</tbody>
@@ -4091,7 +4091,7 @@ function demoModele(m){
 async function renderParcDemo(ttl,c,a){
   ttl.textContent = TR('Parc de démo');
   a.innerHTML = `<button class="btn sm" onclick="render()"><i class="ti ti-refresh"></i>${TR('Actualiser')}</button>`;
-  c.innerHTML = `<div style="color:var(--text2);font-size:15px;padding:16px 0"><i class="ti ti-loader-2"></i> ${t('msg_chargement')||'Chargement…'}</div>`;
+  c.innerHTML = `<div style="color:var(--text2);font-size:14px;padding:16px 0"><i class="ti ti-loader-2"></i> ${t('msg_chargement')||'Chargement…'}</div>`;
   let demos=[], prets=[], transferts=[];
   try{
     demos = await API.demosParc();
@@ -4207,32 +4207,32 @@ async function renderParcDemo(ttl,c,a){
     }).join('  →  ');
     const cle = (d.modele||'')+' '+(d.num_serie||'')+' '+(detenteur||'')+' '+(d.demo_origine_nom||'')+' '+(pretHolder||'')+' '+parcoursTxt;
     const histBadge = (!isHist && u.hist.length>1)
-      ? ` <span class="badge" style="background:var(--surface-2,#eef1f4);color:var(--text2);border:0.5px solid var(--border-s);font-size:12px;cursor:help" title="${TR('Parcours de l’unité')} : ${esc(parcoursTxt)}"><i class="ti ti-history" style="font-size:13px;margin-right:2px"></i>${u.hist.length} ${TR('épisodes')}</span>`
+      ? ` <span class="badge" style="background:var(--surface-2,#eef1f4);color:var(--text2);border:0.5px solid var(--border-s);font-size:11px;cursor:help" title="${TR('Parcours de l’unité')} : ${esc(parcoursTxt)}"><i class="ti ti-history" style="font-size:12px;margin-right:2px"></i>${u.hist.length} ${TR('épisodes')}</span>`
       : '';
     const serieCell = d.num_serie
       ? `<span class="mono">${esc(d.num_serie)}</span>`
-      : `<span class="badge" style="background:var(--warning-bg);color:var(--warning);border:0.5px solid rgba(180,85,31,.3);font-size:12px" title="${TR('Renseignez le n° de série pour suivre l’unité physique et ses transferts')}"><i class="ti ti-alert-triangle" style="font-size:13px;margin-right:2px"></i>${TR('à renseigner')}</span>`;
+      : `<span class="badge" style="background:var(--warning-bg);color:var(--warning);border:0.5px solid rgba(180,85,31,.3);font-size:11px" title="${TR('Renseignez le n° de série pour suivre l’unité physique et ses transferts')}"><i class="ti ti-alert-triangle" style="font-size:12px;margin-right:2px"></i>${TR('à renseigner')}</span>`;
     const pretBadgeHtml = pretLie
-      ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:12px;cursor:pointer" title="${TR('Prêt actif rattaché à cette unité')} — ${esc(PRET_FORMULES[pretLie.formule]||pretLie.formule||'')}${pretLie.date_retour_prevue?' · '+TR('retour prévu')+' '+fdate(pretLie.date_retour_prevue):''}" onclick="modalPret(${pretLie.id})"><i class="ti ti-file-certificate" style="font-size:13px;margin-right:2px"></i>${TR('prêt')}</span>`
+      ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:11px;cursor:pointer" title="${TR('Prêt actif rattaché à cette unité')} — ${esc(PRET_FORMULES[pretLie.formule]||pretLie.formule||'')}${pretLie.date_retour_prevue?' · '+TR('retour prévu')+' '+fdate(pretLie.date_retour_prevue):''}" onclick="modalPret(${pretLie.id})"><i class="ti ti-file-certificate" style="font-size:12px;margin-right:2px"></i>${TR('prêt')}</span>`
       : '';
     // Réservation : unité promise à un distributeur en attente, à son retour.
     const resaBadge = (!isHist && d.demo_reservation)
-      ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:12px;cursor:pointer" title="${TR('Réservée au retour — cliquez pour modifier / retirer')}" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark" style="font-size:13px;margin-right:2px"></i>${TR('réservé')} : ${esc(d.demo_reservation)}</span>`
+      ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:11px;cursor:pointer" title="${TR('Réservée au retour — cliquez pour modifier / retirer')}" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark" style="font-size:12px;margin-right:2px"></i>${TR('réservé')} : ${esc(d.demo_reservation)}</span>`
       : '';
     const aAvoir = _aAvoir(d);
     const avoirBadge = (d.demo_suivi_resultat==='facture' && aAvoir)
-      ? ` <span class="badge" style="background:#dc262618;color:#dc2626;border:0.5px solid #dc262644;font-size:12px;cursor:pointer" title="${TR('Marquée Vendue mais un avoir existe')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''} — ${TR('vente annulée par avoir : cliquez pour la clôturer en « Avoir » (sort du parc).')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-alert-triangle" style="font-size:13px;margin-right:2px"></i>${TR('avoir ?')}</span>`
-      : ((aAvoir && d.demo_suivi_resultat!=='avoir') ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:12px" title="${TR('Un avoir est enregistré sur cette commande')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''}"><i class="ti ti-receipt-refund" style="font-size:13px;margin-right:2px"></i>${TR('avoir')}</span>` : '');
+      ? ` <span class="badge" style="background:#dc262618;color:#dc2626;border:0.5px solid #dc262644;font-size:11px;cursor:pointer" title="${TR('Marquée Vendue mais un avoir existe')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''} — ${TR('vente annulée par avoir : cliquez pour la clôturer en « Avoir » (sort du parc).')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-alert-triangle" style="font-size:12px;margin-right:2px"></i>${TR('avoir ?')}</span>`
+      : ((aAvoir && d.demo_suivi_resultat!=='avoir') ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px" title="${TR('Un avoir est enregistré sur cette commande')}${d.num_avoir?' ('+esc(d.num_avoir)+')':''}"><i class="ti ti-receipt-refund" style="font-size:12px;margin-right:2px"></i>${TR('avoir')}</span>` : '');
     const voirBtn = `<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="setView('commandes',{q:'${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}'})"><i class="ti ti-arrow-right"></i></button>`;
     const actions = isHist
       ? voirBtn
       : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Clôturer en avoir (annulation — sort du parc)')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-receipt-refund"></i></button>${voirBtn}`;
     return `<tr data-k="${esc(cle.toLowerCase())}">
-      <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:14px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
+      <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:13px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
-      <td style="font-size:13px">${serieCell}</td>
+      <td style="font-size:12px">${serieCell}</td>
       <td>${esc(detenteur)}${pretBadgeHtml}${resaBadge}</td>
-      <td style="font-size:14px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
+      <td style="font-size:13px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
       <td style="white-space:nowrap">${fdate(mise)}</td>
       <td style="white-space:nowrap;${echEchue?'color:var(--danger);font-weight:600':''}">${echeance?fdate(echeance):'—'}</td>
       <td style="white-space:nowrap">${actions}</td>
@@ -4261,7 +4261,7 @@ async function renderParcDemo(ttl,c,a){
   const tabHistHtml  = mkTable(histList.map(x=>parcRow(x.u,x.ep,'hist')).join(''), TR('Aucune démo dans l’historique.'));
 
   const _TABS=[['demo','ti-wheelchair',TR('En démo'),enDemoUnits.length],['dispo','ti-home-check',TR('Disponibles'),dispoUnits.length],['hist','ti-history',TR('Historique'),histList.length]];
-  const tabsBar = `<div style="display:flex;gap:2px;border-bottom:0.5px solid var(--border-s);margin-bottom:12px;flex-wrap:wrap">${_TABS.map(([k,ic,lbl,n])=>`<button class="parc-tab-btn" data-tab="${k}" onclick="parcSetTab('${k}')" style="cursor:pointer;border:none;border-bottom:2px solid ${PARC_TAB===k?'var(--accent)':'transparent'};background:none;color:${PARC_TAB===k?'var(--accent)':'var(--text2)'};font-weight:${PARC_TAB===k?'700':'500'};padding:9px 14px;font-size:15px"><i class="ti ${ic}" style="margin-right:5px"></i>${lbl} <span style="opacity:.6">(${n})</span></button>`).join('')}</div>`;
+  const tabsBar = `<div style="display:flex;gap:2px;border-bottom:0.5px solid var(--border-s);margin-bottom:12px;flex-wrap:wrap">${_TABS.map(([k,ic,lbl,n])=>`<button class="parc-tab-btn" data-tab="${k}" onclick="parcSetTab('${k}')" style="cursor:pointer;border:none;border-bottom:2px solid ${PARC_TAB===k?'var(--accent)':'transparent'};background:none;color:${PARC_TAB===k?'var(--accent)':'var(--text2)'};font-weight:${PARC_TAB===k?'700':'500'};padding:9px 14px;font-size:14px"><i class="ti ${ic}" style="margin-right:5px"></i>${lbl} <span style="opacity:.6">(${n})</span></button>`).join('')}</div>`;
 
   const demoTable = `${tabsBar}
     <div style="margin-bottom:10px"><input class="form-input" id="parc-q" placeholder="${TR('Rechercher (modèle, série, distributeur…)')}" style="max-width:320px;padding:9px 12px" oninput="parcDemoFiltrer(this.value)"></div>
@@ -4274,7 +4274,7 @@ async function renderParcDemo(ttl,c,a){
       <thead><tr><th>${TR('Modèle')}</th><th>${TR('N° série')}</th><th>${TR('Départ')}</th><th>${TR('Arrivée')}</th><th>${TR('Statut')}</th><th>${TR('Départ')}</th><th>${TR('Arrivée')}</th></tr></thead>
       <tbody>${transferts.map(tr=>`<tr style="cursor:pointer" onclick="modalTransfert(${tr.id})">
         <td style="font-weight:600">${esc(tr.modele||'—')}</td>
-        <td class="mono" style="font-size:13px">${esc(tr.serie||'—')}</td>
+        <td class="mono" style="font-size:12px">${esc(tr.serie||'—')}</td>
         <td>${esc(tr.client_depart_nom||'—')}</td>
         <td>${esc(tr.client_arrivee_nom||'—')}</td>
         <td><span class="badge ${scT[tr.statut]||''}">${esc(tr.statut||'')}</span></td>
@@ -4282,7 +4282,7 @@ async function renderParcDemo(ttl,c,a){
         <td style="white-space:nowrap">${tr.date_arrivee?fd(tr.date_arrivee):'—'}</td>
       </tr>`).join('')}</tbody>
     </table></div>`
-    : `<div style="font-size:14px;color:var(--text3);padding:8px 0">${TR('Aucun transfert enregistré.')}</div>`;
+    : `<div style="font-size:13px;color:var(--text3);padding:8px 0">${TR('Aucun transfert enregistré.')}</div>`;
 
   const pretsTable = pretsActifs.length ? `<div class="table-wrap"><table class="t">
       <thead><tr><th>${TR('Distributeur')}</th><th>${TR('Matériel')}</th><th>${TR('Formule')}</th><th>${TR('Statut')}</th><th>${TR('Remise')}</th><th>${TR('Retour prévu')}</th></tr></thead>
@@ -4291,20 +4291,20 @@ async function renderParcDemo(ttl,c,a){
         return `<tr style="cursor:pointer" onclick="modalPret(${p.id})">
         <td style="font-weight:600">${esc(p.client_nom_actuel||p.distributeur_nom||'—')}</td>
         <td>${mat}</td>
-        <td style="font-size:14px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
+        <td style="font-size:13px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
         <td>${pretBadge(p.statut)}</td>
         <td style="white-space:nowrap">${p.date_remise?fd((''+p.date_remise).slice(0,10)):'—'}</td>
         <td style="white-space:nowrap">${p.date_retour_prevue?fd((''+p.date_retour_prevue).slice(0,10)):'—'}</td>
       </tr>`;}).join('')}</tbody>
     </table></div>`
-    : `<div style="font-size:14px;color:var(--text3);padding:8px 0">${TR('Aucun prêt / essai actif.')}</div>`;
+    : `<div style="font-size:13px;color:var(--text3);padding:8px 0">${TR('Aucun prêt / essai actif.')}</div>`;
 
-  const bannerSerie = sansSerie ? `<div style="display:flex;align-items:center;gap:8px;background:var(--warning-bg);border:0.5px solid rgba(180,85,31,.3);color:var(--warning);border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:14.5px">
-    <i class="ti ti-alert-triangle" style="font-size:17px"></i>
+  const bannerSerie = sansSerie ? `<div style="display:flex;align-items:center;gap:8px;background:var(--warning-bg);border:0.5px solid rgba(180,85,31,.3);color:var(--warning);border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:13.5px">
+    <i class="ti ti-alert-triangle" style="font-size:16px"></i>
     <span><b>${sansSerie}</b> ${TR('démo(s) sans n° de série')} — ${TR('renseignez-le dans la fiche commande pour suivre l’unité physique et la rattacher automatiquement aux prêts et transferts.')}</span>
   </div>` : '';
-  const bannerAvoir = venduAvecAvoir ? `<div style="display:flex;align-items:center;gap:8px;background:#dc262614;border:0.5px solid #dc262644;color:#b91c1c;border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:14.5px">
-    <i class="ti ti-alert-triangle" style="font-size:17px"></i>
+  const bannerAvoir = venduAvecAvoir ? `<div style="display:flex;align-items:center;gap:8px;background:#dc262614;border:0.5px solid #dc262644;color:#b91c1c;border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:13.5px">
+    <i class="ti ti-alert-triangle" style="font-size:16px"></i>
     <span><b>${venduAvecAvoir}</b> ${TR('démo(s) marquée(s) « Vendue » avec un avoir')} — ${TR('à vérifier : une vente annulée par avoir devrait être clôturée en « Retour ». Ouvrez l’onglet « Historique » pour les voir et les requalifier.')}</span>
   </div>` : '';
 
@@ -4325,22 +4325,22 @@ async function renderParcDemo(ttl,c,a){
   const possMax   = Math.max(1, ...possList.map(g=>g.essai+g.dispo));
   const possessionCard = `<div class="card" style="margin-top:14px">
     <div class="section-title"><i class="ti ti-packages"></i>${TR('Fauteuils de démo en notre possession')}
-      <span style="margin-left:auto;font-size:14px;font-weight:400;color:var(--text3)">${possTotal} ${TR('fauteuil(s)')} · ${possDispo} ${TR('dispo')} · ${TR('hors S1')}</span></div>
+      <span style="margin-left:auto;font-size:13px;font-weight:400;color:var(--text3)">${possTotal} ${TR('fauteuil(s)')} · ${possDispo} ${TR('dispo')} · ${TR('hors S1')}</span></div>
     ${possList.length ? possList.map(g=>{
       const tot=g.essai+g.dispo; const w=Math.round(tot/possMax*100); const wd=tot?Math.round(g.dispo/tot*100):0;
-      const reco = g.dispo===0 ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:12px" title="${TR('Aucun exemplaire disponible chez nous — à recommander à la Suède si besoin')}">${TR('à recommander ?')}</span>` : '';
+      const reco = g.dispo===0 ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px" title="${TR('Aucun exemplaire disponible chez nous — à recommander à la Suède si besoin')}">${TR('à recommander ?')}</span>` : '';
       return `<div style="display:flex;align-items:center;gap:10px;margin:7px 0">
-        <div style="width:100px;font-weight:600;font-size:15px">${esc(g.modele)}</div>
+        <div style="width:100px;font-weight:600;font-size:14px">${esc(g.modele)}</div>
         <div style="flex:1;background:var(--surface-2,#eef1f4);border-radius:6px;height:22px;overflow:hidden">
           <div style="height:100%;width:${w}%;min-width:26px;display:flex">
             <div style="width:${wd}%;background:#2563eb"></div>
             <div style="flex:1;background:#0d9488"></div>
           </div>
         </div>
-        <div style="width:210px;font-size:14px;color:var(--text2);white-space:nowrap;text-align:right"><b style="color:var(--text)">${tot}</b> ${TR('total')} · ${g.dispo} ${TR('dispo')} · ${g.essai} ${TR('en essai')}${reco}</div>
+        <div style="width:210px;font-size:13px;color:var(--text2);white-space:nowrap;text-align:right"><b style="color:var(--text)">${tot}</b> ${TR('total')} · ${g.dispo} ${TR('dispo')} · ${g.essai} ${TR('en essai')}${reco}</div>
       </div>`;
-    }).join('') : `<div style="font-size:14px;color:var(--text3)">${TR('Aucun fauteuil de démo actif.')}</div>`}
-    <div style="margin-top:12px;display:flex;gap:16px;font-size:13px;color:var(--text3);border-top:0.5px solid var(--border-s);padding-top:8px">
+    }).join('') : `<div style="font-size:13px;color:var(--text3)">${TR('Aucun fauteuil de démo actif.')}</div>`}
+    <div style="margin-top:12px;display:flex;gap:16px;font-size:12px;color:var(--text3);border-top:0.5px solid var(--border-s);padding-top:8px">
       <span><span style="display:inline-block;width:10px;height:10px;background:#2563eb;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('Disponibles (chez nous)')}</span>
       <span><span style="display:inline-block;width:10px;height:10px;background:#0d9488;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('En essai (sortis chez un distributeur)')}</span>
     </div>
@@ -4360,27 +4360,27 @@ async function renderParcDemo(ttl,c,a){
   }).sort((a,b)=> (a.next.demo_rappel_date||'9999').localeCompare(b.next.demo_rappel_date||'9999'));
   const tensionCard = tension.length ? `<div class="card" style="margin-bottom:14px;border-left:3px solid #b45309">
     <div class="section-title"><i class="ti ti-alert-triangle" style="color:#b45309"></i>${TR('Modèles sous tension')}
-      <span style="margin-left:auto;font-size:14px;font-weight:400;color:var(--text3)">${TR('aucun exemplaire disponible — 2ᵉ demande à arbitrer')}</span></div>
+      <span style="margin-left:auto;font-size:13px;font-weight:400;color:var(--text3)">${TR('aucun exemplaire disponible — 2ᵉ demande à arbitrer')}</span></div>
     ${tension.map(tg=>{
       const d=tg.next; const holder = d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—';
       const dateTxt = d.demo_rappel_date ? fdate(d.demo_rappel_date) : TR('date non renseignée');
-      const resa = d.demo_reservation ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:12px;cursor:pointer" title="${TR('Modifier / retirer la réservation')}" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark" style="font-size:13px;margin-right:2px"></i>${TR('réservé')} : ${esc(d.demo_reservation)}</span>` : '';
+      const resa = d.demo_reservation ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:11px;cursor:pointer" title="${TR('Modifier / retirer la réservation')}" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark" style="font-size:12px;margin-right:2px"></i>${TR('réservé')} : ${esc(d.demo_reservation)}</span>` : '';
       return `<div style="display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap">
-        <div style="min-width:220px"><b style="font-size:15px">${esc(tg.modele)}</b> <span style="color:var(--text3);font-size:14px">— ${tg.nb} ${TR('en essai')}, 0 ${TR('dispo')}</span><br>
-          <span style="font-size:14px;color:var(--text2)"><i class="ti ti-clock-hour-4" style="font-size:14px"></i> ${TR('prochaine libération')} : <b${d.demo_rappel_date?'':' style="color:var(--warning)"'}>${dateTxt}</b> ${TR('chez')} ${esc(holder)}</span>${resa}</div>
+        <div style="min-width:220px"><b style="font-size:14px">${esc(tg.modele)}</b> <span style="color:var(--text3);font-size:13px">— ${tg.nb} ${TR('en essai')}, 0 ${TR('dispo')}</span><br>
+          <span style="font-size:13px;color:var(--text2)"><i class="ti ti-clock-hour-4" style="font-size:13px"></i> ${TR('prochaine libération')} : <b${d.demo_rappel_date?'':' style="color:var(--warning)"'}>${dateTxt}</b> ${TR('chez')} ${esc(holder)}</span>${resa}</div>
         <span style="flex:1"></span>
         <button class="btn sm" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark"></i>${TR('Réserver au retour')}</button>
         <button class="btn sm primary" onclick="setView('commande-suede')"><i class="ti ti-truck-delivery"></i>${TR('Commander à la Suède')}</button>
       </div>`;
     }).join('')}
-    <div style="margin-top:8px;font-size:13px;color:var(--text3)">${TR('Astuce : si l’essai en cours est en long terme ou que le distributeur ne peut pas attendre, commandez un neuf ; sinon réservez l’unité et planifiez le transfert à son retour.')}</div>
+    <div style="margin-top:8px;font-size:12px;color:var(--text3)">${TR('Astuce : si l’essai en cours est en long terme ou que le distributeur ne peut pas attendre, commandez un neuf ; sinon réservez l’unité et planifiez le transfert à son retour.')}</div>
   </div>` : '';
 
   c.innerHTML = tiles
     + tensionCard
     + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${bannerAvoir}${bannerSerie}${demoTable}</div>`
-    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:14px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
-    + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:14px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`
+    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:13px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
+    + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:13px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`
     + possessionCard;
 }
 window.renderParcDemo = renderParcDemo;
@@ -4401,7 +4401,7 @@ window.parcSetTab = parcSetTab;
 async function modalTransfert(id){
   const d = id ? await API.transfert(id) : {};
   TMP_CLIENTS = await API.clients();
-  showModal(`<div class="modal-header"><i class="ti ti-arrows-exchange" style="font-size:20px;color:var(--accent)"></i><h2>${id?t('transferts_modal_edit'):t('transferts_modal_new')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-arrows-exchange" style="font-size:19px;color:var(--accent)"></i><h2>${id?t('transferts_modal_edit'):t('transferts_modal_new')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <div class="form-group">
         <label class="form-label">${t('transferts_fauteuil')}</label>
@@ -4464,7 +4464,7 @@ async function modalTransfert(id){
           <label class="form-label">${t('transferts_num_suivi')}</label>
           <div style="display:flex;gap:6px;align-items:center">
             <input class="form-input mono" id="tr-num-suivi" value="${esc(d.num_suivi||'')}" oninput="majLienSuiviTransfert()" style="flex:1">
-            <a id="tr-suivi-lien" target="_blank" rel="noopener" title="${t('cmd_suivre_colis')||'Suivre le colis'}" style="display:${d.num_suivi?'inline-flex':'none'};align-items:center;color:var(--accent);padding:0 6px;font-size:18px" ${d.num_suivi?`href="${lienhSuiviInter(d.transporteur,d.num_suivi)}"`:''}><i class="ti ti-external-link"></i></a>
+            <a id="tr-suivi-lien" target="_blank" rel="noopener" title="${t('cmd_suivre_colis')||'Suivre le colis'}" style="display:${d.num_suivi?'inline-flex':'none'};align-items:center;color:var(--accent);padding:0 6px;font-size:17px" ${d.num_suivi?`href="${lienhSuiviInter(d.transporteur,d.num_suivi)}"`:''}><i class="ti ti-external-link"></i></a>
           </div>
         </div>
         <div class="form-group" style="grid-column:1/-1">
@@ -4472,7 +4472,7 @@ async function modalTransfert(id){
           <select class="form-input" id="tr-statut" onchange="document.getElementById('tr-arrive-hint').style.display=this.value==='Arrivé'?'block':'none'">
             ${[['En préparation','transferts_statut_prep'],['En transit','transferts_statut_transit'],['Arrivé','transferts_statut_arrive'],['Annulé','transferts_statut_annule']].map(([v,k])=>`<option value="${v}" ${d.statut===v?'selected':''}>${t(k)}</option>`).join('')}
           </select>
-          <div id="tr-arrive-hint" style="display:${d.statut==='Arrivé'?'block':'none'};font-size:13px;color:var(--warning);margin-top:4px"><i class="ti ti-alert-triangle"></i> ${t('transferts_arrive_hint')}</div>
+          <div id="tr-arrive-hint" style="display:${d.statut==='Arrivé'?'block':'none'};font-size:12px;color:var(--warning);margin-top:4px"><i class="ti ti-alert-triangle"></i> ${t('transferts_arrive_hint')}</div>
         </div>
         <div class="form-group" style="grid-column:1/-1">
           <label class="form-label">Notes</label>
@@ -4505,10 +4505,10 @@ async function searchFauteuilTransfert(q){
   try{
     const res=await API.recherche(q.trim());
     const fauteuils=res.fauteuils||[];
-    if(!fauteuils.length){drop.innerHTML=`<div class="qs-empty" style="padding:10px 12px;font-size:14px;color:var(--text3)">${t('qs_no_result')} "${esc(q)}"</div>`;drop.style.display='block';return;}
+    if(!fauteuils.length){drop.innerHTML=`<div class="qs-empty" style="padding:10px 12px;font-size:13px;color:var(--text3)">${t('qs_no_result')} "${esc(q)}"</div>`;drop.style.display='block';return;}
     drop.innerHTML=fauteuils.map(f=>`<div class="piece-option" onmousedown="event.preventDefault();selectFauteuilTransfert(${f.id},'${esc(f.modele||'')}','${esc(f.serie||'')}',${f.client_id||'null'},'${esc(f.client_nom||'')}')">
-      <div style="font-size:15px;font-weight:700">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;font-size:14px;color:var(--accent)">${esc(f.serie)}</span></div>
-      <div style="font-size:13px;color:var(--text3)">${esc(f.client_nom||'')}</div>
+      <div style="font-size:14px;font-weight:700">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;font-size:13px;color:var(--accent)">${esc(f.serie)}</span></div>
+      <div style="font-size:12px;color:var(--text3)">${esc(f.client_nom||'')}</div>
     </div>`).join('');
     drop.style.display='block';
   }catch(e){}
@@ -4534,8 +4534,8 @@ function searchClientsTransfert(q,which){
   const results=(query?TMP_CLIENTS.filter(c=>c.nom.toLowerCase().includes(query)):TMP_CLIENTS).slice(0,15);
   if(!results.length){drop.style.display='none';return;}
   drop.innerHTML=results.map(c=>`<div class="piece-option" onmousedown="event.preventDefault();selectClientTransfert(${c.id},'${c.nom.replace(/'/g,"\\'")}','${which}')">
-    <div style="font-size:14px;font-weight:600">${esc(c.nom)}</div>
-    <div style="font-size:13px;color:var(--text3)">${esc(c.ville||'')}</div>
+    <div style="font-size:13px;font-weight:600">${esc(c.nom)}</div>
+    <div style="font-size:12px;color:var(--text3)">${esc(c.ville||'')}</div>
   </div>`).join('');
   drop.style.display='block';
 }
@@ -4618,12 +4618,12 @@ function showQuickResults(res,q){
     html+=`<div class="qs-section-label">Fauteuils</div>`;
     html+=fauteuils.map(f=>`<div class="qs-item">
       <div style="display:flex;align-items:center;gap:10px">
-        <i class="ti ti-wheelchair" style="font-size:20px;color:var(--accent);flex-shrink:0"></i>
+        <i class="ti ti-wheelchair" style="font-size:19px;color:var(--accent);flex-shrink:0"></i>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:15px">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;color:var(--text3);font-size:14px">${esc(f.serie)}</span></div>
-          <div style="font-size:14px;color:var(--text2)">${esc(f.client_nom||'')}${f.date_achat?' — achat '+fd(f.date_achat):''}</div>
+          <div style="font-weight:700;font-size:14px">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;color:var(--text3);font-size:13px">${esc(f.serie)}</span></div>
+          <div style="font-size:13px;color:var(--text2)">${esc(f.client_nom||'')}${f.date_achat?' — achat '+fd(f.date_achat):''}</div>
         </div>
-        <span class="badge ${f.nb_interventions>0?'attente':'g'}" style="font-size:12px">${f.nb_interventions} inter.</span>
+        <span class="badge ${f.nb_interventions>0?'attente':'g'}" style="font-size:11px">${f.nb_interventions} inter.</span>
       </div>
       <div style="display:flex;gap:6px;margin-top:6px;padding-left:28px;flex-wrap:wrap">
         <button class="btn sm primary" onclick="quickNewInter(${f.id},${f.client_id})"><i class="ti ti-plus"></i>${TR('Nouvelle intervention')}</button>
@@ -4641,12 +4641,12 @@ function showQuickResults(res,q){
       const statut = cmdStatutClass ? cmdStatutClass(cmd.statut||'En préparation') : '';
       return `<div class="qs-item" onclick="setView('commandes');clearQuickSearch();setTimeout(()=>modalCommande(${cmd.id}),300)" style="cursor:pointer">
         <div style="display:flex;align-items:center;gap:10px">
-          <i class="ti ti-clipboard-list" style="font-size:20px;color:var(--accent);flex-shrink:0"></i>
+          <i class="ti ti-clipboard-list" style="font-size:19px;color:var(--accent);flex-shrink:0"></i>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:15px">${esc(cmd.distributeur_nom)}${cmd.bdc?` <span class="mono" style="font-weight:400;color:var(--text3);font-size:14px">${esc(cmd.bdc)}</span>`:''}${cmd.modele_demo?` <span class="badge hg" style="font-size:12px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</div>
-            <div style="font-size:14px;color:var(--text2)">${esc(cmd.modele||'')}${cmd.num_facture?' · Facture : '+esc(cmd.num_facture):''}${cmd.num_serie?' · '+esc(cmd.num_serie):''}${cmd.date_commande?' · '+fd(cmd.date_commande):''}</div>
+            <div style="font-weight:700;font-size:14px">${esc(cmd.distributeur_nom)}${cmd.bdc?` <span class="mono" style="font-weight:400;color:var(--text3);font-size:13px">${esc(cmd.bdc)}</span>`:''}${cmd.modele_demo?` <span class="badge hg" style="font-size:11px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</div>
+            <div style="font-size:13px;color:var(--text2)">${esc(cmd.modele||'')}${cmd.num_facture?' · Facture : '+esc(cmd.num_facture):''}${cmd.num_serie?' · '+esc(cmd.num_serie):''}${cmd.date_commande?' · '+fd(cmd.date_commande):''}</div>
           </div>
-          ${cmd.statut?`<span class="badge ${statut}" style="font-size:12px">${esc(tStatut(cmd.statut))}</span>`:''}
+          ${cmd.statut?`<span class="badge ${statut}" style="font-size:11px">${esc(tStatut(cmd.statut))}</span>`:''}
         </div>
       </div>`;
     }).join('');
@@ -4655,10 +4655,10 @@ function showQuickResults(res,q){
     html+=`<div class="qs-section-label" style="margin-top:4px">Distributeurs</div>`;
     html+=clients.map(c=>`<div class="qs-item" onclick="setView('client',{clientId:${c.id}});clearQuickSearch()">
       <div style="display:flex;align-items:center;gap:10px">
-        <i class="ti ti-users" style="font-size:20px;color:var(--accent);flex-shrink:0"></i>
+        <i class="ti ti-users" style="font-size:19px;color:var(--accent);flex-shrink:0"></i>
         <div style="flex:1">
-          <div style="font-weight:700;font-size:15px">${esc(c.nom)}</div>
-          <div style="font-size:14px;color:var(--text2)">${esc(c.ville||'')} — ${c.nb_fauteuils||0} fauteuil${(c.nb_fauteuils||0)!==1?'s':''}</div>
+          <div style="font-weight:700;font-size:14px">${esc(c.nom)}</div>
+          <div style="font-size:13px;color:var(--text2)">${esc(c.ville||'')} — ${c.nb_fauteuils||0} fauteuil${(c.nb_fauteuils||0)!==1?'s':''}</div>
         </div>
         <button class="btn sm primary" onclick="event.stopPropagation();modalNewIntervention(null,${c.id});clearQuickSearch()"><i class="ti ti-plus"></i>Intervention</button>
       </div>
@@ -4670,13 +4670,13 @@ async function quickNewInter(fauteuilId,clientId){clearQuickSearch();const inp=$
 async function importerExcel(file){
   if(!file)return;
   const progress=$('qs-import-progress');
-  if(progress){progress.style.display='block';progress.innerHTML=`<div class="card" style="padding:12px;display:flex;align-items:center;gap:10px"><i class="ti ti-loader-2" style="font-size:22px;color:var(--accent)"></i><span>Import en cours : <b>${esc(file.name)}</b>…</span></div>`;}
+  if(progress){progress.style.display='block';progress.innerHTML=`<div class="card" style="padding:12px;display:flex;align-items:center;gap:10px"><i class="ti ti-loader-2" style="font-size:21px;color:var(--accent)"></i><span>Import en cours : <b>${esc(file.name)}</b>…</span></div>`;}
   try{
     const res=await API.importExcel(file);
     const s=res.stats;
     if(progress){progress.innerHTML=`<div class="card" style="padding:12px;background:var(--success-bg);border-color:var(--success)">
       <div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> Import réussi (${res.sheets.join(', ')})</div>
-      <div style="font-size:14px;display:flex;gap:16px;flex-wrap:wrap">
+      <div style="font-size:13px;display:flex;gap:16px;flex-wrap:wrap">
         <span>✚ ${s.clients} nouveaux clients</span><span>✚ ${s.fauteuils} nouveaux fauteuils</span>
         <span>↻ ${s.doublons} mis à jour</span><span style="color:var(--text3)">— ${s.ignores} ignorés (accessoires)</span>
         ${s.erreurs?`<span style="color:var(--danger)">⚠ ${s.erreurs} erreurs</span>`:''}
@@ -4698,10 +4698,10 @@ async function searchFauteuilInter(q){
   try{
     const res=await API.recherche(q.trim());
     const fauteuils=res.fauteuils||[];
-    if(!fauteuils.length){drop.innerHTML=`<div class="qs-empty" style="padding:10px 12px;font-size:14px;color:var(--text3)">${TR("Aucun fauteuil — utilisez \"+ Créer\" pour en ajouter un")}</div>`;drop.style.display='block';return;}
+    if(!fauteuils.length){drop.innerHTML=`<div class="qs-empty" style="padding:10px 12px;font-size:13px;color:var(--text3)">${TR("Aucun fauteuil — utilisez \"+ Créer\" pour en ajouter un")}</div>`;drop.style.display='block';return;}
     drop.innerHTML=fauteuils.map(f=>`<div class="piece-option" onmousedown="event.preventDefault();selectFauteuilInter(${f.id},'${esc(f.modele||'')}','${esc(f.serie||'')}',${f.client_id||'null'},'${esc(f.client_nom||'')}')">
-      <div style="font-size:15px;font-weight:700">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;font-size:14px;color:var(--accent)">${esc(f.serie)}</span></div>
-      <div style="font-size:13px;color:var(--text3)">${esc(f.client_nom||'')}${f.date_achat?' — achat '+fd(f.date_achat):''}</div>
+      <div style="font-size:14px;font-weight:700">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;font-size:13px;color:var(--accent)">${esc(f.serie)}</span></div>
+      <div style="font-size:12px;color:var(--text3)">${esc(f.client_nom||'')}${f.date_achat?' — achat '+fd(f.date_achat):''}</div>
     </div>`).join('');
     drop.style.display='block';
   }catch(e){}
@@ -4782,8 +4782,8 @@ function searchClients(q,allClients){
   const results=(query?allClients.filter(c=>c.nom.toLowerCase().includes(query)||(c.ville&&c.ville.toLowerCase().includes(query))):allClients).slice(0,15);
   if(!results.length){drop.style.display='none';return;}
   drop.innerHTML=results.map(c=>`<div class="piece-option" onmousedown="event.preventDefault();selectClient(${c.id},'${c.nom.replace(/'/g,"\'")}')">
-    <div style="font-size:14px;font-weight:600">${esc(c.nom)}</div>
-    <div style="font-size:13px;color:var(--text3)">${esc(c.ville||'')}${c.contact?' — '+esc(c.contact):''}</div>
+    <div style="font-size:13px;font-weight:600">${esc(c.nom)}</div>
+    <div style="font-size:12px;color:var(--text3)">${esc(c.ville||'')}${c.contact?' — '+esc(c.contact):''}</div>
   </div>`).join('');
   drop.style.display='block';
 }
@@ -4835,7 +4835,7 @@ async function chargerFacturesVF(fauteuilId){
       <tbody>${factures.map(f=>`<tr>
         <td class="mono" style="color:var(--accent)">${esc(f.numero)}</td>
         <td>${f.date?fd(f.date.substring(0,10)):'—'}</td>
-        <td style="font-size:13px">${esc(f.client_nom||'')}</td>
+        <td style="font-size:12px">${esc(f.client_nom||'')}</td>
         <td style="font-weight:700">${f.montant_ttc?parseFloat(f.montant_ttc).toFixed(2)+' €':'—'}</td>
         <td><span class="badge ${f.statut==='paid'?'g':'attente'}">${f.statut==='paid'?'Payée':t('inter_statut_attente')}</span></td>
         <td><a href="${esc(f.url)}" target="_blank" class="btn sm"><i class="ti ti-external-link"></i>VF</a></td>
@@ -4848,8 +4848,8 @@ let SYNC_POLL_TIMER=null;
 async function syncHistorique(){
   const el=document.getElementById('historique-progress');if(!el)return;
   el.style.display='block';
-  el.innerHTML=`<div class="card" style="padding:10px;font-size:14px"><div style="font-weight:600;margin-bottom:4px"><i class="ti ti-loader-2"></i> ${TR('Sync historique lancée en arrière-plan…')}</div><div id="sync-histo-msg" style="color:var(--text3)">${TR('Démarrage…')}</div><div style="font-size:13px;color:var(--text3);margin-top:4px">${TR("Cela peut prendre 10 à 20 min. Vous pouvez continuer à utiliser l'application.")}</div></div>`;
-  try{await API.vfSyncHistorique();pollSyncHistorique();}catch(e){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:14px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div>`;}
+  el.innerHTML=`<div class="card" style="padding:10px;font-size:13px"><div style="font-weight:600;margin-bottom:4px"><i class="ti ti-loader-2"></i> ${TR('Sync historique lancée en arrière-plan…')}</div><div id="sync-histo-msg" style="color:var(--text3)">${TR('Démarrage…')}</div><div style="font-size:12px;color:var(--text3);margin-top:4px">${TR("Cela peut prendre 10 à 20 min. Vous pouvez continuer à utiliser l'application.")}</div></div>`;
+  try{await API.vfSyncHistorique();pollSyncHistorique();}catch(e){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:13px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(e.message)}</div>`;}
 }
 function pollSyncHistorique(){
   clearInterval(SYNC_POLL_TIMER);
@@ -4862,8 +4862,8 @@ function pollSyncHistorique(){
       if(msg)msg.textContent=s.progress||'…';
       if(s.done){
         clearInterval(SYNC_POLL_TIMER);
-        if(s.error){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:14px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(s.error)}<button class="btn sm" style="display:block;margin-top:6px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>${TR('Fermer')}</button></div>`;}
-        else{el.innerHTML=`<div class="card" style="padding:10px;background:var(--success-bg);border-color:var(--success);font-size:14px"><div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> ${TR('Sync historique terminée !')}</div><div>${esc(s.results?.clients||'—')}</div><div>${esc(s.results?.products||'—')}</div><div>${esc(s.results?.invoices||'—')}</div><button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none';render()"><i class="ti ti-x"></i>${TR('Fermer')}</button></div>`;toast(TR('Sync historique terminée'),'ti-history');}
+        if(s.error){el.innerHTML=`<div class="card" style="padding:10px;background:var(--danger-bg);border-color:var(--danger);font-size:13px;color:var(--danger)"><i class="ti ti-alert-circle"></i> Erreur : ${esc(s.error)}<button class="btn sm" style="display:block;margin-top:6px" onclick="this.parentElement.parentElement.style.display='none'"><i class="ti ti-x"></i>${TR('Fermer')}</button></div>`;}
+        else{el.innerHTML=`<div class="card" style="padding:10px;background:var(--success-bg);border-color:var(--success);font-size:13px"><div style="font-weight:700;color:var(--success);margin-bottom:6px"><i class="ti ti-check"></i> ${TR('Sync historique terminée !')}</div><div>${esc(s.results?.clients||'—')}</div><div>${esc(s.results?.products||'—')}</div><div>${esc(s.results?.invoices||'—')}</div><button class="btn sm" style="margin-top:8px" onclick="this.parentElement.parentElement.style.display='none';render()"><i class="ti ti-x"></i>${TR('Fermer')}</button></div>`;toast(TR('Sync historique terminée'),'ti-history');}
       }
     }catch(e){}
   },5000);
@@ -4877,7 +4877,7 @@ async function modalFusionnerClient(idCible){
   window._FUSION_OUVERT=cible; // fiche depuis laquelle on a ouvert la modale
   window._FUSION_AUTRE=null;   // autre fiche (doublon) sélectionnée
   showModal(`<div style="width:min(92vw,640px)">
-    <div class="modal-header"><i class="ti ti-git-merge" style="font-size:20px;color:var(--accent)"></i><h2>${TR('Fusionner un doublon')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-header"><i class="ti ti-git-merge" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Fusionner un doublon')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="min-height:340px">
       <div class="form-group"><label class="form-label">${TR("Autre fiche (le doublon)")}</label>
         <div style="position:relative">
@@ -4893,21 +4893,21 @@ async function modalFusionnerClient(idCible){
         <div style="display:flex;flex-direction:column;gap:8px">
           <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
             <input type="radio" name="fusion-garder" value="ouvert" checked onchange="majApercuFusion()" style="margin-top:2px">
-            <div><div style="font-weight:600;font-size:15px">${esc(cible.nom)}</div>
-              <div style="font-size:13px;color:var(--text3)">Fiche actuelle — ${cible.nb_fauteuils||0} fauteuil(s)</div></div>
+            <div><div style="font-weight:600;font-size:14px">${esc(cible.nom)}</div>
+              <div style="font-size:12px;color:var(--text3)">Fiche actuelle — ${cible.nb_fauteuils||0} fauteuil(s)</div></div>
           </label>
           <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px">
             <input type="radio" name="fusion-garder" value="autre" onchange="majApercuFusion()" style="margin-top:2px">
-            <div><div style="font-weight:600;font-size:15px" id="fusion-autre-nom">—</div>
-              <div style="font-size:13px;color:var(--text3)" id="fusion-autre-info">—</div></div>
+            <div><div style="font-weight:600;font-size:14px" id="fusion-autre-nom">—</div>
+              <div style="font-size:12px;color:var(--text3)" id="fusion-autre-info">—</div></div>
           </label>
         </div>
       </div>
-      <div class="form-group"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:15px">
+      <div class="form-group"><label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
         <input type="checkbox" id="fusion-vf-ignore" checked>
         <span>${TR('Empêcher la sync VosFactures de recréer ce doublon')}</span>
       </label></div>
-      <div id="fusion-apercu" style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:14px;color:var(--danger);display:none"></div>
+      <div id="fusion-apercu" style="background:var(--danger-bg);border:1px solid var(--danger);border-radius:var(--radius);padding:8px 12px;font-size:13px;color:var(--danger);display:none"></div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
@@ -4920,7 +4920,7 @@ function searchFusionClient(q){
   const query=q.toLowerCase().trim();
   const results=(query?(window._FUSION_CLIENTS||[]).filter(c=>c.nom.toLowerCase().includes(query)):(window._FUSION_CLIENTS||[])).slice(0,30);
   if(!results.length){drop.style.display='none';return;}
-  drop.innerHTML=results.map(c=>`<div class="piece-option" onmousedown="event.preventDefault();selectFusionSource(${c.id},'${c.nom.replace(/'/g,"\\'")}',${c.nb_fauteuils||0})"><div style="font-size:14px;font-weight:600">${esc(c.nom)}</div><div style="font-size:13px;color:var(--text3)">${c.nb_fauteuils||0} fauteuil(s)</div></div>`).join('');
+  drop.innerHTML=results.map(c=>`<div class="piece-option" onmousedown="event.preventDefault();selectFusionSource(${c.id},'${c.nom.replace(/'/g,"\\'")}',${c.nb_fauteuils||0})"><div style="font-size:13px;font-weight:600">${esc(c.nom)}</div><div style="font-size:12px;color:var(--text3)">${c.nb_fauteuils||0} fauteuil(s)</div></div>`).join('');
   drop.style.display='block';
 }
 function selectFusionSource(id,nom,nbFauteuils){
@@ -5019,7 +5019,7 @@ window.syncPaiementCommande = syncPaiementCommande;
 async function renderCommandeSuede(ttl, c, a) {
   ttl.textContent = t('nav_commande_suede') || 'Commande Suède';
   a.innerHTML = `<button class="btn primary" onclick="modalNouvelleCommandeSuede()"><i class="ti ti-plus"></i>${TR('Nouvelle commande')}</button>`;
-  c.innerHTML = `<div id="cs-body"><div style="color:var(--text2);font-size:15px;padding:20px 0">${t('msg_chargement')||'Chargement…'}</div></div>`;
+  c.innerHTML = `<div id="cs-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')||'Chargement…'}</div></div>`;
   chargerCommandesSuede();
 }
 
@@ -5029,7 +5029,7 @@ async function chargerCommandesSuede() {
   try {
     const list = await API.commandesSuede();
     if (!list.length) {
-      el.innerHTML = `<div class="empty"><i class="ti ti-truck-delivery"></i>${TR('Aucune commande Suède.')}<br><span style="font-size:14px;color:var(--text3)">${TR('Créez-en une pour réapprovisionner le stock de pièces depuis Eloflex AB.')}</span></div>`;
+      el.innerHTML = `<div class="empty"><i class="ti ti-truck-delivery"></i>${TR('Aucune commande Suède.')}<br><span style="font-size:13px;color:var(--text3)">${TR('Créez-en une pour réapprovisionner le stock de pièces depuis Eloflex AB.')}</span></div>`;
       return;
     }
     el.innerHTML = `<div class="table-wrap"><table class="t">
@@ -5053,7 +5053,7 @@ async function chargerCommandesSuede() {
       }).join('')}</tbody>
     </table></div>`;
   } catch (e) {
-    el.innerHTML = `<div style="color:var(--danger);padding:20px 0;font-size:15px">Erreur : ${esc(e.message)}</div>`;
+    el.innerHTML = `<div style="color:var(--danger);padding:20px 0;font-size:14px">Erreur : ${esc(e.message)}</div>`;
   }
 }
 
@@ -5070,16 +5070,16 @@ function modalNouvelleCommandeSuede() {
     <div class="modal-body">
       <div class="form-group"><label class="form-label">${TR('Référence de la commande')}</label>
         <input class="form-input mono" id="cs-bc" placeholder="STOCK0241" style="max-width:220px">
-        <div style="font-size:13px;color:var(--text3);margin-top:3px">${TR("Votre référence interne (ex. STOCK + numéro).")}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:3px">${TR("Votre référence interne (ex. STOCK + numéro).")}</div>
       </div>
 
       <details open style="margin:10px 0;border:0.5px solid var(--border);border-radius:8px;padding:8px 12px">
-        <summary style="cursor:pointer;font-size:14px;color:var(--text2)">${TR("Importer depuis un bon de commande VosFactures")}</summary>
+        <summary style="cursor:pointer;font-size:13px;color:var(--text2)">${TR("Importer depuis un bon de commande VosFactures")}</summary>
         <div style="display:flex;gap:6px;margin-top:8px">
           <input class="form-input" id="cs-vf-url" placeholder="Collez l'URL ou l'ID du document VosFactures" style="flex:1">
           <button class="btn primary" type="button" onclick="importerDocVF()"><i class="ti ti-download"></i>Importer</button>
         </div>
-        <div style="font-size:13px;color:var(--text3);margin-top:3px">${TR('Ex. https://eloflex.vosfactures.fr/warehouse_documents/73745036 — ou le numéro du document.')}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:3px">${TR('Ex. https://eloflex.vosfactures.fr/warehouse_documents/73745036 — ou le numéro du document.')}</div>
         <div id="cs-lookup" style="margin-top:8px"></div>
       </details>
 
@@ -5126,7 +5126,7 @@ async function rechercherPieceSuede(q) {
   const trouves = _csCatalogue.filter(c => n(c.ref).includes(q) || n(c.designation).includes(q)).slice(0, 8);
   if (!trouves.length) { boite.style.display = 'none'; return; }
   boite.innerHTML = trouves.map(c =>
-    `<div onclick="ajouterLigneSuede(${c.id})" style="padding:7px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,.05);font-size:14px" onmouseover="this.style.background='rgba(46,124,246,.08)'" onmouseout="this.style.background=''">
+    `<div onclick="ajouterLigneSuede(${c.id})" style="padding:7px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,.05);font-size:13px" onmouseover="this.style.background='rgba(46,124,246,.08)'" onmouseout="this.style.background=''">
       <span class="mono" style="color:var(--text3)">${esc(c.ref)}</span> — ${esc(c.designation)}
     </div>`).join('');
   boite.style.display = '';
@@ -5151,7 +5151,7 @@ function dessinerLignesSuede() {
   const zone = document.getElementById('cs-lignes-liste');
   if (!zone) return;
   if (!_csLignes.length) {
-    zone.innerHTML = '<div style="font-size:14px;color:var(--text3);padding:8px 0">'+TR("Aucune pièce pour l'instant. Ajoutez-les ci-dessus, ou importez un document VosFactures.")+'</div>';
+    zone.innerHTML = '<div style="font-size:13px;color:var(--text3);padding:8px 0">'+TR("Aucune pièce pour l'instant. Ajoutez-les ci-dessus, ou importez un document VosFactures.")+'</div>';
     return;
   }
   zone.innerHTML = `<div class="table-wrap"><table class="t"><thead><tr><th>${TR('Réf.')}</th><th>${TR('Désignation')}</th><th style="width:90px">${TR('Qté')}</th><th></th></tr></thead>
@@ -5186,32 +5186,32 @@ async function importerDocVF() {
   else if (/^\d+$/.test(saisie)) id = saisie;
 
   if (id) {
-    if (zone) zone.innerHTML = '<div style="font-size:14px;color:var(--text2)">'+TR("Chargement du document…")+'</div>';
+    if (zone) zone.innerHTML = '<div style="font-size:13px;color:var(--text2)">'+TR("Chargement du document…")+'</div>';
     try {
       const r = await API.stockDoc(id, '', '1'); // warehouse=1
       if (!r.found || !Array.isArray(r.lignes) || !r.lignes.length) {
-        if (zone) zone.innerHTML = '<div style="font-size:14px;color:var(--warning)">'+TR("Document trouvé mais sans lignes exploitables. Ajoutez les pièces manuellement.")+'</div>';
+        if (zone) zone.innerHTML = '<div style="font-size:13px;color:var(--warning)">'+TR("Document trouvé mais sans lignes exploitables. Ajoutez les pièces manuellement.")+'</div>';
         return;
       }
       fusionnerLignesImportees(r.lignes, r.date);
-      if (zone) zone.innerHTML = `<div style="font-size:14px;color:var(--success);padding:6px 0"><i class="ti ti-check"></i> ${r.lignes.length} ligne(s) importée(s)${r.numero ? ' du ' + esc(r.numero) : ''}.</div>`;
+      if (zone) zone.innerHTML = `<div style="font-size:13px;color:var(--success);padding:6px 0"><i class="ti ti-check"></i> ${r.lignes.length} ligne(s) importée(s)${r.numero ? ' du ' + esc(r.numero) : ''}.</div>`;
     } catch (e) {
-      if (zone) zone.innerHTML = `<div style="font-size:14px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
+      if (zone) zone.innerHTML = `<div style="font-size:13px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
     }
     return;
   }
   // Pas d'ID reconnaissable : recherche par numéro via stock-lookup
-  if (zone) zone.innerHTML = '<div style="font-size:14px;color:var(--text2)">'+TR("Recherche par numéro…")+'</div>';
+  if (zone) zone.innerHTML = '<div style="font-size:13px;color:var(--text2)">'+TR("Recherche par numéro…")+'</div>';
   try {
     const r = await API.stockLookup(saisie);
     if (!r.found || !Array.isArray(r.lignes) || !r.lignes.length) {
-      if (zone) zone.innerHTML = '<div style="font-size:14px;color:var(--warning)">'+TR("Document introuvable. Ajoutez les pièces manuellement.")+'</div>';
+      if (zone) zone.innerHTML = '<div style="font-size:13px;color:var(--warning)">'+TR("Document introuvable. Ajoutez les pièces manuellement.")+'</div>';
       return;
     }
     fusionnerLignesImportees(r.lignes, r.date);
-    if (zone) zone.innerHTML = `<div style="font-size:14px;color:var(--success);padding:6px 0"><i class="ti ti-check"></i> ${r.lignes.length} ligne(s) importée(s)${r.numero ? ' du ' + esc(r.numero) : ''}.</div>`;
+    if (zone) zone.innerHTML = `<div style="font-size:13px;color:var(--success);padding:6px 0"><i class="ti ti-check"></i> ${r.lignes.length} ligne(s) importée(s)${r.numero ? ' du ' + esc(r.numero) : ''}.</div>`;
   } catch (e) {
-    if (zone) zone.innerHTML = `<div style="font-size:14px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
+    if (zone) zone.innerHTML = `<div style="font-size:13px;color:var(--danger)">Erreur : ${esc(e.message)}</div>`;
   }
 }
 window.importerDocVF = importerDocVF;
@@ -5286,7 +5286,7 @@ async function ouvrirCommandeSuede(id) {
         </div>
         <div class="form-group"><label class="form-label">${TR("Date de livraison")}</label>
           <input class="form-input" id="cs-e-livraison" type="date" value="${cs.date_livraison||''}">
-          ${lien ? `<a href="${lien}" target="_blank" rel="noopener" style="font-size:14px;color:var(--accent);display:inline-block;margin-top:4px"><i class="ti ti-external-link"></i> Suivre le colis</a>` : ''}
+          ${lien ? `<a href="${lien}" target="_blank" rel="noopener" style="font-size:13px;color:var(--accent);display:inline-block;margin-top:4px"><i class="ti ti-external-link"></i> Suivre le colis</a>` : ''}
         </div>
         <div class="section-title" style="margin-top:8px"><i class="ti ti-list"></i>Lignes (${cs.lignes.length})</div>
         <div class="table-wrap"><table class="t"><thead><tr><th>${TR('Désignation')}</th><th>${TR('Réf.')}</th><th>${TR('Cmdé')}</th>${cs.stock_integre?'<th>'+TR("Reçu")+'</th><th>Reliquat</th>':''}</tr></thead>
@@ -5296,7 +5296,7 @@ async function ouvrirCommandeSuede(id) {
             <td>${l.quantite_commandee}</td>
             ${cs.stock_integre?`<td>${l.quantite_recue==null?'—':l.quantite_recue}</td><td>${l.reliquat>0?`<span class="badge hg">${l.reliquat}</span>`:'0'}</td>`:''}
           </tr>`).join('')}</tbody></table></div>
-        ${cs.stock_integre ? `<div style="font-size:14px;color:var(--success);margin-top:8px"><i class="ti ti-check"></i> Stock intégré${cs.integre_le?' le '+fd(String(cs.integre_le).slice(0,10)):''}</div>` : ''}
+        ${cs.stock_integre ? `<div style="font-size:13px;color:var(--success);margin-top:8px"><i class="ti ti-check"></i> Stock intégré${cs.integre_le?' le '+fd(String(cs.integre_le).slice(0,10)):''}</div>` : ''}
       </div>
       <div class="modal-foot" style="justify-content:space-between">
         <div>${cs.stock_integre ? '' : `<button class="btn sm danger" onclick="supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i>${TR('Supprimer')}</button>`}</div>
@@ -5336,7 +5336,7 @@ async function modalIntegrerStock(id) {
       <div class="modal-head"><h3><i class="ti ti-package-import"></i>Réception ${esc(cs.numero_bc)}</h3>
         <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
-        <div style="font-size:14px;color:var(--text2);margin-bottom:10px">${TR('Vérifiez la livraison. Ajustez la quantité reçue (un reliquat est calculé si elle est inférieure à la commande) et, au besoin, corrigez la référence ou reliez une ligne au catalogue pour que le stock soit mis à jour.')}</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Vérifiez la livraison. Ajustez la quantité reçue (un reliquat est calculé si elle est inférieure à la commande) et, au besoin, corrigez la référence ou reliez une ligne au catalogue pour que le stock soit mis à jour.')}</div>
         <div id="cs-int-liste"></div>
       </div>
       <div class="modal-foot">
@@ -5359,18 +5359,18 @@ function dessinerLignesIntegration() {
       const rattache = !!l.catalogue_id;
       return `<tr>
         <td>
-          <input class="form-input mono" value="${esc(l.reference || '')}" onchange="majIntLigne(${i},'reference',this.value)" style="width:90px;padding:3px 6px;font-size:14px" placeholder="${TR("réf.")}">
+          <input class="form-input mono" value="${esc(l.reference || '')}" onchange="majIntLigne(${i},'reference',this.value)" style="width:90px;padding:3px 6px;font-size:13px" placeholder="${TR("réf.")}">
           ${rattache
-            ? '<div style="font-size:12px;color:var(--success)"><i class="ti ti-link"></i> catalogue</div>'
-            : `<div style="font-size:12px"><span onclick="relierLigneCatalogue(${i})" style="color:var(--accent);cursor:pointer"><i class="ti ti-link"></i> relier au stock</span></div>`}
+            ? '<div style="font-size:11px;color:var(--success)"><i class="ti ti-link"></i> catalogue</div>'
+            : `<div style="font-size:11px"><span onclick="relierLigneCatalogue(${i})" style="color:var(--accent);cursor:pointer"><i class="ti ti-link"></i> relier au stock</span></div>`}
         </td>
-        <td><input class="form-input" value="${esc(l.designation || '')}" onchange="majIntLigne(${i},'designation',this.value)" style="min-width:160px;padding:3px 6px;font-size:14px"></td>
+        <td><input class="form-input" value="${esc(l.designation || '')}" onchange="majIntLigne(${i},'designation',this.value)" style="min-width:160px;padding:3px 6px;font-size:13px"></td>
         <td>${l.quantite_commandee}</td>
         <td><input class="form-input" type="number" min="0" value="${recu}" oninput="majIntLigne(${i},'_recu',this.value)" style="width:70px;padding:3px 6px"></td>
         <td id="cs-int-reliquat-${i}">${reliquat > 0 ? `<span class="badge hg">${reliquat}</span>` : '<span style="color:var(--text3)">0</span>'}</td>
       </tr>`;
     }).join('')}</tbody></table></div>
-    <div style="font-size:13px;color:var(--text3);margin-top:6px">${TR("Une ligne « relier au stock » non reliée n'incrémente aucun stock, mais la réception est enregistrée.")}</div>`;
+    <div style="font-size:12px;color:var(--text3);margin-top:6px">${TR("Une ligne « relier au stock » non reliée n'incrémente aucun stock, mais la réception est enregistrée.")}</div>`;
 }
 
 function majIntLigne(index, champ, valeur) {
@@ -5456,13 +5456,13 @@ function ouvrirRattachements() {
     '<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9998;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)fermerRattachements()">' +
       '<div style="background:#fff;border-radius:12px;width:820px;max-width:94vw;height:86vh;display:flex;flex-direction:column" onclick="event.stopPropagation()">' +
         '<div style="padding:18px 22px 12px;border-bottom:0.5px solid var(--border)">' +
-          '<h3 style="margin:0 0 4px;font-size:18px">'+TR("Rattacher les points aux fiches clients")+'</h3>' +
-          '<div style="font-size:14px;color:var(--text2)">'+TR("Un point relié à une fiche affiche les ventes de ce client, quelle que soit l\\u2019orthographe employée dans les commandes.")+'</div>' +
-          '<div id="rat-stats" style="font-size:14px;color:var(--text3);margin-top:8px">'+TR("Chargement…")+'</div>' +
+          '<h3 style="margin:0 0 4px;font-size:17px">'+TR("Rattacher les points aux fiches clients")+'</h3>' +
+          '<div style="font-size:13px;color:var(--text2)">'+TR("Un point relié à une fiche affiche les ventes de ce client, quelle que soit l\\u2019orthographe employée dans les commandes.")+'</div>' +
+          '<div id="rat-stats" style="font-size:13px;color:var(--text3);margin-top:8px">'+TR("Chargement…")+'</div>' +
         '</div>' +
         '<div id="rat-liste" style="flex:1;overflow:auto;padding:14px 22px"></div>' +
         '<div style="padding:14px 22px;border-top:0.5px solid var(--border);display:flex;gap:8px;justify-content:flex-end;align-items:center">' +
-          '<span id="rat-compteur" style="font-size:14px;color:var(--text3);margin-right:auto"></span>' +
+          '<span id="rat-compteur" style="font-size:13px;color:var(--text3);margin-right:auto"></span>' +
           '<button class="btn" onclick="fermerRattachements()">'+TR("Fermer")+'</button>' +
           '<button class="btn primary" onclick="enregistrerRattachements(this)"><i class="ti ti-check"></i>'+TR("Enregistrer")+'</button>' +
         '</div>' +
@@ -5487,8 +5487,8 @@ function ratSearch(pid, q) {
   if (!res.length) { drop.style.display = 'none'; return; }
   drop.innerHTML = res.map(function(c){
     return '<div class="piece-option" onmousedown="event.preventDefault();ratSelect(' + pid + ',' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')">' +
-      '<div style="font-size:14px;font-weight:600">' + _esc(c.nom) + '</div>' +
-      (c.ville ? '<div style="font-size:13px;color:var(--text3)">' + _esc(c.ville) + '</div>' : '') + '</div>';
+      '<div style="font-size:13px;font-weight:600">' + _esc(c.nom) + '</div>' +
+      (c.ville ? '<div style="font-size:12px;color:var(--text3)">' + _esc(c.ville) + '</div>' : '') + '</div>';
   }).join('');
   drop.style.display = 'block';
 }
@@ -5540,14 +5540,14 @@ function dessinerRattachements() {
   var sansRien = _ratDonnees.points.filter(function(p){ return p.etat === 'aucune'; });
 
   if (!aTraiter.length && !sansRien.length) {
-    l.innerHTML = '<div style="padding:30px;text-align:center;color:#16a34a"><i class="ti ti-check" style="font-size:28px"></i><br>'+TR("Tous les points sont reliés à une fiche client.")+'</div>';
+    l.innerHTML = '<div style="padding:30px;text-align:center;color:#16a34a"><i class="ti ti-check" style="font-size:27px"></i><br>'+TR("Tous les points sont reliés à une fiche client.")+'</div>';
     majCompteurRat();
     return;
   }
 
   var html = '';
   if (aTraiter.length) {
-    html += '<div style="font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin-bottom:8px">'+TR("Correspondances proposées")+'</div>';
+    html += '<div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin-bottom:8px">'+TR("Correspondances proposées")+'</div>';
     html += aTraiter.map(function(p){
       var cfg = RESEAUX_CONFIG[p.reseau] || { color: '#888', label: p.reseau };
       var choix = _ratChoix[p.id];
@@ -5557,50 +5557,50 @@ function dessinerRattachements() {
                (actif ? 'background:rgba(46,124,246,.1)' : '') + '">' +
           '<input type="radio" name="rat-' + p.id + '" ' + (actif ? 'checked' : '') +
             ' onchange="choisirRattachement(' + p.id + ',' + s.id + ')">' +
-          '<span style="flex:1;font-size:15px">' + _esc(s.nom) +
+          '<span style="flex:1;font-size:14px">' + _esc(s.nom) +
             (s.ville ? ' <span style="color:var(--text3)">— ' + _esc(s.ville) + '</span>' : '') + '</span>' +
-          (s.commandes ? '<span style="font-size:13px;background:rgba(46,124,246,.1);color:#2e7cf6;padding:1px 6px;border-radius:99px">' + s.commandes + ' cmd</span>' : '') +
-          (s.deja_lie ? '<span style="font-size:13px;color:#d97706" title="'+TR("Déjà relié à un autre point")+'">'+TR("déjà relié")+'</span>' : '') +
-          '<span style="font-size:13px;color:var(--text3);width:34px;text-align:right">' + s.score + '%</span>' +
+          (s.commandes ? '<span style="font-size:12px;background:rgba(46,124,246,.1);color:#2e7cf6;padding:1px 6px;border-radius:99px">' + s.commandes + ' cmd</span>' : '') +
+          (s.deja_lie ? '<span style="font-size:12px;color:#d97706" title="'+TR("Déjà relié à un autre point")+'">'+TR("déjà relié")+'</span>' : '') +
+          '<span style="font-size:12px;color:var(--text3);width:34px;text-align:right">' + s.score + '%</span>' +
         '</label>';
       }).join('');
 
       return '<div style="border:0.5px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
           '<span style="width:11px;height:11px;border-radius:50%;background:' + cfg.color + ';flex-shrink:0"></span>' +
-          '<strong style="font-size:15px">' + _esc(p.nom) + '</strong>' +
-          '<span style="font-size:13px;color:var(--text3)">' + _esc([p.cp, p.ville].filter(Boolean).join(' ')) + '</span>' +
+          '<strong style="font-size:14px">' + _esc(p.nom) + '</strong>' +
+          '<span style="font-size:12px;color:var(--text3)">' + _esc([p.cp, p.ville].filter(Boolean).join(' ')) + '</span>' +
         '</div>' + options +
         '<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;cursor:pointer">' +
           '<input type="radio" name="rat-' + p.id + '" ' + (choix === null ? 'checked' : '') +
             ' onchange="choisirRattachement(' + p.id + ',null)">' +
-          '<span style="font-size:14px;color:var(--text3)">'+TR("Aucune de ces fiches")+'</span>' +
+          '<span style="font-size:13px;color:var(--text3)">'+TR("Aucune de ces fiches")+'</span>' +
         '</label>' +
         '<div style="position:relative;margin-top:4px;padding-top:6px;border-top:0.5px dashed var(--border)">' +
-          '<input id="rat-search-' + p.id + '" placeholder="🔎 Chercher une autre fiche…" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:14px;background:var(--surface)">' +
+          '<input id="rat-search-' + p.id + '" placeholder="🔎 Chercher une autre fiche…" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;background:var(--surface)">' +
           '<div id="rat-drop-' + p.id + '" class="piece-dropdown" style="display:none"></div>' +
-          '<div id="rat-choix-' + p.id + '" style="font-size:13px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> '+TR("Rattaché à :")+' <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
+          '<div id="rat-choix-' + p.id + '" style="font-size:12px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> '+TR("Rattaché à :")+' <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
         '</div>' +
       '</div>';
     }).join('');
   }
 
   if (sansRien.length) {
-    html += '<div style="font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin:18px 0 8px">' +
+    html += '<div style="font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:700;margin:18px 0 8px">' +
             'Sans correspondance (' + sansRien.length + ')</div>' +
-            '<div style="font-size:14px;color:var(--text3);margin-bottom:8px">'+TR("Ces points n\\u2019ont pas d\\u2019équivalent parmi les fiches clients. Leurs ventes restent rapprochées par le nom.")+'</div>' +
+            '<div style="font-size:13px;color:var(--text3);margin-bottom:8px">'+TR("Ces points n\\u2019ont pas d\\u2019équivalent parmi les fiches clients. Leurs ventes restent rapprochées par le nom.")+'</div>' +
             sansRien.map(function(p){
               var cfg = RESEAUX_CONFIG[p.reseau] || { color: '#888' };
               return '<div style="border:0.5px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">' +
                 '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
                   '<span style="width:11px;height:11px;border-radius:50%;background:' + cfg.color + ';flex-shrink:0"></span>' +
-                  '<strong style="font-size:15px">' + _esc(p.nom) + '</strong>' +
-                  '<span style="font-size:13px;color:var(--text3)">' + _esc([p.cp, p.ville].filter(Boolean).join(' ')) + '</span>' +
+                  '<strong style="font-size:14px">' + _esc(p.nom) + '</strong>' +
+                  '<span style="font-size:12px;color:var(--text3)">' + _esc([p.cp, p.ville].filter(Boolean).join(' ')) + '</span>' +
                 '</div>' +
                 '<div style="position:relative">' +
-                  '<input id="rat-search-' + p.id + '" placeholder="'+TR("🔎 Chercher une fiche à relier…")+'" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:14px;background:var(--surface)">' +
+                  '<input id="rat-search-' + p.id + '" placeholder="'+TR("🔎 Chercher une fiche à relier…")+'" autocomplete="off" oninput="ratSearch(' + p.id + ',this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'rat-drop-' + p.id + '\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;background:var(--surface)">' +
                   '<div id="rat-drop-' + p.id + '" class="piece-dropdown" style="display:none"></div>' +
-                  '<div id="rat-choix-' + p.id + '" style="font-size:13px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> '+TR("Rattaché à :")+' <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
+                  '<div id="rat-choix-' + p.id + '" style="font-size:12px;color:#16a34a;margin-top:3px">' + (_ratChoixNom[p.id] ? '<i class="ti ti-check"></i> '+TR("Rattaché à :")+' <strong>' + _esc(_ratChoixNom[p.id]) + '</strong>' : '') + '</div>' +
                 '</div>' +
               '</div>';
             }).join('');
@@ -5767,14 +5767,14 @@ var DISC_EMOJIS = ['👍','✅','❤️','👀','🎉'];
 
 function renderDiscussions(ttl, c, a) {
   ttl.textContent = t('nav_discussions') || 'Discussions';
-  a.innerHTML = '<button onclick="renderDiscussionsRecharger()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer"><i class="ti ti-refresh"></i> Actualiser</button>';
-  var tab = function(k,lbl){ return '<button id="disc-tab-'+k+'" onclick="switchDiscTab(\''+k+'\')" style="flex:0 0 auto;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:15px;font-weight:600;border-bottom:2px solid transparent;color:var(--text2)">'+lbl+'</button>'; };
+  a.innerHTML = '<button onclick="renderDiscussionsRecharger()" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer"><i class="ti ti-refresh"></i> Actualiser</button>';
+  var tab = function(k,lbl){ return '<button id="disc-tab-'+k+'" onclick="switchDiscTab(\''+k+'\')" style="flex:0 0 auto;padding:8px 14px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;border-bottom:2px solid transparent;color:var(--text2)">'+lbl+'</button>'; };
   c.innerHTML =
     '<div style="display:flex;gap:4px;border-bottom:0.5px solid var(--border-s);margin-bottom:14px">' +
       tab('fil','💬 Fil d\'équipe') + tab('notes','📦 Notes commandes') +
     '</div>' +
     '<div id="disc-fil"></div>' +
-    '<div id="disc-notes" style="display:none"><div id="disc-body" style="color:var(--text2);font-size:15px;padding:10px 0">'+TR("Chargement…")+'</div></div>';
+    '<div id="disc-notes" style="display:none"><div id="disc-body" style="color:var(--text2);font-size:14px;padding:10px 0">'+TR("Chargement…")+'</div></div>';
   switchDiscTab(_DISC_TAB);
 }
 window.renderDiscussions = renderDiscussions;
@@ -5797,13 +5797,13 @@ function chargerFil(){
   var host = document.getElementById('disc-fil'); if(!host) return;
   host.innerHTML =
     '<div class="card" style="padding:12px 14px;margin-bottom:14px">' +
-      '<textarea id="fil-nouveau" rows="2" placeholder="'+TR("Écrire un message à l'équipe…")+'" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:15px;resize:vertical;font-family:inherit"></textarea>' +
+      '<textarea id="fil-nouveau" rows="2" placeholder="'+TR("Écrire un message à l'équipe…")+'" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:14px;resize:vertical;font-family:inherit"></textarea>' +
       '<div style="display:flex;align-items:center;gap:12px;margin-top:8px">' +
-        '<label style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text2);cursor:pointer;margin-left:auto"><input type="checkbox" id="fil-arch-toggle" ' + (_DISC_ARCH?'checked':'') + ' onchange="_DISC_ARCH=this.checked;chargerFil()"> '+TR("Afficher les archivés")+'</label>' +
+        '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;margin-left:auto"><input type="checkbox" id="fil-arch-toggle" ' + (_DISC_ARCH?'checked':'') + ' onchange="_DISC_ARCH=this.checked;chargerFil()"> '+TR("Afficher les archivés")+'</label>' +
         '<button class="btn primary" onclick="publierFil()"><i class="ti ti-send"></i> Publier</button>' +
       '</div>' +
     '</div>' +
-    '<div id="fil-liste" style="color:var(--text2);font-size:15px">'+TR("Chargement…")+'</div>';
+    '<div id="fil-liste" style="color:var(--text2);font-size:14px">'+TR("Chargement…")+'</div>';
   fetch('/api/discussions/fil?archived=' + (_DISC_ARCH?'1':'0'))
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(list){
@@ -5822,7 +5822,7 @@ function filCarte(m){
   var reacts = DISC_EMOJIS.map(function(em){
     var found = (m.reactions||[]).find(function(r){ return r.emoji===em; });
     var cnt = found ? found.count : 0, mine = found ? found.mine : false, title = found ? found.users.join(', ') : '';
-    return '<button onclick="reactFil('+m.id+',\''+em+'\')" title="'+_esc(title)+'" style="border:0.5px solid '+(mine?'var(--accent)':'var(--border-s)')+';background:'+(mine?'rgba(46,124,246,.10)':'var(--surface)')+';border-radius:99px;padding:2px 9px;font-size:15px;cursor:pointer;line-height:1.5">'+em+(cnt?' <span style="font-size:13px;color:var(--text2)">'+cnt+'</span>':'')+'</button>';
+    return '<button onclick="reactFil('+m.id+',\''+em+'\')" title="'+_esc(title)+'" style="border:0.5px solid '+(mine?'var(--accent)':'var(--border-s)')+';background:'+(mine?'rgba(46,124,246,.10)':'var(--surface)')+';border-radius:99px;padding:2px 9px;font-size:14px;cursor:pointer;line-height:1.5">'+em+(cnt?' <span style="font-size:12px;color:var(--text2)">'+cnt+'</span>':'')+'</button>';
   }).join(' ');
   var actions = '';
   if (m.can_edit){
@@ -5832,17 +5832,17 @@ function filCarte(m){
     actions += '<button onclick="supprFil('+m.id+')" title="'+TR("Supprimer")+'" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:2px 4px"><i class="ti ti-trash"></i></button>';
   }
   var corps = edit
-    ? '<textarea id="fil-edit-'+m.id+'" rows="3" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:15px;resize:vertical;font-family:inherit">'+_esc(m.contenu)+'</textarea>' +
+    ? '<textarea id="fil-edit-'+m.id+'" rows="3" style="width:100%;border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;font-size:14px;resize:vertical;font-family:inherit">'+_esc(m.contenu)+'</textarea>' +
       '<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">'+TR("Annuler")+'</button><button class="btn sm primary" onclick="sauverEditFil('+m.id+')">'+TR("Enregistrer")+'</button></div>'
-    : '<div style="font-size:15.5px;white-space:pre-wrap;line-height:1.5">'+_esc(m.contenu)+'</div>';
+    : '<div style="font-size:14.5px;white-space:pre-wrap;line-height:1.5">'+_esc(m.contenu)+'</div>';
   var initiale = (m.user_nom||'?').trim().charAt(0).toUpperCase();
   return '<div class="card" style="padding:12px 14px;margin-bottom:10px;'+(m.pinned?'border-left:3px solid var(--accent)':'')+'">' +
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
-      '<span style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0">'+_esc(initiale)+'</span>' +
-      '<span style="font-weight:700;font-size:15px">'+_esc(m.user_nom||'Utilisateur')+'</span>' +
-      (m.pinned?'<span class="badge ouvert" style="font-size:12px"><i class="ti ti-pin-filled" style="font-size:12px"></i> '+TR("Épinglé")+'</span>':'') +
-      (m.archived?'<span class="badge hg" style="font-size:12px">'+TR("Archivé")+'</span>':'') +
-      '<span style="font-size:13px;color:var(--text3)">'+_fd(m.created_at)+ (m.updated_at && m.updated_at!==m.created_at ? ' · modifié' : '') +'</span>' +
+      '<span style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">'+_esc(initiale)+'</span>' +
+      '<span style="font-weight:700;font-size:14px">'+_esc(m.user_nom||'Utilisateur')+'</span>' +
+      (m.pinned?'<span class="badge ouvert" style="font-size:11px"><i class="ti ti-pin-filled" style="font-size:11px"></i> '+TR("Épinglé")+'</span>':'') +
+      (m.archived?'<span class="badge hg" style="font-size:11px">'+TR("Archivé")+'</span>':'') +
+      '<span style="font-size:12px;color:var(--text3)">'+_fd(m.created_at)+ (m.updated_at && m.updated_at!==m.created_at ? ' · modifié' : '') +'</span>' +
       '<span style="margin-left:auto;display:flex;gap:2px">'+actions+'</span>' +
     '</div>' +
     corps +
@@ -5850,7 +5850,7 @@ function filCarte(m){
       '<div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap">'+reacts+'</div>' +
       ((m.replies||[]).length ? '<div style="margin-top:8px">'+(m.replies||[]).map(filReply).join('')+'</div>' : '') +
       '<div style="display:flex;gap:6px;margin-top:8px;padding-left:34px">' +
-        '<input id="reply-'+m.id+'" placeholder="'+TR("Répondre…")+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();repondreFil('+m.id+')}" style="flex:1;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 9px;font-size:14px">' +
+        '<input id="reply-'+m.id+'" placeholder="'+TR("Répondre…")+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();repondreFil('+m.id+')}" style="flex:1;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 9px;font-size:13px">' +
         '<button class="btn sm" onclick="repondreFil('+m.id+')"><i class="ti ti-corner-down-right"></i> '+TR("Répondre")+'</button>' +
       '</div>'
     ) +
@@ -5861,17 +5861,17 @@ function filCarte(m){
 function filReply(r){
   var edit = _DISC_EDIT === r.id;
   var actions = (r.can_edit && !edit)
-    ? '<button onclick="editFil('+r.id+')" title="'+TR("Éditer")+'" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 3px"><i class="ti ti-pencil" style="font-size:14px"></i></button>' +
-      '<button onclick="supprFil('+r.id+')" title="'+TR("Supprimer")+'" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:1px 3px"><i class="ti ti-trash" style="font-size:14px"></i></button>'
+    ? '<button onclick="editFil('+r.id+')" title="'+TR("Éditer")+'" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:1px 3px"><i class="ti ti-pencil" style="font-size:13px"></i></button>' +
+      '<button onclick="supprFil('+r.id+')" title="'+TR("Supprimer")+'" style="background:none;border:none;cursor:pointer;color:var(--danger);padding:1px 3px"><i class="ti ti-trash" style="font-size:13px"></i></button>'
     : '';
   var corps = edit
-    ? '<textarea id="fil-edit-'+r.id+'" rows="2" style="width:100%;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 8px;font-size:14px;resize:vertical;font-family:inherit">'+_esc(r.contenu)+'</textarea><div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">'+TR("Annuler")+'</button><button class="btn sm primary" onclick="sauverEditFil('+r.id+')">'+TR("Enregistrer")+'</button></div>'
-    : '<div style="font-size:14px;white-space:pre-wrap;line-height:1.45;color:var(--text)">'+_esc(r.contenu)+'</div>';
+    ? '<textarea id="fil-edit-'+r.id+'" rows="2" style="width:100%;border:0.5px solid var(--border-s);border-radius:7px;padding:6px 8px;font-size:13px;resize:vertical;font-family:inherit">'+_esc(r.contenu)+'</textarea><div style="display:flex;gap:6px;justify-content:flex-end;margin-top:4px"><button class="btn sm" onclick="_DISC_EDIT=null;chargerFil()">'+TR("Annuler")+'</button><button class="btn sm primary" onclick="sauverEditFil('+r.id+')">'+TR("Enregistrer")+'</button></div>'
+    : '<div style="font-size:13px;white-space:pre-wrap;line-height:1.45;color:var(--text)">'+_esc(r.contenu)+'</div>';
   var ini = (r.user_nom||'?').trim().charAt(0).toUpperCase();
   return '<div style="display:flex;gap:7px;padding:6px 0 6px 10px;border-left:2px solid var(--border-s);margin-left:22px;margin-top:6px">' +
-    '<span style="width:20px;height:20px;border-radius:50%;background:var(--text3);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">'+_esc(ini)+'</span>' +
+    '<span style="width:20px;height:20px;border-radius:50%;background:var(--text3);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">'+_esc(ini)+'</span>' +
     '<div style="flex:1">' +
-      '<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:600;font-size:14px">'+_esc(r.user_nom||'Utilisateur')+'</span><span style="font-size:12px;color:var(--text3)">'+_fd(r.created_at)+(r.updated_at && r.updated_at!==r.created_at?' · modifié':'')+'</span><span style="margin-left:auto;display:flex;gap:2px">'+actions+'</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px"><span style="font-weight:600;font-size:13px">'+_esc(r.user_nom||'Utilisateur')+'</span><span style="font-size:11px;color:var(--text3)">'+_fd(r.created_at)+(r.updated_at && r.updated_at!==r.created_at?' · modifié':'')+'</span><span style="margin-left:auto;display:flex;gap:2px">'+actions+'</span></div>' +
       corps +
     '</div>' +
   '</div>';
@@ -5944,7 +5944,7 @@ function chargerDiscussions() {
       var el = document.getElementById('disc-body');
       if (!el) return;
       if (!Array.isArray(notes) || !notes.length) {
-        el.innerHTML = '<div class="empty"><i class="ti ti-messages"></i>'+TR("Aucune note pour le moment.")+'<br><span style="font-size:14px;color:var(--text3)">'+TR("Les notes ajoutées depuis l'onglet Notes d'une commande apparaîtront ici.")+'</span></div>';
+        el.innerHTML = '<div class="empty"><i class="ti ti-messages"></i>'+TR("Aucune note pour le moment.")+'<br><span style="font-size:13px;color:var(--text3)">'+TR("Les notes ajoutées depuis l'onglet Notes d'une commande apparaîtront ici.")+'</span></div>';
         return;
       }
       // Regroupement par commande, en conservant l'ordre d'arrivée
@@ -5960,20 +5960,20 @@ function chargerDiscussions() {
         var titre = cmd.bdc ? 'BDC ' + _esc(cmd.bdc) : 'Commande #' + cmd.commande_id;
         return '<div class="card" style="margin-bottom:10px;padding:12px 14px">' +
           '<div onclick="_ouvrirCmd(' + cmd.commande_id + ')" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px">' +
-            '<i class="ti ti-package" style="font-size:16px;color:var(--accent)"></i>' +
-            '<span style="font-weight:700;font-size:15px">' + titre + '</span>' +
-            (cmd.distributeur_nom ? '<span style="font-size:14px;color:var(--text3)">— ' + _esc(cmd.distributeur_nom) + '</span>' : '') +
-            (cmd.num_serie ? '<span class="mono" style="font-size:13px;color:var(--text3)">' + _esc(cmd.num_serie) + '</span>' : '') +
-            '<span style="margin-left:auto;font-size:13px;color:var(--text3)">' + g.notes.length + ' note' + (g.notes.length > 1 ? 's' : '') + '</span>' +
-            '<i class="ti ti-arrow-right" style="font-size:15px;color:var(--text3)"></i>' +
+            '<i class="ti ti-package" style="font-size:15px;color:var(--accent)"></i>' +
+            '<span style="font-weight:700;font-size:14px">' + titre + '</span>' +
+            (cmd.distributeur_nom ? '<span style="font-size:13px;color:var(--text3)">— ' + _esc(cmd.distributeur_nom) + '</span>' : '') +
+            (cmd.num_serie ? '<span class="mono" style="font-size:12px;color:var(--text3)">' + _esc(cmd.num_serie) + '</span>' : '') +
+            '<span style="margin-left:auto;font-size:12px;color:var(--text3)">' + g.notes.length + ' note' + (g.notes.length > 1 ? 's' : '') + '</span>' +
+            '<i class="ti ti-arrow-right" style="font-size:14px;color:var(--text3)"></i>' +
           '</div>' +
           g.notes.map(function(n){
             return '<div style="border-left:2px solid var(--border);padding:5px 0 5px 10px;margin-bottom:4px">' +
               '<div style="display:flex;align-items:baseline;gap:8px">' +
-                '<span style="font-size:14px;font-weight:600">' + _esc(n.user_nom || 'Utilisateur') + '</span>' +
-                '<span style="font-size:13px;color:var(--text3)">' + _fd(n.created_at) + '</span>' +
+                '<span style="font-size:13px;font-weight:600">' + _esc(n.user_nom || 'Utilisateur') + '</span>' +
+                '<span style="font-size:12px;color:var(--text3)">' + _fd(n.created_at) + '</span>' +
               '</div>' +
-              '<div style="font-size:15px;white-space:pre-wrap;margin-top:2px">' + _esc(n.texte || '') + '</div>' +
+              '<div style="font-size:14px;white-space:pre-wrap;margin-top:2px">' + _esc(n.texte || '') + '</div>' +
             '</div>';
           }).join('') +
         '</div>';
@@ -5981,7 +5981,7 @@ function chargerDiscussions() {
     })
     .catch(function(e){
       var el = document.getElementById('disc-body');
-      if (el) el.innerHTML = '<div style="color:var(--danger);padding:20px 0;font-size:15px">Erreur de chargement : ' + _esc(e.message) + '</div>';
+      if (el) el.innerHTML = '<div style="color:var(--danger);padding:20px 0;font-size:14px">Erreur de chargement : ' + _esc(e.message) + '</div>';
     });
 }
 window.chargerDiscussions = chargerDiscussions;
@@ -6058,8 +6058,8 @@ function cfAutocomplete(input, champ) {
           var ligne2 = [c.cp, c.ville].filter(Boolean).join(' ');
           return '<div onclick="cfSelect(' + i + ')" style="padding:7px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,.06)"' +
             ' onmouseover="this.style.background=\'rgba(46,124,246,.08)\'" onmouseout="this.style.background=\'\'">' +
-            '<div style="font-size:14px;font-weight:600">' + _esc([c.nom, c.prenom].filter(Boolean).join(' ')) + '</div>' +
-            '<div style="font-size:13px;color:var(--text3)">' + _esc(ligne2 || c.email || '') +
+            '<div style="font-size:13px;font-weight:600">' + _esc([c.nom, c.prenom].filter(Boolean).join(' ')) + '</div>' +
+            '<div style="font-size:12px;color:var(--text3)">' + _esc(ligne2 || c.email || '') +
               (c.nb_commandes > 1 ? ' · ' + c.nb_commandes + ' commandes' : '') + '</div>' +
             '</div>';
         }).join('');
@@ -6107,7 +6107,7 @@ function copierAdresse(el, txt) {
   if (navigator.clipboard) {
     navigator.clipboard.writeText(txt).then(function(){
       var av = el.innerHTML;
-      el.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i> Copié';
+      el.innerHTML = '<i class="ti ti-check" style="font-size:12px"></i> Copié';
       setTimeout(function(){ el.innerHTML = av; }, 1500);
     }).catch(function(){});
   }
@@ -6222,19 +6222,19 @@ function legendeAnnees(){
   var html = '<details class="card carte-collapse" style="padding:0;margin-bottom:10px">' +
     '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-calendar"></i>'+TR("Année")+'</summary>' +
     '<div style="padding:0 13px 13px">' +
-    '<label style="display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;font-size:14px;font-weight:600;color:var(--text)">' +
+    '<label style="display:flex;align-items:center;gap:8px;padding:4px 4px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">' +
       '<input type="checkbox" ' + (_carteToutesAnnees?'checked':'') + ' onchange="basculerToutesAnnees(this.checked)"> ' + (t('carte_toutes_annees')||'Toutes les années') +
     '</label>' +
     '<div id="carte-annees-liste" style="' + (_carteToutesAnnees?'opacity:.4;pointer-events:none':'') + '">';
   for (var y = actuelle; y >= 2019; y--) {
-    html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:14px">' +
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:13px">' +
       '<input type="checkbox" ' + (_carteAnneesFiltre[y]?'checked':'') + ' onchange="basculerAnnee(' + y + ',this.checked)"> ' + y +
-      '<span id="cnt-annee-' + y + '" style="margin-left:auto;font-size:13px;color:var(--text3)">0</span>' +
+      '<span id="cnt-annee-' + y + '" style="margin-left:auto;font-size:12px;color:var(--text3)">0</span>' +
       '</label>';
   }
-  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:14px;color:var(--text2)">' +
+  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px 3px 14px;cursor:pointer;font-size:13px;color:var(--text2)">' +
     '<input type="checkbox" ' + (_carteSansAnnee?'checked':'') + ' onchange="basculerSansAnnee(this.checked)"> ' + (t('carte_sans_commande')||'Sans commande / avant 2019') +
-    '<span id="cnt-annee-sans" style="margin-left:auto;font-size:13px;color:var(--text3)">0</span>' +
+    '<span id="cnt-annee-sans" style="margin-left:auto;font-size:12px;color:var(--text3)">0</span>' +
     '</label>';
   html += '</div></div></details>';
   return html;
@@ -6266,16 +6266,16 @@ function legendePriorites(){
     '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-flag"></i>' + (t('carte_priorite')||'Priorité') + '</summary>' +
     '<div style="padding:0 13px 13px">';
   ['T1','T2','T3'].forEach(function(p){
-    html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:14px">' +
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:13px">' +
       '<input type="checkbox" ' + (_cartePriorites[p]?'checked':'') + ' onchange="basculerPriorite(\'' + p + '\',this.checked)">' +
       '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + couleurs[p] + '"></span>' +
       libelles[p] +
-      '<span id="cnt-prio-' + p + '" style="margin-left:auto;font-size:13px;color:var(--text3)">0</span>' +
+      '<span id="cnt-prio-' + p + '" style="margin-left:auto;font-size:12px;color:var(--text3)">0</span>' +
       '</label>';
   });
-  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:14px;color:var(--text2)">' +
+  html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:13px;color:var(--text2)">' +
     '<input type="checkbox" ' + (_cartePrioriteSans?'checked':'') + ' onchange="basculerPrioriteSans(this.checked)"> ' + (t('carte_priorite_sans')||'Sans priorité') +
-    '<span id="cnt-prio-sans" style="margin-left:auto;font-size:13px;color:var(--text3)">0</span>' +
+    '<span id="cnt-prio-sans" style="margin-left:auto;font-size:12px;color:var(--text3)">0</span>' +
     '</label>';
   html += '</div></details>';
   return html;
@@ -6298,16 +6298,16 @@ function renderCarte(ttl, c, a) {
   _carteCible = null;
 
   a.innerHTML = '<div style="display:flex;gap:8px;align-items:center">' +
-    '<select id="carte-annee" onchange="_carteAnnee=parseInt(this.value);chargerPoints()" style="border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:15px;background:var(--surface)">' +
+    '<select id="carte-annee" onchange="_carteAnnee=parseInt(this.value);chargerPoints()" style="border:0.5px solid var(--border);border-radius:6px;padding:4px 8px;font-size:14px;background:var(--surface)">' +
     [new Date().getFullYear(), new Date().getFullYear()-1, new Date().getFullYear()-2].map(function(y){
       return '<option value="'+y+'"'+(y===_carteAnnee?' selected':'')+'>'+y+'</option>';
     }).join('') + '</select>' +
-    '<button onclick="cadrerFrance()" title="Recentrer sur la France" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer"><i class="ti ti-focus-centered"></i> Recentrer</button>' +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer"><i class="ti ti-plus"></i> '+TR("Ajouter")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="ouvrirRattachements()" title="Relier les points aux fiches clients" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer"><i class="ti ti-link"></i> '+TR("Rattacher")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="lancerGeocodageCarte()" title="'+TR("Positionner les distributeurs dont l'adresse a été complétée")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer"><i class="ti ti-map-pin-search"></i> '+TR("Géocoder")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="controleVillesCarte()" title="'+TR("Repérer les villes ne correspondant pas au code postal")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer"><i class="ti ti-map-check"></i> '+TR("Contrôle villes")+'</button>' : '') +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
+    '<button onclick="cadrerFrance()" title="Recentrer sur la France" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer"><i class="ti ti-focus-centered"></i> Recentrer</button>' +
+    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="modalPointCarte()" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer"><i class="ti ti-plus"></i> '+TR("Ajouter")+'</button>' : '') +
+    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="ouvrirRattachements()" title="Relier les points aux fiches clients" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer"><i class="ti ti-link"></i> '+TR("Rattacher")+'</button>' : '') +
+    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="lancerGeocodageCarte()" title="'+TR("Positionner les distributeurs dont l'adresse a été complétée")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer"><i class="ti ti-map-pin-search"></i> '+TR("Géocoder")+'</button>' : '') +
+    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="controleVillesCarte()" title="'+TR("Repérer les villes ne correspondant pas au code postal")+'" style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer"><i class="ti ti-map-check"></i> '+TR("Contrôle villes")+'</button>' : '') +
+    (typeof canWriteCarte==='function' && canWriteCarte() ? '<label style="background:var(--surface);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer"><input type="file" accept=".kml" multiple style="display:none" onchange="importerKML(this.files)"><i class="ti ti-upload"></i> Importer KML</label>' : '') +
     '</div>';
 
   var legende = Object.keys(RESEAUX_CONFIG).map(function(k){
@@ -6317,8 +6317,8 @@ function renderCarte(ttl, c, a) {
       (r.img
         ? '<img src="' + r.img + '" width="22" height="22" style="display:block;flex-shrink:0" alt="">'
         : '<span style="width:14px;height:14px;border-radius:50%;background:' + r.color + ';border:2px solid #fff;box-shadow:0 0 0 1px #0002"></span>') +
-      '<span style="flex:1;font-size:15px;color:var(--text)">' + labelReseauTraduit(k, r.label) + '</span>' +
-      '<span id="cnt-' + k + '" style="font-size:14px;color:var(--text3)">0</span>' +
+      '<span style="flex:1;font-size:14px;color:var(--text)">' + labelReseauTraduit(k, r.label) + '</span>' +
+      '<span id="cnt-' + k + '" style="font-size:13px;color:var(--text3)">0</span>' +
       '</label>';
   }).join('');
 
@@ -6326,21 +6326,21 @@ function renderCarte(ttl, c, a) {
   var rechercheCard = '<div class="card" style="padding:13px;margin-bottom:10px">' +
         '<div class="section-title"><i class="ti ti-search"></i>' + (t('carte_recherche')||'Recherche') + '</div>' +
         '<div style="position:relative;margin-bottom:4px">' +
-          '<input id="carte-search" class="form-input" placeholder="' + (t('carte_nom_distrib')||'Nom de distributeur…') + '" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;padding:6px 26px 6px 9px;font-size:15px">' +
-          '<span onclick="document.getElementById(\'carte-search\').value=\'\';afficherMarkers(true)" title="Effacer" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text3);font-size:15px">✕</span>' +
+          '<input id="carte-search" class="form-input" placeholder="' + (t('carte_nom_distrib')||'Nom de distributeur…') + '" oninput="rechercheNom()" onkeydown="if(event.key===\'Enter\'){clearTimeout(_tmrRechercheNom);afficherMarkers(true);}" style="width:100%;padding:6px 26px 6px 9px;font-size:14px">' +
+          '<span onclick="document.getElementById(\'carte-search\').value=\'\';afficherMarkers(true)" title="Effacer" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text3);font-size:14px">✕</span>' +
         '</div>' +
-        '<div id="carte-nom-result" style="font-size:13px;color:var(--text3);margin-bottom:8px;min-height:14px"></div>' +
+        '<div id="carte-nom-result" style="font-size:12px;color:var(--text3);margin-bottom:8px;min-height:14px"></div>' +
         '<div style="display:flex;gap:6px">' +
-          '<input id="carte-geo" class="form-input" placeholder="'+TR("Ville, code postal ou n° de département (ex : 83)")+'" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;padding:6px 9px;font-size:15px">' +
-          '<button onclick="rechercheGeo()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:14px;cursor:pointer"><i class="ti ti-search"></i></button>' +
+          '<input id="carte-geo" class="form-input" placeholder="'+TR("Ville, code postal ou n° de département (ex : 83)")+'" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;padding:6px 9px;font-size:14px">' +
+          '<button onclick="rechercheGeo()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer"><i class="ti ti-search"></i></button>' +
         '</div>' +
-        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:14px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
-        '<div id="carte-geo-result" style="margin-top:10px;font-size:14px;color:var(--text2)"></div>' +
-        '<div style="margin-top:10px;font-size:13px;color:var(--text3);line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
+        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:13px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
+        '<div id="carte-geo-result" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>' +
+        '<div style="margin-top:10px;font-size:12px;color:var(--text3);line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
       '</div>';
 
   // Conteneur en position absolue pour garantir une hauteur
-  c.innerHTML = '<style>.carte-collapse>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none}.carte-collapse>summary::-webkit-details-marker{display:none}.carte-collapse>summary::after{content:"+";margin-left:auto;font-size:19px;line-height:1;color:var(--text3);font-weight:400}.carte-collapse[open]>summary::after{content:"\\2212"}</style>' +
+  c.innerHTML = '<style>.carte-collapse>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none}.carte-collapse>summary::-webkit-details-marker{display:none}.carte-collapse>summary::after{content:"+";margin-left:auto;font-size:18px;line-height:1;color:var(--text3);font-weight:400}.carte-collapse[open]>summary::after{content:"\\2212"}</style>' +
     '<div id="carte-wrap" style="display:flex;height:75vh;min-height:500px;margin:-18px -20px;background:var(--bg)">' +
     '<div style="width:256px;border-right:0.5px solid var(--border);padding:12px;overflow:auto;flex-shrink:0">' +
       rechercheCard +
@@ -6348,7 +6348,7 @@ function renderCarte(ttl, c, a) {
         '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-affiliate"></i>' + (t('carte_reseaux')||'Réseaux') + '</summary>' +
         '<div style="padding:0 13px 13px">' +
         legende +
-        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:14px;color:var(--text2)">' +
+        '<label style="display:flex;align-items:center;gap:8px;padding:7px 4px 0;margin-top:5px;border-top:0.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--text2)">' +
           '<input type="checkbox" ' + (_carteHorsCarte?'checked':'') + ' onchange="basculerHorsCarte(this.checked)">' +
           '<img src="/img/reseaux/inconnu.png" width="18" height="18" style="display:block">' +
           '<span style="flex:1">Autres distributeurs (hors carte)</span>' +
@@ -6422,7 +6422,7 @@ function voirDistributeurSurCarte(clientId, nom){
       // Pas de point pour ce distributeur : proposer de l'ajouter directement
       if (info) {
         info.innerHTML = '<div style="color:#b45309;margin-bottom:6px">' + esc(nom || 'Ce distributeur') + ' n\'a pas encore de point sur la carte.</div>' +
-          '<button onclick="ajouterDistributeurCarte(' + clientId + ',\'' + String(nom||'').replace(/'/g,'&#39;') + '\')" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:14px;cursor:pointer"><i class="ti ti-map-pin-plus"></i> '+TR("Ajouter à la carte maintenant")+'</button>';
+          '<button onclick="ajouterDistributeurCarte(' + clientId + ',\'' + String(nom||'').replace(/'/g,'&#39;') + '\')" style="background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer"><i class="ti ti-map-pin-plus"></i> '+TR("Ajouter à la carte maintenant")+'</button>';
       }
     }
   }, 150);
@@ -6715,17 +6715,17 @@ function prioSelectCarte(p) {
     return '<option value="' + v + '"' + ((p.priorite||'')===v?' selected':'') + '>' + libs[v] + '</option>';
   }).join('');
   return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">' +
-    '<span style="font-size:13px;color:#888;text-transform:uppercase;letter-spacing:.03em">'+TR("Priorité")+'</span>' +
-    '<select onchange="sauverPrioriteCarte(' + p.id + ',this.value)" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:4px 7px;font-size:14px;cursor:pointer">' + opts + '</select>' +
+    '<span style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:.03em">'+TR("Priorité")+'</span>' +
+    '<select onchange="sauverPrioriteCarte(' + p.id + ',this.value)" style="flex:1;border:0.5px solid #cfcfca;border-radius:6px;padding:4px 7px;font-size:13px;cursor:pointer">' + opts + '</select>' +
     '</div>';
 }
 
 function popupCarte(p) {
   var cfg = RESEAUX_CONFIG[p.reseau] || { label:'?', color:'#888' };
-  var statutTxt = p.impayes > 0 ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:99px;font-size:13px">⚠️ ' + p.impayes + ' impayé' + (p.impayes>1?'s':'') + '</span>'
-    : p.en_cours > 0 ? '<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:99px;font-size:13px">' + p.en_cours + ' en cours</span>'
-    : p.nb_commandes > 0 ? '<span style="background:#f0fdf4;color:#16a34a;padding:2px 7px;border-radius:99px;font-size:13px">'+TR("à jour")+'</span>'
-    : '<span style="background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;font-size:13px">'+TR("aucune commande")+'</span>';
+  var statutTxt = p.impayes > 0 ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:99px;font-size:12px">⚠️ ' + p.impayes + ' impayé' + (p.impayes>1?'s':'') + '</span>'
+    : p.en_cours > 0 ? '<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:99px;font-size:12px">' + p.en_cours + ' en cours</span>'
+    : p.nb_commandes > 0 ? '<span style="background:#f0fdf4;color:#16a34a;padding:2px 7px;border-radius:99px;font-size:12px">'+TR("à jour")+'</span>'
+    : '<span style="background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;font-size:12px">'+TR("aucune commande")+'</span>';
 
   var prioCoul = {T1:'#dc2626',T2:'#d97706',T3:'#65a30d'}[p.priorite] || '#888';
   var prioLib  = {T1:'T1 — Priorité absolue',T2:'T2 — Priorité moyenne',T3:'T3 — Priorité basse'}[p.priorite] || '';
@@ -6734,36 +6734,36 @@ function popupCarte(p) {
   var mobTxt   = p.portable ? String(p.portable).trim() : '';
   var mobHref  = mobTxt.replace(/[^0-9+]/g, '');
   var emailTxt = p.email ? String(p.email).trim() : '';
-  return '<div style="width:262px;font-size:15px">' +
-    '<div style="font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + labelReseauTraduit(p.reseau, cfg.label) + '</div>' +
-    '<div style="font-weight:700;font-size:17px;margin-bottom:6px;line-height:1.3">' + _esc(p.nom) + '</div>' +
-    '<div style="font-size:15.5px;line-height:1.65;margin-bottom:10px;color:var(--text)">' +
+  return '<div style="width:262px;font-size:14px">' +
+    '<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + labelReseauTraduit(p.reseau, cfg.label) + '</div>' +
+    '<div style="font-weight:700;font-size:16px;margin-bottom:6px;line-height:1.3">' + _esc(p.nom) + '</div>' +
+    '<div style="font-size:14.5px;line-height:1.65;margin-bottom:10px;color:var(--text)">' +
       ((p.adresse && p.adresse.trim().toLowerCase() !== String(p.nom||'').trim().toLowerCase()) ? _esc(p.adresse) + '<br>' : '') +
       (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
       (p.pays && p.pays !== 'France' ? '<span style="font-weight:600">' + libellePays(p.pays) + '</span><br>' : '') +
-      (telTxt ? '<a href="tel:' + telHref + '" style="color:var(--accent);text-decoration:none;font-size:16.5px;font-weight:600"><i class="ti ti-phone" style="font-size:15px"></i> ' + _esc(fmtTel(telTxt)) + '</a><br>' : '') +
-      (mobTxt ? '<a href="tel:' + mobHref + '" style="color:var(--accent);text-decoration:none;font-size:16.5px;font-weight:600"><i class="ti ti-device-mobile" style="font-size:15px"></i> ' + _esc(fmtTel(mobTxt)) + '</a><br>' : '') +
-      (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:14px;font-weight:500;word-break:break-all"><i class="ti ti-mail" style="font-size:14px"></i> ' + _esc(emailTxt) + '</a>' : '') +
+      (telTxt ? '<a href="tel:' + telHref + '" style="color:var(--accent);text-decoration:none;font-size:15.5px;font-weight:600"><i class="ti ti-phone" style="font-size:14px"></i> ' + _esc(fmtTel(telTxt)) + '</a><br>' : '') +
+      (mobTxt ? '<a href="tel:' + mobHref + '" style="color:var(--accent);text-decoration:none;font-size:15.5px;font-weight:600"><i class="ti ti-device-mobile" style="font-size:14px"></i> ' + _esc(fmtTel(mobTxt)) + '</a><br>' : '') +
+      (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:13px;font-weight:500;word-break:break-all"><i class="ti ti-mail" style="font-size:13px"></i> ' + _esc(emailTxt) + '</a>' : '') +
     '</div>' +
-    (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:15px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:14px"></i> ' + prioLib + '</span></div>' : '') +
+    (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:14px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:13px"></i> ' + prioLib + '</span></div>' : '') +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
-      '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:13px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
+      '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:12px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
       statutTxt +
     '</div>' +
-    ((p.abs_retour||0) > 3 ? '<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:6px;padding:5px 8px;font-size:13.5px;font-weight:600;margin-bottom:8px"><i class="ti ti-alert-triangle" style="font-size:14px"></i> ' + p.abs_retour + ' ' + TR("demandes sans retour (distributeur peu réactif)") + '</div>' : '') +
-    '<div style="font-size:13px;color:#999;margin-bottom:10px">' +
+    ((p.abs_retour||0) > 3 ? '<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:6px;padding:5px 8px;font-size:12.5px;font-weight:600;margin-bottom:8px"><i class="ti ti-alert-triangle" style="font-size:13px"></i> ' + p.abs_retour + ' ' + TR("demandes sans retour (distributeur peu réactif)") + '</div>' : '') +
+    '<div style="font-size:12px;color:#999;margin-bottom:10px">' +
       (p.lien_type === 'client'
         ? '<span style="color:#16a34a">'+TR("🔗 Lié au client")+'</span>'
         : p.lien_type === 'nom'
           ? 'Rapproché par nom : ' + _esc((p.noms_rattaches||[]).join(', '))
           : '<span style="color:#d97706">'+TR("⚠ Aucune commande rattachée — liez ce point à un client pour fiabiliser")+'</span>') +
     '</div>' +
-    (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:13px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:13px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
-    (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:14px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:13px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
-    (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:14px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> '+TR("Voir la fiche complète →")+'</button>' : '') +
-    (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:14px;cursor:pointer;margin-bottom:8px">'+TR("Voir ses commandes →")+'</button>' : '') +
-    '<button onclick="nouvelleDemandeDepuisCarte(' + (p.client_id||'null') + ',\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:14px;cursor:pointer;margin-bottom:8px"><i class="ti ti-address-book"></i> '+TR("Nouvelle demande d'info →")+'</button>' +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<div style="margin-top:6px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:6px 0;font-size:14px;cursor:pointer"><i class="ti ti-edit"></i> '+TR("Modifier")+'</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:14px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
+    (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:12px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:12px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
+    (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:12px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
+    (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> '+TR("Voir la fiche complète →")+'</button>' : '') +
+    (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px">'+TR("Voir ses commandes →")+'</button>' : '') +
+    '<button onclick="nouvelleDemandeDepuisCarte(' + (p.client_id||'null') + ',\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px"><i class="ti ti-address-book"></i> '+TR("Nouvelle demande d'info →")+'</button>' +
+    (typeof canWriteCarte==='function' && canWriteCarte() ? '<div style="margin-top:6px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:6px 0;font-size:13px;cursor:pointer"><i class="ti ti-edit"></i> '+TR("Modifier")+'</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
     '</div>';
 }
 
@@ -6964,14 +6964,14 @@ function afficherHorsMarkers() {
   });
 }
 function popupHorsCarte(c) {
-  return '<div style="width:230px;font-size:15px">' +
-    '<div style="font-weight:700;font-size:16px;margin-bottom:4px">' + _esc(c.nom) + ' <span style="font-size:12px;color:#888;font-weight:600">(hors carte)</span></div>' +
+  return '<div style="width:230px;font-size:14px">' +
+    '<div style="font-weight:700;font-size:15px;margin-bottom:4px">' + _esc(c.nom) + ' <span style="font-size:11px;color:#888;font-weight:600">(hors carte)</span></div>' +
     '<div style="color:#666;line-height:1.5;margin-bottom:8px">' +
       ((c.adresse && c.adresse.trim().toLowerCase() !== String(c.nom||'').trim().toLowerCase()) ? _esc(c.adresse) + '<br>' : '') +
       ((c.cp || c.ville) ? _esc((c.cp||'') + ' ' + (c.ville||'')) : '') + '</div>' +
-    '<button onclick="ajouterDistributeurCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:14px;cursor:pointer;margin-bottom:6px"><i class="ti ti-map-pin-plus"></i> '+TR("Ajouter à la carte")+'</button>' +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="passerParticulierCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\',this)" style="width:100%;background:#d97706;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:14px;cursor:pointer;margin-bottom:6px"><i class="ti ti-user"></i> '+TR("Passer en particulier")+'</button>' : '') +
-    '<button onclick="ouvrirFicheDistrib(' + c.id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:14px;cursor:pointer">'+TR("Voir la fiche →")+'</button>' +
+    '<button onclick="ajouterDistributeurCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:13px;cursor:pointer;margin-bottom:6px"><i class="ti ti-map-pin-plus"></i> '+TR("Ajouter à la carte")+'</button>' +
+    (typeof canWriteCarte==='function' && canWriteCarte() ? '<button onclick="passerParticulierCarte(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\',this)" style="width:100%;background:#d97706;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:13px;cursor:pointer;margin-bottom:6px"><i class="ti ti-user"></i> '+TR("Passer en particulier")+'</button>' : '') +
+    '<button onclick="ouvrirFicheDistrib(' + c.id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 0;font-size:13px;cursor:pointer">'+TR("Voir la fiche →")+'</button>' +
     '</div>';
 }
 // Passe une fiche "hors carte" directement en Particulier (la retire de la carte), sans ouvrir la fiche.
@@ -7064,14 +7064,14 @@ function afficherModalControleVilles(mism) {
       '<td style="padding:6px 8px;color:#dc2626">' + esc(m.ville) + '</td>' +
       '<td style="padding:6px 8px;text-align:center">' + esc(m.cp) + '</td>' +
       '<td style="padding:6px 8px;color:#16a34a">' + esc(m.suggestion) + '</td>' +
-      '<td style="padding:6px 8px;text-align:right"><button onclick="corrigerVilleCarte(' + m.id + ',\'' + String(m.suggestion).replace(/'/g,'&#39;') + '\',this)" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:14px;cursor:pointer">Corriger</button></td>' +
+      '<td style="padding:6px 8px;text-align:right"><button onclick="corrigerVilleCarte(' + m.id + ',\'' + String(m.suggestion).replace(/'/g,'&#39;') + '\',this)" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:13px;cursor:pointer">Corriger</button></td>' +
     '</tr>';
   }).join('') : '<tr><td colspan="5" style="padding:14px;text-align:center;color:var(--text3)">'+TR("Aucune incohérence détectée 🎉")+'</td></tr>';
   var html = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">' +
     '<div style="background:var(--surface);border-radius:12px;padding:20px;width:760px;max-width:94vw;max-height:86vh;overflow:auto" onclick="event.stopPropagation()">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><h3 style="margin:0;font-size:18px">Contrôle ville ↔ code postal — ' + mism.length + ' à vérifier</h3><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer"><i class="ti ti-x"></i></button></div>' +
-      '<div style="font-size:14px;color:var(--text2);margin-bottom:10px">'+TR("La ville de la fiche ne correspond pas à la commune officielle du code postal. « Corriger » remplace la ville par la commune officielle proposée.")+'</div>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:var(--bg)"><th style="padding:6px 8px;text-align:left">'+TR("Distributeur")+'</th><th style="padding:6px 8px;text-align:left">Ville (fiche)</th><th style="padding:6px 8px">CP</th><th style="padding:6px 8px;text-align:left">Commune officielle</th><th></th></tr></thead><tbody>' + lignes + '</tbody></table>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><h3 style="margin:0;font-size:17px">Contrôle ville ↔ code postal — ' + mism.length + ' à vérifier</h3><button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer"><i class="ti ti-x"></i></button></div>' +
+      '<div style="font-size:13px;color:var(--text2);margin-bottom:10px">'+TR("La ville de la fiche ne correspond pas à la commune officielle du code postal. « Corriger » remplace la ville par la commune officielle proposée.")+'</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg)"><th style="padding:6px 8px;text-align:left">'+TR("Distributeur")+'</th><th style="padding:6px 8px;text-align:left">Ville (fiche)</th><th style="padding:6px 8px">CP</th><th style="padding:6px 8px;text-align:left">Commune officielle</th><th></th></tr></thead><tbody>' + lignes + '</tbody></table>' +
     '</div></div>';
   var div = document.createElement('div'); div.innerHTML = html; document.body.appendChild(div.firstChild);
 }
@@ -7098,7 +7098,7 @@ function stylesRepereGeo() {
     '@keyframes geoPulse{0%{transform:scale(.5);opacity:.6}70%{transform:scale(1.8);opacity:0}100%{transform:scale(1.8);opacity:0}}' +
     '.geo-onde{position:absolute;inset:0;border-radius:50%;background:#2e7cf6;animation:geoPulse 1.9s ease-out infinite}' +
     '.leaflet-tooltip.geo-label{background:#2e7cf6;color:#fff;border:none;box-shadow:0 2px 7px rgba(0,0,0,.3);' +
-      'font-weight:700;font-size:13px;padding:3px 10px;border-radius:99px;white-space:nowrap}' +
+      'font-weight:700;font-size:12px;padding:3px 10px;border-radius:99px;white-space:nowrap}' +
     '.leaflet-tooltip.geo-label:before{border-top-color:#2e7cf6}';
   document.head.appendChild(st);
 }
@@ -7259,11 +7259,11 @@ function centrerSurGeo(lat, lng, label) {
           var cfg = RESEAUX_CONFIG[p.reseau] || { color:'#888' };
           return '<div onclick="zoomSurPoint(' + p.id + ')" style="display:flex;align-items:center;gap:6px;padding:4px 2px;cursor:pointer;border-radius:4px" onmouseover="this.style.background=\'#f0f0ee\'" onmouseout="this.style.background=\'\'">' +
             '<span style="width:9px;height:9px;border-radius:50%;background:' + cfg.color + ';flex-shrink:0"></span>' +
-            '<span style="flex:1;font-size:14px">' + _esc(p.nom) + '</span>' +
-            '<span style="font-size:13px;color:#999">' + p._dist.toFixed(0) + ' km</span>' +
+            '<span style="flex:1;font-size:13px">' + _esc(p.nom) + '</span>' +
+            '<span style="font-size:12px;color:#999">' + p._dist.toFixed(0) + ' km</span>' +
             '</div>';
         }).join('') +
-        (proches.length > 15 ? '<div style="font-size:13px;color:#999;margin-top:4px">… et ' + (proches.length - 15) + ' autres</div>' : '');
+        (proches.length > 15 ? '<div style="font-size:12px;color:#999;margin-top:4px">… et ' + (proches.length - 15) + ' autres</div>' : '');
     } else {
       resultEl.innerHTML = '<span style="color:#999">'+TR("Aucun distributeur dans ce rayon.")+'</span>';
     }
@@ -7293,44 +7293,44 @@ function modalPointCarte(id) {
 
   var html = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)fermerModalPoint()">' +
     '<div style="background:#fff;border-radius:12px;padding:24px;width:440px;max-width:92vw;max-height:88vh;overflow:auto" onclick="event.stopPropagation()">' +
-      '<h3 style="margin:0 0 16px;font-size:18px">' + titre + '</h3>' +
+      '<h3 style="margin:0 0 16px;font-size:17px">' + titre + '</h3>' +
       '<div style="display:flex;flex-direction:column;gap:10px">' +
-        '<div><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">'+TR("Réseau")+'</label><select id="pc-reseau" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px">' + reseauOpts + '</select></div>' +
-        '<div><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">'+TR("Nom du distributeur *")+'</label><input id="pc-nom" value="' + (p?_esc(p.nom):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div>' +
-        '<div><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">'+TR("Client rattaché")+' <span style="color:#999">'+TR("(recommandé)")+'</span></label>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Réseau")+'</label><select id="pc-reseau" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px">' + reseauOpts + '</select></div>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Nom du distributeur *")+'</label><input id="pc-nom" value="' + (p?_esc(p.nom):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Client rattaché")+' <span style="color:#999">'+TR("(recommandé)")+'</span></label>' +
           '<div style="position:relative">' +
-            '<input id="pc-client-search" autocomplete="off" placeholder="'+TR("Taper le nom du client…")+'" oninput="pcClientInput(this.value)" onfocus="searchPcClient(this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'pc-client-drop\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px">' +
+            '<input id="pc-client-search" autocomplete="off" placeholder="'+TR("Taper le nom du client…")+'" oninput="pcClientInput(this.value)" onfocus="searchPcClient(this.value)" onblur="setTimeout(function(){var d=document.getElementById(\'pc-client-drop\');if(d)d.style.display=\'none\'},150)" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px">' +
             '<input type="hidden" id="pc-client" value="' + (p&&p.client_id?p.client_id:'') + '">' +
             '<div id="pc-client-drop" class="piece-dropdown" style="display:none"></div>' +
           '</div>' +
-          '<div style="font-size:13px;color:#999;margin-top:3px">'+TR("Lier au client garantit que ses ventes s'affichent, même si l'orthographe diffère. Laisser vide = rattachement par nom.")+'</div></div>' +
-        '<div><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Adresse</label><input id="pc-adresse" value="' + (p&&p.adresse?_esc(p.adresse):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div>' +
-        '<div style="display:flex;gap:8px"><div style="width:110px"><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Code postal</label><input id="pc-cp" value="' + (p&&p.cp?_esc(p.cp):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div>' +
-        '<div style="flex:1"><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div></div>' +
-        '<div><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Pays</label><select id="pc-pays" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px">' + optionsPays(p ? p.pays : 'France') + '</select></div>' +
-        '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">'+TR("Téléphone")+'</label><input id="pc-tel" value="' + (p&&p.tel?_esc(fmtTel(p.tel)):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div>' +
-        '<div style="flex:1"><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Portable</label><input id="pc-portable" value="' + (p&&p.portable?_esc(fmtTel(p.portable)):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div></div>' +
-        '<div><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div>' +
+          '<div style="font-size:12px;color:#999;margin-top:3px">'+TR("Lier au client garantit que ses ventes s'affichent, même si l'orthographe diffère. Laisser vide = rattachement par nom.")+'</div></div>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Adresse</label><input id="pc-adresse" value="' + (p&&p.adresse?_esc(p.adresse):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
+        '<div style="display:flex;gap:8px"><div style="width:110px"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Code postal</label><input id="pc-cp" value="' + (p&&p.cp?_esc(p.cp):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
+        '<div style="flex:1"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Ville</label><input id="pc-ville" value="' + (p&&p.ville?_esc(p.ville):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div></div>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Pays</label><select id="pc-pays" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px">' + optionsPays(p ? p.pays : 'France') + '</select></div>' +
+        '<div style="display:flex;gap:8px"><div style="flex:1"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Téléphone")+'</label><input id="pc-tel" value="' + (p&&p.tel?_esc(fmtTel(p.tel)):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
+        '<div style="flex:1"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Portable</label><input id="pc-portable" value="' + (p&&p.portable?_esc(fmtTel(p.portable)):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div></div>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Email</label><input id="pc-email" value="' + (p&&p.email?_esc(p.email):'') + '" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
         '<div style="display:flex;gap:8px">' +
-          '<div style="flex:1"><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">'+TR("Priorité")+'</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px">' +
+          '<div style="flex:1"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Priorité")+'</label><select id="pc-priorite" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px">' +
             ['','T1','T2','T3'].map(function(v){ var lib={'':'— Aucune —',T1:'T1 — absolue',T2:'T2 — moyenne',T3:'T3 — basse'}[v]; return '<option value="'+v+'"'+(p&&(p.priorite||'')===v?' selected':'')+'>'+lib+'</option>'; }).join('') +
           '</select></div>' +
-          '<div style="width:130px"><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Rayon (km)</label><input id="pc-rayon" type="number" min="0" step="5" value="' + (p&&p.rayon_km!=null?_esc(String(p.rayon_km)):'') + '" placeholder="optionnel" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div>' +
+          '<div style="width:130px"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Rayon (km)</label><input id="pc-rayon" type="number" min="0" step="5" value="' + (p&&p.rayon_km!=null?_esc(String(p.rayon_km)):'') + '" placeholder="optionnel" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
         '</div>' +
-        '<div><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">'+TR("Zone de chalandise / départements")+'</label><textarea id="pc-zone" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px;resize:vertical;font-family:inherit">' + (p&&p.zone_chalandise?_esc(p.zone_chalandise):'') + '</textarea></div>' +
-        '<div><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">'+TR("Note interne")+'</label><textarea id="pc-note" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px;resize:vertical;font-family:inherit">' + (p&&p.note_interne?_esc(p.note_interne):'') + '</textarea></div>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Zone de chalandise / départements")+'</label><textarea id="pc-zone" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px;resize:vertical;font-family:inherit">' + (p&&p.zone_chalandise?_esc(p.zone_chalandise):'') + '</textarea></div>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Note interne")+'</label><textarea id="pc-note" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px;resize:vertical;font-family:inherit">' + (p&&p.note_interne?_esc(p.note_interne):'') + '</textarea></div>' +
         '<div style="background:#f8f9fa;border-radius:8px;padding:10px 12px">' +
           '<div style="display:flex;gap:8px;align-items:flex-end">' +
-            '<div style="width:120px"><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Latitude *</label><input id="pc-lat" value="' + (p?p.lat:'') + '" placeholder="48.85" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div>' +
-            '<div style="width:120px"><label style="font-size:14px;color:#666;display:block;margin-bottom:3px">Longitude *</label><input id="pc-lng" value="' + (p?p.lng:'') + '" placeholder="2.35" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:15px"></div>' +
-            '<button onclick="geocoderAdresse()" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:14px;cursor:pointer;white-space:nowrap"><i class="ti ti-map-pin"></i> Trouver</button>' +
+            '<div style="width:120px"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Latitude *</label><input id="pc-lat" value="' + (p?p.lat:'') + '" placeholder="48.85" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
+            '<div style="width:120px"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Longitude *</label><input id="pc-lng" value="' + (p?p.lng:'') + '" placeholder="2.35" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
+            '<button onclick="geocoderAdresse()" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:7px 12px;font-size:13px;cursor:pointer;white-space:nowrap"><i class="ti ti-map-pin"></i> Trouver</button>' +
           '</div>' +
-          '<div style="font-size:13px;color:#999;margin-top:5px">'+TR("Cliquez \"Trouver\" pour localiser depuis l'adresse, ou saisissez les coordonnées manuellement.")+'</div>' +
+          '<div style="font-size:12px;color:#999;margin-top:5px">'+TR("Cliquez \"Trouver\" pour localiser depuis l'adresse, ou saisissez les coordonnées manuellement.")+'</div>' +
         '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;margin-top:18px;justify-content:flex-end">' +
-        '<button onclick="fermerModalPoint()" style="background:var(--surface);border:0.5px solid #cfcfca;border-radius:7px;padding:8px 16px;font-size:15px;cursor:pointer">'+TR("Annuler")+'</button>' +
-        '<button onclick="sauverPointCarte(' + (id||'null') + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:15px;cursor:pointer">'+TR("Enregistrer")+'</button>' +
+        '<button onclick="fermerModalPoint()" style="background:var(--surface);border:0.5px solid #cfcfca;border-radius:7px;padding:8px 16px;font-size:14px;cursor:pointer">'+TR("Annuler")+'</button>' +
+        '<button onclick="sauverPointCarte(' + (id||'null') + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:8px 16px;font-size:14px;cursor:pointer">'+TR("Enregistrer")+'</button>' +
       '</div>' +
     '</div></div>';
 
@@ -7368,8 +7368,8 @@ function searchPcClient(q) {
   if (!res.length) { drop.style.display = 'none'; return; }
   drop.innerHTML = res.map(function(c){
     return '<div class="piece-option" onmousedown="event.preventDefault();selectPcClient(' + c.id + ',\'' + String(c.nom||'').replace(/'/g,'&#39;') + '\')">' +
-      '<div style="font-size:14px;font-weight:600">' + esc(c.nom) + '</div>' +
-      (c.ville ? '<div style="font-size:13px;color:var(--text3)">' + esc(c.ville) + '</div>' : '') + '</div>';
+      '<div style="font-size:13px;font-weight:600">' + esc(c.nom) + '</div>' +
+      (c.ville ? '<div style="font-size:12px;color:var(--text3)">' + esc(c.ville) + '</div>' : '') + '</div>';
   }).join('');
   drop.style.display = 'block';
 }
@@ -7544,26 +7544,26 @@ function renderNotesTab(cmdId) {
           var dt = String(n.created_at||'').slice(0,16).replace('T',' ');
           html += '<div style="background:rgba(255,255,255,.7);border:0.5px solid #dde3ef;border-radius:9px;padding:10px 12px">';
           html += '<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">';
-          html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">' + _esc(ini) + '</span>';
-          html += '<strong style="font-size:14px">' + _esc(n.user_nom||'?') + '</strong>';
-          html += '<span style="font-size:12px;color:#aaa;margin-left:auto">' + dt + '</span>';
-          html += '<button onclick="_delNote(' + cmdId + ',' + n.id + ')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:13px;line-height:1;padding:0 2px">✕</button>';
+          html += '<span style="background:#2e7cf6;color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">' + _esc(ini) + '</span>';
+          html += '<strong style="font-size:13px">' + _esc(n.user_nom||'?') + '</strong>';
+          html += '<span style="font-size:11px;color:#aaa;margin-left:auto">' + dt + '</span>';
+          html += '<button onclick="_delNote(' + cmdId + ',' + n.id + ')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:12px;line-height:1;padding:0 2px">✕</button>';
           html += '</div>';
-          html += '<div style="font-size:14px;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
+          html += '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">' + _esc(n.texte) + '</div>';
           html += '</div>';
         }
       } else {
-        html += '<div style="padding:24px;text-align:center;color:#aaa;font-size:14px">'+TR("Aucune note — ajoutez un commentaire ci-dessous.")+'</div>';
+        html += '<div style="padding:24px;text-align:center;color:#aaa;font-size:13px">'+TR("Aucune note — ajoutez un commentaire ci-dessous.")+'</div>';
       }
       html += '</div>';
       html += '<div style="padding:10px 12px;border-top:0.5px solid #dde3ef;display:flex;gap:8px">';
-      html += '<textarea id="ni-' + cmdId + '" placeholder="'+TR("Ajouter une note...")+'" rows="2" style="flex:1;border:0.5px solid #c0c8d8;border-radius:7px;padding:6px 9px;font-size:14px;resize:none;background:rgba(255,255,255,.8)"></textarea>';
-      html += '<button onclick="_sendNote(' + cmdId + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:7px 12px;cursor:pointer;font-size:14px">&#10148;</button>';
+      html += '<textarea id="ni-' + cmdId + '" placeholder="'+TR("Ajouter une note...")+'" rows="2" style="flex:1;border:0.5px solid #c0c8d8;border-radius:7px;padding:6px 9px;font-size:13px;resize:none;background:rgba(255,255,255,.8)"></textarea>';
+      html += '<button onclick="_sendNote(' + cmdId + ')" style="background:#2e7cf6;color:#fff;border:none;border-radius:7px;padding:7px 12px;cursor:pointer;font-size:13px">&#10148;</button>';
       html += '</div>';
       html += '</div>';
       return html;
     })
-    .catch(function(e) { return '<div style="padding:20px;color:red;font-size:14px">Erreur : ' + String(e.message) + '</div>'; });
+    .catch(function(e) { return '<div style="padding:20px;color:red;font-size:13px">Erreur : ' + String(e.message) + '</div>'; });
 }
 window.renderNotesTab = renderNotesTab;
 
@@ -7610,15 +7610,15 @@ const PRET_STATUTS_UI = {
   rachete:  {l:'Racheté',  c:'#7c3aed',ic:'ti-cash'}
 };
 const PRET_FORMULES = { essai_court:'Essai court (15–30 j)', long_terme:'Prêt long terme (≥ 3 mois)' };
-function pretBadge(s){ const u=PRET_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:13px;font-weight:600;color:#fff;background:${u.c}">${u.l}</span>`; }
+function pretBadge(s){ const u=PRET_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;color:#fff;background:${u.c}">${u.l}</span>`; }
 
 // Sélecteur de statut en icônes (façon « Demandes d'infos ») : l'icône colorée = statut
 // actuel, les grisées = les autres ; clic = change le statut.
 function pretStatutIcons(p){
   return `<span style="display:inline-flex;align-items:center;gap:1px;white-space:nowrap">${Object.keys(PRET_STATUTS_UI).map(k=>{
     const u=PRET_STATUTS_UI[k], on=(p.statut===k);
-    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setPretStatutInline(${p.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:25px;height:25px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:16px"></i></span>`;
-    return `<span onclick="event.stopPropagation();setPretStatutInline(${p.id},'${k}')" title="${u.l}" style="cursor:pointer;width:23px;height:25px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:18px;color:var(--text3);opacity:.35"></i></span>`;
+    if(on) return `<span title="${u.l}" onclick="event.stopPropagation();setPretStatutInline(${p.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:25px;height:25px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:15px"></i></span>`;
+    return `<span onclick="event.stopPropagation();setPretStatutInline(${p.id},'${k}')" title="${u.l}" style="cursor:pointer;width:23px;height:25px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:17px;color:var(--text3);opacity:.35"></i></span>`;
   }).join('')}</span>`;
 }
 window.pretStatutIcons = pretStatutIcons;
@@ -7647,7 +7647,7 @@ async function renderPrets(ttl,c,a){
   ttl.textContent = TR('Prêts') || 'Prêts';
   a.innerHTML = `<button class="btn sm" onclick="ouvrirContratsModal()"><i class="ti ti-file-description"></i>${TR('Contrats-cadre')}</button><button class="btn sm" onclick="creerPretDepuisPennylane()"><i class="ti ti-brand-stripe"></i>${TR('Depuis Pennylane')}</button><button class="btn sm primary" onclick="modalPret()"><i class="ti ti-plus"></i>${TR('Nouveau bon de prêt')}</button>`;
   let rows=[]; try{ rows = await API.prets(); }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
-  if(!rows.length){ c.innerHTML=`<div class="empty"><i class="ti ti-file-certificate"></i>${TR('Aucun bon de prêt pour le moment.')}<br><span style="font-size:14px;color:var(--text3)">${TR('Créez-en un depuis une fiche distributeur ou avec « Nouveau bon de prêt ».')}</span></div>`; return; }
+  if(!rows.length){ c.innerHTML=`<div class="empty"><i class="ti ti-file-certificate"></i>${TR('Aucun bon de prêt pour le moment.')}<br><span style="font-size:13px;color:var(--text3)">${TR('Créez-en un depuis une fiche distributeur ou avec « Nouveau bon de prêt ».')}</span></div>`; return; }
   const fdate = d => d ? fd((''+d).slice(0,10)) : '—';
   const lignes = rows.map(p=>{
     const arts = pretArticlesOf(p);
@@ -7659,7 +7659,7 @@ async function renderPrets(ttl,c,a){
       <td>${nom}</td>
       <td>${mat}</td>
       <td class="mono" style="white-space:nowrap">${serie}</td>
-      <td style="font-size:14px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
+      <td style="font-size:13px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
       <td style="white-space:nowrap">${fdate(p.date_remise)}</td>
       <td style="white-space:nowrap">${fdate(p.date_retour_prevue)}</td>
       <td style="white-space:nowrap">${pretStatutIcons(p)}${sign}</td>
@@ -7722,7 +7722,7 @@ async function modalPret(id, prefillClientId){
       </div>
       <div class="form-group"><label class="form-label">${TR('Adresse du distributeur')}</label><input class="form-input" id="pret-adresse" value="${esc(p.adresse||'')}"></div>
       <div class="form-group" style="margin-bottom:6px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:15px;cursor:pointer;font-weight:500">
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;font-weight:500">
           <input type="checkbox" id="pret-liv-autre" ${p.livraison_autre?'checked':''} onchange="pretToggleLivraison()" style="accent-color:var(--accent)">
           ${TR('Autre adresse de livraison')}</label>
       </div>
@@ -7738,22 +7738,22 @@ async function modalPret(id, prefillClientId){
           <button type="button" class="btn sm" title="Ouvrir la pièce" onclick="ouvrirPretVF()"><i class="ti ti-external-link"></i></button>
           <button type="button" class="btn sm primary" onclick="importerPretVF()" title="Récupérer distributeur et matériel depuis la pièce"><i class="ti ti-download"></i> ${TR('Importer')}</button>
         </div>
-        <div id="pret-vf-msg" style="font-size:13px;color:var(--text3);margin-top:3px"></div></div>
+        <div id="pret-vf-msg" style="font-size:12px;color:var(--text3);margin-top:3px"></div></div>
       <div class="form-group">
         <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">${TR('Matériel prêté')}
           <button type="button" class="btn sm" onclick="addPretArticle()"><i class="ti ti-plus"></i> ${TR('Ajouter')}</button></label>
-        <div style="display:grid;grid-template-columns:1fr 90px 120px 90px 30px;gap:6px;font-size:13px;color:var(--text3);margin-bottom:4px;padding:0 2px">
+        <div style="display:grid;grid-template-columns:1fr 90px 120px 90px 30px;gap:6px;font-size:12px;color:var(--text3);margin-bottom:4px;padding:0 2px">
           <span>${TR('Désignation / Modèle')}</span><span>${TR('Réf.')}</span><span>${TR('N° de série')}</span><span>${TR('Prix HT (€)')}</span><span></span></div>
         <div id="pret-articles"></div>
-        <div style="font-size:13px;color:var(--text3);margin-top:5px"><i class="ti ti-info-circle" style="font-size:14px;margin-right:2px;color:var(--accent)"></i>${TR('Renseignez le n° de série du fauteuil : le prêt est alors rattaché à l’unité dans le Parc démo (détenteur et échéance suivis automatiquement).')}</div>
-        <div style="text-align:right;font-size:15px;margin-top:6px">${TR('Total HT')} : <b id="pret-total">0,00 €</b></div>
+        <div style="font-size:12px;color:var(--text3);margin-top:5px"><i class="ti ti-info-circle" style="font-size:13px;margin-right:2px;color:var(--accent)"></i>${TR('Renseignez le n° de série du fauteuil : le prêt est alors rattaché à l’unité dans le Parc démo (détenteur et échéance suivis automatiquement).')}</div>
+        <div style="text-align:right;font-size:14px;margin-top:6px">${TR('Total HT')} : <b id="pret-total">0,00 €</b></div>
       </div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Date de remise')}</label><input class="form-input" id="pret-remise" type="date" value="${(p.date_remise||'').slice(0,10)||today}" onchange="pretMajRetour(true)"></div>
         <div class="form-group"><label class="form-label">${TR('Date de retour prévue')}</label><input class="form-input" id="pret-retour" type="date" value="${(p.date_retour_prevue||'').slice(0,10)}"></div>
       </div>
       <div class="form-group"><label class="form-label">${TR('Observations sur l\'état initial')}</label><textarea class="form-input" id="pret-obs" rows="2">${esc(p.observations||'')}</textarea></div>
-      <p style="font-size:13px;color:var(--text3);margin:0">${TR('Rappel automatique : Essai court → avant l\'échéance de retour (retour proposé à +30 j de la remise). Prêt long terme → rappel périodique (bilan trimestriel).')}</p>
+      <p style="font-size:12px;color:var(--text3);margin:0">${TR('Rappel automatique : Essai court → avant l\'échéance de retour (retour proposé à +30 j de la remise). Prêt long terme → rappel périodique (bilan trimestriel).')}</p>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
@@ -7816,8 +7816,8 @@ function pretDistribSearch(prefix, q){
   const res = (query ? src.filter(c=> (c.nom&&c.nom.toLowerCase().includes(query)) || (c.ville&&c.ville.toLowerCase().includes(query))) : src).slice(0,25);
   if(!res.length){ drop.style.display='none'; return; }
   drop.innerHTML = res.map(c=>'<div class="piece-option" onmousedown="event.preventDefault();pretDistribSelect(\''+prefix+'\','+c.id+',\''+String(c.nom||'').replace(/\x27/g,'&#39;')+'\')">'+
-    '<div style="font-size:14px;font-weight:600">'+esc(c.nom)+'</div>'+
-    (c.ville?'<div style="font-size:13px;color:var(--text3)">'+esc(c.ville)+'</div>':'')+'</div>').join('');
+    '<div style="font-size:13px;font-weight:600">'+esc(c.nom)+'</div>'+
+    (c.ville?'<div style="font-size:12px;color:var(--text3)">'+esc(c.ville)+'</div>':'')+'</div>').join('');
   drop.style.display='block';
 }
 window.pretDistribSearch = pretDistribSearch;
@@ -7959,7 +7959,7 @@ function modalPretSigneMail(id){
   const today = new Date().toISOString().slice(0,10);
   showModal(`<div class="modal-header"><i class="ti ti-mail-check" style="color:var(--accent)"></i><h2>${TR('Offre de prêt signée par mail')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <p style="font-size:15px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.')}</p>
+      <p style="font-size:14px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.')}</p>
       <div class="form-group"><label class="form-label">${TR('Date de signature')}</label><input class="form-input" id="pret-signe-date" type="date" value="${today}" style="max-width:200px"></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="validerSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
@@ -7999,8 +7999,8 @@ window.envoyerPretLien = envoyerPretLien;
 function montrerLienSignature(url){
   showModal(`<div class="modal-header"><i class="ti ti-link" style="color:var(--accent)"></i><h2>${TR('Lien de signature')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <p style="font-size:15px;color:var(--text2);margin-top:0">${TR('Ouvre ce lien pour signer le document toi-même (test), sans envoyer d\'e-mail au distributeur.')}</p>
-      <input class="form-input mono" id="lien-sign" value="${esc(url)}" readonly onclick="this.select()" style="font-size:14px">
+      <p style="font-size:14px;color:var(--text2);margin-top:0">${TR('Ouvre ce lien pour signer le document toi-même (test), sans envoyer d\'e-mail au distributeur.')}</p>
+      <input class="form-input mono" id="lien-sign" value="${esc(url)}" readonly onclick="this.select()" style="font-size:13px">
       <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
         <button class="btn primary" onclick="window.open(document.getElementById('lien-sign').value,'_blank','noopener')"><i class="ti ti-external-link"></i> ${TR('Ouvrir la page de signature')}</button>
         <button class="btn" onclick="try{navigator.clipboard.writeText(document.getElementById('lien-sign').value);toast(TR('Lien copié'),'ti-copy')}catch(e){}"><i class="ti ti-copy"></i> ${TR('Copier le lien')}</button>
@@ -8119,7 +8119,7 @@ const CONTRAT_STATUTS_UI = {
   envoye:    { l:'Envoyé',    c:'#d97706' },
   signe:     { l:'Signé',     c:'#16a34a' },
 };
-function contratBadge(s){ const u=CONTRAT_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:13px;font-weight:600;color:#fff;background:${u.c}">${u.l}</span>`; }
+function contratBadge(s){ const u=CONTRAT_STATUTS_UI[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;color:#fff;background:${u.c}">${u.l}</span>`; }
 
 // Bandeau d'info dans la fenêtre du bon de prêt : le distributeur a-t-il signé son contrat-cadre ?
 async function majContratCadreHint(clientId){
@@ -8127,11 +8127,11 @@ async function majContratCadreHint(clientId){
   try{
     const cc = await API.contratCadreByClient(clientId);
     if(cc && cc.statut==='signe'){
-      el.innerHTML = `<div style="font-size:13px;color:#16a34a;display:flex;align-items:center;gap:5px"><i class="ti ti-shield-check"></i> ${TR('Contrat-cadre signé')}${cc.signed_at?(' — '+fd((''+cc.signed_at).slice(0,10))):''}</div>`;
+      el.innerHTML = `<div style="font-size:12px;color:#16a34a;display:flex;align-items:center;gap:5px"><i class="ti ti-shield-check"></i> ${TR('Contrat-cadre signé')}${cc.signed_at?(' — '+fd((''+cc.signed_at).slice(0,10))):''}</div>`;
     } else if(cc && (cc.statut==='envoye'||cc.statut==='brouillon')){
-      el.innerHTML = `<div style="font-size:13px;color:#d97706;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><i class="ti ti-alert-triangle"></i> ${TR('Contrat-cadre')} : ${contratBadge(cc.statut)} — ${TR('non signé')} <a href="#" onclick="event.preventDefault();closeModal();modalContrat(${clientId})" style="color:var(--accent)">${TR('gérer')}</a></div>`;
+      el.innerHTML = `<div style="font-size:12px;color:#d97706;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><i class="ti ti-alert-triangle"></i> ${TR('Contrat-cadre')} : ${contratBadge(cc.statut)} — ${TR('non signé')} <a href="#" onclick="event.preventDefault();closeModal();modalContrat(${clientId})" style="color:var(--accent)">${TR('gérer')}</a></div>`;
     } else {
-      el.innerHTML = `<div style="font-size:13px;color:#d97706;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><i class="ti ti-alert-triangle"></i> ${TR('Aucun contrat-cadre pour ce distributeur.')} <a href="#" onclick="event.preventDefault();closeModal();modalContrat(${clientId})" style="color:var(--accent)">${TR('en créer un')}</a></div>`;
+      el.innerHTML = `<div style="font-size:12px;color:#d97706;display:flex;align-items:center;gap:6px;flex-wrap:wrap"><i class="ti ti-alert-triangle"></i> ${TR('Aucun contrat-cadre pour ce distributeur.')} <a href="#" onclick="event.preventDefault();closeModal();modalContrat(${clientId})" style="color:var(--accent)">${TR('en créer un')}</a></div>`;
     }
   }catch(e){ el.innerHTML=''; }
 }
@@ -8143,7 +8143,7 @@ async function ouvrirContratsModal(){
   let rows=[]; try{ rows = await API.contratsCadre(); }catch(e){}
   const lignes = rows.map(cc=>{
     const nom = esc(cc.client_nom_actuel || cc.distributeur_nom || '—');
-    const sign = cc.signed_at ? `<span style="color:#16a34a;font-size:13px;margin-left:4px">${fd((''+cc.signed_at).slice(0,10))}</span>` : '';
+    const sign = cc.signed_at ? `<span style="color:#16a34a;font-size:12px;margin-left:4px">${fd((''+cc.signed_at).slice(0,10))}</span>` : '';
     return `<tr style="border-top:0.5px solid var(--border)">
       <td style="padding:9px 10px">${nom}</td>
       <td style="padding:9px 10px">${contratBadge(cc.statut)}${sign}</td>
@@ -8170,7 +8170,7 @@ function ccPickInput(){
   const src=window._clientsCache||[];
   const res=(q?src.filter(c=>c.nom&&c.nom.toLowerCase().includes(q)):src).filter(c=>c.type!=='Particulier').slice(0,25);
   if(!res.length){ drop.style.display='none'; return; }
-  drop.innerHTML=res.map(c=>'<div class="piece-option" onmousedown="event.preventDefault();modalContrat('+c.id+')"><div style="font-size:14px;font-weight:600">'+esc(c.nom)+'</div>'+(c.ville?'<div style="font-size:13px;color:var(--text3)">'+esc(c.ville)+'</div>':'')+'</div>').join('');
+  drop.innerHTML=res.map(c=>'<div class="piece-option" onmousedown="event.preventDefault();modalContrat('+c.id+')"><div style="font-size:13px;font-weight:600">'+esc(c.nom)+'</div>'+(c.ville?'<div style="font-size:12px;color:var(--text3)">'+esc(c.ville)+'</div>':'')+'</div>').join('');
   drop.style.display='block';
 }
 window.ccPickInput = ccPickInput;
@@ -8194,7 +8194,7 @@ async function modalContrat(clientId){
   showModal(`<div class="modal-header"><i class="ti ti-file-description" style="color:var(--accent)"></i><h2>${TR('Contrat-cadre')} — ${esc(cc.distributeur_nom||cl&&cl.nom||'')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <input type="hidden" id="cc-id" value="${cc.id}">
-      <div style="margin-bottom:10px">${TR('Statut')} : ${contratBadge(cc.statut)}${cc.signed_at?` <span style="font-size:14px;color:var(--text2)">— ${TR('signé le')} ${fd((''+cc.signed_at).slice(0,10))}${cc.signataire_nom?(' '+TR('par')+' '+esc(cc.signataire_nom)):''}</span>`:''}</div>
+      <div style="margin-bottom:10px">${TR('Statut')} : ${contratBadge(cc.statut)}${cc.signed_at?` <span style="font-size:13px;color:var(--text2)">— ${TR('signé le')} ${fd((''+cc.signed_at).slice(0,10))}${cc.signataire_nom?(' '+TR('par')+' '+esc(cc.signataire_nom)):''}</span>`:''}</div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Représentant Eloflex')}</label><input class="form-input" id="cc-rep-eloflex" value="${esc(cc.representant_eloflex||(CURRENT_USER&&CURRENT_USER.nom)||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Représentant distributeur')}</label><input class="form-input" id="cc-rep-distrib" value="${esc(cc.representant_distrib||cc.signataire_nom||'')}"></div>
@@ -8241,7 +8241,7 @@ function modalContratSigneMail(id){
   const today = new Date().toISOString().slice(0,10);
   showModal(`<div class="modal-header"><i class="ti ti-mail-check" style="color:var(--accent)"></i><h2>${TR('Contrat-cadre signé par mail')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <p style="font-size:15px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le contrat-cadre signé par e-mail. Indiquez la date de signature.')}</p>
+      <p style="font-size:14px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le contrat-cadre signé par e-mail. Indiquez la date de signature.')}</p>
       <div class="form-group"><label class="form-label">${TR('Date de signature')}</label><input class="form-input" id="cc-signe-date" type="date" value="${today}" style="max-width:200px"></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="validerContratSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
@@ -8324,7 +8324,7 @@ const DI_STATUTS = {
   absence_retour:{ l:'Absence de retour', c:'#dc2626', ic:'ti-clock-x' },
 };
 const DI_NON_TRAITEES = ['transmise','relance'];   // = "En attente" (à traiter) — hors "Absence de retour"
-function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:13px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.l}</span>`; }
+function diBadge(s){ const u=DI_STATUTS[s]||{l:s,c:'#6b7280'}; return `<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;color:#fff;background:${u.c};white-space:nowrap">${u.l}</span>`; }
 function diCouleur(s){ return (DI_STATUTS[s]||{c:'#6b7280'}).c; }
 function diStatutOptions(sel){ return Object.keys(DI_STATUTS).map(k=>`<option value="${k}" ${k===sel?'selected':''}>${DI_STATUTS[k].l}</option>`).join(''); }
 const _dfd = d => d ? fd((''+d).slice(0,10)) : '—';
@@ -8342,15 +8342,15 @@ function diStatutIcons(d){
   return `<span style="display:inline-flex;align-items:center;gap:2px;white-space:nowrap">${Object.keys(DI_STATUTS).map(k=>{
     const u=DI_STATUTS[k], on=(d.statut===k);
     const t = u.l + (dates[k] ? ' — '+_dfd(dates[k]) : '');
-    if(on) return `<span title="${t}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:18px"></i></span>`;
-    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${t}" style="cursor:pointer;width:25px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:20px;color:var(--text3);opacity:.3"></i></span>`;
+    if(on) return `<span title="${t}" onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" style="cursor:pointer;background:${u.c};color:#fff;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:17px"></i></span>`;
+    return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${t}" style="cursor:pointer;width:25px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:19px;color:var(--text3);opacity:.3"></i></span>`;
   }).join('')}</span>`;
 }
 // Icône historique (placée en dernière colonne)
 function diHistCell(d){
   const nb = Array.isArray(d.historique)?d.historique.length:0;
   if(nb<2) return '';
-  return `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:19px"></i>`;
+  return `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:18px"></i>`;
 }
 async function setDemandeStatutInline(id, statut){
   try{ await API.setDemandeInfoStatut(id, statut, {date_statut:new Date().toISOString().slice(0,10)});
@@ -8373,23 +8373,23 @@ function diEnsureBlinkCSS(){
   if(document.getElementById('di-blink-css')) return;
   const s=document.createElement('style'); s.id='di-blink-css';
   s.textContent='@keyframes diBlink{0%,100%{opacity:1}50%{opacity:.15}} .di-blink{animation:diBlink 1s ease-in-out infinite}'
-    + ' .di-table td{padding-top:11px!important;padding-bottom:11px!important;font-size:14.5px}'
+    + ' .di-table td{padding-top:11px!important;padding-bottom:11px!important;font-size:13.5px}'
     + ' .di-table th{padding-top:8px!important;padding-bottom:8px!important}';
   document.head.appendChild(s);
 }
 // Cellule "Relance mail" : enveloppe cliquable (envoie le mail au distributeur + date). Clignote si en attente et pas de relance après 7 j.
 function diRelanceMailCell(d){
-  const dt = d.relance_mail_date ? `<span style="font-size:12px;color:var(--text3);display:block;margin-top:2px">${_dfd(d.relance_mail_date)}</span>` : '';
+  const dt = d.relance_mail_date ? `<span style="font-size:11px;color:var(--text3);display:block;margin-top:2px">${_dfd(d.relance_mail_date)}</span>` : '';
   const j = _joursDepuis(d.date_transmission);
   const blink = (DI_NON_TRAITEES.includes(d.statut) && !d.relance_mail_date && j!=null && j>=7) ? ' di-blink' : '';
-  return `<i class="ti ti-mail${blink}" title="${TR('Relancer par mail (au distributeur)')}" onclick="event.stopPropagation();relancerMailContact(${d.id})" style="cursor:pointer;color:${d.relance_mail_date?'#d97706':'var(--accent)'};font-size:19px"></i>${dt}`;
+  return `<i class="ti ti-mail${blink}" title="${TR('Relancer par mail (au distributeur)')}" onclick="event.stopPropagation();relancerMailContact(${d.id})" style="cursor:pointer;color:${d.relance_mail_date?'#d97706':'var(--accent)'};font-size:18px"></i>${dt}`;
 }
 // Cellule "Relance téléphonique" : téléphone cliquable (enregistre la date). Clignote 7 j après la relance mail si pas encore fait.
 function diRelanceTelCell(d){
-  const dt = d.relance_tel_date ? `<span style="font-size:12px;color:var(--text3);display:block;margin-top:2px">${_dfd(d.relance_tel_date)}</span>` : '';
+  const dt = d.relance_tel_date ? `<span style="font-size:11px;color:var(--text3);display:block;margin-top:2px">${_dfd(d.relance_tel_date)}</span>` : '';
   const j = _joursDepuis(d.relance_mail_date);
   const blink = (DI_NON_TRAITEES.includes(d.statut) && d.relance_mail_date && !d.relance_tel_date && j!=null && j>=7) ? ' di-blink' : '';
-  return `<i class="ti ti-phone${blink}" title="${TR('Marquer une relance téléphonique')}" onclick="event.stopPropagation();relanceTel(${d.id})" style="cursor:pointer;color:${d.relance_tel_date?'#16a34a':'var(--text3)'};font-size:19px"></i>${dt}`;
+  return `<i class="ti ti-phone${blink}" title="${TR('Marquer une relance téléphonique')}" onclick="event.stopPropagation();relanceTel(${d.id})" style="cursor:pointer;color:${d.relance_tel_date?'#16a34a':'var(--text3)'};font-size:18px"></i>${dt}`;
 }
 async function relancerMailContact(id){
   try{ const r=await API.relanceContactInfo(id); toast(TR('Relance envoyée à ')+r.to,'ti-mail','var(--success)'); rafraichirDemandes(); }
@@ -8411,7 +8411,7 @@ async function relanceTel(id){
 window.relanceTel = relanceTel;
 // Petite légende des statuts
 function diLegende(){
-  return `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:13px;color:var(--text2);margin-bottom:10px">
+  return `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12px;color:var(--text2);margin-bottom:10px">
     <span style="font-weight:600;color:var(--text3)">${TR('Statuts')} :</span>
     ${Object.keys(DI_STATUTS).map(k=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:9px;height:9px;border-radius:99px;background:${DI_STATUTS[k].c};display:inline-block"></span>${DI_STATUTS[k].i} ${DI_STATUTS[k].l}</span>`).join('')}
   </div>`;
@@ -8424,11 +8424,11 @@ function historiqueDemande(id){
   const items = hist.length ? hist.map((h,i)=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;${i?'border-top:0.5px solid var(--border)':''}">
       <span style="width:11px;height:11px;border-radius:99px;background:${diCouleur(h.statut)};margin-top:3px;flex:none"></span>
       <div style="flex:1"><div>${diBadge(h.statut)}</div>
-      <div style="font-size:13px;color:var(--text3);margin-top:2px">${_dfd(h.date)}${h.par?(' · '+esc(h.par)):''}</div></div>
-    </div>`).join('') : `<div style="color:var(--text3);font-size:14px">${TR('Aucun changement de statut enregistré.')}</div>`;
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">${_dfd(h.date)}${h.par?(' · '+esc(h.par)):''}</div></div>
+    </div>`).join('') : `<div style="color:var(--text3);font-size:13px">${TR('Aucun changement de statut enregistré.')}</div>`;
   showModal(`<div class="modal-header"><i class="ti ti-history" style="color:var(--accent)"></i><h2>${TR('Historique du suivi')} — ${esc(d.nom||'')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <div style="font-size:14px;color:var(--text3);margin-bottom:6px">${TR('Transmis le')} ${_dfd(d.date_transmission)}</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:6px">${TR('Transmis le')} ${_dfd(d.date_transmission)}</div>
       ${items}
     </div>`);
 }
@@ -8447,17 +8447,17 @@ async function chargerDemandesFiche(clientId){
   let rows=[]; try{ rows = await API.demandesInfo({client_id:clientId}); }catch(e){ el.innerHTML=''; return; }
   const nonTraitees = rows.filter(r=>DI_NON_TRAITEES.includes(r.statut)).length;
   const absN = rows.filter(r=>r.statut==='absence_retour').length;
-  const alerte = absN>3 ? `<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:8px 12px;margin:4px 0 10px;font-size:15px;font-weight:600"><i class="ti ti-alert-triangle"></i> ${TR('Distributeur peu réactif :')} ${absN} ${TR('demandes en « absence de retour » (le distributeur ne fait pas les relances).')}</div>` : '';
+  const alerte = absN>3 ? `<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:8px;padding:8px 12px;margin:4px 0 10px;font-size:14px;font-weight:600"><i class="ti ti-alert-triangle"></i> ${TR('Distributeur peu réactif :')} ${absN} ${TR('demandes en « absence de retour » (le distributeur ne fait pas les relances).')}</div>` : '';
   const header = `<div class="section-title" style="margin:4px 0 8px;display:flex;align-items:center;gap:8px">
       <i class="ti ti-address-book"></i>${TR("Demandes d'informations")}
       <span class="badge hg" style="font-weight:600">${rows.length}</span>
-      ${nonTraitees?`<span style="color:#d97706;font-size:14px;font-weight:600">● ${nonTraitees} ${TR('en attente')}</span>`:''}
+      ${nonTraitees?`<span style="color:#d97706;font-size:13px;font-weight:600">● ${nonTraitees} ${TR('en attente')}</span>`:''}
       <span style="margin-left:auto;display:flex;gap:6px">
         <button class="btn sm primary" onclick="modalDemande(${clientId},'${esc(nom).replace(/'/g,'&#39;')}')"><i class="ti ti-plus"></i> ${TR('Ajouter')}</button>
         ${nonTraitees?`<button class="btn sm" onclick="relancerDemandes(${clientId},'${esc(email).replace(/'/g,'&#39;')}')"><i class="ti ti-mail"></i> ${TR('Demander un retour')}</button>`:''}
         <button class="btn sm" onclick="exporterDemandes(${clientId})"><i class="ti ti-download"></i> ${TR('Export')}</button>
       </span></div>` + alerte;
-  if(!rows.length){ el.innerHTML = header + `<div style="font-size:14px;color:var(--text3);padding:6px 0">${TR('Aucune demande transmise pour ce distributeur.')}</div>`; return; }
+  if(!rows.length){ el.innerHTML = header + `<div style="font-size:13px;color:var(--text3);padding:6px 0">${TR('Aucune demande transmise pour ce distributeur.')}</div>`; return; }
   el.innerHTML = header + demandesTableHTML(rows, false);
 }
 window.chargerDemandesFiche = chargerDemandesFiche;
@@ -8471,10 +8471,10 @@ function demandesTableHTML(rows, withDistrib){
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
     <td style="padding:8px 10px">${esc(d.nom||'')}</td>
     <td style="padding:8px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(telHref(d.telephone))}" style="color:inherit;text-decoration:none">${esc(fmtTel(d.telephone))}</a>`:'—'}</td>
-    <td style="padding:8px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:14px">${esc(d.email)}</a>`:'—'}</td>
+    <td style="padding:8px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:13px">${esc(d.email)}</a>`:'—'}</td>
     <td style="padding:8px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
-    <td style="padding:8px 10px;font-size:14px">${esc(d.demande_client||'')}</td>
-    <td style="padding:8px 10px;font-size:14px;color:var(--text2)">${esc(d.annotation||'')}</td>
+    <td style="padding:8px 10px;font-size:13px">${esc(d.demande_client||'')}</td>
+    <td style="padding:8px 10px;font-size:13px;color:var(--text2)">${esc(d.annotation||'')}</td>
     <td style="padding:8px 8px;text-align:center">${diHistCell(d)}</td>
     </tr>`).join('');
   return `<div class="card" style="padding:0;overflow:hidden"><table class="table di-table" style="width:100%;table-layout:fixed">
@@ -8523,13 +8523,13 @@ async function renderDemandes(ttl,c,a){
   const filtres = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
     <input class="form-input" id="di-q" placeholder="${TR('Rechercher (contact, distributeur, ville…)')}" value="${esc(DEMANDES_FILTRE.q)}" oninput="DEMANDES_FILTRE.q=this.value;clearTimeout(window._diT);window._diT=setTimeout(chargerDemandesGlobal,300)" style="max-width:320px">
     <select class="form-input" id="di-statut" onchange="DEMANDES_FILTRE.statut=this.value;chargerDemandesGlobal()" style="max-width:180px"><option value="">${TR('Tous les statuts')}</option>${diStatutOptions(DEMANDES_FILTRE.statut)}</select>
-    <label style="display:flex;align-items:center;gap:6px;font-size:15px;cursor:pointer"><input type="checkbox" ${DEMANDES_FILTRE.non_traitees?'checked':''} onchange="DEMANDES_FILTRE.non_traitees=this.checked;chargerDemandesGlobal()"> ${TR('En attente seulement')}</label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer"><input type="checkbox" ${DEMANDES_FILTRE.non_traitees?'checked':''} onchange="DEMANDES_FILTRE.non_traitees=this.checked;chargerDemandesGlobal()"> ${TR('En attente seulement')}</label>
   </div>`;
   if(DEMANDES_VUE==='distrib'){
-    c.innerHTML = tiles + vueTabs + `<div id="di-distrib-list"><div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
+    c.innerHTML = tiles + vueTabs + `<div id="di-distrib-list"><div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
     chargerDemandesParDistrib();
   } else {
-    c.innerHTML = tiles + vueTabs + filtres + `<div id="di-global-list"><div style="font-size:14px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
+    c.innerHTML = tiles + vueTabs + filtres + `<div id="di-global-list"><div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR('Chargement…')}</div></div>`;
     chargerDemandesGlobal();
   }
 }
@@ -8540,7 +8540,7 @@ async function chargerDemandesGlobal(){
   let rows=[]; try{ rows=await API.demandesInfo(params); }catch(e){ el.innerHTML=`<div class="empty">Erreur : ${esc(e.message)}</div>`; return; }
   window._DI_ROWS = rows;
   if(!rows.length){ el.innerHTML=`<div class="empty"><i class="ti ti-address-book"></i>${TR('Aucune demande.')}</div>`; return; }
-  el.innerHTML = `<div style="font-size:14px;color:var(--text3);margin-bottom:6px">${rows.length} ${TR('demande(s)')}</div>` + demandesTableHTML(rows, true);
+  el.innerHTML = `<div style="font-size:13px;color:var(--text3);margin-bottom:6px">${rows.length} ${TR('demande(s)')}</div>` + demandesTableHTML(rows, true);
 }
 window.chargerDemandesGlobal = chargerDemandesGlobal;
 
@@ -8604,14 +8604,14 @@ async function chargerDemandesParDistrib(){
       <button class="btn sm${ntActif?' primary':''}" title="${TR('Non traitées (Transmise, Relancé mail, Appel émis)')}" onclick="diFiltreNonTraitees()"><i class="ti ti-inbox"></i> ${TR('Non traitées')}</button>
       <button class="btn sm${DI_RELANCE_ONLY?' primary':''}" title="${TR('Relances à faire (mail à 7j, tél. à 7j après le mail)')}" onclick="diFiltreRelances()"><i class="ti ti-bell-ringing"></i> ${TR('Relances à faire')}</button>
       <span style="width:1px;height:22px;background:var(--border);margin:0 4px"></span>
-      ${Object.keys(DI_STATUTS).map(k=>{const u=DI_STATUTS[k];const on=DI_STATUT_FILTRE.has(k);return `<span onclick="diFiltreStatut('${k}')" title="${u.l}" style="cursor:pointer;width:26px;height:26px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;${on?('background:'+u.c):''}"><i class="ti ${u.ic}" style="font-size:19px;color:${on?'#fff':'var(--text3)'};opacity:${on?1:.4}"></i></span>`;}).join('')}
+      ${Object.keys(DI_STATUTS).map(k=>{const u=DI_STATUTS[k];const on=DI_STATUT_FILTRE.has(k);return `<span onclick="diFiltreStatut('${k}')" title="${u.l}" style="cursor:pointer;width:26px;height:26px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;${on?('background:'+u.c):''}"><i class="ti ${u.ic}" style="font-size:18px;color:${on?'#fff':'var(--text3)'};opacity:${on?1:.4}"></i></span>`;}).join('')}
       ${(DI_STATUT_FILTRE.size||DI_RELANCE_ONLY)?`<button class="btn sm" title="${TR('Réinitialiser le filtre')}" onclick="DI_STATUT_FILTRE=new Set();DI_RELANCE_ONLY=false;chargerDemandesParDistrib()"><i class="ti ti-x"></i></button>`:''}
     </div>`;
   const barre = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
     <input class="form-input" id="di-distrib-q" autofocus placeholder="${TR('Rechercher : distributeur, contact, mail, téléphone…')}" value="${esc(DI_DISTRIB_Q)}" oninput="DI_DISTRIB_Q=this.value;clearTimeout(window._diDT);window._diDT=setTimeout(chargerDemandesParDistrib,250)" style="max-width:300px">
     ${filtres}
     <span style="flex:1"></span>
-    <span style="font-size:14px;color:var(--text3)">${list.length} ${TR('distributeur(s)')}</span>
+    <span style="font-size:13px;color:var(--text3)">${list.length} ${TR('distributeur(s)')}</span>
     <button class="btn sm" onclick="toggleTousDistrib(true)"><i class="ti ti-chevrons-down"></i> ${TR('Tout déplier')}</button>
     <button class="btn sm" onclick="toggleTousDistrib(false)"><i class="ti ti-chevrons-up"></i> ${TR('Tout replier')}</button>
   </div>`;
@@ -8633,19 +8633,19 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.nom||'')}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(telHref(d.telephone))}" style="color:inherit;text-decoration:none">${esc(fmtTel(d.telephone))}</a>`:'—'}</td>
-      <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:14px">${esc(d.email)}</a>`:'—'}</td>
+      <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:13px">${esc(d.email)}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
-      <td style="padding:7px 10px;font-size:14px;word-break:break-word">${esc(d.demande_client||'')}</td>
-      <td style="padding:7px 10px;font-size:14px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
+      <td style="padding:7px 10px;font-size:13px;word-break:break-word">${esc(d.demande_client||'')}</td>
+      <td style="padding:7px 10px;font-size:13px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
       <td style="padding:7px 8px;text-align:center">${diHistCell(d)}</td>
       </tr>`;
     }).join('');
     return `<div style="border-top:0.5px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;user-select:none">
-        <i id="ic-${gid}" class="ti ${open?'ti-eye-off':'ti-eye'}" title="${alerte?(absN+' '+TR('demandes sans retour du distributeur !')):TR('Voir les demandes')}" onclick="toggleDistribGroup('${gid}')" style="color:${alerte?'#dc2626':'var(--accent)'};width:18px;cursor:pointer;font-size:19px"></i>
-        <span style="font-weight:600;cursor:pointer;${alerte?'color:#dc2626':''}" onclick="toggleDistribGroup('${gid}')">${esc(g.nom)}${alerte?` <i class="ti ti-alert-triangle" title="${absN} ${TR('demandes sans retour')}" style="font-size:15px"></i>`:''}</span>
+        <i id="ic-${gid}" class="ti ${open?'ti-eye-off':'ti-eye'}" title="${alerte?(absN+' '+TR('demandes sans retour du distributeur !')):TR('Voir les demandes')}" onclick="toggleDistribGroup('${gid}')" style="color:${alerte?'#dc2626':'var(--accent)'};width:18px;cursor:pointer;font-size:18px"></i>
+        <span style="font-weight:600;cursor:pointer;${alerte?'color:#dc2626':''}" onclick="toggleDistribGroup('${gid}')">${esc(g.nom)}${alerte?` <i class="ti ti-alert-triangle" title="${absN} ${TR('demandes sans retour')}" style="font-size:14px"></i>`:''}</span>
         ${ntBadge}
-        <span style="background:var(--bg2,#eef1f4);border:1px solid var(--border);border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex:none" title="${TR('Nombre de demandes')}">${g.items.length}</span>
+        <span style="background:var(--bg2,#eef1f4);border:1px solid var(--border);border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none" title="${TR('Nombre de demandes')}">${g.items.length}</span>
         <span style="flex:1"></span>
         ${g.client_id?`<button class="btn sm" title="${TR('Ouvrir la fiche du distributeur (ventes, adresse…)')}" onclick="event.stopPropagation();ouvrirFicheDistrib(${g.client_id})"><i class="ti ti-user"></i></button>`:''}
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
@@ -8657,15 +8657,15 @@ async function chargerDemandesParDistrib(){
             <col style="width:220px"><col style="width:128px"><col style="width:300px"><col><col style="width:44px">
           </colgroup>
           <thead><tr>
-          <th style="text-align:left;padding:6px 8px;font-size:13px">${TR('Statut')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:13px">${TR('Date')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:13px">${TR('Contact')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:13px">${TR('Téléphone')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:13px">${TR('Mail')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:13px">${TR('Ville / CP')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:13px">${TR('Demande client')}</th>
-          <th style="text-align:left;padding:6px 10px;font-size:13px">${TR('Annotation de suivi')}</th>
-          <th style="text-align:center;padding:6px 6px;font-size:13px" title="${TR('Historique')}"><i class="ti ti-history"></i></th>
+          <th style="text-align:left;padding:6px 8px;font-size:12px">${TR('Statut')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Date')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Contact')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Téléphone')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Mail')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Ville / CP')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Demande client')}</th>
+          <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Annotation de suivi')}</th>
+          <th style="text-align:center;padding:6px 6px;font-size:12px" title="${TR('Historique')}"><i class="ti ti-history"></i></th>
         </tr></thead><tbody>${lignes}</tbody></table>
       </div>
     </div>`;
@@ -8717,14 +8717,14 @@ async function reaffecterGroupe(nom){
   showModal(`<div class="modal-header"><i class="ti ti-arrow-move-right" style="color:var(--accent)"></i><h2>${TR('Rattacher / renommer le distributeur')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <input type="hidden" id="di-client-id" value="${g.client_id||''}">
-      <div style="font-size:15px;color:var(--text2);margin-bottom:12px"><strong>${g.items.length}</strong> ${TR('demande(s) actuellement sous')} « <strong>${esc(nom)}</strong> ».</div>
+      <div style="font-size:14px;color:var(--text2);margin-bottom:12px"><strong>${g.items.length}</strong> ${TR('demande(s) actuellement sous')} « <strong>${esc(nom)}</strong> ».</div>
       <div class="form-group"><label class="form-label">${TR('Rattacher à ce distributeur (fiche Clients) ou nouveau nom')}</label>
         <div style="position:relative">
           <input class="form-input" id="di-distrib" autocomplete="off" value="${esc(nom)}" placeholder="${TR('Nom du distributeur')}" oninput="diDistribInput(this.value)" onfocus="diDistribInput(this.value)" onblur="setTimeout(diDistribHideDrop,200)">
           <div id="di-distrib-drop" style="display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 2px);max-height:240px;overflow:auto;background:rgba(255,255,255,0.98);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(30,60,110,.18)"></div>
         </div>
-        <div id="di-distrib-lien" style="font-size:14px;margin-top:4px"></div></div>
-      <div style="font-size:13px;color:var(--text3)">${TR('Choisissez une fiche existante dans la liste pour un rattachement correct, ou tapez un nouveau nom.')}</div>
+        <div id="di-distrib-lien" style="font-size:13px;margin-top:4px"></div></div>
+      <div style="font-size:12px;color:var(--text3)">${TR('Choisissez une fiche existante dans la liste pour un rattachement correct, ou tapez un nouveau nom.')}</div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="confirmerReaffectation('${nom.replace(/'/g,'&#39;')}')"><i class="ti ti-check"></i> ${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
   setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); },0);
@@ -8768,7 +8768,7 @@ async function modalDemande(clientId, distribNom, id){
           <input class="form-input" id="di-distrib" autocomplete="off" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur (lié à une fiche existante)')}" oninput="diDistribInput(this.value)" onfocus="diDistribInput(this.value)" onblur="setTimeout(diDistribHideDrop,200)">
           <div id="di-distrib-drop" style="display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 2px);max-height:240px;overflow:auto;background:rgba(255,255,255,0.98);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(30,60,110,.18)"></div>
         </div>
-        <div id="di-distrib-lien" style="font-size:14px;margin-top:4px"></div></div>
+        <div id="di-distrib-lien" style="font-size:13px;margin-top:4px"></div></div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="di-tel" value="${esc(fmtTel(d.telephone||''))}"></div>
@@ -8808,7 +8808,7 @@ function diDistribInput(val){
   const matches=(q?list.filter(n=>_diKey(n).includes(q)):list).slice(0,15);
   window._DI_MATCH=matches;
   if(!matches.length){ drop.style.display='none'; return; }
-  drop.innerHTML=matches.map((n,i)=>`<div onmousedown="event.preventDefault();diDistribPick(${i})" onmouseover="this.style.background='rgba(46,124,246,.10)'" onmouseout="this.style.background='transparent'" style="padding:8px 11px;cursor:pointer;font-size:15px;color:var(--text);border-bottom:0.5px solid var(--border)">${esc(n)}</div>`).join('');
+  drop.innerHTML=matches.map((n,i)=>`<div onmousedown="event.preventDefault();diDistribPick(${i})" onmouseover="this.style.background='rgba(46,124,246,.10)'" onmouseout="this.style.background='transparent'" style="padding:8px 11px;cursor:pointer;font-size:14px;color:var(--text);border-bottom:0.5px solid var(--border)">${esc(n)}</div>`).join('');
   drop.style.display='block';
 }
 window.diDistribInput=diDistribInput;
@@ -8851,7 +8851,7 @@ function menuDemandeStatut(id){
     <div class="modal-body">
       <div class="form-group"><label class="form-label">${TR('Date du changement')}</label>
         <input class="form-input" type="date" id="di-statut-date" value="${today}"></div>
-      <div style="font-size:13px;color:var(--text3);margin-bottom:8px">${TR('Statut actuel')} : ${d.statut?diBadge(d.statut):'—'}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px">${TR('Statut actuel')} : ${d.statut?diBadge(d.statut):'—'}</div>
       <div style="display:flex;flex-direction:column;gap:7px">
         ${Object.keys(DI_STATUTS).map(k=>`<button class="btn" style="justify-content:flex-start;border-left:4px solid ${DI_STATUTS[k].c}${k===d.statut?';background:var(--bg2,#eef1f4)':''}" onclick="setDemandeStatut(${id},'${k}')">${DI_STATUTS[k].l}${k===d.statut?' ✓':''}</button>`).join('')}
       </div>
