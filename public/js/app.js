@@ -4326,24 +4326,25 @@ async function renderParcDemo(ttl,c,a){
   const possessionCard = `<div class="card" style="margin-top:14px">
     <div class="section-title"><i class="ti ti-packages"></i>${TR('Fauteuils de démo en notre possession')}
       <span style="margin-left:auto;font-size:13px;font-weight:400;color:var(--text3)">${possTotal} ${TR('fauteuil(s)')} · ${possDispo} ${TR('dispo')} · ${TR('hors S1')}</span></div>
-    ${possList.length ? possList.map(g=>{
-      const tot=g.essai+g.dispo; const w=Math.round(tot/possMax*100); const wd=tot?Math.round(g.dispo/tot*100):0;
-      const reco = g.dispo===0 ? ` <span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px" title="${TR('Aucun exemplaire disponible chez nous — à recommander à la Suède si besoin')}">${TR('à recommander ?')}</span>` : '';
-      return `<div style="display:flex;align-items:center;gap:10px;margin:7px 0">
-        <div style="width:100px;font-weight:600;font-size:14px">${esc(g.modele)}</div>
-        <div style="flex:1;background:var(--surface-2,#eef1f4);border-radius:6px;height:22px;overflow:hidden">
-          <div style="height:100%;width:${w}%;min-width:26px;display:flex">
-            <div style="width:${wd}%;background:#2563eb"></div>
-            <div style="flex:1;background:#0d9488"></div>
-          </div>
-        </div>
-        <div style="width:210px;font-size:13px;color:var(--text2);white-space:nowrap;text-align:right"><b style="color:var(--text)">${tot}</b> ${TR('total')} · ${g.dispo} ${TR('dispo')} · ${g.essai} ${TR('en essai')}${reco}</div>
-      </div>`;
-    }).join('') : `<div style="font-size:13px;color:var(--text3)">${TR('Aucun fauteuil de démo actif.')}</div>`}
-    <div style="margin-top:12px;display:flex;gap:16px;font-size:12px;color:var(--text3);border-top:0.5px solid var(--border-s);padding-top:8px">
-      <span><span style="display:inline-block;width:10px;height:10px;background:#2563eb;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('Disponibles (chez nous)')}</span>
-      <span><span style="display:inline-block;width:10px;height:10px;background:#0d9488;border-radius:2px;margin-right:4px;vertical-align:-1px"></span>${TR('En essai (sortis chez un distributeur)')}</span>
-    </div>
+    ${possList.length ? `<div class="table-wrap"><table class="t">
+      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Total')}</th><th></th></tr></thead>
+      <tbody>${possList.map(g=>{
+        const tot=g.essai+g.dispo;
+        const reco = g.dispo===0 ? `<span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px" title="${TR('Aucun exemplaire disponible chez nous — à recommander à la Suède si besoin')}">${TR('à recommander ?')}</span>` : '';
+        return `<tr>
+          <td style="font-weight:600">${esc(g.modele)}</td>
+          <td style="text-align:center;font-weight:600;color:${g.dispo===0?'var(--danger)':'var(--text)'}">${g.dispo}</td>
+          <td style="text-align:center">${g.essai}</td>
+          <td style="text-align:center;font-weight:700">${tot}</td>
+          <td>${reco}</td>
+        </tr>`;
+      }).join('')}
+      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td>
+        <td style="text-align:center;font-weight:700">${possDispo}</td>
+        <td style="text-align:center;font-weight:700">${possList.reduce((s,g)=>s+g.essai,0)}</td>
+        <td style="text-align:center;font-weight:700">${possTotal}</td><td></td></tr>
+      </tbody></table></div>`
+      : `<div style="font-size:13px;color:var(--text3)">${TR('Aucun fauteuil de démo actif.')}</div>`}
   </div>`;
 
   // ── Modèles « sous tension » : 0 exemplaire disponible alors qu'au moins un est en essai ──
