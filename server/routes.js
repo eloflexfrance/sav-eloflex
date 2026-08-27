@@ -3647,7 +3647,7 @@ router.get('/demos/parc', async (req, res) => {
               cmd.distributeur_nom, cmd.client_id,
               c.nom AS client_nom, c.ville AS client_ville,
               cmd.date_commande, cmd.date_livraison,
-              cmd.demo_origine_nom, cmd.demo_localisation_actuelle, cmd.demo_reservation, cmd.updated_at,
+              cmd.demo_origine_nom, cmd.demo_localisation_actuelle, cmd.demo_reservation, cmd.demo_retour_date, cmd.updated_at,
               cmd.demo_rappel_date, cmd.demo_suivi_resultat,
               cmd.num_facture, cmd.facture_paiement_statut,
               cmd.num_avoir,
@@ -3692,10 +3692,18 @@ router.post('/commandes/:id/demo-cloturer', async (req, res) => {
   try {
     const r = String(req.body.resultat || '').toLowerCase();
     if (!['retour', 'facture', 'avoir'].includes(r)) return res.status(400).json({ error: "resultat doit être 'retour', 'facture' ou 'avoir'" });
-    // Clôture par avoir : on aligne aussi le statut de commande sur « Avoir » (les deux vues restent cohérentes).
-    const row = r === 'avoir'
-      ? await db.run("UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat='avoir', statut='Avoir', updated_at=NOW() WHERE id=$1 RETURNING id, demo_suivi_resultat", [req.params.id])
-      : await db.run('UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat=$1, updated_at=NOW() WHERE id=$2 RETURNING id, demo_suivi_resultat', [r, req.params.id]);
+    // Date réelle de retour (facultative) — utilisée pour le planning ; validée AAAA-MM-JJ.
+    const rawDate = (req.body.date != null ? String(req.body.date).slice(0, 10) : '');
+    const retourDate = (r === 'retour' && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(rawDate)) ? rawDate : null;
+    let row;
+    if (r === 'avoir') {
+      // Clôture par avoir : on aligne aussi le statut de commande sur « Avoir » (les deux vues restent cohérentes).
+      row = await db.run("UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat='avoir', statut='Avoir', updated_at=NOW() WHERE id=$1 RETURNING id, demo_suivi_resultat", [req.params.id]);
+    } else if (r === 'retour') {
+      row = await db.run('UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat=$1, demo_retour_date=$2, updated_at=NOW() WHERE id=$3 RETURNING id, demo_suivi_resultat, demo_retour_date', [r, retourDate, req.params.id]);
+    } else {
+      row = await db.run('UPDATE commandes SET demo_rappel_date=NULL, demo_suivi_resultat=$1, updated_at=NOW() WHERE id=$2 RETURNING id, demo_suivi_resultat', [r, req.params.id]);
+    }
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
     res.json({ ok: true, ...row });
   } catch (e) { res.status(500).json({ error: e.message }); }

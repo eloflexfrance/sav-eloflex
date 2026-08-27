@@ -149,7 +149,7 @@ const API = {
   demosSuivi:()=>API.get('/demos/suivi'),
   demosParc:()=>API.get('/demos/parc'),
   demoProlonger:(id,date)=>API.post(`/commandes/${id}/demo-prolonger`,{date}),
-  demoCloturer:(id,resultat)=>API.post(`/commandes/${id}/demo-cloturer`,{resultat}),
+  demoCloturer:(id,resultat,date)=>API.post(`/commandes/${id}/demo-cloturer`,{resultat,date}),
   demoReserver:(id,reservation)=>API.post(`/commandes/${id}/demo-reserver`,{reservation}),
   vfSyncCommandes:(historique=false)=>API.post(`/vosfactures/sync-commandes${historique?'?historique=1':''}`,{}),
   commandeFacturesSuggestions:(id)=>API.get(`/commandes/${id}/factures-vf-suggestions`),

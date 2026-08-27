@@ -2486,10 +2486,19 @@ async function demoCloturer(id, resultat){
               : resultat==='avoir'   ? TR('Elle sort du parc démo (annulation) et n’apparaît plus que dans l’Historique.')
               : TR('Elle reste dans le parc, marquée « Disponible » pour un autre essai.');
   if(!confirm(TR('Marquer cette démo comme ')+lbl+' ? '+suite)) return;
+  // Pour un retour : on saisit la date réelle de retour (sert au planning). Vide = aujourd'hui.
+  let retourDate = null;
+  if(resultat==='retour'){
+    const today = new Date().toISOString().slice(0,10);
+    const d = prompt(TR('Date de retour à Éloflex France (AAAA-MM-JJ) :'), today);
+    if(d===null) return;                              // annulé
+    retourDate = (d.trim() || today);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(retourDate)){ alert(TR('Format attendu : AAAA-MM-JJ')); return; }
+  }
   const okMsg = resultat==='facture' ? TR('Démo marquée vendue')
               : resultat==='avoir'   ? TR('Démo clôturée par avoir')
               : TR('Démo de retour — disponible');
-  try{ await API.demoCloturer(id, resultat); toast(okMsg,'ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
+  try{ await API.demoCloturer(id, resultat, retourDate); toast(okMsg,'ti-check'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 window.demoProlonger=demoProlonger; window.demoCloturer=demoCloturer;
 async function reserverDemoRetour(id, prefill){
@@ -4070,6 +4079,7 @@ function parcToggleConclues(v){ PARC_SHOW_CONCLUES = !!v; render(); }
 let PARC_TAB = 'demo';            // onglet actif du Parc de démo : 'demo' | 'dispo' | 'hist'
 let PARC_PLANNING = false;        // planning (Gantt) des indisponibilités : affiché ou non
 let PARC_PLANNING_HIST = false;   // inclure les essais terminés dans le planning
+let PARC_UNIT_VIEW = 'list';      // vue du bloc Unités : 'list' | 'plan'
 window.parcToggleConclues = parcToggleConclues;
 // Seule la VENTE fait sortir une démo du parc. Un retour à Éloflex France la garde
 // dans le parc, « Disponible » pour un nouvel essai.
@@ -4146,41 +4156,6 @@ async function renderParcDemo(ttl,c,a){
   // devrait normalement être clôturée en « Retour ». À vérifier par l'utilisateur.
   const venduAvecAvoir = vendues.filter(u=>_aAvoir(u.rep)).length;
 
-  const tiles = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px">
-    <div class="stat-card"><div class="stat-label">${TR('Parc démo (actif)')}</div><div class="stat-value" style="color:#0d9488">${parcActif.length}</div></div>
-    <div class="stat-card"><div class="stat-label">${TR('En essai')}</div><div class="stat-value" style="color:#0d9488">${enEssai.length}</div></div>
-    <div class="stat-card"><div class="stat-label">${TR('Disponibles')}</div><div class="stat-value" style="color:#2563eb">${disponibles.length}</div></div>
-    <div class="stat-card"><div class="stat-label">${TR('Rappels échus')}</div><div class="stat-value" style="color:${echues.length?'var(--danger)':'var(--text)'}">${echues.length}</div></div>
-    <div class="stat-card"><div class="stat-label">${TR('Transferts en cours')}</div><div class="stat-value" style="color:#2563eb">${transEnCours.length}</div></div>
-    <div class="stat-card"><div class="stat-label">${TR('Vendues')}</div><div class="stat-value" style="color:#15803d">${vendues.length}</div></div>
-  </div>`;
-
-  // ── Compteur par modèle (parc actif) : En essai / Disponibles / Total + vendues (cumul) ──
-  const grp = {};
-  parcActif.forEach(u=>{ const k=demoModele(u.rep.modele); const g=grp[k]||(grp[k]={modele:k,essai:0,dispo:0}); if(_stU(u)==='retour') g.dispo++; else g.essai++; });
-  const venduGrp = {};
-  vendues.forEach(u=>{ const k=demoModele(u.rep.modele); venduGrp[k]=(venduGrp[k]||0)+1; });
-  const grpList = Object.values(grp).sort((x,y)=>(y.essai+y.dispo)-(x.essai+x.dispo));
-  const compteurModele = grpList.length ? `<div class="card" style="margin-bottom:14px">
-    <div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Compteur par modèle')}</div>
-    <div class="table-wrap"><table class="t">
-      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('Total parc')}</th><th style="text-align:center">${TR('Vendues (cumul)')}</th></tr></thead>
-      <tbody>${grpList.map(g=>`<tr>
-        <td style="font-weight:600">${esc(g.modele)}</td>
-        <td style="text-align:center;color:#0d9488;font-weight:600">${g.essai}</td>
-        <td style="text-align:center;color:#2563eb;font-weight:600">${g.dispo}</td>
-        <td style="text-align:center;font-weight:700">${g.essai+g.dispo}</td>
-        <td style="text-align:center;color:var(--text3)">${venduGrp[g.modele]||0}</td>
-      </tr>`).join('')}
-      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td>
-        <td style="text-align:center;font-weight:700">${enEssai.length}</td>
-        <td style="text-align:center;font-weight:700">${disponibles.length}</td>
-        <td style="text-align:center;font-weight:700">${parcActif.length}</td>
-        <td style="text-align:center;font-weight:700;color:var(--text3)">${vendues.length}</td></tr>
-      </tbody>
-    </table></div>
-  </div>` : '';
-
   // ── Trois onglets : En démo (en essai) · Disponibles (revenus) · Historique ──
   // Une unité vit dans « En démo » tant qu'elle est en essai, bascule en
   // « Disponibles » à son retour ; chaque stint terminé (stint antérieur =
@@ -4235,7 +4210,7 @@ async function renderParcDemo(ttl,c,a){
       <td style="font-size:12px">${serieCell}</td>
       <td>${esc(detenteur)}${pretBadgeHtml}${resaBadge}</td>
       <td style="font-size:13px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
-      <td style="white-space:nowrap">${fdate(mise)}</td>
+      <td style="white-space:nowrap">${fdate(mise)}${(!isHist && !d.demo_suivi_resultat && mise)?(()=>{const j=Math.round((new Date(_today+'T00:00:00')-new Date((''+mise).slice(0,10)+'T00:00:00'))/86400000);return j>=0?` <span style="color:${j>60?'var(--danger)':'var(--text3)'};font-size:11px">(${j} j)</span>`:'';})():''}</td>
       <td style="white-space:nowrap;${echEchue?'color:var(--danger);font-weight:600':''}">${echeance?fdate(echeance):'—'}</td>
       <td style="white-space:nowrap">${actions}</td>
     </tr>`;
@@ -4301,54 +4276,6 @@ async function renderParcDemo(ttl,c,a){
     </table></div>`
     : `<div style="font-size:13px;color:var(--text3);padding:8px 0">${TR('Aucun prêt / essai actif.')}</div>`;
 
-  const bannerSerie = sansSerie ? `<div style="display:flex;align-items:center;gap:8px;background:var(--warning-bg);border:0.5px solid rgba(180,85,31,.3);color:var(--warning);border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:13.5px">
-    <i class="ti ti-alert-triangle" style="font-size:16px"></i>
-    <span><b>${sansSerie}</b> ${TR('démo(s) sans n° de série')} — ${TR('renseignez-le dans la fiche commande pour suivre l’unité physique et la rattacher automatiquement aux prêts et transferts.')}</span>
-  </div>` : '';
-  const bannerAvoir = venduAvecAvoir ? `<div style="display:flex;align-items:center;gap:8px;background:#dc262614;border:0.5px solid #dc262644;color:#b91c1c;border-radius:var(--radius);padding:9px 12px;margin-bottom:12px;font-size:13.5px">
-    <i class="ti ti-alert-triangle" style="font-size:16px"></i>
-    <span><b>${venduAvecAvoir}</b> ${TR('démo(s) marquée(s) « Vendue » avec un avoir')} — ${TR('à vérifier : une vente annulée par avoir devrait être clôturée en « Retour ». Ouvrez l’onglet « Historique » pour les voir et les requalifier.')}</span>
-  </div>` : '';
-
-  // ── Fauteuils de démo EN NOTRE POSSESSION, par modèle (hors S1) ──────────────
-  // Parc actif = en essai + disponibles = les unités que nous possédons réellement.
-  // Sert à voir d'un coup d'œil s'il faut recommander des modèles de démo à la Suède.
-  const possGrp = {};
-  parcActif.forEach(u=>{
-    const k = demoModele(u.rep.modele);
-    const fam = k.replace(/^Modèle\s+/i,'').trim().toUpperCase();
-    if(fam==='S1') return;                        // exclusion du modèle S1
-    const g = possGrp[k] || (possGrp[k]={modele:k, essai:0, dispo:0});
-    if(_stU(u)==='retour') g.dispo++; else g.essai++;
-  });
-  const possList  = Object.values(possGrp).sort((a,b)=>(b.essai+b.dispo)-(a.essai+a.dispo) || a.modele.localeCompare(b.modele));
-  const possTotal = possList.reduce((s,g)=>s+g.essai+g.dispo,0);
-  const possDispo = possList.reduce((s,g)=>s+g.dispo,0);
-  const possMax   = Math.max(1, ...possList.map(g=>g.essai+g.dispo));
-  const possessionCard = `<div class="card" style="margin-top:14px">
-    <div class="section-title"><i class="ti ti-packages"></i>${TR('Fauteuils de démo en notre possession')}
-      <span style="margin-left:auto;font-size:13px;font-weight:400;color:var(--text3)">${possTotal} ${TR('fauteuil(s)')} · ${possDispo} ${TR('dispo')} · ${TR('hors S1')}</span></div>
-    ${possList.length ? `<div class="table-wrap"><table class="t">
-      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Total')}</th><th></th></tr></thead>
-      <tbody>${possList.map(g=>{
-        const tot=g.essai+g.dispo;
-        const reco = g.dispo===0 ? `<span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px" title="${TR('Aucun exemplaire disponible chez nous — à recommander à la Suède si besoin')}">${TR('à recommander ?')}</span>` : '';
-        return `<tr>
-          <td style="font-weight:600">${esc(g.modele)}</td>
-          <td style="text-align:center;font-weight:600;color:${g.dispo===0?'var(--danger)':'var(--text)'}">${g.dispo}</td>
-          <td style="text-align:center">${g.essai}</td>
-          <td style="text-align:center;font-weight:700">${tot}</td>
-          <td>${reco}</td>
-        </tr>`;
-      }).join('')}
-      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td>
-        <td style="text-align:center;font-weight:700">${possDispo}</td>
-        <td style="text-align:center;font-weight:700">${possList.reduce((s,g)=>s+g.essai,0)}</td>
-        <td style="text-align:center;font-weight:700">${possTotal}</td><td></td></tr>
-      </tbody></table></div>`
-      : `<div style="font-size:13px;color:var(--text3)">${TR('Aucun fauteuil de démo actif.')}</div>`}
-  </div>`;
-
   // ── Planning (Gantt) des indisponibilités : un fauteuil en essai est indisponible
   // de sa mise en démo jusqu'à son échéance de retour. Repliable (affiché ou non). ──
   const planningUnits = enEssai.map(u=>{ const d=u.rep; return {
@@ -4369,19 +4296,11 @@ async function renderParcDemo(ttl,c,a){
     bdc: d.bdc || '',
     who: d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '',
     start: d.date_livraison || d.date_commande || '',
-    end: d.demo_rappel_date || (d.updated_at ? (''+d.updated_at).slice(0,10) : ''),
+    end: d.demo_retour_date || d.demo_rappel_date || (d.updated_at ? (''+d.updated_at).slice(0,10) : ''),
     echu:false, finished:true, resultat:_resLbl(d)
   };}).filter(u=>u.start);
   window._PARC_PLAN = { cur: planningUnits, hist: planningHistUnits };
   const _planInit = PARC_PLANNING_HIST ? planningUnits.concat(planningHistUnits) : planningUnits;
-  const planningCard = `<div class="card" style="margin-top:14px">
-    <div class="section-title"><i class="ti ti-timeline"></i>${TR('Planning des indisponibilités')}
-      <span style="margin-left:auto"><button class="btn sm" id="parc-planning-btn" onclick="parcTogglePlanning()"><i class="ti ti-${PARC_PLANNING?'eye-off':'timeline'}"></i>${PARC_PLANNING?TR('Masquer le planning'):TR('Afficher le planning')}</button></span></div>
-    <div id="parc-planning-body" style="${PARC_PLANNING?'':'display:none'}">
-      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--text2);margin-bottom:10px"><input type="checkbox" ${PARC_PLANNING_HIST?'checked':''} onchange="parcToggleHist(this.checked)"> ${TR('Inclure les essais terminés')}${planningHistUnits.length?` (${planningHistUnits.length})`:''}</label>
-      <div id="parc-planning-content">${buildParcPlanning(_planInit)}</div>
-    </div>
-  </div>`;
 
   // ── Modèles « sous tension » : 0 exemplaire disponible alors qu'au moins un est en essai ──
   // C'est le cas d'une 2ᵉ demande sur un modèle déjà sorti : on affiche la prochaine
@@ -4395,31 +4314,84 @@ async function renderParcDemo(ttl,c,a){
     const tri = g.essai.slice().sort((a,b)=>{ const da=a.rep.demo_rappel_date||'9999', db=b.rep.demo_rappel_date||'9999'; return (''+da).localeCompare(''+db); });
     return { modele:g.modele, nb:g.essai.length, next:tri[0].rep, essais:tri };
   }).sort((a,b)=> (a.next.demo_rappel_date||'9999').localeCompare(b.next.demo_rappel_date||'9999'));
-  const tensionCard = tension.length ? `<div class="card" style="margin-bottom:14px;border-left:3px solid #b45309">
-    <div class="section-title"><i class="ti ti-alert-triangle" style="color:#b45309"></i>${TR('Modèles sous tension')}
-      <span style="margin-left:auto;font-size:13px;font-weight:400;color:var(--text3)">${TR('aucun exemplaire disponible — 2ᵉ demande à arbitrer')}</span></div>
-    ${tension.map(tg=>{
-      const d=tg.next; const holder = d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—';
-      const dateTxt = d.demo_rappel_date ? fdate(d.demo_rappel_date) : TR('date non renseignée');
-      const resa = d.demo_reservation ? ` <span class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed44;font-size:11px;cursor:pointer" title="${TR('Modifier / retirer la réservation')}" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark" style="font-size:12px;margin-right:2px"></i>${TR('réservé')} : ${esc(d.demo_reservation)}</span>` : '';
-      return `<div style="display:flex;align-items:center;gap:10px;margin:8px 0;flex-wrap:wrap">
-        <div style="min-width:220px"><b style="font-size:14px">${esc(tg.modele)}</b> <span style="color:var(--text3);font-size:13px">— ${tg.nb} ${TR('en essai')}, 0 ${TR('dispo')}</span><br>
-          <span style="font-size:13px;color:var(--text2)"><i class="ti ti-clock-hour-4" style="font-size:13px"></i> ${TR('prochaine libération')} : <b${d.demo_rappel_date?'':' style="color:var(--warning)"'}>${dateTxt}</b> ${TR('chez')} ${esc(holder)}</span>${resa}</div>
-        <span style="flex:1"></span>
-        <button class="btn sm" onclick="reserverDemoRetour(${d.id},'${esc((d.demo_reservation||'').replace(/'/g,'&#39;'))}')"><i class="ti ti-bookmark"></i>${TR('Réserver au retour')}</button>
-        <button class="btn sm primary" onclick="setView('commande-suede')"><i class="ti ti-truck-delivery"></i>${TR('Commander à la Suède')}</button>
-      </div>`;
-    }).join('')}
-    <div style="margin-top:8px;font-size:12px;color:var(--text3)">${TR('Astuce : si l’essai en cours est en long terme ou que le distributeur ne peut pas attendre, commandez un neuf ; sinon réservez l’unité et planifiez le transfert à son retour.')}</div>
-  </div>` : '';
 
-  c.innerHTML = tiles
-    + tensionCard
-    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-wheelchair"></i>${TR('Démos déclarées')}</div>${bannerAvoir}${bannerSerie}${demoTable}</div>`
-    + `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-arrows-exchange"></i>${TR('Transferts de fauteuils')} <span style="margin-left:auto;font-size:13px;font-weight:400"><span onclick="setView('transferts')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${transTable}</div>`
-    + `<div class="card"><div class="section-title"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais en cours')} <span style="margin-left:auto;font-size:13px;font-weight:400"><span onclick="setView('prets')" style="color:var(--accent);cursor:pointer">${TR('Gérer')} →</span></span></div>${pretsTable}</div>`
-    + possessionCard
-    + planningCard;
+  // ══ REFONTE — 5 zones : cockpit · actions · inventaire · unités (liste/planning) · secondaire ══
+  const _dU = s => s ? Math.round((new Date((''+s).slice(0,10)+'T00:00:00') - new Date(_today+'T00:00:00'))/86400000) : null;
+  const retoursProches = enEssai.filter(u=>{ const n=_dU(u.rep.demo_rappel_date); return n!==null && n<=30; }).length;
+
+  // Zone 1 — Cockpit
+  const _kpi=(l,v,c,s)=>`<div class="stat-card"><div class="stat-label">${l}</div><div class="stat-value" style="${c?`color:${c}`:''}">${v}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">${s}</div></div>`;
+  const cockpit = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px">
+    ${_kpi(TR('Parc actif'),parcActif.length,'var(--accent)',TR('unités possédées'))}
+    ${_kpi(TR('Disponibles'),disponibles.length,'#2563eb',TR('prêtes à repartir'))}
+    ${_kpi(TR('En essai'),enEssai.length,'#0d9488',TR('chez un distributeur'))}
+    ${_kpi(TR('Retours < 30 j'),retoursProches,echues.length?'var(--danger)':'',echues.length?`${TR('dont')} ${echues.length} ${TR('échus')}`:TR('à venir'))}
+    ${_kpi(TR('Sous tension'),tension.length,tension.length?'#b45309':'',TR('modèles à 0 dispo'))}
+    ${_kpi(TR('Vendues'),vendues.length,'var(--text2)',TR('cumul'))}
+  </div>`;
+
+  // Zone 2 — Actions requises (toutes les alertes, priorisées, au même endroit)
+  const _actRow=(ic,bg,fg,titre,detail,btns)=>`<div style="display:flex;align-items:center;gap:13px;padding:12px 16px;border-top:0.5px solid var(--border-s)">
+    <div style="width:30px;height:30px;border-radius:8px;display:grid;place-items:center;flex:none;background:${bg};color:${fg}"><i class="ti ${ic}"></i></div>
+    <div style="flex:1;min-width:0"><div style="font-weight:700">${titre}</div>${detail?`<div style="color:var(--text3);font-size:12.5px">${detail}</div>`:''}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">${btns||''}</div></div>`;
+  const acts=[];
+  if(echues.length) acts.push(_actRow('ti-alert-triangle','#dc262618','#dc2626',
+    `${echues.length} ${TR('rappel(s) de retour échu(s)')}`,
+    echues.slice(0,3).map(u=>esc(demoModele(u.rep.modele)+' — '+(u.rep.demo_localisation_actuelle||u.rep.client_nom||u.rep.distributeur_nom||''))).join(' · '),
+    `<button class="btn sm" onclick="parcGoTab('demo')">${TR('Voir')}</button>`));
+  if(tension.length) acts.push(_actRow('ti-alert-triangle','#f59e0b18','#b45309',
+    `${tension.length} ${TR('modèle(s) sous tension')}`,
+    tension.map(tg=>esc(tg.modele+' — '+TR('dispo')+' '+(tg.next.demo_rappel_date?fdate(tg.next.demo_rappel_date):'?'))).join(' · '),
+    `<button class="btn sm" onclick="reserverDemoRetour(${tension[0].next.id},'')">${TR('Réserver')}</button><button class="btn sm primary" onclick="setView('commande-suede')"><i class="ti ti-truck-delivery"></i>${TR('Suède')}</button>`));
+  if(venduAvecAvoir) acts.push(_actRow('ti-receipt-refund','#f59e0b18','#b45309',
+    `${venduAvecAvoir} ${TR('démo(s) « Vendue » avec un avoir')}`, TR('vente annulée : à requalifier en « Avoir »'),
+    `<button class="btn sm" onclick="parcGoTab('hist')">${TR('Historique')}</button>`));
+  if(sansSerie) acts.push(_actRow('ti-hash','#0d948818','#0d9488',
+    `${sansSerie} ${TR('démo(s) sans n° de série')}`, TR('à renseigner pour un suivi fiable à l’unité'),
+    `<button class="btn sm" onclick="parcGoTab('demo')">${TR('Compléter')}</button>`));
+  const actionsCard = acts.length
+    ? `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-checklist"></i>${TR('Actions requises')}</div>${acts.join('')}</div>`
+    : `<div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;padding:14px 16px;color:#0c5c3c"><i class="ti ti-circle-check" style="font-size:18px"></i>${TR('Rien à signaler — parc à jour.')}</div>`;
+
+  // Zone 3 — Inventaire par modèle (hors S1), source unique
+  const _isS1=k=>k.replace(/^Modèle\s+/i,'').trim().toUpperCase()==='S1';
+  const inv={};
+  parcActif.forEach(u=>{ const k=demoModele(u.rep.modele); if(_isS1(k))return; const g=inv[k]||(inv[k]={m:k,essai:0,dispo:0,vendu:0}); if(_stU(u)==='retour')g.dispo++; else g.essai++; });
+  vendues.forEach(u=>{ const k=demoModele(u.rep.modele); if(_isS1(k))return; (inv[k]||(inv[k]={m:k,essai:0,dispo:0,vendu:0})).vendu++; });
+  const invList=Object.values(inv).sort((a,b)=>(b.essai+b.dispo)-(a.essai+a.dispo)||a.m.localeCompare(b.m));
+  const invTot=invList.reduce((t,g)=>({e:t.e+g.essai,d:t.d+g.dispo,p:t.p+g.essai+g.dispo,v:t.v+g.vendu}),{e:0,d:0,p:0,v:0});
+  const nbReco=invList.filter(g=>g.dispo===0&&(g.essai+g.dispo)>0).length;
+  const _okBadge=`<span class="badge" style="background:#0d948818;color:#0d9488;border:0.5px solid #0d948844;font-size:11px">OK</span>`;
+  const _recoBadge=`<span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${TR('à recommander ?')}</span>`;
+  const inventaireCard = `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Inventaire par modèle')} <span style="font-size:12px;font-weight:400;color:var(--text3)">· ${TR('hors S1')}</span>${nbReco?`<span style="margin-left:auto"><span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${nbReco} ${TR('à recommander')}</span></span>`:''}</div>
+    <div class="table-wrap"><table class="t">
+      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('Total parc')}</th><th style="text-align:center">${TR('Vendues (cumul)')}</th><th>${TR('Statut')}</th></tr></thead>
+      <tbody>${invList.length?invList.map(g=>{const tot=g.essai+g.dispo;const reco=g.dispo===0&&tot>0;return `<tr>
+        <td style="font-weight:600">${esc(g.m)}</td>
+        <td style="text-align:center">${g.essai}</td>
+        <td style="text-align:center;font-weight:600;color:${g.dispo===0?'var(--danger)':'#2563eb'}">${g.dispo}</td>
+        <td style="text-align:center;font-weight:700">${tot}</td>
+        <td style="text-align:center;color:var(--text3)">${g.vendu}</td>
+        <td>${reco?_recoBadge:(tot>0?_okBadge:'<span style="color:var(--text3);font-size:12px">—</span>')}</td></tr>`;}).join(''):`<tr><td colspan="6" style="color:var(--text3);font-size:13px">${TR('Aucun fauteuil de démo actif.')}</td></tr>`}
+      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td><td style="text-align:center;font-weight:700">${invTot.e}</td><td style="text-align:center;font-weight:700">${invTot.d}</td><td style="text-align:center;font-weight:700">${invTot.p}</td><td style="text-align:center;font-weight:700;color:var(--text3)">${invTot.v}</td><td></td></tr>
+      </tbody></table></div></div>`;
+
+  // Zone 4 — Unités : liste OU planning sur les mêmes données
+  const _segCss=`<style>.pd-seg{display:inline-flex;background:var(--surface-2,#eef1f4);border:0.5px solid var(--border-s);border-radius:9px;padding:3px}.pd-seg button{border:0;background:transparent;color:var(--text2);font:inherit;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:7px;cursor:pointer}.pd-seg button.on{background:var(--surface,#fff);color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.08)}</style>`;
+  const unitesCard = _segCss+`<div class="card" style="margin-bottom:14px">
+    <div class="section-title"><i class="ti ti-list-details"></i>${TR('Unités')}<span style="margin-left:auto" class="pd-seg"><button id="pd-v-list" class="${PARC_UNIT_VIEW==='list'?'on':''}" onclick="parcSetUnitView('list')"><i class="ti ti-list"></i> ${TR('Liste')}</button><button id="pd-v-plan" class="${PARC_UNIT_VIEW==='plan'?'on':''}" onclick="parcSetUnitView('plan')"><i class="ti ti-timeline"></i> ${TR('Planning')}</button></span></div>
+    <div id="parc-unit-list" style="${PARC_UNIT_VIEW==='list'?'':'display:none'}">${demoTable}</div>
+    <div id="parc-unit-plan" style="${PARC_UNIT_VIEW==='plan'?'':'display:none'}">
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--text2);margin-bottom:10px"><input type="checkbox" ${PARC_PLANNING_HIST?'checked':''} onchange="parcToggleHist(this.checked)"> ${TR('Inclure les essais terminés')}${planningHistUnits.length?` (${planningHistUnits.length})`:''}</label>
+      <div id="parc-planning-content">${buildParcPlanning(_planInit)}</div>
+    </div></div>`;
+
+  // Zone 5 — Secondaire (replié) : l'essentiel remonte déjà en badges dans les lignes
+  const secondary = `<details class="card" style="margin-bottom:10px"><summary style="cursor:pointer;list-style:none;padding:13px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px"><i class="ti ti-arrows-exchange"></i>${TR('Transferts en cours')} <span class="badge" style="font-size:11px">${transEnCours.length}</span><span style="margin-left:auto;color:var(--accent);font-size:12px" onclick="event.preventDefault();setView('transferts')">${TR('Gérer')} →</span></summary><div style="padding:0 4px 8px">${transTable}</div></details>
+    <details class="card"><summary style="cursor:pointer;list-style:none;padding:13px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px"><i class="ti ti-file-certificate"></i>${TR('Prêts / essais actifs')} <span class="badge" style="font-size:11px">${pretsActifs.length}</span><span style="margin-left:auto;color:var(--accent);font-size:12px" onclick="event.preventDefault();setView('prets')">${TR('Gérer')} →</span></summary><div style="padding:0 4px 8px">${pretsTable}</div></details>`;
+
+  c.innerHTML = cockpit + actionsCard + inventaireCard + unitesCard + secondary;
 }
 window.renderParcDemo = renderParcDemo;
 function parcDemoFiltrer(v){
@@ -4435,6 +4407,25 @@ function parcSetTab(k){
   document.querySelectorAll('.parc-tab-btn').forEach(b=>{ const on=b.getAttribute('data-tab')===k; b.style.borderBottom='2px solid '+(on?'var(--accent)':'transparent'); b.style.color=on?'var(--accent)':'var(--text2)'; b.style.fontWeight=on?'700':'500'; });
 }
 window.parcSetTab = parcSetTab;
+
+function parcSetUnitView(v){
+  PARC_UNIT_VIEW = v;
+  const L=document.getElementById('parc-unit-list'), P=document.getElementById('parc-unit-plan');
+  if(L) L.style.display = v==='list' ? '' : 'none';
+  if(P) P.style.display = v==='plan' ? '' : 'none';
+  const bl=document.getElementById('pd-v-list'), bp=document.getElementById('pd-v-plan');
+  if(bl) bl.classList.toggle('on', v==='list');
+  if(bp) bp.classList.toggle('on', v==='plan');
+}
+window.parcSetUnitView = parcSetUnitView;
+// Ouvre la liste sur un onglet précis (depuis les « Actions requises »).
+function parcGoTab(tab){
+  parcSetUnitView('list');
+  parcSetTab(tab);
+  const el=document.getElementById('parc-unit-list');
+  if(el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+window.parcGoTab = parcGoTab;
 
 function parcTogglePlanning(){
   PARC_PLANNING = !PARC_PLANNING;
