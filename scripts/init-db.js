@@ -471,6 +471,17 @@ async function initDB() {
         statut TEXT DEFAULT 'envoyé',
         notes TEXT
       )`);
+      // Signature en ligne des devis / bons de commande (même mécanique que les bons de prêt)
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS doc_type TEXT DEFAULT 'devis'`);   // 'devis' | 'bdc'
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS token_signature TEXT`);
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS signataire_nom TEXT`);
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS signature_data TEXT`);
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS pdf_data TEXT`);
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS sign_ip TEXT`);
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS sign_ua TEXT`);
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS signature_email TEXT`);   // e-mail où le lien a été envoyé
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_devis_token ON devis(token_signature)`);
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pays TEXT`);
       // pays NULL sur users = admin global (voit tous les pays)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS ref_suede TEXT`);

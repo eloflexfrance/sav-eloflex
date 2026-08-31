@@ -2791,83 +2791,70 @@ router.post('/devis/sync-vf', adminOnly, async (req, res) => {
     });
     const dateMin = new Date(); dateMin.setDate(dateMin.getDate() - 90);
     const dateStr = dateMin.toISOString().slice(0, 10);
-    let page = 1, total = 0, created = 0, updated = 0;
-    while(true) {
-      const { data } = await vfApi.get('/invoices.json', {
-        params: { kind: 'estimate', page, per_page: 50, date_from: dateStr, order: 'issue_date.desc' }
-      });
-      if (!Array.isArray(data) || !data.length) break;
-      for (const inv of data) {
-        // Toujours récupérer le détail complet pour avoir les montants et lignes
-        let detail = inv;
-        try {
-          const { data: det } = await vfApi.get(`/invoices/${inv.id}.json`);
-          if (det && det.id) detail = det;
-        } catch(_) {}
-        // Fusionner liste + détail (le détail prime)
-        const inv2 = { ...inv, ...detail };
-        // LOG temporaire pour diagnostic montants (premier devis seulement)
-        if (total === 0) {
-          console.log('[DEVIS DEBUG] Champs disponibles:', Object.keys(inv2).join(', '));
-          console.log('[DEVIS DEBUG] Montants:', JSON.stringify({
-            total_price_gross: inv2.total_price_gross,
-            total_price_net:   inv2.total_price_net,
-            price_gross:       inv2.price_gross,
-            price_net:         inv2.price_net,
-            total:             inv2.total,
-            gross_price:       inv2.gross_price,
-            net_price:         inv2.net_price,
-            amount:            inv2.amount,
-          }));
-        }
-        // Vérifier si déjà converti en BDC dans VF (statut accepted)
-        const statutVF = inv2.status || inv2.payment_status || '';
-        const estConverti = statutVF === 'accepted' || statutVF === 'paid';
-        // Vérifier si un client_order existe pour ce devis dans nos commandes
-        const deja = await db.get('SELECT id FROM commandes WHERE vf_commande_id=$1', [inv2.id]);
-        const dejaConvertiLocal = !!deja;
-        const statutFinal = estConverti || dejaConvertiLocal ? 'converti' : 'ouvert';
-        const lignes = (inv2.positions || []).map(p => ({
-          nom: p.name, qte: p.quantity, prix: p.price_net, total: p.total_price_gross
-        }));
-        await db.run(
-          `INSERT INTO devis (vf_id, numero, distributeur_nom, client_email, date_devis, date_expiration,
-             montant, devise, statut, vf_statut, lignes, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
-           ON CONFLICT (vf_id) DO UPDATE SET
-             statut=CASE WHEN devis.statut='ignoré' THEN 'ignoré'
-                         WHEN $9='converti' THEN 'converti'
-                         ELSE devis.statut END,
-             vf_statut=$10, distributeur_nom=$3, client_email=$4,
-             montant=$7, lignes=$11, updated_at=NOW()`,
-          [inv2.id, inv2.number, inv2.buyer_name, inv2.buyer_email||null,
-           (inv2.issue_date||'').slice(0,10), (inv2.payment_to||'').slice(0,10),
-           (() => {
-             // Champs confirmés par debug VosFactures : price_gross (TTC), price_net (HT)
-             const vals = [inv2.price_gross, inv2.price_net, inv2.total_price_gross, inv2.total_price_net, inv2.total];
-             for (const v of vals) {
-               const n = parseFloat(v);
-               if (n > 0) return n;
-             }
-             // Fallback : sommer les positions
-             const pos = inv2.positions || [];
-             if (pos.length) {
-               const s = pos.reduce((acc, p) => {
-                 const pv = [p.total_price_gross, p.price_gross, p.total_price_net, p.price_net];
-                 for (const v of pv) { const n = parseFloat(v); if (n > 0) return acc + n; }
-                 return acc;
-               }, 0);
-               if (s > 0) return s;
-             }
-             return 0;
-           })(), inv2.currency||'EUR',
-           statutFinal, statutVF, JSON.stringify(lignes)]
-        );
-        total++; if(dejaConvertiLocal || estConverti) updated++; else created++;
+    let total = 0, created = 0, updated = 0;
+    const montantOf = (inv2) => {
+      const vals = [inv2.price_gross, inv2.price_net, inv2.total_price_gross, inv2.total_price_net, inv2.total];
+      for (const v of vals) { const n = parseFloat(v); if (n > 0) return n; }
+      const pos = inv2.positions || [];
+      if (pos.length) {
+        const s = pos.reduce((acc, p) => {
+          const pv = [p.total_price_gross, p.price_gross, p.total_price_net, p.price_net];
+          for (const v of pv) { const n = parseFloat(v); if (n > 0) return acc + n; }
+          return acc;
+        }, 0);
+        if (s > 0) return s;
       }
-      if (data.length < 50) break;
-      page++;
-    }
+      return 0;
+    };
+    const upsertDoc = async (inv2, docType, statutFinal, statutVF) => {
+      const lignes = (inv2.positions || []).map(p => ({ nom: p.name, qte: p.quantity, prix: p.price_net, total: p.total_price_gross }));
+      await db.run(
+        `INSERT INTO devis (vf_id, numero, distributeur_nom, client_email, date_devis, date_expiration,
+           montant, devise, statut, vf_statut, lignes, doc_type, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+         ON CONFLICT (vf_id) DO UPDATE SET
+           statut=CASE WHEN devis.statut='ignoré' THEN 'ignoré'
+                       WHEN $9='converti' THEN 'converti'
+                       ELSE devis.statut END,
+           vf_statut=$10, distributeur_nom=$3, client_email=$4,
+           montant=$7, lignes=$11, doc_type=$12, updated_at=NOW()`,
+        [inv2.id, inv2.number, inv2.buyer_name, inv2.buyer_email||null,
+         (inv2.issue_date||'').slice(0,10), (inv2.payment_to||'').slice(0,10),
+         montantOf(inv2), inv2.currency||'EUR', statutFinal, statutVF, JSON.stringify(lignes), docType]);
+    };
+    // Import des devis (estimate) ET des bons de commande (client_order) — tous deux signables.
+    const fetchKind = async (kind, docType) => {
+      let page = 1;
+      while (true) {
+        let data;
+        try {
+          ({ data } = await vfApi.get('/invoices.json', { params: { kind, page, per_page: 50, date_from: dateStr, order: 'issue_date.desc' } }));
+        } catch (e) { break; }  // kind non supporté ou erreur VF → on ignore ce type
+        if (!Array.isArray(data) || !data.length) break;
+        for (const inv of data) {
+          let detail = inv;
+          try { const { data: det } = await vfApi.get(`/invoices/${inv.id}.json`); if (det && det.id) detail = det; } catch(_) {}
+          const inv2 = { ...inv, ...detail };
+          const statutVF = inv2.status || inv2.payment_status || '';
+          let statutFinal;
+          if (docType === 'devis') {
+            const estConverti = statutVF === 'accepted' || statutVF === 'paid';
+            const deja = await db.get('SELECT id FROM commandes WHERE vf_commande_id=$1', [inv2.id]);
+            statutFinal = (estConverti || !!deja) ? 'converti' : 'ouvert';
+            if (estConverti || !!deja) updated++; else created++;
+          } else {
+            statutFinal = 'ouvert';   // BDC : à faire signer (accusé de réception)
+            created++;
+          }
+          await upsertDoc(inv2, docType, statutFinal, statutVF);
+          total++;
+        }
+        if (data.length < 50) break;
+        page++;
+      }
+    };
+    await fetchKind('estimate', 'devis');
+    await fetchKind('client_order', 'bdc');
     res.json({ ok: true, total, created, updated });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -2879,6 +2866,100 @@ router.put('/devis/:id/statut', adminOrOp, async (req, res) => {
       [statut, notes||null, req.params.id]);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Signature en ligne d'un devis / bon de commande (même mécanique que les bons de prêt) ──
+function _docMots(doc_type){
+  return doc_type === 'bdc'
+    ? { doc:'bon de commande', Doc:'Bon de commande', accord:'accusé de réception signé', Accord:'Accusé de réception signé' }
+    : { doc:'devis', Doc:'Devis', accord:'bon pour accord', Accord:'Bon pour accord' };
+}
+// Envoyer au client le lien de signature en ligne
+router.post('/devis/:id/envoyer-signature', adminOrOp, async (req, res) => {
+  try {
+    const d = await db.get('SELECT * FROM devis WHERE id=$1', [req.params.id]);
+    if (!d) return res.status(404).json({ error: 'Document introuvable' });
+    const dest = (req.body && req.body.email) || d.client_email;
+    if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail pour ce client' });
+    let token = d.token_signature;
+    if (!token) {
+      token = require('crypto').randomBytes(24).toString('hex');
+      await db.run('UPDATE devis SET token_signature=$1 WHERE id=$2', [token, d.id]);
+    }
+    await db.run('UPDATE devis SET signature_email=$1, updated_at=NOW() WHERE id=$2', [dest, d.id]);
+    const base = process.env.APP_URL || (req.protocol + '://' + req.get('host'));
+    const lien = `${base}/devis-sign/${token}`;
+    const m = _docMots(d.doc_type);
+    await sendBrevoMail({
+      from: 'sav@eloflex.fr', fromName: 'Eloflex France', to: dest,
+      subject: `${m.Doc} Eloflex ${d.numero || ''} — à signer en ligne`,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
+        <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — ${m.Doc} à signer</h2></div>
+        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px">
+          <p>Bonjour,</p>
+          <p>Vous trouverez votre ${m.doc} <b>${d.numero || ''}</b>${d.montant?` d'un montant de <b>${Number(d.montant).toFixed(2)} € ${d.devise||'EUR'}</b>`:''}. Merci de le relire et de le <b>signer en ligne</b> (${m.accord}) :</p>
+          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le ${m.doc}</a></p>
+          <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien :<br>${lien}</p>
+        </div>
+        <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
+      </div>`
+    });
+    res.json({ ok: true, to: dest, token });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Public (sans auth) : consultation du document à signer
+router.get('/devis-public/:token', async (req, res) => {
+  try {
+    const d = await db.get('SELECT * FROM devis WHERE token_signature=$1', [req.params.token]);
+    if (!d) return res.status(404).json({ error: 'Lien invalide ou expiré' });
+    let lignes = d.lignes;
+    if (typeof lignes === 'string') { try { lignes = JSON.parse(lignes); } catch(_) { lignes = []; } }
+    res.json({
+      id: d.id, doc_type: d.doc_type || 'devis', numero: d.numero,
+      distributeur_nom: d.distributeur_nom, client_email: d.client_email,
+      date_devis: d.date_devis, date_expiration: d.date_expiration,
+      montant: d.montant, devise: d.devise || 'EUR', lignes: lignes || [],
+      signataire_nom: d.signataire_nom, signed_at: d.signed_at
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Public (sans auth) : signature
+router.post('/devis-public/:token/signer', async (req, res) => {
+  try {
+    const d = await db.get('SELECT * FROM devis WHERE token_signature=$1', [req.params.token]);
+    if (!d) return res.status(404).json({ error: 'Lien invalide ou expiré' });
+    if (d.signed_at) return res.status(409).json({ error: 'Ce document a déjà été signé.' });
+    const b = req.body || {};
+    if (!b.signataire_nom || !b.signature_data) return res.status(400).json({ error: 'Nom et signature requis' });
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
+    const ua = (req.headers['user-agent'] || '').toString().slice(0, 250);
+    await db.run(
+      `UPDATE devis SET signataire_nom=$1, signature_data=$2, pdf_data=$3, sign_ip=$4, sign_ua=$5,
+        signed_at=NOW(), statut='converti', updated_at=NOW() WHERE id=$6`,
+      [String(b.signataire_nom).slice(0,120), b.signature_data, b.pdf_data || null, ip, ua, d.id]);
+    const m = _docMots(d.doc_type);
+    try {
+      const attachments = b.pdf_data
+        ? [{ name: `${m.Doc}_${(d.numero||'document').replace(/[^\w-]+/g,'_')}_signe.pdf`,
+             content: String(b.pdf_data).replace(/^data:application\/pdf;base64,/, '') }]
+        : [];
+      await sendBrevoMail({
+        from: 'sav@eloflex.fr', fromName: 'Eloflex France',
+        to: d.client_email || 'sav@eloflex.fr',
+        cc: d.client_email ? 'sav@eloflex.fr' : undefined,
+        subject: `${m.Doc} Eloflex ${d.numero||''} — signé par ${b.signataire_nom}`,
+        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
+          <p>Le ${m.doc} <b>${d.numero||''}</b>${d.distributeur_nom?` (${d.distributeur_nom})`:''} a été signé en ligne (${m.accord}) par <b>${String(b.signataire_nom)}</b>.</p>
+          ${attachments.length ? '<p>Le document signé est joint (PDF).</p>' : ''}
+          <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
+        attachments
+      });
+    } catch (mailErr) { console.error('[DEVIS] e-mail signature:', mailErr.message); }
+    try { await addAlerte('devis_signe', d.id, `✍️ ${m.Doc} ${d.numero||''} signé en ligne par ${b.signataire_nom} — ${d.distributeur_nom || ''}.`); } catch(_){}
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/devis/:id/relances', async (req, res) => {

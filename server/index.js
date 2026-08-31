@@ -79,6 +79,11 @@ app.get('/contrat/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'contrat.html'));
 });
 
+// ── Page publique de signature d'un devis / bon de commande (sans auth) ──
+app.get('/devis-sign/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'devis-sign.html'));
+});
+
 // ── Routes API ───────────────────────────────────────────────────────
 app.use('/api', require('./routes'));
 

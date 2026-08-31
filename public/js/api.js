@@ -187,6 +187,7 @@ const API = {
   devisStatut:(id,statut,notes)=>API.put(`/devis/${id}/statut`,{statut,notes}),
   devisRelances:(id)=>API.get(`/devis/${id}/relances`),
   devisRelance:(id,email,notes)=>API.post(`/devis/${id}/relance`,{email,notes}),
+  devisEnvoyerSignature:(id,email)=>API.post(`/devis/${id}/envoyer-signature`,{email}),
   // ── Commande Suède ──
   commandesSuede:()=>API.get('/commandes-suede'),
   commandeSuede:(id)=>API.get(`/commandes-suede/${id}`),

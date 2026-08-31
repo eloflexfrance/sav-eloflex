@@ -39,20 +39,27 @@ async function chargerDevis(){
       return;
     }
     el.innerHTML=`<div class="table-wrap"><table class="t">
-      <thead><tr><th>${t('devis_col_distributeur')||'Distributeur'}</th><th>${t('devis_col_numero')||'N° Devis'}</th><th>Date</th><th>${t('devis_col_jours')||'Jours'}</th><th>${t('devis_col_montant')||'Montant'}</th><th>${t('devis_col_relances')||'Relances'}</th><th>${t('devis_col_derniere')||(t('devis_col_derniere')||'Dernière relance')}</th><th></th></tr></thead>
+      <thead><tr><th>${t('devis_col_distributeur')||'Distributeur'}</th><th>${t('devis_col_numero')||'N° Devis'}</th><th>Date</th><th>${t('devis_col_jours')||'Jours'}</th><th>${t('devis_col_montant')||'Montant'}</th><th>${TR('Signature')}</th><th>${t('devis_col_relances')||'Relances'}</th><th></th></tr></thead>
       <tbody>${list.map(d=>{
         const jours = Math.round((Date.now()-new Date(d.date_devis).getTime())/86400000);
         const montant = parseFloat(d.montant||0).toLocaleString('fr-FR',{style:'currency',currency:d.devise||'EUR'});
+        const estBdc = d.doc_type==='bdc';
+        const sigCell = d.signed_at
+          ? `<span class="badge g" style="font-size:11px" title="${esc(d.signataire_nom||'')} — ${fd((''+d.signed_at).slice(0,10))}"><i class="ti ti-writing-sign"></i> ${TR('signé')}</span>`
+          : (d.token_signature
+              ? `<span class="badge attente" style="font-size:11px" title="${TR('Lien de signature envoyé')}${d.signature_email?' — '+esc(d.signature_email):''}"><i class="ti ti-send"></i> ${TR('envoyé')}</span> <button class="btn sm" title="${TR('Copier le lien de signature')}" onclick="copierLienDevis('${esc(d.token_signature)}')"><i class="ti ti-link"></i></button>`
+              : `<span style="color:var(--text3);font-size:12px">—</span>`);
         return `<tr>
-          <td><strong>${esc(d.distributeur_nom)}</strong>${d.client_email?`<br><span style="font-size:11px;color:var(--text3)">${esc(d.client_email)}</span>`:''}</td>
+          <td><strong>${esc(d.distributeur_nom)}</strong>${estBdc?` <span class="badge hg" style="font-size:10px">BDC</span>`:''}${d.client_email?`<br><span style="font-size:11px;color:var(--text3)">${esc(d.client_email)}</span>`:''}</td>
           <td class="mono">${esc(d.numero||'')}</td>
           <td>${d.date_devis?fd(d.date_devis):'—'}</td>
           <td><span class="badge ${jours>60?'urgent':jours>30?'hg':'ouvert'}">${jours}j</span></td>
           <td style="font-weight:600">${montant}</td>
+          <td style="white-space:nowrap">${sigCell}</td>
           <td style="text-align:center">${d.nb_relances||0}</td>
-          <td style="font-size:12px;color:var(--text2)">${d.derniere_relance?fd(d.derniere_relance.slice(0,10)):'—'}</td>
           <td style="white-space:nowrap">
             ${window._VF_ACCOUNT?`<button class="btn sm" onclick="window.open('https://${window._VF_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}','_blank')" title="${t('devis_btn_ouvrir')||'Ouvrir dans VosFactures'}"><i class="ti ti-external-link"></i></button>`:''}
+            ${!d.signed_at?`<button class="btn sm" onclick="envoyerDevisSignature(${d.id},'${esc(d.client_email||'')}','${esc((d.distributeur_nom||'').replace(/'/g,'&#39;'))}',${estBdc?1:0})" title="${TR('Envoyer pour signature en ligne')}"><i class="ti ti-signature"></i></button>`:''}
             <button class="btn sm" onclick="modalRelanceDevis(${d.id},'${esc(d.client_email||'')}','${esc(d.distributeur_nom)}')" title="${t('devis_btn_relancer')||'Envoyer une relance'}"><i class="ti ti-mail"></i></button>
             <button class="btn sm" onclick="voirRelancesDevis(${d.id})" title="${t('devis_btn_historique')||'Historique relances'}"><i class="ti ti-history"></i></button>
             ${DEVIS_FILTRE==='ouvert'?`
@@ -83,6 +90,25 @@ async function syncDevisVF(manuel=false){
       chargerDevis();
     } else if(manuel) toast(`Erreur : ${r.reason||r.error}`,'ti-alert-circle','var(--warning)');
   }catch(e){ if(manuel) toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+
+// Envoyer au client le lien de signature en ligne (devis ou BDC).
+async function envoyerDevisSignature(id, email, nom, estBdc){
+  const mot = estBdc ? 'bon de commande' : 'devis';
+  const dest = prompt(TR('Envoyer le lien de signature du ')+mot+TR(' à quel e-mail ?'), email||'');
+  if(dest===null) return;
+  const e = (dest||'').trim();
+  if(!e || !/@/.test(e)){ alert(TR('Adresse e-mail invalide')); return; }
+  try{
+    await API.devisEnvoyerSignature(id, e);
+    toast(TR('Lien de signature envoyé à ')+e,'ti-send');
+    await chargerDevis();
+  }catch(err){ toast(err.message||'Erreur','ti-alert-circle','var(--danger)'); }
+}
+function copierLienDevis(token){
+  const lien = location.origin+'/devis-sign/'+token;
+  if(navigator.clipboard){ navigator.clipboard.writeText(lien).then(()=>toast(TR('Lien copié'),'ti-copy')).catch(()=>montrerLienSignature(lien)); }
+  else montrerLienSignature(lien);
 }
 
 async function changerStatutDevis(id, statut){

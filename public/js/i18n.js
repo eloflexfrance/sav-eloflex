@@ -1960,6 +1960,16 @@ const EN_STR = {
   "à renseigner pour un suivi fiable à l’unité": "to fill in for reliable per-unit tracking",
   "à venir": "upcoming",
   "échus": "overdue",
+  "Signature": "Signature",
+  "signé": "signed",
+  "envoyé": "sent",
+  "Lien de signature envoyé": "Signature link sent",
+  "Copier le lien de signature": "Copy the signature link",
+  "Envoyer pour signature en ligne": "Send for online signature",
+  "Envoyer le lien de signature du ": "Send the signature link for the ",
+  " à quel e-mail ?": " to which email?",
+  "Adresse e-mail invalide": "Invalid email address",
+
 
 
 
