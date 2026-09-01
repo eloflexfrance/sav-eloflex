@@ -68,7 +68,11 @@ router.post('/auth/setup', async (req, res) => {
 });
 
 // ── Middleware d'authentification ──────────────────────────────────
+// Routes publiques protégées par jeton (signature en ligne côté client/distributeur,
+// qui n'est PAS connecté) : elles gèrent elles-mêmes leur token_signature.
+const PUBLIC_TOKEN_PREFIXES = ['/devis-public/', '/pret-public/', '/contrat-public/'];
 router.use((req, res, next) => {
+  if (PUBLIC_TOKEN_PREFIXES.some(p => req.path.startsWith(p))) return next();
   if (!req.session?.user) return res.status(401).json({ error: 'Non authentifié', redirect: '/login' });
   res.locals.user = req.session.user;
   next();
@@ -109,8 +113,10 @@ function moduleFromPath(p) {
 
 // Middleware de protection en écriture par module (s'applique aux non-admins)
 router.use((req, res, next) => {
+  if (PUBLIC_TOKEN_PREFIXES.some(p => req.path.startsWith(p))) return next(); // routes publiques par jeton
   const user = res.locals.user;
-  if (user.role === 'admin') return next(); // Admin : accès total
+  if (!user || user.role === 'admin') return next(); // Admin : accès total
+
   const module = moduleFromPath(req.path);
   if (!module) return next(); // Route système (auth, VF sync...) : déjà protégée
   const perms = user.permissions || {};
@@ -3088,17 +3094,41 @@ router.get('/devis-public/:token/pdf', async (req, res) => {
   } catch (e) { console.error('[DEVIS] aperçu PDF:', e.message); res.status(500).send('Erreur PDF'); }
 });
 
+// Un buffer est-il un vrai PDF ? (commence par %PDF-)
+function _estPdf(buf) {
+  return buf && buf.length > 4 && buf.slice(0, 5).toString('latin1') === '%PDF-';
+}
 // Récupère le PDF ORIGINAL du document (Pennylane public, ou VosFactures via jeton).
+// Renvoie un Buffer PDF valide, ou null (jamais du HTML déguisé en PDF).
 async function _fetchDevisOriginalPdf(d) {
   const axios = require('axios');
+  const UA = 'Mozilla/5.0 (compatible; EloflexSAV/1.0)';
   if (d.doc_url) {
-    const r = await axios.get(d.doc_url, { responseType: 'arraybuffer', timeout: 20000 });
-    return Buffer.from(r.data);
+    try {
+      const r = await axios.get(d.doc_url, {
+        responseType: 'arraybuffer', timeout: 20000, maxRedirects: 5,
+        headers: { 'User-Agent': UA, 'Accept': 'application/pdf,*/*' },
+        validateStatus: s => s >= 200 && s < 400
+      });
+      const buf = Buffer.from(r.data);
+      const ct = String(r.headers['content-type'] || '');
+      if (_estPdf(buf) || ct.includes('pdf')) return buf;
+      // Pennylane a renvoyé une page HTML (viewer) et non le fichier → on abandonne proprement.
+      console.warn('[DEVIS] doc_url non-PDF (content-type:', ct, ') pour', d.numero);
+    } catch (e) {
+      console.warn('[DEVIS] échec fetch doc_url pour', d.numero, ':', (e.response && e.response.status) ? 'HTTP ' + e.response.status : e.message);
+    }
   }
   if (d.vf_id && process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT) {
-    const r = await axios.get(`https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}.pdf`,
-      { params: { api_token: process.env.VOSFACTURES_API_TOKEN }, responseType: 'arraybuffer', timeout: 20000 });
-    return Buffer.from(r.data);
+    try {
+      const r = await axios.get(`https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}.pdf`,
+        { params: { api_token: process.env.VOSFACTURES_API_TOKEN }, responseType: 'arraybuffer', timeout: 20000,
+          headers: { 'User-Agent': UA } });
+      const buf = Buffer.from(r.data);
+      if (_estPdf(buf)) return buf;
+    } catch (e) {
+      console.warn('[DEVIS] échec fetch VosFactures PDF pour', d.numero, ':', e.message);
+    }
   }
   return null;
 }

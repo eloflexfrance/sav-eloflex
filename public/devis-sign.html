@@ -93,12 +93,26 @@ fetch('/api/devis-public/'+encodeURIComponent(TOKEN)).then(function(r){
   DOC=p; MOTS=mots(p.doc_type);
   document.title='Eloflex — '+MOTS.Doc+' '+(p.numero||'');
   if(p.pdf){
-    // Document original (Pennylane / VosFactures) affiché à l'identique
+    // Document original (Pennylane / VosFactures) affiché à l'identique.
+    // On vérifie d'abord que le serveur peut bien fournir le PDF ; sinon on
+    // retombe proprement sur le rendu HTML du document (au lieu d'une erreur).
     var pdfUrl='/api/devis-public/'+encodeURIComponent(TOKEN)+'/pdf';
-    document.getElementById('doc').innerHTML =
-      '<embed src="'+pdfUrl+'" type="application/pdf" style="width:100%;height:78vh;border:1px solid #e3e8ee;border-radius:8px">'+
-      '<div style="margin-top:8px;font-size:12px;color:#888">'+esc(MOTS.Doc)+' '+esc(p.numero||'')+' — '+
-        '<a href="'+pdfUrl+'" target="_blank" style="color:#1F5C8C">ouvrir le PDF dans un onglet</a></div>';
+    document.getElementById('doc').innerHTML = '<div class="msg" style="color:#888">Chargement du document…</div>';
+    fetch(pdfUrl, { method:'GET' }).then(function(r){
+      var ct = r.headers.get('content-type')||'';
+      if(r.ok && ct.indexOf('pdf')!==-1){
+        return r.blob().then(function(b){
+          var obj=URL.createObjectURL(b);
+          document.getElementById('doc').innerHTML =
+            '<embed src="'+obj+'" type="application/pdf" style="width:100%;height:78vh;border:1px solid #e3e8ee;border-radius:8px">'+
+            '<div style="margin-top:8px;font-size:12px;color:#888">'+esc(MOTS.Doc)+' '+esc(p.numero||'')+' — '+
+              '<a href="'+obj+'" target="_blank" style="color:#1F5C8C">ouvrir le PDF dans un onglet</a></div>';
+        });
+      }
+      throw new Error('pdf indisponible');
+    }).catch(function(){
+      document.getElementById('doc').innerHTML = docHTML(p);
+    });
   } else {
     document.getElementById('doc').innerHTML = docHTML(p);
   }
