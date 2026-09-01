@@ -2887,6 +2887,73 @@ router.put('/devis/:id/statut', adminOrOp, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Ajouter manuellement un devis / bon de commande par son numéro (import auto depuis
+// VosFactures ou Pennylane s'il existe, sinon saisie manuelle). Sans doublon.
+router.post('/devis/ajouter', adminOrOp, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const numero = String(b.numero || '').trim();
+    if (!numero) return res.status(400).json({ error: 'Numéro requis' });
+    const docType = (b.doc_type === 'bdc') ? 'bdc' : 'devis';
+    const wantSource = b.source || 'auto';
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/gi, '');
+    const nn = norm(numero);
+
+    // Déjà présent (par numéro normalisé) ?
+    const exist = await db.get(
+      `SELECT id FROM devis WHERE lower(regexp_replace(coalesce(numero,''),'[^A-Za-z0-9]','','g')) = $1 LIMIT 1`, [nn]);
+    if (exist) return res.json({ ok: true, added: false, exists: true, id: exist.id });
+
+    let found = null;
+
+    if (!found && (wantSource === 'auto' || wantSource === 'vosfactures') && process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT) {
+      try {
+        const axios = require('axios');
+        const vfApi = axios.create({ baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`, headers: { 'Accept': 'application/json' }, params: { api_token: process.env.VOSFACTURES_API_TOKEN } });
+        const variantes = new Set([numero, numero.replace(/[\s\/]+/g, '')]);
+        const mPref = numero.match(/^([A-Za-z]+)[\s\/]*(\d.*)$/); if (mPref) variantes.add(mPref[1] + '/' + mPref[2].replace(/[\s\/]+/g, ''));
+        const cand = [];
+        for (const v of variantes) { try { const { data } = await vfApi.get('/invoices.json', { params: { number: v, period: 'all', per_page: 20 } }); if (Array.isArray(data)) cand.push(...data); } catch(_) {} }
+        const inv = cand.find(d => norm(d.number) === nn) || (nn.length >= 4 ? cand.find(d => norm(d.number).includes(nn)) : null);
+        if (inv) {
+          let det = inv; try { const { data } = await vfApi.get(`/invoices/${inv.id}.json`); if (data && data.id) det = { ...inv, ...data }; } catch(_) {}
+          const lignes = (det.positions || []).map(p => ({ nom: p.name, qte: p.quantity, prix: p.price_net, total: p.total_price_gross }));
+          const montant = [det.price_gross, det.price_net, det.total_price_gross, det.total_price_net, det.total].map(parseFloat).find(n => n > 0) || 0;
+          found = { source: 'vosfactures', vf_id: det.id, numero: det.number || numero, distributeur: det.buyer_name || '', email: det.buyer_email || null, date: (det.issue_date || '').slice(0, 10) || null, montant, devise: det.currency || 'EUR', lignes };
+        }
+      } catch(_) {}
+    }
+
+    if (!found && (wantSource === 'auto' || wantSource === 'pennylane') && (process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) {
+      try {
+        const { lookupDocumentPennylane } = require('../scripts/sync-pennylane');
+        const r = await lookupDocumentPennylane(numero);
+        if (r && r.found) {
+          const lignes = (r.lignes || []).map(l => ({ nom: l.designation || l.nom || '', qte: l.quantite || l.qte || 1, prix: l.prix, total: (l.prix != null ? l.prix * (l.quantite || 1) : null) }));
+          found = { source: 'pennylane', pennylane_id: r.vf_id, numero: r.numero || numero, distributeur: r.distributeur || '', email: null, date: r.date_commande || null, montant: r.total_ht || 0, devise: 'EUR', lignes, doc_url: r.url_doc || null };
+        }
+      } catch(_) {}
+    }
+
+    if (found) {
+      // Éviter le doublon par identifiant externe
+      const dupe = await db.get('SELECT id FROM devis WHERE (vf_id=$1 AND $1 IS NOT NULL) OR (pennylane_id=$2 AND $2 IS NOT NULL) LIMIT 1', [found.vf_id || null, found.pennylane_id || null]);
+      if (dupe) return res.json({ ok: true, added: false, exists: true, id: dupe.id });
+      if (!found.distributeur && b.distributeur_nom) found.distributeur = String(b.distributeur_nom).trim();
+      if (!found.email && b.client_email) found.email = String(b.client_email).trim();
+      if ((!found.montant || found.montant === 0) && b.montant) found.montant = parseFloat(b.montant) || 0;
+    } else {
+      found = { source: 'manuel', numero, distributeur: (b.distributeur_nom || '').trim(), email: (b.client_email || '').trim() || null, date: (b.date_devis || '').slice(0, 10) || new Date().toISOString().slice(0, 10), montant: parseFloat(b.montant) || 0, devise: b.devise || 'EUR', lignes: [] };
+    }
+
+    const ins = await db.get(
+      `INSERT INTO devis (source, vf_id, pennylane_id, numero, distributeur_nom, client_email, date_devis, montant, devise, statut, lignes, doc_type, doc_url, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ouvert',$10,$11,$12,NOW()) RETURNING id`,
+      [found.source, found.vf_id || null, found.pennylane_id || null, found.numero, found.distributeur || null, found.email || null, found.date || null, found.montant || 0, found.devise || 'EUR', JSON.stringify(found.lignes || []), docType, found.doc_url || null]);
+    res.json({ ok: true, added: true, id: ins.id, source: found.source });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Signature en ligne d'un devis / bon de commande (même mécanique que les bons de prêt) ──
 function _docMots(doc_type){
   return doc_type === 'bdc'
@@ -2939,9 +3006,30 @@ router.get('/devis-public/:token', async (req, res) => {
       distributeur_nom: d.distributeur_nom, client_email: d.client_email,
       date_devis: d.date_devis, date_expiration: d.date_expiration,
       montant: d.montant, devise: d.devise || 'EUR', lignes: lignes || [],
+      source: d.source || 'vosfactures',
+      // A-t-on le PDF original ? (Pennylane = lien public ; VosFactures = proxy jetonné)
+      pdf: d.doc_url ? 'url' : ((d.source||'vosfactures')!=='pennylane' && d.vf_id ? 'proxy' : null),
       signataire_nom: d.signataire_nom, signed_at: d.signed_at
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Public (sans auth) : PDF original du document (redirige vers Pennylane, ou proxie le PDF VosFactures)
+router.get('/devis-public/:token/pdf', async (req, res) => {
+  try {
+    const d = await db.get('SELECT source, doc_url, vf_id FROM devis WHERE token_signature=$1', [req.params.token]);
+    if (!d) return res.status(404).send('Lien invalide');
+    if (d.doc_url) return res.redirect(d.doc_url);
+    if (d.vf_id && process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT) {
+      const axios = require('axios');
+      const r = await axios.get(`https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}.pdf`,
+        { params: { api_token: process.env.VOSFACTURES_API_TOKEN }, responseType: 'arraybuffer', timeout: 15000 });
+      res.set('Content-Type', 'application/pdf');
+      res.set('Content-Disposition', 'inline');
+      return res.send(Buffer.from(r.data));
+    }
+    return res.status(404).send('PDF indisponible');
+  } catch (e) { res.status(500).send('Erreur PDF'); }
 });
 
 // Public (sans auth) : signature

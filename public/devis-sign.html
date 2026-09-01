@@ -91,7 +91,16 @@ fetch('/api/devis-public/'+encodeURIComponent(TOKEN)).then(function(r){
 }).then(function(p){
   DOC=p; MOTS=mots(p.doc_type);
   document.title='Eloflex — '+MOTS.Doc+' '+(p.numero||'');
-  document.getElementById('doc').innerHTML = docHTML(p);
+  if(p.pdf){
+    // Document original (Pennylane / VosFactures) affiché à l'identique
+    var pdfUrl='/api/devis-public/'+encodeURIComponent(TOKEN)+'/pdf';
+    document.getElementById('doc').innerHTML =
+      '<embed src="'+pdfUrl+'" type="application/pdf" style="width:100%;height:78vh;border:1px solid #e3e8ee;border-radius:8px">'+
+      '<div style="margin-top:8px;font-size:12px;color:#888">'+esc(MOTS.Doc)+' '+esc(p.numero||'')+' — '+
+        '<a href="'+pdfUrl+'" target="_blank" style="color:#1F5C8C">ouvrir le PDF dans un onglet</a></div>';
+  } else {
+    document.getElementById('doc').innerHTML = docHTML(p);
+  }
   document.getElementById('signtitle').textContent = 'Signature du '+MOTS.doc;
   document.getElementById('btnSign').textContent = 'Signer le '+MOTS.doc;
   document.getElementById('acceptlbl').innerHTML = 'J\'ai lu et j\'approuve le contenu du '+esc(MOTS.doc)+' — « Lu et approuvé, '+esc(MOTS.accord)+' ». <span class="req">*</span>';

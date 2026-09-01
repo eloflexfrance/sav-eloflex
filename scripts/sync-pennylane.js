@@ -606,6 +606,7 @@ async function upsertDevisPennylane(api, doc) {
   const statut = /accept|validat|signed|paid|complet|convert/.test(st) ? 'converti'
                : /refus|reject|cancel|expir/.test(st) ? 'ignoré' : 'ouvert';
   const docType = doc._doc === 'bdc' ? 'bdc' : 'devis';
+  const docUrl = detail.public_file_url || detail.file_url || detail.pdf_url || null;
   const plid = detail.id;
 
   const ex = await db.get('SELECT id FROM devis WHERE pennylane_id=$1', [plid]);
@@ -613,15 +614,15 @@ async function upsertDevisPennylane(api, doc) {
     await db.run(
       `UPDATE devis SET statut=CASE WHEN statut='ignoré' THEN 'ignoré' WHEN $1='converti' THEN 'converti' ELSE statut END,
         numero=$2, distributeur_nom=$3, client_email=$4, date_devis=$5, date_expiration=$6, montant=$7, devise=$8,
-        lignes=$9, doc_type=$10, vf_statut=$11, updated_at=NOW() WHERE id=$12`,
-      [statut, numero, nom, email, date, dateExp, montant, detail.currency || 'EUR', JSON.stringify(lignes), docType, st, ex.id]);
+        lignes=$9, doc_type=$10, vf_statut=$11, doc_url=COALESCE($12, doc_url), updated_at=NOW() WHERE id=$13`,
+      [statut, numero, nom, email, date, dateExp, montant, detail.currency || 'EUR', JSON.stringify(lignes), docType, st, docUrl, ex.id]);
     return 'updated';
   }
   await db.run(
     `INSERT INTO devis (source, pennylane_id, numero, distributeur_nom, client_email, date_devis, date_expiration,
-       montant, devise, statut, vf_statut, lignes, doc_type, updated_at)
-     VALUES ('pennylane',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())`,
-    [plid, numero, nom, email, date, dateExp, montant, detail.currency || 'EUR', statut, st, JSON.stringify(lignes), docType]);
+       montant, devise, statut, vf_statut, lignes, doc_type, doc_url, updated_at)
+     VALUES ('pennylane',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())`,
+    [plid, numero, nom, email, date, dateExp, montant, detail.currency || 'EUR', statut, st, JSON.stringify(lignes), docType, docUrl]);
   return 'created';
 }
 

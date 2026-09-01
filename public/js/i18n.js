@@ -1974,6 +1974,24 @@ const EN_STR = {
   "document(s)": "document(s)",
   "nouveaux": "new",
   "maj": "updated",
+  "Ajouter un document": "Add a document",
+  "Ajouter un devis / bon de commande": "Add a quote / purchase order",
+  "Indiquez le numéro : le document est importé automatiquement depuis VosFactures ou Pennylane s’il existe ; sinon vous pouvez le saisir manuellement.": "Enter the number: the document is imported automatically from VosFactures or Pennylane if it exists; otherwise you can enter it manually.",
+  "N° du document": "Document no.",
+  "Type": "Type",
+  "Devis": "Quote",
+  "Bon de commande": "Purchase order",
+  "Source": "Source",
+  "Auto (VF puis Pennylane)": "Auto (VF then Pennylane)",
+  "Saisie manuelle": "Manual entry",
+  "Montant (si saisie manuelle)": "Amount (if manual entry)",
+  "Distributeur (si saisie manuelle)": "Distributor (if manual entry)",
+  "Email client (si saisie manuelle)": "Client email (if manual entry)",
+  "Indiquez d’abord un numéro.": "Enter a number first.",
+  "Recherche et ajout…": "Searching and adding…",
+  "Ce document est déjà présent dans la liste.": "This document is already in the list.",
+  "Document ajouté": "Document added",
+
 
 
 

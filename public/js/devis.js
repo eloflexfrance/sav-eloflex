@@ -12,7 +12,8 @@ async function renderDevis(ttl, c, a){
   a.innerHTML = `
     <span style="font-size:12px;color:var(--text2)">${syncLabel}</span>
     <button class="btn" onclick="syncDevisVF(true)"><i class="ti ti-refresh"></i> ${t('devis_sync_btn')||'Sync VosFactures'}</button>
-    <button class="btn" onclick="syncDevisPL(true)"><i class="ti ti-refresh"></i> ${TR('Sync Pennylane')}</button>`;
+    <button class="btn" onclick="syncDevisPL(true)"><i class="ti ti-refresh"></i> ${TR('Sync Pennylane')}</button>
+    <button class="btn primary" onclick="modalAjouterDevis()"><i class="ti ti-plus"></i> ${TR('Ajouter un document')}</button>`;
   
   c.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
@@ -133,6 +134,51 @@ function copierLienDevis(token){
   if(navigator.clipboard){ navigator.clipboard.writeText(lien).then(()=>toast(TR('Lien copié'),'ti-copy')).catch(()=>montrerLienSignature(lien)); }
   else montrerLienSignature(lien);
 }
+
+// Ajouter manuellement un devis / BDC par son numéro (import auto s'il existe).
+function modalAjouterDevis(){
+  showModal(`
+    <div class="modal-header"><i class="ti ti-plus" style="color:var(--accent)"></i><h2>${TR('Ajouter un devis / bon de commande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--text2);margin-top:0">${TR('Indiquez le numéro : le document est importé automatiquement depuis VosFactures ou Pennylane s’il existe ; sinon vous pouvez le saisir manuellement.')}</p>
+      <div class="grid-2" style="gap:10px">
+        <div class="form-group"><label class="form-label">${TR('N° du document')} *</label><input class="form-input mono" id="ajd-numero" placeholder="ex. D0931 / DEV-2026-08"></div>
+        <div class="form-group"><label class="form-label">${TR('Type')}</label>
+          <select class="form-input" id="ajd-type"><option value="devis">${TR('Devis')}</option><option value="bdc">${TR('Bon de commande')}</option></select></div>
+        <div class="form-group"><label class="form-label">${TR('Source')}</label>
+          <select class="form-input" id="ajd-source"><option value="auto">${TR('Auto (VF puis Pennylane)')}</option><option value="vosfactures">VosFactures</option><option value="pennylane">Pennylane</option><option value="manuel">${TR('Saisie manuelle')}</option></select></div>
+        <div class="form-group"><label class="form-label">${TR('Montant (si saisie manuelle)')}</label><input class="form-input" id="ajd-montant" type="number" step="0.01" placeholder="€"></div>
+        <div class="form-group"><label class="form-label">${TR('Distributeur (si saisie manuelle)')}</label><input class="form-input" id="ajd-distrib"></div>
+        <div class="form-group"><label class="form-label">${TR('Email client (si saisie manuelle)')}</label><input class="form-input" id="ajd-email" type="email"></div>
+      </div>
+      <div id="ajd-msg" style="margin-top:8px;font-size:13px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
+      <button class="btn primary" id="ajd-btn" onclick="ajouterDevisSubmit()"><i class="ti ti-download"></i> ${TR('Ajouter')}</button>
+    </div>`);
+  setTimeout(()=>{ const i=document.getElementById('ajd-numero'); if(i) i.focus(); }, 60);
+}
+window.modalAjouterDevis = modalAjouterDevis;
+async function ajouterDevisSubmit(){
+  const numero=(document.getElementById('ajd-numero').value||'').trim();
+  const msg=document.getElementById('ajd-msg');
+  if(!numero){ if(msg) msg.innerHTML=`<span style="color:var(--danger)">${TR('Indiquez d’abord un numéro.')}</span>`; return; }
+  const payload={
+    numero, doc_type:document.getElementById('ajd-type').value, source:document.getElementById('ajd-source').value,
+    montant:document.getElementById('ajd-montant').value||null,
+    distributeur_nom:(document.getElementById('ajd-distrib').value||'').trim(),
+    client_email:(document.getElementById('ajd-email').value||'').trim()
+  };
+  const btn=document.getElementById('ajd-btn'); btn.disabled=true; if(msg) msg.innerHTML=`<i class="ti ti-loader-2"></i> ${TR('Recherche et ajout…')}`;
+  try{
+    const r=await API.devisAjouter(payload);
+    if(r.exists){ if(msg) msg.innerHTML=`<span style="color:var(--warning)">${TR('Ce document est déjà présent dans la liste.')}</span>`; setTimeout(()=>{closeModal();chargerDevis();},900); return; }
+    toast(TR('Document ajouté')+(r.source&&r.source!=='manuel'?` (${r.source})`:''),'ti-check');
+    closeModal(); if(DEVIS_FILTRE!=='ouvert'){ setDevisFiltre('ouvert'); } else { chargerDevis(); }
+  }catch(e){ btn.disabled=false; if(msg) msg.innerHTML=`<span style="color:var(--danger)">${esc(e.message||'Erreur')}</span>`; }
+}
+window.ajouterDevisSubmit = ajouterDevisSubmit;
 
 async function changerStatutDevis(id, statut){
   try{
