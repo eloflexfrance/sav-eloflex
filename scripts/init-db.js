@@ -482,6 +482,10 @@ async function initDB() {
       await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ`);
       await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS signature_email TEXT`);   // e-mail où le lien a été envoyé
       await client.query(`CREATE INDEX IF NOT EXISTS idx_devis_token ON devis(token_signature)`);
+      // Source du document (VosFactures ou Pennylane) — même table, mêmes fonctions
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'vosfactures'`);
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS pennylane_id BIGINT`);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_devis_plid ON devis(pennylane_id) WHERE pennylane_id IS NOT NULL`);
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pays TEXT`);
       // pays NULL sur users = admin global (voit tous les pays)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS ref_suede TEXT`);

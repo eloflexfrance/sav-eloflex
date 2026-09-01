@@ -11,7 +11,8 @@ async function renderDevis(ttl, c, a){
   const syncLabel = sinceSync === null ? (t('devis_non_configure')||(t('devis_non_configure')||'Jamais synchronisé')) : sinceSync < 60 ? `${t('devis_sync_il_y_a')||'Sync il y a'} ${sinceSync} ${t('devis_sync_min')||'min'}` : `${t('devis_sync_il_y_a')||'Sync il y a'} ${Math.round(sinceSync/60)}${t('devis_sync_h')||'h'}`;
   a.innerHTML = `
     <span style="font-size:12px;color:var(--text2)">${syncLabel}</span>
-    <button class="btn" onclick="syncDevisVF(true)"><i class="ti ti-refresh"></i> ${t('devis_sync_btn')||'Sync VosFactures'}</button>`;
+    <button class="btn" onclick="syncDevisVF(true)"><i class="ti ti-refresh"></i> ${t('devis_sync_btn')||'Sync VosFactures'}</button>
+    <button class="btn" onclick="syncDevisPL(true)"><i class="ti ti-refresh"></i> ${TR('Sync Pennylane')}</button>`;
   
   c.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
@@ -26,9 +27,25 @@ async function renderDevis(ttl, c, a){
   // Ne jamais le déclencher depuis chargerDevis : sinon chaque « convertir / ignorer »
   // relance une synchro lente qui bloque le rafraîchissement de la liste (bug « à retardement »).
   syncDevisVF(false);
+  syncDevisPL(false);
 }
 function setDevisFiltre(s){ DEVIS_FILTRE = s; render(); }
 window.setDevisFiltre = setDevisFiltre;
+
+let _devisPlLastSync = parseInt(localStorage.getItem('sav_devis_pl_last_sync')||'0');
+async function syncDevisPL(manuel=false){
+  if(!manuel){ if(Date.now() - _devisPlLastSync < 6*60*60*1000) return; }
+  if(manuel) toast(TR('Synchronisation Pennylane…'),'ti-loader-2');
+  try{
+    const r = await API.devisSyncPennylane();
+    if(r && r.ok){
+      _devisPlLastSync = Date.now(); localStorage.setItem('sav_devis_pl_last_sync', _devisPlLastSync);
+      if(manuel) toast(`Pennylane — ${r.total||0} ${TR('document(s)')} (${r.created||0} ${TR('nouveaux')}, ${r.updated||0} ${TR('maj')})`,'ti-check');
+      chargerDevis();
+    } else if(manuel) toast(`Erreur : ${(r&&(r.reason||r.error))||'Pennylane'}`,'ti-alert-circle','var(--warning)');
+  }catch(e){ if(manuel) toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.syncDevisPL = syncDevisPL;
 
 async function chargerDevis(){
   const el = document.getElementById('devis-list'); if(!el) return;
@@ -44,13 +61,17 @@ async function chargerDevis(){
         const jours = Math.round((Date.now()-new Date(d.date_devis).getTime())/86400000);
         const montant = parseFloat(d.montant||0).toLocaleString('fr-FR',{style:'currency',currency:d.devise||'EUR'});
         const estBdc = d.doc_type==='bdc';
+        const estPL = d.source==='pennylane';
+        const srcBadge = estPL
+          ? `<span class="badge" style="background:#358ddd18;color:#358ddd;border:0.5px solid #358ddd44;font-size:10px" title="Pennylane">PL</span>`
+          : `<span class="badge" style="background:#0d948818;color:#0d9488;border:0.5px solid #0d948844;font-size:10px" title="VosFactures">VF</span>`;
         const sigCell = d.signed_at
           ? `<span class="badge g" style="font-size:11px" title="${esc(d.signataire_nom||'')} — ${fd((''+d.signed_at).slice(0,10))}"><i class="ti ti-writing-sign"></i> ${TR('signé')}</span>`
           : (d.token_signature
               ? `<span class="badge attente" style="font-size:11px" title="${TR('Lien de signature envoyé')}${d.signature_email?' — '+esc(d.signature_email):''}"><i class="ti ti-send"></i> ${TR('envoyé')}</span> <button class="btn sm" title="${TR('Copier le lien de signature')}" onclick="copierLienDevis('${esc(d.token_signature)}')"><i class="ti ti-link"></i></button>`
               : `<span style="color:var(--text3);font-size:12px">—</span>`);
         return `<tr>
-          <td><strong>${esc(d.distributeur_nom)}</strong>${estBdc?` <span class="badge hg" style="font-size:10px">BDC</span>`:''}${d.client_email?`<br><span style="font-size:11px;color:var(--text3)">${esc(d.client_email)}</span>`:''}</td>
+          <td><strong>${esc(d.distributeur_nom)}</strong> ${srcBadge}${estBdc?` <span class="badge hg" style="font-size:10px">BDC</span>`:''}${d.client_email?`<br><span style="font-size:11px;color:var(--text3)">${esc(d.client_email)}</span>`:''}</td>
           <td class="mono">${esc(d.numero||'')}</td>
           <td>${d.date_devis?fd(d.date_devis):'—'}</td>
           <td><span class="badge ${jours>60?'urgent':jours>30?'hg':'ouvert'}">${jours}j</span></td>
@@ -58,7 +79,9 @@ async function chargerDevis(){
           <td style="white-space:nowrap">${sigCell}</td>
           <td style="text-align:center">${d.nb_relances||0}</td>
           <td style="white-space:nowrap">
-            ${window._VF_ACCOUNT?`<button class="btn sm" onclick="window.open('https://${window._VF_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}','_blank')" title="${t('devis_btn_ouvrir')||'Ouvrir dans VosFactures'}"><i class="ti ti-external-link"></i></button>`:''}
+            ${estPL
+              ? (d.pennylane_id?`<button class="btn sm" onclick="window.open('https://app.pennylane.com/companies/documents/${d.pennylane_id}','_blank')" title="${TR('Ouvrir dans Pennylane')}"><i class="ti ti-external-link"></i></button>`:'')
+              : (window._VF_ACCOUNT&&d.vf_id?`<button class="btn sm" onclick="window.open('https://${window._VF_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}','_blank')" title="${t('devis_btn_ouvrir')||'Ouvrir dans VosFactures'}"><i class="ti ti-external-link"></i></button>`:'')}
             ${!d.signed_at?`<button class="btn sm" onclick="envoyerDevisSignature(${d.id},'${esc(d.client_email||'')}','${esc((d.distributeur_nom||'').replace(/'/g,'&#39;'))}',${estBdc?1:0})" title="${TR('Envoyer pour signature en ligne')}"><i class="ti ti-signature"></i></button>`:''}
             <button class="btn sm" onclick="modalRelanceDevis(${d.id},'${esc(d.client_email||'')}','${esc(d.distributeur_nom)}')" title="${t('devis_btn_relancer')||'Envoyer une relance'}"><i class="ti ti-mail"></i></button>
             <button class="btn sm" onclick="voirRelancesDevis(${d.id})" title="${t('devis_btn_historique')||'Historique relances'}"><i class="ti ti-history"></i></button>

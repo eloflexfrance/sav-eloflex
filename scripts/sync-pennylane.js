@@ -568,9 +568,91 @@ async function suggestFacturesPennylane(distributeurNom, numFacture) {
   return { configured: true, factures };
 }
 
+// ── Synchro des DEVIS et BONS DE COMMANDE Pennylane vers la table `devis` ──────
+// Miroir de la synchro VosFactures : mêmes fonctions ensuite (signature, relance,
+// converti/ignoré). Les documents Pennylane sont dédupliqués sur `pennylane_id`.
+async function upsertDevisPennylane(api, doc) {
+  const ep = doc._ep || '/quotes';
+  let detail = doc;
+  if (!doc.invoice_lines && doc.id) {
+    try {
+      const { data } = await api.get(`${ep}/${doc.id}`);
+      const full = data.quote || data.commercial_document || data.customer_invoice || data;
+      if (full && typeof full === 'object') detail = Object.assign({}, doc, full);
+    } catch (_) {}
+  }
+  if (!(detail.invoice_lines || detail.line_items || []).length && doc.id) {
+    try { const { data: dl } = await api.get(`${ep}/${doc.id}/invoice_lines`); detail = { ...detail, invoice_lines: dl.items || dl.invoice_lines || [] }; } catch (_) {}
+  }
+  const numero = detail.invoice_number || detail.number || detail.label || String(detail.id);
+  let nom = detail.customer?.name || detail.customer?.company_name || detail.customer_name || detail.client?.name || '';
+  if (!nom) nom = await resolvePennylaneCustomerName(api, detail.customer || detail.client || (detail.customer_id ? { id: detail.customer_id } : null));
+  const email = detail.customer?.billing_email || detail.customer?.email || detail.client?.email || null;
+  const date = (detail.date || detail.issue_date || detail.emitted_at || detail.document_date || detail.created_at || '').slice(0, 10) || null;
+  const dateExp = (detail.deadline || detail.expiry_date || detail.valid_until || detail.due_date || '').slice(0, 10) || null;
+  const montant = _plNum(detail.currency_amount != null ? detail.currency_amount
+                  : (detail.amount != null ? detail.amount
+                  : (detail.total_amount != null ? detail.total_amount : detail.total))) || 0;
+  const lignes = (detail.invoice_lines || detail.line_items || []).map(l => {
+    const qte = parseInt(l.quantity) || 1;
+    const prix = _plNum(l.raw_currency_unit_price != null ? l.raw_currency_unit_price
+                 : (l.currency_price != null ? l.currency_price
+                 : (l.unit_price != null ? l.unit_price : l.unit_amount)));
+    const tot = _plNum(l.currency_amount != null ? l.currency_amount
+                : (l.amount != null ? l.amount : (prix != null ? prix * qte : null)));
+    return { nom: l.label || l.description || l.product_name || '', qte, prix, total: tot };
+  }).filter(l => l.nom);
+  const st = String(detail.status || detail.state || '').toLowerCase();
+  const statut = /accept|validat|signed|paid|complet|convert/.test(st) ? 'converti'
+               : /refus|reject|cancel|expir/.test(st) ? 'ignoré' : 'ouvert';
+  const docType = doc._doc === 'bdc' ? 'bdc' : 'devis';
+  const plid = detail.id;
+
+  const ex = await db.get('SELECT id FROM devis WHERE pennylane_id=$1', [plid]);
+  if (ex) {
+    await db.run(
+      `UPDATE devis SET statut=CASE WHEN statut='ignoré' THEN 'ignoré' WHEN $1='converti' THEN 'converti' ELSE statut END,
+        numero=$2, distributeur_nom=$3, client_email=$4, date_devis=$5, date_expiration=$6, montant=$7, devise=$8,
+        lignes=$9, doc_type=$10, vf_statut=$11, updated_at=NOW() WHERE id=$12`,
+      [statut, numero, nom, email, date, dateExp, montant, detail.currency || 'EUR', JSON.stringify(lignes), docType, st, ex.id]);
+    return 'updated';
+  }
+  await db.run(
+    `INSERT INTO devis (source, pennylane_id, numero, distributeur_nom, client_email, date_devis, date_expiration,
+       montant, devise, statut, vf_statut, lignes, doc_type, updated_at)
+     VALUES ('pennylane',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())`,
+    [plid, numero, nom, email, date, dateExp, montant, detail.currency || 'EUR', statut, st, JSON.stringify(lignes), docType]);
+  return 'created';
+}
+
+async function syncDevisPennylane(fullHistory = false) {
+  const api = plApi();
+  const dateFilter = fullHistory ? null : (() => { const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10); })();
+  const buildFilter = () => dateFilter ? JSON.stringify([{ field: 'date', operator: 'gteq', value: dateFilter }]) : undefined;
+
+  const quotes = await fetchAllPages(api, '/quotes', { filter: buildFilter() }).catch(() => []);
+  let orders = [];
+  try {
+    const docs = await fetchAllPages(api, '/commercial_documents', { filter: buildFilter() });
+    orders = docs.filter(d => { const t = String(d.type || d.document_type || d.kind || '').toLowerCase(); return !t || /order|commande|purchase/.test(t); });
+  } catch (_) {}
+
+  const all = [
+    ...quotes.map(d => ({ ...d, _ep: '/quotes', _doc: 'devis' })),
+    ...orders.map(d => ({ ...d, _ep: '/commercial_documents', _doc: 'bdc' })),
+  ];
+  let created = 0, updated = 0, skipped = 0;
+  for (const doc of all) {
+    try { const r = await upsertDevisPennylane(api, doc); if (r === 'created') created++; else if (r === 'updated') updated++; else skipped++; }
+    catch (e) { console.warn('  ⚠️ Devis PL #' + doc.id + ' : ' + e.message); skipped++; }
+  }
+  return { ok: true, total: all.length, created, updated, skipped };
+}
+
 module.exports = {
   checkStatus,
   syncCommandesPennylane,
+  syncDevisPennylane,
   lookupDocumentPennylane,
   genererFacturePennylane,
   suggestFacturesPennylane,

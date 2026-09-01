@@ -184,6 +184,7 @@ const API = {
   // ── Devis ──
   devis:(statut)=>API.get(`/devis${statut?'?statut='+statut:''}`),
   devisSyncVF:()=>API.post('/devis/sync-vf',{}),
+  devisSyncPennylane:()=>API.post('/pennylane/sync-devis',{}),
   devisStatut:(id,statut,notes)=>API.put(`/devis/${id}/statut`,{statut,notes}),
   devisRelances:(id)=>API.get(`/devis/${id}/relances`),
   devisRelance:(id,email,notes)=>API.post(`/devis/${id}/relance`,{email,notes}),

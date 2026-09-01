@@ -1969,6 +1969,12 @@ const EN_STR = {
   "Envoyer le lien de signature du ": "Send the signature link for the ",
   " à quel e-mail ?": " to which email?",
   "Adresse e-mail invalide": "Invalid email address",
+  "Sync Pennylane": "Sync Pennylane",
+  "Synchronisation Pennylane…": "Syncing Pennylane…",
+  "document(s)": "document(s)",
+  "nouveaux": "new",
+  "maj": "updated",
+
 
 
 
