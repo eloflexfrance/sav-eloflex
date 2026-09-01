@@ -2733,6 +2733,15 @@ router.post('/pennylane/sync-commandes', adminOnly, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Diagnostic : contenu brut renvoyé par Pennylane (quotes / commercial_documents / customer_invoices)
+router.get('/pennylane/debug-devis', adminOnly, async (req, res) => {
+  try {
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ ok: false, reason: 'Pennylane non configuré' });
+    const { debugDevisPennylane } = require('../scripts/sync-pennylane');
+    res.json({ ok: true, ...(await debugDevisPennylane()) });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Synchro des devis + bons de commande Pennylane vers la section « Devis en attente »
 router.post('/pennylane/sync-devis', adminOnly, async (req, res) => {
   try {

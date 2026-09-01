@@ -625,22 +625,28 @@ async function upsertDevisPennylane(api, doc) {
   return 'created';
 }
 
+// Récupère toutes les pages d'un endpoint SANS filtre serveur (le filtre V2 est
+// peu fiable et renvoie souvent une liste vide) ; le filtrage par date se fait ensuite en JS.
+async function _fetchNoFilter(api, endpoint) {
+  try { return await fetchAllPages(api, endpoint, {}); }
+  catch (e) { console.warn('  ⚠️ Pennylane ' + endpoint + ' indisponible: ' + ((e.response && e.response.status) ? 'HTTP ' + e.response.status : e.message)); return []; }
+}
+function _docDate(d) { return (d.date || d.issue_date || d.emitted_at || d.document_date || d.created_at || '').slice(0, 10); }
+
 async function syncDevisPennylane(fullHistory = false) {
   const api = plApi();
-  const dateFilter = fullHistory ? null : (() => { const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10); })();
-  const buildFilter = () => dateFilter ? JSON.stringify([{ field: 'date', operator: 'gteq', value: dateFilter }]) : undefined;
+  const cutoff = fullHistory ? null : (() => { const d = new Date(); d.setDate(d.getDate() - 120); return d.toISOString().slice(0, 10); })();
+  const dateOK = d => { if (!cutoff) return true; const dd = _docDate(d); return !dd || dd >= cutoff; };
 
-  const quotes = await fetchAllPages(api, '/quotes', { filter: buildFilter() }).catch(() => []);
-  let orders = [];
-  try {
-    const docs = await fetchAllPages(api, '/commercial_documents', { filter: buildFilter() });
-    orders = docs.filter(d => { const t = String(d.type || d.document_type || d.kind || '').toLowerCase(); return !t || /order|commande|purchase/.test(t); });
-  } catch (_) {}
+  const quotes = (await _fetchNoFilter(api, '/quotes')).filter(dateOK);
+  let orders = (await _fetchNoFilter(api, '/commercial_documents')).filter(d =>
+    dateOK(d) && (() => { const t = String(d.type || d.document_type || d.kind || '').toLowerCase(); return !t || /order|commande|purchase|bon/.test(t); })());
 
   const all = [
     ...quotes.map(d => ({ ...d, _ep: '/quotes', _doc: 'devis' })),
     ...orders.map(d => ({ ...d, _ep: '/commercial_documents', _doc: 'bdc' })),
   ];
+  console.log(`  📄 Pennylane devis/BDC : ${quotes.length} devis + ${orders.length} BDC = ${all.length} document(s)`);
   let created = 0, updated = 0, skipped = 0;
   for (const doc of all) {
     try { const r = await upsertDevisPennylane(api, doc); if (r === 'created') created++; else if (r === 'updated') updated++; else skipped++; }
@@ -649,10 +655,39 @@ async function syncDevisPennylane(fullHistory = false) {
   return { ok: true, total: all.length, created, updated, skipped };
 }
 
+// Diagnostic : que renvoie réellement Pennylane sur chaque endpoint ?
+async function debugDevisPennylane() {
+  const api = plApi();
+  const out = { base_url: BASE_URL };
+  for (const ep of ['/quotes', '/commercial_documents', '/customer_invoices']) {
+    const r = { ok: false };
+    try {
+      const { data } = await api.get(ep, { params: { limit: 5 } });
+      const items = data.items || data.quotes || data.commercial_documents || data.customer_invoices || (Array.isArray(data) ? data : []);
+      r.ok = true; r.count_page = items.length; r.has_more = data.has_more || false;
+      r.top_keys = items[0] ? Object.keys(items[0]).slice(0, 40) : [];
+      r.sample = items.slice(0, 3).map(x => ({
+        id: x.id, number: x.invoice_number || x.number || x.label,
+        status: x.status || x.state, date: _docDate(x),
+        type: x.type || x.document_type || x.kind,
+        amount: x.currency_amount || x.amount || x.total_amount,
+        customer: (x.customer && (x.customer.name || x.customer.company_name)) || x.customer_name || null
+      }));
+    } catch (e) {
+      r.error = (e.response && e.response.status)
+        ? ('HTTP ' + e.response.status + ' — ' + JSON.stringify(e.response.data || '').slice(0, 300))
+        : e.message;
+    }
+    out[ep] = r;
+  }
+  return out;
+}
+
 module.exports = {
   checkStatus,
   syncCommandesPennylane,
   syncDevisPennylane,
+  debugDevisPennylane,
   lookupDocumentPennylane,
   genererFacturePennylane,
   suggestFacturesPennylane,
