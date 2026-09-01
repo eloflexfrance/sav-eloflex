@@ -3078,17 +3078,14 @@ router.get('/devis-public/:token/pdf', async (req, res) => {
   try {
     const d = await db.get('SELECT source, doc_url, vf_id FROM devis WHERE token_signature=$1', [req.params.token]);
     if (!d) return res.status(404).send('Lien invalide');
-    if (d.doc_url) return res.redirect(d.doc_url);
-    if (d.vf_id && process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT) {
-      const axios = require('axios');
-      const r = await axios.get(`https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}.pdf`,
-        { params: { api_token: process.env.VOSFACTURES_API_TOKEN }, responseType: 'arraybuffer', timeout: 15000 });
-      res.set('Content-Type', 'application/pdf');
-      res.set('Content-Disposition', 'inline');
-      return res.send(Buffer.from(r.data));
-    }
-    return res.status(404).send('PDF indisponible');
-  } catch (e) { res.status(500).send('Erreur PDF'); }
+    // On relaie TOUJOURS les octets depuis notre domaine : Pennylane (et d'autres) refusent
+    // l'affichage de leur URL publique dans un cadre (X-Frame-Options), d'où le blocage de l'aperçu.
+    const buf = await _fetchDevisOriginalPdf(d);
+    if (!buf) return res.status(404).send('PDF indisponible');
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline');
+    return res.send(buf);
+  } catch (e) { console.error('[DEVIS] aperçu PDF:', e.message); res.status(500).send('Erreur PDF'); }
 });
 
 // Récupère le PDF ORIGINAL du document (Pennylane public, ou VosFactures via jeton).
