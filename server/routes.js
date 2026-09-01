@@ -2887,6 +2887,27 @@ router.put('/devis/:id/statut', adminOrOp, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Réinitialiser la signature d'un devis/BDC (le remet « en attente » sur le même document)
+router.post('/devis/:id/reset-signature', adminOrOp, async (req, res) => {
+  try {
+    const row = await db.run(
+      `UPDATE devis SET signed_at=NULL, signataire_nom=NULL, signature_data=NULL, pdf_data=NULL,
+        sign_ip=NULL, sign_ua=NULL, token_signature=NULL, signature_email=NULL, statut='ouvert', updated_at=NOW()
+       WHERE id=$1 RETURNING id`, [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Document introuvable' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Supprimer un devis/BDC de la liste (il peut revenir à la prochaine synchro s'il vient de VF/Pennylane)
+router.delete('/devis/:id', adminOrOp, async (req, res) => {
+  try {
+    await db.run('DELETE FROM devis_relances WHERE devis_id=$1', [req.params.id]).catch(()=>{});
+    await db.run('DELETE FROM devis WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Ajouter manuellement un devis / bon de commande par son numéro (import auto depuis
 // VosFactures ou Pennylane s'il existe, sinon saisie manuelle). Sans doublon.
 router.post('/devis/ajouter', adminOrOp, async (req, res) => {

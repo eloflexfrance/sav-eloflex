@@ -89,6 +89,8 @@ async function chargerDevis(){
             ${DEVIS_FILTRE==='ouvert'?`
             <button class="btn sm success" onclick="changerStatutDevis(${d.id},'converti')" title="${t('devis_btn_converti')||'Marquer converti'}"><i class="ti ti-check"></i></button>
             <button class="btn sm" onclick="changerStatutDevis(${d.id},'ignoré')" title="${t('devis_btn_ignorer')||'Ignorer'}" style="color:var(--text3)"><i class="ti ti-x"></i></button>`:''}
+            ${d.signed_at?`<button class="btn sm" onclick="resetSignatureDevis(${d.id},'${esc((d.numero||'').replace(/'/g,'&#39;'))}')" title="${TR('Réinitialiser la signature (re-signer le même document)')}"><i class="ti ti-rotate"></i></button>`:''}
+            <button class="btn sm danger" onclick="supprimerDevis(${d.id},'${esc((d.numero||'').replace(/'/g,'&#39;'))}',${d.source&&d.source!=='manuel'?1:0})" title="${TR('Supprimer de la liste')}"><i class="ti ti-trash"></i></button>
           </td>
         </tr>`;
       }).join('')}</tbody>
@@ -179,6 +181,20 @@ async function ajouterDevisSubmit(){
   }catch(e){ btn.disabled=false; if(msg) msg.innerHTML=`<span style="color:var(--danger)">${esc(e.message||'Erreur')}</span>`; }
 }
 window.ajouterDevisSubmit = ajouterDevisSubmit;
+
+async function resetSignatureDevis(id, numero){
+  if(!confirm(TR('Réinitialiser la signature du document ')+(numero||'')+' ?\n'+TR('Il repassera « en attente » et pourra être renvoyé pour signature (le même document).'))) return;
+  try{ await API.devisResetSignature(id); toast(TR('Signature réinitialisée — document remis en attente'),'ti-rotate'); if(DEVIS_FILTRE!=='ouvert') setDevisFiltre('ouvert'); else chargerDevis(); }
+  catch(e){ toast(e.message||'Erreur','ti-alert-circle','var(--danger)'); }
+}
+window.resetSignatureDevis = resetSignatureDevis;
+async function supprimerDevis(id, numero, resync){
+  const suite = resync ? '\n'+TR('(Provenant de VosFactures / Pennylane, il réapparaîtra à la prochaine synchro.)') : '';
+  if(!confirm(TR('Supprimer le document ')+(numero||'')+' ?'+suite)) return;
+  try{ await API.devisSupprimer(id); toast(TR('Document supprimé'),'ti-trash'); chargerDevis(); }
+  catch(e){ toast(e.message||'Erreur','ti-alert-circle','var(--danger)'); }
+}
+window.supprimerDevis = supprimerDevis;
 
 async function changerStatutDevis(id, statut){
   try{

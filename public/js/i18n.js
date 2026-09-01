@@ -1991,6 +1991,15 @@ const EN_STR = {
   "Recherche et ajout…": "Searching and adding…",
   "Ce document est déjà présent dans la liste.": "This document is already in the list.",
   "Document ajouté": "Document added",
+  "Réinitialiser la signature (re-signer le même document)": "Reset the signature (re-sign the same document)",
+  "Supprimer de la liste": "Remove from the list",
+  "Réinitialiser la signature du document ": "Reset the signature of document ",
+  "Il repassera « en attente » et pourra être renvoyé pour signature (le même document).": "It will go back to “pending” and can be re-sent for signature (the same document).",
+  "Signature réinitialisée — document remis en attente": "Signature reset — document back to pending",
+  "Supprimer le document ": "Delete document ",
+  "(Provenant de VosFactures / Pennylane, il réapparaîtra à la prochaine synchro.)": "(From VosFactures / Pennylane, it will reappear at the next sync.)",
+  "Document supprimé": "Document deleted",
+
 
 
 

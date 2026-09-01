@@ -190,6 +190,8 @@ const API = {
   devisRelance:(id,email,notes)=>API.post(`/devis/${id}/relance`,{email,notes}),
   devisEnvoyerSignature:(id,email)=>API.post(`/devis/${id}/envoyer-signature`,{email}),
   devisAjouter:(payload)=>API.post('/devis/ajouter',payload),
+  devisResetSignature:(id)=>API.post(`/devis/${id}/reset-signature`,{}),
+  devisSupprimer:(id)=>API.del(`/devis/${id}`),
   // ── Commande Suède ──
   commandesSuede:()=>API.get('/commandes-suede'),
   commandeSuede:(id)=>API.get(`/commandes-suede/${id}`),
