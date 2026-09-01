@@ -2943,6 +2943,54 @@ router.get('/devis/:id/certificat.pdf', adminOrOp, async (req, res) => {
   } catch (e) { res.status(500).send('Erreur certificat'); }
 });
 
+// Admin : DIAGNOSTIC de récupération du PDF d'un document (pour comprendre les échecs Pennylane)
+// Accessible par id numérique (/devis/12/diag-pdf) ou par jeton (/devis/TOKEN/diag-pdf).
+router.get('/devis/:id/diag-pdf', adminOrOp, async (req, res) => {
+  const out = { };
+  try {
+    const axios = require('axios');
+    const key = req.params.id;
+    const byToken = !/^\d+$/.test(key);
+    const d = await db.get(
+      `SELECT id, numero, source, doc_url, pennylane_id, vf_id FROM devis WHERE ${byToken ? 'token_signature' : 'id'}=$1`,
+      [key]);
+    if (!d) return res.status(404).json({ error: 'introuvable' });
+    out.devis = { id: d.id, numero: d.numero, source: d.source, pennylane_id: d.pennylane_id, vf_id: d.vf_id, doc_url: d.doc_url };
+    // 1) Tentative de récupération directe de doc_url
+    if (d.doc_url) {
+      try {
+        const r = await axios.get(d.doc_url, { responseType: 'arraybuffer', timeout: 20000, maxRedirects: 5,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EloflexSAV/1.0)', 'Accept': 'application/pdf,*/*' },
+          validateStatus: () => true });
+        const buf = Buffer.from(r.data);
+        out.fetch_doc_url = {
+          status: r.status, content_type: r.headers['content-type'] || null, length: buf.length,
+          is_pdf: buf.slice(0,5).toString('latin1') === '%PDF-',
+          final_url: (r.request && r.request.res && r.request.res.responseUrl) || null,
+          apercu: buf.slice(0, 180).toString('latin1').replace(/[^\x20-\x7e]/g, '.')
+        };
+      } catch (e) { out.fetch_doc_url = { error: e.message }; }
+    }
+    // 2) Interrogation live de l'API Pennylane pour trouver les vrais champs d'URL de fichier
+    if (d.pennylane_id && (process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) {
+      let api; try { api = require('../scripts/sync-pennylane').plApi(); } catch (_) {}
+      for (const ep of ['/quotes/', '/commercial_documents/', '/customer_invoices/']) {
+        try {
+          const { data } = await api.get(ep + d.pennylane_id, { validateStatus: () => true });
+          const obj = (data && (data.quote || data.commercial_document || data.customer_invoice || data.invoice || data)) || {};
+          const urlFields = {};
+          for (const k of Object.keys(obj)) {
+            if (/url|file|pdf/i.test(k)) urlFields[k] = obj[k];
+          }
+          out['api' + ep.replace(/\//g, '')] = { ok: true, url_fields: urlFields };
+          break;
+        } catch (e) { out['api' + ep.replace(/\//g, '')] = { error: (e.response && e.response.status) ? 'HTTP ' + e.response.status : e.message }; }
+      }
+    }
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message, out }); }
+});
+
 // Supprimer un devis/BDC de la liste (il peut revenir à la prochaine synchro s'il vient de VF/Pennylane)
 router.delete('/devis/:id', adminOrOp, async (req, res) => {
   try {

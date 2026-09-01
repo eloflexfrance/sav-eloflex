@@ -692,4 +692,6 @@ module.exports = {
   lookupDocumentPennylane,
   genererFacturePennylane,
   suggestFacturesPennylane,
+  plApi,
+  BASE_URL,
 };
