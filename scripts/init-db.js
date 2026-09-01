@@ -486,6 +486,8 @@ async function initDB() {
       await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'vosfactures'`);
       await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS pennylane_id BIGINT`);
       await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS doc_url TEXT`);   // lien PDF public du document (Pennylane) pour l'affichage à l'identique
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS pdf_sha256 TEXT`);  // empreinte du PDF signé (intégrité)
+      await client.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS pdf_seal TEXT`);    // cachet électronique Éloflex (RSA-SHA256 de l'empreinte)
       await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_devis_plid ON devis(pennylane_id) WHERE pennylane_id IS NOT NULL`);
       await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pays TEXT`);
       // pays NULL sur users = admin global (voit tous les pays)

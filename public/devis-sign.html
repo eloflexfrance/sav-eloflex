@@ -49,7 +49,8 @@
 
   <div class="card" id="done" style="display:none">
     <div class="msg ok" id="donemsg">✔ Merci, votre signature a bien été enregistrée. Une copie signée a été envoyée par e-mail. Vous pouvez fermer cette page.</div>
-    <div class="btns"><button class="ghost" type="button" onclick="telechargerPDF()">Télécharger le PDF signé</button></div>
+    <div class="btns"><button class="ghost" type="button" onclick="telechargerPDF()">Télécharger le PDF signé</button>
+      <button class="ghost" type="button" onclick="telechargerCertificat()">Télécharger le certificat de preuve</button></div>
   </div>
 </div>
 
@@ -194,6 +195,9 @@ function signer(){
 function telechargerPDF(){
   // Le PDF signé de référence est celui archivé côté serveur (document original + page signature)
   window.open('/api/devis-public/'+encodeURIComponent(TOKEN)+'/signed.pdf','_blank');
+}
+function telechargerCertificat(){
+  window.open('/api/devis-public/'+encodeURIComponent(TOKEN)+'/certificat.pdf','_blank');
 }
 </script>
 </body>

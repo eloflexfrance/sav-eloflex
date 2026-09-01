@@ -2887,16 +2887,54 @@ router.put('/devis/:id/statut', adminOrOp, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Réinitialiser la signature d'un devis/BDC (le remet « en attente » sur le même document)
+// Réinitialiser la signature d'un devis/BDC (le remet « en attente » sur le même document).
+// Retire aussi la commande créée automatiquement lors de la signature, pour repartir propre.
 router.post('/devis/:id/reset-signature', adminOrOp, async (req, res) => {
   try {
-    const row = await db.run(
+    const d = await db.get('SELECT id, numero, distributeur_nom FROM devis WHERE id=$1', [req.params.id]);
+    if (!d) return res.status(404).json({ error: 'Document introuvable' });
+    // Supprime la commande auto-générée à la signature (identifiée par n° + distributeur + note auto)
+    let cmdRemoved = 0;
+    if (d.numero) {
+      const del = await db.run(
+        `DELETE FROM commandes
+          WHERE lower(coalesce(bdc,''))=lower($1)
+            AND lower(coalesce(distributeur_nom,''))=lower(coalesce($2,''))
+            AND informations ILIKE '%signé en ligne%'
+          RETURNING id`, [d.numero, d.distributeur_nom || '']);
+      cmdRemoved = del ? 1 : 0;
+    }
+    await db.run(
       `UPDATE devis SET signed_at=NULL, signataire_nom=NULL, signature_data=NULL, pdf_data=NULL,
-        sign_ip=NULL, sign_ua=NULL, token_signature=NULL, signature_email=NULL, statut='ouvert', updated_at=NOW()
-       WHERE id=$1 RETURNING id`, [req.params.id]);
-    if (!row) return res.status(404).json({ error: 'Document introuvable' });
-    res.json({ ok: true });
+        sign_ip=NULL, sign_ua=NULL, token_signature=NULL, signature_email=NULL,
+        pdf_sha256=NULL, pdf_seal=NULL, statut='ouvert', updated_at=NOW()
+       WHERE id=$1`, [req.params.id]);
+    res.json({ ok: true, commande_supprimee: cmdRemoved });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin : télécharger le PDF signé archivé
+router.get('/devis/:id/signed.pdf', adminOrOp, async (req, res) => {
+  try {
+    const d = await db.get('SELECT pdf_data, numero FROM devis WHERE id=$1', [req.params.id]);
+    if (!d || !d.pdf_data) return res.status(404).send('PDF signé indisponible');
+    const b64 = String(d.pdf_data).replace(/^data:application\/pdf;base64,/, '');
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `inline; filename="${(d.numero||'document').replace(/[^\w-]+/g,'_')}_signe.pdf"`);
+    res.send(Buffer.from(b64, 'base64'));
+  } catch (e) { res.status(500).send('Erreur PDF'); }
+});
+
+// Admin : télécharger le certificat de preuve d'intégrité
+router.get('/devis/:id/certificat.pdf', adminOrOp, async (req, res) => {
+  try {
+    const d = await db.get('SELECT * FROM devis WHERE id=$1', [req.params.id]);
+    if (!d || !d.signed_at) return res.status(404).send('Certificat indisponible (document non signé)');
+    const buf = await _construireCertificatPreuve(d);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `inline; filename="Certificat_preuve_${(d.numero||'document').replace(/[^\w-]+/g,'_')}.pdf"`);
+    res.send(buf);
+  } catch (e) { res.status(500).send('Erreur certificat'); }
 });
 
 // Supprimer un devis/BDC de la liste (il peut revenir à la prochaine synchro s'il vient de VF/Pennylane)
@@ -3140,6 +3178,78 @@ async function _ajouterCommandeDepuisDevis(d) {
   return row.id;
 }
 
+// ── Cachet électronique Éloflex : clé RSA serveur persistée dans `parametres` ──
+let _sealKeysCache = null;
+async function _getSealKeys() {
+  if (_sealKeysCache) return _sealKeysCache;
+  const crypto = require('crypto');
+  const rows = await db.all("SELECT cle, valeur FROM parametres WHERE cle IN ('seal_priv','seal_pub')");
+  let priv = (rows.find(r => r.cle === 'seal_priv') || {}).valeur;
+  let pub  = (rows.find(r => r.cle === 'seal_pub') || {}).valeur;
+  if (!priv || !pub) {
+    const kp = crypto.generateKeyPairSync('rsa', { modulusLength: 2048,
+      publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
+    priv = kp.privateKey; pub = kp.publicKey;
+    await db.run("INSERT INTO parametres (cle,valeur) VALUES ('seal_priv',$1) ON CONFLICT (cle) DO UPDATE SET valeur=$1", [priv]);
+    await db.run("INSERT INTO parametres (cle,valeur) VALUES ('seal_pub',$1) ON CONFLICT (cle) DO UPDATE SET valeur=$1", [pub]);
+  }
+  _sealKeysCache = { priv, pub };
+  return _sealKeysCache;
+}
+function _pubFingerprint(pub) {
+  return require('crypto').createHash('sha256').update(pub || '').digest('hex').slice(0, 32).replace(/(.{4})/g, '$1 ').trim();
+}
+// Empreinte SHA-256 + cachet RSA-SHA256 d'un PDF (base64) → { hashHex, seal, pubFp }
+async function _scellerPdf(pdfB64) {
+  try {
+    const crypto = require('crypto');
+    const buf = Buffer.from(String(pdfB64).replace(/^data:application\/pdf;base64,/, ''), 'base64');
+    const hashHex = crypto.createHash('sha256').update(buf).digest('hex');
+    const { priv, pub } = await _getSealKeys();
+    const seal = crypto.createSign('RSA-SHA256').update(hashHex).sign(priv, 'base64');
+    return { hashHex, seal, pubFp: _pubFingerprint(pub) };
+  } catch (e) { console.error('[DEVIS] scellement:', e.message); return null; }
+}
+// Certificat de preuve d'intégrité (PDF autonome, joint au dossier)
+async function _construireCertificatPreuve(d) {
+  const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595.28, 841.89]);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const monoF = await pdf.embedFont(StandardFonts.Courier);
+  const m = _docMots(d.doc_type);
+  const blue = rgb(0.122, 0.361, 0.549), grey = rgb(0.4, 0.43, 0.48), dark = rgb(0.13, 0.13, 0.13);
+  let y = 800;
+  const L = (t, f, s, c, dy) => { page.drawText(String(t == null ? '' : t), { x: 50, y, size: s || 11, font: f || font, color: c || dark }); y -= (dy || 16); };
+  L("Certificat de preuve d'integrite", bold, 18, blue, 6);
+  page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 1, color: blue }); y -= 26;
+  L(`${m.Doc} : ${d.numero || ''}`, bold, 12, dark, 16);
+  L(`Client : ${d.distributeur_nom || '-'}`, font, 11, dark, 14);
+  L(`Source : ${d.source || '-'}`, font, 11, dark, 24);
+  L('Signature', bold, 12, blue, 16);
+  L(`Signataire : ${d.signataire_nom || '-'}`, font, 11, dark, 14);
+  L(`Date : ${d.signed_at ? new Date(d.signed_at).toLocaleString('fr-FR') : '-'}  (${d.signed_at ? new Date(d.signed_at).toISOString() : ''} UTC)`, font, 10, dark, 14);
+  L(`Adresse IP : ${d.sign_ip || '-'}`, font, 10, dark, 14);
+  L(`Navigateur : ${String(d.sign_ua || '-').slice(0, 88)}`, font, 9, grey, 14);
+  L(`Lien envoye a : ${d.signature_email || '-'}`, font, 10, dark, 24);
+  L('Integrite du document signe', bold, 12, blue, 16);
+  L('Empreinte SHA-256 du PDF signe archive :', font, 10, dark, 13);
+  L(d.pdf_sha256 || '-', monoF, 9, dark, 20);
+  L('Cachet electronique Eloflex (RSA-SHA256, base64) :', font, 10, dark, 13);
+  const seal = String(d.pdf_seal || '-'); for (let i = 0; i < seal.length && i < 344; i += 84) L(seal.slice(i, i + 84), monoF, 7, grey, 9);
+  y -= 6;
+  try { const keys = await _getSealKeys(); L(`Empreinte cle publique du cachet : ${_pubFingerprint(keys.pub)}`, font, 9, grey, 22); } catch (_) { y -= 22; }
+  const notes = [
+    "Verification : recalculer l'empreinte SHA-256 du PDF signe archive et la comparer a",
+    "celle ci-dessus. Toute modification du document change l'empreinte. Le cachet atteste",
+    "l'endossement par Eloflex France et se verifie avec sa cle publique.",
+    "Signature electronique simple - art. 1366 et 1367 du Code civil."
+  ];
+  for (const n of notes) L(n, font, 9, grey, 12);
+  return Buffer.from(await pdf.save());
+}
+
 // Public (sans auth) : PDF SIGNÉ archivé (original + page signature)
 router.get('/devis-public/:token/signed.pdf', async (req, res) => {
   try {
@@ -3150,6 +3260,18 @@ router.get('/devis-public/:token/signed.pdf', async (req, res) => {
     res.set('Content-Disposition', `inline; filename="${(d.numero||'document').replace(/[^\w-]+/g,'_')}_signe.pdf"`);
     res.send(Buffer.from(b64, 'base64'));
   } catch (e) { res.status(500).send('Erreur PDF'); }
+});
+
+// Public (sans auth) : certificat de preuve d'intégrité (généré à la volée)
+router.get('/devis-public/:token/certificat.pdf', async (req, res) => {
+  try {
+    const d = await db.get('SELECT * FROM devis WHERE token_signature=$1', [req.params.token]);
+    if (!d || !d.signed_at) return res.status(404).send('Certificat indisponible (document non signé)');
+    const buf = await _construireCertificatPreuve(d);
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `inline; filename="Certificat_preuve_${(d.numero||'document').replace(/[^\w-]+/g,'_')}.pdf"`);
+    res.send(buf);
+  } catch (e) { res.status(500).send('Erreur certificat'); }
 });
 
 // Public (sans auth) : signature
@@ -3166,12 +3288,18 @@ router.post('/devis-public/:token/signer', async (req, res) => {
     d.signataire_nom = String(b.signataire_nom).slice(0, 120);
     let pdfSigne = await _construireDevisSignePdf(d, b.signature_data, ip);
     if (!pdfSigne && b.pdf_data) pdfSigne = String(b.pdf_data).replace(/^data:application\/pdf;base64,/, '');  // repli
+    const pdfB64 = pdfSigne ? String(pdfSigne).replace(/^data:application\/pdf;base64,/, '') : null;
+    // Scellement : empreinte SHA-256 + cachet RSA du PDF signé archivé (preuve d'intégrité)
+    const sealInfo = pdfB64 ? await _scellerPdf(pdfB64) : null;
+    // On complète l'objet `d` pour le certificat de preuve (valeurs qui viennent d'être posées)
+    d.sign_ip = ip; d.sign_ua = ua; d.signed_at = new Date().toISOString();
+    d.pdf_sha256 = sealInfo ? sealInfo.hashHex : null;
+    d.pdf_seal   = sealInfo ? sealInfo.seal   : null;
     await db.run(
       `UPDATE devis SET signataire_nom=$1, signature_data=$2, pdf_data=$3, sign_ip=$4, sign_ua=$5,
-        signed_at=NOW(), statut='converti', updated_at=NOW() WHERE id=$6`,
-      [d.signataire_nom, b.signature_data, pdfSigne || null, ip, ua, d.id]);
+        signed_at=NOW(), statut='converti', pdf_sha256=$6, pdf_seal=$7, updated_at=NOW() WHERE id=$8`,
+      [d.signataire_nom, b.signature_data, pdfSigne || null, ip, ua, d.pdf_sha256, d.pdf_seal, d.id]);
     const m = _docMots(d.doc_type);
-    const pdfB64 = pdfSigne ? String(pdfSigne).replace(/^data:application\/pdf;base64,/, '') : null;
 
     // 1) Ajout dans le Suivi commandes (si pas déjà présent)
     let cmdId = null;
@@ -3182,9 +3310,17 @@ router.post('/devis-public/:token/signer', async (req, res) => {
     let mailOk = false;
     try {
       const clientMail = (/.+@.+\..+/.test(d.client_email || '')) ? d.client_email : null;
+      const numSafe = (d.numero||'document').replace(/[^\w-]+/g,'_');
       const attachments = pdfB64
-        ? [{ name: `${m.Doc}_${(d.numero||'document').replace(/[^\w-]+/g,'_')}_signe.pdf`, content: pdfB64 }]
+        ? [{ name: `${m.Doc}_${numSafe}_signe.pdf`, content: pdfB64 }]
         : [];
+      // Certificat de preuve d'intégrité joint (si le scellement a réussi)
+      if (sealInfo) {
+        try {
+          const certBuf = await _construireCertificatPreuve(d);
+          attachments.push({ name: `Certificat_preuve_${numSafe}.pdf`, content: certBuf.toString('base64') });
+        } catch (ce) { console.error('[DEVIS] certificat preuve:', ce.message); }
+      }
       await sendBrevoMail({
         from: 'sav@eloflex.fr', fromName: 'Eloflex France',
         to: clientMail || 'info@eloflex.fr',
@@ -3192,7 +3328,8 @@ router.post('/devis-public/:token/signer', async (req, res) => {
         subject: `✍️ ${m.Doc} ${d.numero||''} — signé par ${b.signataire_nom}`,
         html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
           <p>Le ${m.doc} <b>${d.numero||''}</b>${d.distributeur_nom?` (${d.distributeur_nom})`:''} a été signé en ligne (${m.accord}) par <b>${String(b.signataire_nom)}</b> le ${new Date().toLocaleDateString('fr-FR')}.</p>
-          ${attachments.length ? '<p>Le document signé (original + page de signature) est joint en PDF.</p>' : '<p style="color:#b45309">Le PDF signé n’a pas pu être généré automatiquement — disponible dans l’application.</p>'}
+          ${pdfB64 ? '<p>Le document signé (original + page de signature) est joint en PDF.</p>' : '<p style="color:#b45309">Le PDF signé n’a pas pu être généré automatiquement — disponible dans l’application.</p>'}
+          ${sealInfo ? `<p style="font-size:12px;color:#555">Un <b>certificat de preuve d’intégrité</b> est également joint (empreinte SHA-256 et cachet électronique Eloflex).</p>` : ''}
           ${cmdId ? '<p>Il a été ajouté au <b>Suivi commandes</b>.</p>' : ''}
           <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
         attachments
