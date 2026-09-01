@@ -192,7 +192,8 @@ function signer(){
     .catch(function(e){ btn.disabled=false; btn.textContent='Signer le '+(MOTS?MOTS.doc:'document'); document.getElementById('msg').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; });
 }
 function telechargerPDF(){
-  if(SIGNED_PDF){ var a=document.createElement('a'); a.href=SIGNED_PDF; a.download=(MOTS?MOTS.Doc:'Document')+'_signe.pdf'; a.click(); }
+  // Le PDF signé de référence est celui archivé côté serveur (document original + page signature)
+  window.open('/api/devis-public/'+encodeURIComponent(TOKEN)+'/signed.pdf','_blank');
 }
 </script>
 </body>

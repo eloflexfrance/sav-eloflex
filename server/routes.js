@@ -3032,6 +3032,105 @@ router.get('/devis-public/:token/pdf', async (req, res) => {
   } catch (e) { res.status(500).send('Erreur PDF'); }
 });
 
+// Récupère le PDF ORIGINAL du document (Pennylane public, ou VosFactures via jeton).
+async function _fetchDevisOriginalPdf(d) {
+  const axios = require('axios');
+  if (d.doc_url) {
+    const r = await axios.get(d.doc_url, { responseType: 'arraybuffer', timeout: 20000 });
+    return Buffer.from(r.data);
+  }
+  if (d.vf_id && process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT) {
+    const r = await axios.get(`https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}.pdf`,
+      { params: { api_token: process.env.VOSFACTURES_API_TOKEN }, responseType: 'arraybuffer', timeout: 20000 });
+    return Buffer.from(r.data);
+  }
+  return null;
+}
+// Reprend le PDF original À L'IDENTIQUE et lui ajoute une page « Signature électronique »
+// (signataire, date, mention, signature manuscrite, IP). Renvoie une base64, ou null si échec.
+async function _construireDevisSignePdf(d, sigDataUrl, ip) {
+  try {
+    const orig = await _fetchDevisOriginalPdf(d);
+    if (!orig) return null;
+    const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+    const pdf = await PDFDocument.load(orig);
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const m = _docMots(d.doc_type);
+    const page = pdf.addPage([595.28, 841.89]);
+    const blue = rgb(0.122, 0.361, 0.549), grey = rgb(0.42, 0.45, 0.5), dark = rgb(0.13, 0.13, 0.13);
+    let y = 780;
+    page.drawText('Signature electronique', { x: 50, y, size: 18, font: bold, color: blue }); y -= 8;
+    page.drawLine({ start: { x: 50, y }, end: { x: 545, y }, thickness: 1, color: blue }); y -= 28;
+    page.drawText(`${m.Doc} ${d.numero || ''}`.trim(), { x: 50, y, size: 12, font: bold, color: dark }); y -= 18;
+    if (d.distributeur_nom) { page.drawText(`Client : ${d.distributeur_nom}`, { x: 50, y, size: 11, font, color: dark }); y -= 26; } else { y -= 8; }
+    const dateStr = new Date().toLocaleDateString('fr-FR');
+    page.drawText(`Signe par : ${String(d.signataire_nom || '')}`, { x: 50, y, size: 13, font: bold, color: dark }); y -= 20;
+    page.drawText(`Le : ${dateStr}`, { x: 50, y, size: 12, font, color: dark }); y -= 20;
+    page.drawText(`Mention : « Lu et approuve, ${m.accord} »`, { x: 50, y, size: 11, font, color: dark }); y -= 30;
+    page.drawText('Signature :', { x: 50, y, size: 11, font: bold, color: dark }); y -= 6;
+    try {
+      const b64 = String(sigDataUrl || '').replace(/^data:image\/png;base64,/, '');
+      if (b64) { const png = await pdf.embedPng(Buffer.from(b64, 'base64')); page.drawImage(png, { x: 50, y: y - 90, width: 200, height: 90 }); }
+    } catch (_) {}
+    y -= 110;
+    page.drawText(`Signature electronique horodatee — ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC${ip ? ' — IP ' + ip : ''}`,
+      { x: 50, y, size: 9, font, color: grey }); y -= 12;
+    page.drawText('Valeur probante : art. 1366 et suivants du Code civil.', { x: 50, y, size: 9, font, color: grey });
+    const out = await pdf.save();
+    return Buffer.from(out).toString('base64');
+  } catch (e) { console.error('[DEVIS] stamp PDF:', e.message); return null; }
+}
+
+// Ajoute un devis/BDC signé au Suivi commandes (sans doublon). Renvoie l'id de commande.
+async function _ajouterCommandeDepuisDevis(d) {
+  const numero = (d.numero || '').trim();
+  const distrib = (d.distributeur_nom || '').trim();
+  if (!numero && !distrib) return null;
+  // Déjà présent ? (même BDC + distributeur — compatible avec la dédup de la synchro)
+  const ex = await db.get(
+    `SELECT id FROM commandes WHERE lower(coalesce(bdc,''))=lower($1) AND lower(coalesce(distributeur_nom,''))=lower($2) LIMIT 1`,
+    [numero, distrib]);
+  if (ex) return ex.id;
+  // Client : rattacher à une fiche existante, sinon en créer une
+  let clientId = null;
+  if (distrib) {
+    const cr = await db.get('SELECT id FROM clients WHERE lower(trim(nom))=lower(trim($1)) LIMIT 1', [distrib]);
+    if (cr) clientId = cr.id;
+    else {
+      const ins = await db.get(
+        `INSERT INTO clients (nom, email, type, token_portail) VALUES ($1,$2,'Distributeur',md5(random()::text)) RETURNING id`,
+        [distrib, d.client_email || null]);
+      clientId = ins.id;
+    }
+  }
+  let lignes = d.lignes; if (typeof lignes === 'string') { try { lignes = JSON.parse(lignes); } catch(_) { lignes = []; } }
+  const fauteuil = (lignes || []).find(l => /eloflex/i.test(l.nom || l.designation || '')) || (lignes || [])[0] || null;
+  const modele = fauteuil ? (fauteuil.nom || fauteuil.designation || '') : '';
+  const qte = fauteuil ? (parseInt(fauteuil.qte || fauteuil.quantite) || 1) : 1;
+  const today = new Date().toISOString().slice(0, 10);
+  const annee = parseInt(today.slice(0, 4));
+  const m = _docMots(d.doc_type);
+  const row = await db.get(
+    `INSERT INTO commandes (client_id, annee_onglet, distributeur_nom, modele, quantite, bdc, date_commande, statut, informations, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()) RETURNING id`,
+    [clientId, annee, distrib || null, modele, qte, numero, today, 'En préparation',
+     `${m.Doc} signé en ligne le ${today} par ${d.signataire_nom || ''} (${d.source || 'devis'}).`]);
+  return row.id;
+}
+
+// Public (sans auth) : PDF SIGNÉ archivé (original + page signature)
+router.get('/devis-public/:token/signed.pdf', async (req, res) => {
+  try {
+    const d = await db.get('SELECT pdf_data, numero FROM devis WHERE token_signature=$1', [req.params.token]);
+    if (!d || !d.pdf_data) return res.status(404).send('PDF signé indisponible');
+    const b64 = String(d.pdf_data).replace(/^data:application\/pdf;base64,/, '');
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', `inline; filename="${(d.numero||'document').replace(/[^\w-]+/g,'_')}_signe.pdf"`);
+    res.send(Buffer.from(b64, 'base64'));
+  } catch (e) { res.status(500).send('Erreur PDF'); }
+});
+
 // Public (sans auth) : signature
 router.post('/devis-public/:token/signer', async (req, res) => {
   try {
@@ -3042,30 +3141,45 @@ router.post('/devis-public/:token/signer', async (req, res) => {
     if (!b.signataire_nom || !b.signature_data) return res.status(400).json({ error: 'Nom et signature requis' });
     const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
     const ua = (req.headers['user-agent'] || '').toString().slice(0, 250);
+    // On enregistre d'abord le signataire, puis on construit le PDF signé À PARTIR DE L'ORIGINAL.
+    d.signataire_nom = String(b.signataire_nom).slice(0, 120);
+    let pdfSigne = await _construireDevisSignePdf(d, b.signature_data, ip);
+    if (!pdfSigne && b.pdf_data) pdfSigne = String(b.pdf_data).replace(/^data:application\/pdf;base64,/, '');  // repli
     await db.run(
       `UPDATE devis SET signataire_nom=$1, signature_data=$2, pdf_data=$3, sign_ip=$4, sign_ua=$5,
         signed_at=NOW(), statut='converti', updated_at=NOW() WHERE id=$6`,
-      [String(b.signataire_nom).slice(0,120), b.signature_data, b.pdf_data || null, ip, ua, d.id]);
+      [d.signataire_nom, b.signature_data, pdfSigne || null, ip, ua, d.id]);
     const m = _docMots(d.doc_type);
+    const pdfB64 = pdfSigne ? String(pdfSigne).replace(/^data:application\/pdf;base64,/, '') : null;
+
+    // 1) Ajout dans le Suivi commandes (si pas déjà présent)
+    let cmdId = null;
+    try { cmdId = await _ajouterCommandeDepuisDevis(d); } catch (e) { console.error('[DEVIS] ajout commande:', e.message); }
+
+    // 2) E-mail de confirmation — Éloflex est TOUJOURS notifié (info@eloflex.fr),
+    //    le client reçoit sa copie si son e-mail est valide.
+    let mailOk = false;
     try {
-      const attachments = b.pdf_data
-        ? [{ name: `${m.Doc}_${(d.numero||'document').replace(/[^\w-]+/g,'_')}_signe.pdf`,
-             content: String(b.pdf_data).replace(/^data:application\/pdf;base64,/, '') }]
+      const clientMail = (/.+@.+\..+/.test(d.client_email || '')) ? d.client_email : null;
+      const attachments = pdfB64
+        ? [{ name: `${m.Doc}_${(d.numero||'document').replace(/[^\w-]+/g,'_')}_signe.pdf`, content: pdfB64 }]
         : [];
       await sendBrevoMail({
         from: 'sav@eloflex.fr', fromName: 'Eloflex France',
-        to: d.client_email || 'sav@eloflex.fr',
-        cc: d.client_email ? 'sav@eloflex.fr' : undefined,
-        subject: `${m.Doc} Eloflex ${d.numero||''} — signé par ${b.signataire_nom}`,
+        to: clientMail || 'info@eloflex.fr',
+        cc: clientMail ? 'info@eloflex.fr' : undefined,
+        subject: `✍️ ${m.Doc} ${d.numero||''} — signé par ${b.signataire_nom}`,
         html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
-          <p>Le ${m.doc} <b>${d.numero||''}</b>${d.distributeur_nom?` (${d.distributeur_nom})`:''} a été signé en ligne (${m.accord}) par <b>${String(b.signataire_nom)}</b>.</p>
-          ${attachments.length ? '<p>Le document signé est joint (PDF).</p>' : ''}
+          <p>Le ${m.doc} <b>${d.numero||''}</b>${d.distributeur_nom?` (${d.distributeur_nom})`:''} a été signé en ligne (${m.accord}) par <b>${String(b.signataire_nom)}</b> le ${new Date().toLocaleDateString('fr-FR')}.</p>
+          ${attachments.length ? '<p>Le document signé (original + page de signature) est joint en PDF.</p>' : '<p style="color:#b45309">Le PDF signé n’a pas pu être généré automatiquement — disponible dans l’application.</p>'}
+          ${cmdId ? '<p>Il a été ajouté au <b>Suivi commandes</b>.</p>' : ''}
           <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
         attachments
       });
+      mailOk = true;
     } catch (mailErr) { console.error('[DEVIS] e-mail signature:', mailErr.message); }
-    try { await addAlerte('devis_signe', d.id, `✍️ ${m.Doc} ${d.numero||''} signé en ligne par ${b.signataire_nom} — ${d.distributeur_nom || ''}.`); } catch(_){}
-    res.json({ ok: true });
+    try { await addAlerte('devis_signe', d.id, `✍️ ${m.Doc} ${d.numero||''} signé en ligne par ${b.signataire_nom} — ${d.distributeur_nom || ''}.${cmdId?' Ajouté au Suivi commandes.':''}`); } catch(_){}
+    res.json({ ok: true, commande_id: cmdId || null, mail: mailOk });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
