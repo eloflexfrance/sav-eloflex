@@ -2983,6 +2983,17 @@ router.get('/devis/:id/diag-pdf', adminOrOp, async (req, res) => {
             if (/url|file|pdf/i.test(k)) urlFields[k] = obj[k];
           }
           out['api' + ep.replace(/\//g, '')] = { ok: true, url_fields: urlFields };
+          // Test réel : on télécharge le lien frais et on vérifie que c'est bien un PDF.
+          const freshUrl = urlFields.public_file_url || urlFields.file_url || urlFields.pdf_url;
+          if (freshUrl) {
+            try {
+              const fr = await axios.get(freshUrl, { responseType: 'arraybuffer', timeout: 20000, maxRedirects: 5,
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EloflexSAV/1.0)', 'Accept': 'application/pdf,*/*' }, validateStatus: () => true });
+              const fb = Buffer.from(fr.data);
+              out.fetch_fresh_url = { status: fr.status, content_type: fr.headers['content-type'] || null, length: fb.length,
+                is_pdf: fb.slice(0,5).toString('latin1') === '%PDF-' };
+            } catch (e2) { out.fetch_fresh_url = { error: e2.message }; }
+          }
           break;
         } catch (e) { out['api' + ep.replace(/\//g, '')] = { error: (e.response && e.response.status) ? 'HTTP ' + e.response.status : e.message }; }
       }
@@ -3121,7 +3132,7 @@ router.get('/devis-public/:token', async (req, res) => {
       montant: d.montant, devise: d.devise || 'EUR', lignes: lignes || [],
       source: d.source || 'vosfactures',
       // A-t-on le PDF original ? (Pennylane = lien public ; VosFactures = proxy jetonné)
-      pdf: d.doc_url ? 'url' : ((d.source||'vosfactures')!=='pennylane' && d.vf_id ? 'proxy' : null),
+      pdf: (d.doc_url || d.pennylane_id) ? 'url' : ((d.source||'vosfactures')!=='pennylane' && d.vf_id ? 'proxy' : null),
       signataire_nom: d.signataire_nom, signed_at: d.signed_at
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3130,7 +3141,7 @@ router.get('/devis-public/:token', async (req, res) => {
 // Public (sans auth) : PDF original du document (redirige vers Pennylane, ou proxie le PDF VosFactures)
 router.get('/devis-public/:token/pdf', async (req, res) => {
   try {
-    const d = await db.get('SELECT source, doc_url, vf_id FROM devis WHERE token_signature=$1', [req.params.token]);
+    const d = await db.get('SELECT id, numero, source, doc_url, vf_id, pennylane_id FROM devis WHERE token_signature=$1', [req.params.token]);
     if (!d) return res.status(404).send('Lien invalide');
     // On relaie TOUJOURS les octets depuis notre domaine : Pennylane (et d'autres) refusent
     // l'affichage de leur URL publique dans un cadre (X-Frame-Options), d'où le blocage de l'aperçu.
@@ -3146,26 +3157,62 @@ router.get('/devis-public/:token/pdf', async (req, res) => {
 function _estPdf(buf) {
   return buf && buf.length > 4 && buf.slice(0, 5).toString('latin1') === '%PDF-';
 }
-// Récupère le PDF ORIGINAL du document (Pennylane public, ou VosFactures via jeton).
+// Télécharge une URL et renvoie un Buffer PDF valide, ou null.
+async function _getPdfUrl(url, ua) {
+  if (!url) return null;
+  const axios = require('axios');
+  try {
+    const r = await axios.get(url, {
+      responseType: 'arraybuffer', timeout: 20000, maxRedirects: 5,
+      headers: { 'User-Agent': ua, 'Accept': 'application/pdf,*/*' },
+      validateStatus: s => s >= 200 && s < 400
+    });
+    const buf = Buffer.from(r.data);
+    const ct = String(r.headers['content-type'] || '');
+    if (_estPdf(buf) || ct.includes('pdf')) return buf;
+  } catch (e) {
+    console.warn('[DEVIS] échec fetch URL PDF:', (e.response && e.response.status) ? 'HTTP ' + e.response.status : e.message);
+  }
+  return null;
+}
+// Interroge l'API Pennylane en direct pour l'URL de fichier ACTUELLE du document.
+// (Le lien public stocké contient un encrypted_id qui se périme : il faut le rafraîchir.)
+async function _pennylaneFreshFileUrl(pennylaneId) {
+  if (!pennylaneId || !(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return null;
+  let api; try { api = require('../scripts/sync-pennylane').plApi(); } catch (_) { return null; }
+  for (const ep of ['/quotes/', '/commercial_documents/', '/customer_invoices/']) {
+    try {
+      const { data } = await api.get(ep + pennylaneId, { validateStatus: () => true });
+      const obj = (data && (data.quote || data.commercial_document || data.customer_invoice || data.invoice || data)) || {};
+      const url = obj.public_file_url || obj.file_url || obj.pdf_url || null;
+      if (url) return url;
+    } catch (_) {}
+  }
+  return null;
+}
+// Récupère le PDF ORIGINAL du document (Pennylane API→lien frais, ou VosFactures via jeton).
 // Renvoie un Buffer PDF valide, ou null (jamais du HTML déguisé en PDF).
 async function _fetchDevisOriginalPdf(d) {
-  const axios = require('axios');
   const UA = 'Mozilla/5.0 (compatible; EloflexSAV/1.0)';
-  if (d.doc_url) {
-    try {
-      const r = await axios.get(d.doc_url, {
-        responseType: 'arraybuffer', timeout: 20000, maxRedirects: 5,
-        headers: { 'User-Agent': UA, 'Accept': 'application/pdf,*/*' },
-        validateStatus: s => s >= 200 && s < 400
-      });
-      const buf = Buffer.from(r.data);
-      const ct = String(r.headers['content-type'] || '');
-      if (_estPdf(buf) || ct.includes('pdf')) return buf;
-      // Pennylane a renvoyé une page HTML (viewer) et non le fichier → on abandonne proprement.
-      console.warn('[DEVIS] doc_url non-PDF (content-type:', ct, ') pour', d.numero);
-    } catch (e) {
-      console.warn('[DEVIS] échec fetch doc_url pour', d.numero, ':', (e.response && e.response.status) ? 'HTTP ' + e.response.status : e.message);
+  // 1) Pennylane : on récupère TOUJOURS le lien public à jour depuis l'API (le lien stocké se périme).
+  if (d.pennylane_id) {
+    const freshUrl = await _pennylaneFreshFileUrl(d.pennylane_id);
+    if (freshUrl) {
+      const buf = await _getPdfUrl(freshUrl, UA);
+      if (buf) {
+        // On rafraîchit le lien stocké pour les prochains accès / affichages.
+        if (freshUrl !== d.doc_url) {
+          try { await db.run('UPDATE devis SET doc_url=$1 WHERE id=$2', [freshUrl, d.id]); d.doc_url = freshUrl; } catch (_) {}
+        }
+        return buf;
+      }
     }
+  }
+  // 2) Repli : lien stocké tel quel (VosFactures avec doc_url, ou Pennylane si l'API a échoué).
+  if (d.doc_url) {
+    const buf = await _getPdfUrl(d.doc_url, UA);
+    if (buf) return buf;
+    console.warn('[DEVIS] doc_url stocké inexploitable pour', d.numero);
   }
   if (d.vf_id && process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT) {
     try {
