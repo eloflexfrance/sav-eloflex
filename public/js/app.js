@@ -4204,7 +4204,7 @@ async function renderParcDemo(ttl,c,a){
     const actions = isHist
       ? voirBtn
       : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Clôturer en avoir (annulation — sort du parc)')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-receipt-refund"></i></button>${voirBtn}`;
-    return `<tr data-k="${esc(cle.toLowerCase())}">
+    return `<tr data-k="${esc(cle.toLowerCase())}" data-echu="${(!isHist && d.rappel_echu)?1:0}" data-noserie="${(!isHist && !sn)?1:0}">
       <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:13px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
       <td style="font-size:12px">${serieCell}</td>
@@ -4339,7 +4339,7 @@ async function renderParcDemo(ttl,c,a){
   if(echues.length) acts.push(_actRow('ti-alert-triangle','#dc262618','#dc2626',
     `${echues.length} ${TR('rappel(s) de retour échu(s)')}`,
     echues.slice(0,3).map(u=>esc(demoModele(u.rep.modele)+' — '+(u.rep.demo_localisation_actuelle||u.rep.client_nom||u.rep.distributeur_nom||''))).join(' · '),
-    `<button class="btn sm" onclick="parcGoTab('demo')">${TR('Voir')}</button>`));
+    `<button class="btn sm" onclick="parcFocus('echu')">${TR('Voir')}</button>`));
   if(tension.length) acts.push(_actRow('ti-alert-triangle','#f59e0b18','#b45309',
     `${tension.length} ${TR('modèle(s) sous tension')}`,
     tension.map(tg=>esc(tg.modele+' — '+TR('dispo')+' '+(tg.next.demo_rappel_date?fdate(tg.next.demo_rappel_date):'?'))).join(' · '),
@@ -4349,7 +4349,7 @@ async function renderParcDemo(ttl,c,a){
     `<button class="btn sm" onclick="parcGoTab('hist')">${TR('Historique')}</button>`));
   if(sansSerie) acts.push(_actRow('ti-hash','#0d948818','#0d9488',
     `${sansSerie} ${TR('démo(s) sans n° de série')}`, TR('à renseigner pour un suivi fiable à l’unité'),
-    `<button class="btn sm" onclick="parcGoTab('demo')">${TR('Compléter')}</button>`));
+    `<button class="btn sm" onclick="parcFocus('noserie')">${TR('Compléter')}</button>`));
   const actionsCard = acts.length
     ? `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-checklist"></i>${TR('Actions requises')}</div>${acts.join('')}</div>`
     : `<div class="card" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;padding:14px 16px;color:#0c5c3c"><i class="ti ti-circle-check" style="font-size:18px"></i>${TR('Rien à signaler — parc à jour.')}</div>`;
@@ -4378,7 +4378,9 @@ async function renderParcDemo(ttl,c,a){
       </tbody></table></div></div>`;
 
   // Zone 4 — Unités : liste OU planning sur les mêmes données
-  const _segCss=`<style>.pd-seg{display:inline-flex;background:var(--surface-2,#eef1f4);border:0.5px solid var(--border-s);border-radius:9px;padding:3px}.pd-seg button{border:0;background:transparent;color:var(--text2);font:inherit;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:7px;cursor:pointer}.pd-seg button.on{background:var(--surface,#fff);color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.08)}</style>`;
+  const _segCss=`<style>.pd-seg{display:inline-flex;background:var(--surface-2,#eef1f4);border:0.5px solid var(--border-s);border-radius:9px;padding:3px}.pd-seg button{border:0;background:transparent;color:var(--text2);font:inherit;font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:7px;cursor:pointer}.pd-seg button.on{background:var(--surface,#fff);color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  @keyframes pdFlash{0%,100%{background:transparent}20%,70%{background:#fde68a66}}
+  tr.pd-flash>td{animation:pdFlash 1.05s ease-in-out 3;box-shadow:inset 3px 0 0 #f59e0b}</style>`;
   const unitesCard = _segCss+`<div class="card" style="margin-bottom:14px">
     <div class="section-title"><i class="ti ti-list-details"></i>${TR('Unités')}<span style="margin-left:auto" class="pd-seg"><button id="pd-v-list" class="${PARC_UNIT_VIEW==='list'?'on':''}" onclick="parcSetUnitView('list')"><i class="ti ti-list"></i> ${TR('Liste')}</button><button id="pd-v-plan" class="${PARC_UNIT_VIEW==='plan'?'on':''}" onclick="parcSetUnitView('plan')"><i class="ti ti-timeline"></i> ${TR('Planning')}</button></span></div>
     <div id="parc-unit-list" style="${PARC_UNIT_VIEW==='list'?'':'display:none'}">${demoTable}</div>
@@ -4426,6 +4428,32 @@ function parcGoTab(tab){
   if(el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'start'});
 }
 window.parcGoTab = parcGoTab;
+
+// Depuis une « Action requise » : ouvre la liste, va sur le bon onglet et met en
+// évidence (surbrillance + défilement) les unités concernées (échues, sans n° de série).
+function parcFocus(kind){
+  parcSetUnitView('list');
+  const sel = kind==='noserie' ? 'tr[data-noserie="1"]' : 'tr[data-echu="1"]';
+  // On cherche l'onglet (En démo / Disponibles / Historique) qui contient les lignes visées.
+  let targetTab='demo', rows=[];
+  for(const t of ['demo','dispo','hist']){
+    const pane=document.querySelector('.parc-pane[data-tab="'+t+'"]');
+    if(!pane) continue;
+    const r=pane.querySelectorAll(sel);
+    if(r.length){ targetTab=t; rows=Array.from(r); break; }
+  }
+  parcSetTab(targetTab);
+  const list=document.getElementById('parc-unit-list');
+  if(list && list.scrollIntoView) list.scrollIntoView({behavior:'smooth', block:'start'});
+  if(rows.length){
+    setTimeout(()=>{
+      rows.forEach(r=>r.classList.add('pd-flash'));
+      if(rows[0].scrollIntoView) rows[0].scrollIntoView({behavior:'smooth', block:'center'});
+      setTimeout(()=>rows.forEach(r=>r.classList.remove('pd-flash')), 3200);
+    }, 300);
+  }
+}
+window.parcFocus = parcFocus;
 
 function parcTogglePlanning(){
   PARC_PLANNING = !PARC_PLANNING;
