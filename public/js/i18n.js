@@ -1482,6 +1482,7 @@ const EN_STR = {
  "Suivre le retour": "Track the return",
  "Ouvrir dans VosFactures": "Open in VosFactures",
  "Chargement...": "Loading...",
+ "Enregistrez d’abord la commande pour pouvoir ajouter des notes.": "Save the order first before you can add notes.",
  "Chargement du suivi…": "Loading tracking…",
  "CC — Emails relances devis & BDC": "CC — Quote & PO follow-up emails",
  "statut de paiement": "payment status",

@@ -73,23 +73,27 @@ const MODULES = [
   { key:'demandes',      label:"Demandes d'infos" },
   { key:'interventions', label:'Interventions SAV' },
   { key:'commandes',     label:'Suivi commandes' },
+  { key:'devis',         label:'Devis en attente' },
   { key:'catalogue',     label:'Catalogue pièces' },
   { key:'prets',         label:'Prêts' },
+  { key:'parc-demo',     label:'Parc de démo' },
+  { key:'transferts',    label:'Transferts fauteuils' },
+  { key:'commande-suede',label:'Commande Suède' },
+  { key:'retours_suede', label:'Retours Suède' },
+  { key:'discussions',   label:'Discussions' },
   { key:'rapports',      label:'Rapports & exports' },
   { key:'alertes',       label:'Alertes' },
-  { key:'retours_suede', label:'Retours Suède' },
-  { key:'transferts',    label:'Transferts fauteuils' },
-  { key:'devis',         label:'Devis VosFactures' },
   { key:'parametres',    label:'Paramètres' },
 ];
 
 // Modules qui héritent d'un autre module si non défini explicitement
 const PERM_FALLBACK = {
   'discussions': 'commandes',
-  'carte':      'clients',     // Carte : par défaut, qui gère les clients voit/modifie la carte
-  'devis':      'commandes',   // Devis hérite de commandes
-  'dashboard':  'commandes',   // Tableau de bord toujours accessible si commandes
-  'parc-demo':  'commandes',   // Parc démo : visible si accès au suivi commandes
+  'carte':      'clients',       // Carte : par défaut, qui gère les clients voit/modifie la carte
+  'devis':      'commandes',     // Devis hérite de commandes
+  'dashboard':  'commandes',     // Tableau de bord toujours accessible si commandes
+  'parc-demo':  'commandes',     // Parc démo : visible si accès au suivi commandes
+  'commande-suede': 'commandes', // Commande Suède : suit le suivi commandes
 };
 
 function hasAccess(module) {
@@ -1857,8 +1861,15 @@ function switchCmdTab(tab){
       if(factPanel && factPanel.parentNode) factPanel.parentNode.appendChild(notesDiv);
     }
     notesDiv.style.display = '';
-    notesDiv.innerHTML = '<div style="padding:20px;color:#aaa;text-align:center">'+TR("Chargement...")+'</div>';
-    if(cmdId) renderNotesTab(cmdId).then(function(h){ notesDiv.innerHTML = h; });
+    if(cmdId){
+      notesDiv.innerHTML = '<div style="padding:20px;color:#aaa;text-align:center">'+TR("Chargement...")+'</div>';
+      renderNotesTab(cmdId).then(function(h){ notesDiv.innerHTML = h; });
+    } else {
+      // Nouvelle commande : pas encore d'identifiant, donc pas de fil de notes possible.
+      notesDiv.innerHTML = '<div style="padding:26px 20px;color:var(--text3);text-align:center;font-size:13px">'
+        + '<i class="ti ti-message-circle" style="font-size:26px;display:block;margin-bottom:8px;opacity:.5"></i>'
+        + TR("Enregistrez d’abord la commande pour pouvoir ajouter des notes.") + '</div>';
+    }
   } else {
     // Cacher le panel notes si on revient sur un autre onglet
     const notesDiv = document.getElementById('cmd-notes-panel');
@@ -2728,6 +2739,15 @@ async function chargerListeUtilisateurs(){
   }catch(e){ wrap.innerHTML=`<div style="font-size:13px;color:var(--danger)">${esc(e.message)}</div>`; }
 }
 
+// Droit EFFECTIF d'un module : valeur explicite, sinon héritage (fallback), sinon masquée.
+// Permet d'afficher dans la grille l'accès réel d'un utilisateur pour un module ajouté
+// après la création de son compte (évite de le masquer par erreur en enregistrant).
+function _effPerm(perms, key){
+  let p = perms ? perms[key] : undefined;
+  if((p===undefined || p===null || p==='') && PERM_FALLBACK[key]) p = perms ? perms[PERM_FALLBACK[key]] : undefined;
+  if(p==='none') return 'hidden';
+  return p || 'hidden';
+}
 function _permGrid(perms={}){
   return `<div style="margin-top:4px;border:0.5px solid var(--border-s);border-radius:var(--radius);overflow:hidden">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -2737,12 +2757,12 @@ function _permGrid(perms={}){
         <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--warning);width:100px">Lecture seule</th>
         <th style="padding:6px 10px;text-align:center;font-weight:600;color:var(--text3);width:90px">${TR('Masquée')}</th>
       </tr></thead>
-      <tbody>${MODULES.map((m,i)=>`<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
+      <tbody>${MODULES.map((m,i)=>{const ep=_effPerm(perms,m.key);return `<tr style="${i%2===0?'background:var(--surface)':'background:var(--bg)'}">
         <td style="padding:7px 10px">${m.label}</td>
-        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="write"  ${perms[m.key]==='write'?'checked':''}></td>
-        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="read"   ${perms[m.key]==='read'?'checked':''}></td>
-        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="hidden" ${perms[m.key]==='hidden'||perms[m.key]==='none'||!perms[m.key]?'checked':''}></td>
-      </tr>`).join('')}</tbody>
+        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="write"  ${ep==='write'?'checked':''}></td>
+        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="read"   ${ep==='read'?'checked':''}></td>
+        <td style="text-align:center"><input type="radio" name="perm-${m.key}" value="hidden" ${ep==='hidden'?'checked':''}></td>
+      </tr>`;}).join('')}</tbody>
     </table>
   </div>`;
 }
