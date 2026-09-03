@@ -957,22 +957,33 @@ router.get('/catalogue', async (req, res) => {
 });
 router.post('/catalogue', async (req, res) => {
   try {
-    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif } = req.body;
+    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif, vf_product_id, taux_tva, prix_ttc_public } = req.body;
     if (!ref || !designation) return res.status(400).json({ error: 'ref et designation requis' });
     const r = await db.run(
-      'INSERT INTO catalogue (ref,designation,fournisseur,ref_fournisseur,pxht,stock,stock_alerte,stock_actif,vf_product_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
-      [ref, designation, fournisseur||null, ref_fournisseur||null, pxht||0, stock||0, stock_alerte||2, stock_actif!==false, vf_product_id||null]
+      'INSERT INTO catalogue (ref,designation,fournisseur,ref_fournisseur,pxht,stock,stock_alerte,stock_actif,vf_product_id,taux_tva,prix_ttc_public) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+      [ref, designation, fournisseur||null, ref_fournisseur||null, pxht||0, stock||0, stock_alerte||2, stock_actif!==false, vf_product_id||null,
+       (taux_tva===''||taux_tva==null)?null:taux_tva, (prix_ttc_public===''||prix_ttc_public==null)?null:prix_ttc_public]
     );
     res.status(201).json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.put('/catalogue/:id', async (req, res) => {
   try {
-    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif } = req.body;
+    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif, taux_tva, prix_ttc_public } = req.body;
     const r = await db.run(
-      'UPDATE catalogue SET ref=$1,designation=$2,fournisseur=$3,ref_fournisseur=$4,pxht=$5,stock=$6,stock_alerte=$7,stock_actif=$8,updated_at=NOW() WHERE id=$9 RETURNING *',
-      [ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte||2, stock_actif!==false, req.params.id]
+      `UPDATE catalogue SET ref=$1,designation=$2,fournisseur=$3,ref_fournisseur=$4,pxht=$5,stock=$6,stock_alerte=$7,stock_actif=$8,
+        taux_tva=$9, prix_ttc_public=$10, updated_at=NOW() WHERE id=$11 RETURNING *`,
+      [ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte||2, stock_actif!==false,
+       (taux_tva===''||taux_tva==null)?null:taux_tva, (prix_ttc_public===''||prix_ttc_public==null)?null:prix_ttc_public, req.params.id]
     );
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Synchro produits Pennylane : rapproche le catalogue par référence, remonte TVA et prix TTC.
+router.post('/catalogue/sync-pennylane', adminOrOp, async (req, res) => {
+  try {
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ ok: false, reason: 'Pennylane non configuré' });
+    const r = await require('../scripts/sync-pennylane').syncProduitsPennylane();
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

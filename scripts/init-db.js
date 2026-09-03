@@ -98,6 +98,9 @@ async function initDB() {
       await client.query(`ALTER TABLE fauteuils ALTER COLUMN vf_facture_id TYPE BIGINT`);
       await client.query(`ALTER TABLE intervention_produits ALTER COLUMN vf_product_id TYPE BIGINT`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_actif BOOLEAN DEFAULT TRUE`);
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS pl_product_id BIGINT`);       // produit Pennylane rapproché
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS taux_tva NUMERIC`);           // taux de TVA (%)
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_ttc_public NUMERIC`);    // prix TTC public
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS vf_ignore BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS edi BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_bordereau_vf TEXT`);

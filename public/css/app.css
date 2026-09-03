@@ -207,11 +207,22 @@ table.t th {
   font-size: 11px; color: var(--text3);
   border-bottom: 0.5px solid var(--border-dark);
   font-weight: 700;
-  white-space: normal; line-height: 1.25;
+  white-space: nowrap; line-height: 1.25;
   text-transform: uppercase; letter-spacing: .05em;
   background: rgba(255,255,255,.35);
 }
-table.t td { padding: 10px 10px; border-bottom: 0.5px solid rgba(100,140,200,.12); font-size: 13px; vertical-align: middle; color: var(--text); overflow-wrap: break-word }
+/* Chaque colonne garde au moins la largeur de son en-tête : sur écran étroit le tableau
+   déborde et défile horizontalement (.table-wrap) au lieu d'écraser la dernière colonne
+   en un texte vertical caractère par caractère. */
+table.t td { padding: 10px 10px; border-bottom: 0.5px solid rgba(100,140,200,.12); font-size: 13px; vertical-align: middle; color: var(--text); overflow-wrap: break-word; word-break: normal }
+/* Colonnes de texte libre : lisibles sans exploser la largeur du tableau. */
+table.t td.txt-libre, table.t td[data-col="texte"] { min-width: 180px; white-space: normal }
+
+/* Tableaux Demandes d'infos (mise en page fixe) : on garde la largeur naturelle des
+   colonnes ; sur écran étroit le tableau déborde et défile dans son .table-wrap au lieu
+   d'écraser la dernière colonne (« Annotation de suivi ») en texte vertical. */
+table.di-table { min-width: max-content }
+table.di-table th { white-space: nowrap }
 
 /* ── Densité adaptative selon la largeur de fenêtre ── */
 @media (max-width: 1600px) {

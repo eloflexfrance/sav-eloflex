@@ -684,6 +684,44 @@ async function debugDevisPennylane() {
   return out;
 }
 
+// Convertit le taux de TVA Pennylane (« FR_200 », « FR_55 », « 20.0 », « exempt »…) en nombre (%).
+function _plVatToNumber(v) {
+  if (v == null) return null;
+  const s = String(v).trim().toUpperCase();
+  if (!s) return null;
+  if (/EXEMPT|EXO|NON_?APPLIC|ZERO/.test(s)) return 0;
+  const m = s.match(/(\d+(?:[.,]\d+)?)/);
+  if (!m) return null;
+  if (/^[A-Z]{2,}_?\d+$/.test(s)) return parseInt(m[1], 10) / 10;  // FR_200 → 20.0 ; FR_55 → 5.5
+  return parseFloat(m[1].replace(',', '.'));
+}
+
+// ── Rapprochement du catalogue local avec les produits Pennylane (par référence) ──
+// Remplit pl_product_id ; complète taux_tva et prix_ttc_public depuis Pennylane s'ils sont vides.
+async function syncProduitsPennylane() {
+  const api = plApi();
+  const prods = await _fetchNoFilter(api, '/products');
+  const byRef = new Map();
+  const add = (k, p) => { const n = _norm(k); if (n && !byRef.has(n)) byRef.set(n, p); };
+  for (const p of prods) { add(p.reference, p); add(p.external_reference, p); }
+  const cat = await db.all('SELECT id, ref, ref_fournisseur, taux_tva, prix_ttc_public FROM catalogue');
+  let matched = 0, tvaMaj = 0, ttcMaj = 0;
+  for (const c of cat) {
+    const p = byRef.get(_norm(c.ref)) || byRef.get(_norm(c.ref_fournisseur));
+    if (!p) continue;
+    matched++;
+    const tva = _plVatToNumber(p.vat_rate);
+    const ttc = _plNum(p.price);
+    const sets = ['pl_product_id=$1'], vals = [p.id];
+    if ((c.taux_tva == null || c.taux_tva === '') && tva != null) { vals.push(tva); sets.push(`taux_tva=$${vals.length}`); tvaMaj++; }
+    if ((c.prix_ttc_public == null || c.prix_ttc_public === '') && ttc != null) { vals.push(ttc); sets.push(`prix_ttc_public=$${vals.length}`); ttcMaj++; }
+    vals.push(c.id);
+    await db.run(`UPDATE catalogue SET ${sets.join(',')}, updated_at=NOW() WHERE id=$${vals.length}`, vals);
+  }
+  console.log(`[PENNYLANE] produits : ${prods.length} côté Pennylane, ${matched} article(s) rapproché(s), TVA:${tvaMaj}, TTC:${ttcMaj}`);
+  return { ok: true, produits_pennylane: prods.length, rapproches: matched, tva_maj: tvaMaj, ttc_maj: ttcMaj };
+}
+
 module.exports = {
   checkStatus,
   syncCommandesPennylane,
@@ -692,6 +730,7 @@ module.exports = {
   lookupDocumentPennylane,
   genererFacturePennylane,
   suggestFacturesPennylane,
+  syncProduitsPennylane,
   plApi,
   BASE_URL,
 };

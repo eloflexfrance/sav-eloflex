@@ -66,6 +66,8 @@ const PAYS_LIST = [
 const isAdmin  = () => CURRENT_USER?.role === 'admin';
 
 // Modules de l'application (dans l'ordre d'affichage)
+// Identifiant de société Pennylane (pour construire les liens vers les fiches produit).
+const PL_COMPANY_ID = '22996810';
 const MODULES = [
   { key:'dashboard',     label:'Tableau de bord' },
   { key:'clients',       label:'Clients / Distributeurs' },
@@ -2362,6 +2364,7 @@ async function renderCatalogue(ttl,c,a){
     <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')}</button>
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>
     ${isAdmin()?'<button class="btn" onclick="importerVFIds()" title="Lier IDs VosFactures"><i class="ti ti-plug-connected"></i> Lier VF</button>':''}
+    <button class="btn" onclick="syncCataloguePennylane(this)" title="${TR('Rapprocher les articles avec les produits Pennylane (référence → TVA, prix TTC)')}"><i class="ti ti-refresh"></i> ${TR('Sync Pennylane')}</button>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-left:8px;color:var(--text2)" title="Afficher le prix d'achat fournisseur (Eloflex AB)">
       <input type="checkbox" id="cat-show-price" ${localStorage.getItem('sav_show_prix_achat')==='1'?'checked':''} onchange="localStorage.setItem('sav_show_prix_achat',this.checked?'1':'0');document.getElementById('cat-table')?.classList.toggle('show-prix',this.checked)">
       Prix achat 🇸🇪
@@ -2382,15 +2385,19 @@ async function chargerListeCatalogue(){
   const list = await API.catalogue(STATE.q);
   if(reqId !== _catalogueReqId) return;
   CACHE.catalogue = list;
+  const _tva = v => (v!=null && v!=='') ? (parseFloat(v)%1===0 ? parseFloat(v).toFixed(0) : parseFloat(v).toFixed(1)) + ' %' : '—';
+  const _ttc = v => (v!=null && v!=='') ? parseFloat(v).toFixed(2) + ' €' : '—';
   el.innerHTML=`<div class="table-wrap"><table id="cat-table" class="t ${localStorage.getItem('sav_show_prix_achat')==='1'?'show-prix':''}">
-    <thead><tr><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_fournisseur')}</th><th>${t('col_ref_fou')}</th><th class="col-prix">${t('col_prix')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">VF</th></tr></thead>
+    <thead><tr><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${t('col_prix')}</th><th style="width:66px">${TR('TVA')}</th><th style="width:118px">${TR('Prix TTC public')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
-      <td style="color:var(--text3)">${esc(p.fournisseur||'')}</td>
-      <td class="mono">${esc(p.ref_fournisseur||'')}</td>
+      <td>${esc(p.ref_fournisseur||'')}</td>
       <td class="col-prix" style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>
+      <td style="color:var(--text2)">${_tva(p.taux_tva)}</td>
+      <td style="font-weight:600">${_ttc(p.prix_ttc_public)}</td>
       <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
       <td style="font-size:12px;color:var(--text3)">${p.stock_alerte}</td>
+      <td style="text-align:center">${p.pl_product_id?`<a href="https://app.pennylane.com/companies/${PL_COMPANY_ID}/products?id=${p.pl_product_id}" target="_blank" onclick="event.stopPropagation()" title="${TR('Voir dans Pennylane')}" style="color:var(--accent);font-size:14px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
       <td style="text-align:center">${p.vf_product_id?`<a href="https://eloflex.vosfactures.fr/products/${p.vf_product_id}" target="_blank" onclick="event.stopPropagation()" title="${TR("Voir sur VosFactures")}" style="color:var(--accent);font-size:14px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
@@ -3897,20 +3904,38 @@ async function modalPiece(id){
   showModal(`<div class="modal-header"><i class="ti ti-box" style="font-size:19px;color:var(--accent)"></i><h2>${id?'Modifier pièce':'Nouvelle pièce'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body"><div class="grid-2">
       <div class="form-group"><label class="form-label">${TR('Référence *')}</label><input class="form-input mono" id="f-ref" value="${esc(p?.ref||'')}"></div>
-      <div class="form-group"><label class="form-label">${TR('Réf fournisseur')}</label><input class="form-input mono" id="f-reffou" value="${esc(p?.ref_fournisseur||'')}"></div>
+      <div class="form-group"><label class="form-label">${TR('Réf fournisseur')}</label><input class="form-input" id="f-reffou" value="${esc(p?.ref_fournisseur||'')}"></div>
       <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Désignation *')}</label><input class="form-input" id="f-des" value="${esc(p?.designation||'')}"></div>
       <div class="form-group"><label class="form-label">Fournisseur</label><input class="form-input" id="f-fou" value="${esc(p?.fournisseur||'Eloflex AB')}"></div>
-      <div class="form-group"><label class="form-label">Prix HT (€)</label><input class="form-input" id="f-px" type="number" step="0.01" value="${p?.pxht||0}"></div>
+      <div class="form-group"><label class="form-label">${TR('Prix HT (achat) (€)')}</label><input class="form-input" id="f-px" type="number" step="0.01" value="${p?.pxht||0}"></div>
+      <div class="form-group"><label class="form-label">${TR('TVA (%)')}</label><input class="form-input" id="f-tva" type="number" step="0.1" placeholder="20" value="${p?.taux_tva??''}"></div>
+      <div class="form-group"><label class="form-label">${TR('Prix TTC public (€)')}</label><input class="form-input" id="f-ttc" type="number" step="0.01" value="${p?.prix_ttc_public??''}"></div>
       <div class="form-group"><label class="form-label">Stock</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}"></div>
       <div class="form-group"><label class="form-label">Seuil alerte stock</label><input class="form-input" id="f-stalerte" type="number" value="${p?.stock_alerte||2}"></div>
-    </div></div>
+    </div>
+    ${p?.pl_product_id?`<div style="margin-top:10px"><a href="https://app.pennylane.com/companies/${PL_COMPANY_ID}/products?id=${p.pl_product_id}" target="_blank" style="color:var(--accent);font-size:13px;text-decoration:none"><i class="ti ti-external-link"></i> ${TR('Voir dans Pennylane')}</a></div>`:''}</div>
     <div class="modal-footer">
       ${id?`<button class="btn danger" onclick="deletePiece(${id})"><i class="ti ti-trash"></i></button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);}
-async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2,vf_product_id:parseInt(gv('f-vfid'))||null};if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:gv('f-tva')===''?null:parseFloat(gv('f-tva')),prix_ttc_public:gv('f-ttc')===''?null:parseFloat(gv('f-ttc')),stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
 async function deletePiece(id){if(!confirm(TR('Supprimer ?')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
+async function syncCataloguePennylane(btn){
+  const old = btn?btn.innerHTML:null;
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Synchro…'); }
+  try{
+    const r = await API.catalogueSyncPennylane();
+    if(r && r.ok){
+      toast(`${TR('Pennylane')} : ${r.rapproches} ${TR('article(s) rapproché(s)')}${r.tva_maj?` · TVA ${r.tva_maj}`:''}${r.ttc_maj?` · TTC ${r.ttc_maj}`:''}`,'ti-check','var(--success)');
+      CACHE.catalogue=[]; chargerListeCatalogue();
+    } else {
+      toast((r&&r.reason)||TR('Pennylane indisponible'),'ti-alert-circle','var(--warning)');
+    }
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+  finally{ if(btn){ btn.disabled=false; btn.innerHTML=old; } }
+}
+window.syncCataloguePennylane = syncCataloguePennylane;
 
 // ── EXPORTS PDF ───────────────────────────────────────────────────
 
@@ -8633,10 +8658,10 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 10px;font-size:13px;color:var(--text2)">${esc(d.annotation||'')}</td>
     <td style="padding:8px 8px;text-align:center">${diHistCell(d)}</td>
     </tr>`).join('');
-  return `<div class="card" style="padding:0;overflow:hidden"><table class="table di-table" style="width:100%;table-layout:fixed">
+  return `<div class="card" style="padding:0;overflow:hidden"><div class="table-wrap"><table class="table di-table" style="width:100%;table-layout:fixed">
     <colgroup>
       <col style="width:322px"><col style="width:96px">${withDistrib?'<col style="width:160px">':''}<col style="width:160px"><col style="width:128px">
-      <col style="width:220px"><col style="width:128px"><col style="width:300px"><col><col style="width:44px">
+      <col style="width:220px"><col style="width:128px"><col style="width:300px"><col style="width:280px"><col style="width:44px">
     </colgroup>
     <thead><tr>
     <th style="text-align:left;padding:8px 8px">${TR('Statut')}</th>
@@ -8649,7 +8674,7 @@ function demandesTableHTML(rows, withDistrib){
     <th style="text-align:left;padding:8px 10px">${TR('Demande client')}</th>
     <th style="text-align:left;padding:8px 10px">${TR('Annotation de suivi')}</th>
     <th style="text-align:center;padding:8px 6px" title="${TR('Historique')}"><i class="ti ti-history"></i></th>
-  </tr></thead><tbody>${lignes}</tbody></table></div>`;
+  </tr></thead><tbody>${lignes}</tbody></table></div></div>`;
 }
 
 // ── Vue globale ──
@@ -8807,10 +8832,10 @@ async function chargerDemandesParDistrib(){
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
-        <table class="table di-table" style="width:100%;table-layout:fixed">
+        <div class="table-wrap"><table class="table di-table" style="width:100%;table-layout:fixed">
           <colgroup>
             <col style="width:322px"><col style="width:96px"><col style="width:160px"><col style="width:128px">
-            <col style="width:220px"><col style="width:128px"><col style="width:300px"><col><col style="width:44px">
+            <col style="width:220px"><col style="width:128px"><col style="width:300px"><col style="width:280px"><col style="width:44px">
           </colgroup>
           <thead><tr>
           <th style="text-align:left;padding:6px 8px;font-size:12px">${TR('Statut')}</th>
@@ -8822,7 +8847,7 @@ async function chargerDemandesParDistrib(){
           <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Demande client')}</th>
           <th style="text-align:left;padding:6px 10px;font-size:12px">${TR('Annotation de suivi')}</th>
           <th style="text-align:center;padding:6px 6px;font-size:12px" title="${TR('Historique')}"><i class="ti ti-history"></i></th>
-        </tr></thead><tbody>${lignes}</tbody></table>
+        </tr></thead><tbody>${lignes}</tbody></table></div>
       </div>
     </div>`;
   }).join('');

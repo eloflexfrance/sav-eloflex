@@ -115,6 +115,7 @@ const API = {
   createPiece:(d)=>API.post('/catalogue',d),
   updatePiece:(id,d)=>API.put(`/catalogue/${id}`,d),
   deletePiece:(id)=>API.del(`/catalogue/${id}`),
+  catalogueSyncPennylane:()=>API.post('/catalogue/sync-pennylane',{}),
   alertes:()=>API.get('/alertes'),
   marquerAlerteLue:(id)=>API.patch(`/alertes/${id}/lue`,{}),
   marquerToutesLues:()=>API.patch('/alertes/lire-toutes',{}),
