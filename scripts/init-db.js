@@ -101,6 +101,8 @@ async function initDB() {
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS pl_product_id BIGINT`);       // produit Pennylane rapproché
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS taux_tva NUMERIC`);           // taux de TVA (%)
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_ttc_public NUMERIC`);    // prix TTC public
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS poids NUMERIC`);              // poids (kg)
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS image_data TEXT`);            // vignette produit (data URL base64)
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS vf_ignore BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS edi BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS num_bordereau_vf TEXT`);

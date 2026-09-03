@@ -722,8 +722,17 @@ async function syncProduitsPennylane() {
   return { ok: true, produits_pennylane: prods.length, rapproches: matched, tva_maj: tvaMaj, ttc_maj: ttcMaj };
 }
 
+// Met à jour le statut d'un devis Pennylane (pending | accepted | denied | invoiced | expired).
+async function setQuoteStatusPennylane(quoteId, status) {
+  if (!quoteId) return { ok: false, reason: 'id manquant' };
+  const api = plApi();
+  const { data } = await api.put(`/quotes/${quoteId}/update_status`, { status }, { validateStatus: () => true });
+  return { ok: true, data };
+}
+
 module.exports = {
   checkStatus,
+  setQuoteStatusPennylane,
   syncCommandesPennylane,
   syncDevisPennylane,
   debugDevisPennylane,

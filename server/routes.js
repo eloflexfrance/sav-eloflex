@@ -949,35 +949,58 @@ router.get('/expeditions', async (req, res) => {
 router.get('/catalogue', async (req, res) => {
   try {
     const q = `%${req.query.q || ''}%`;
-    let sql = 'SELECT * FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1)';
+    // On exclut image_data (volumineux) de la liste ; un drapeau has_image suffit pour l'affichage.
+    let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif,
+                 vf_product_id, pl_product_id, taux_tva, prix_ttc_public, poids,
+                 (image_data IS NOT NULL) AS has_image, created_at, updated_at
+               FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1)`;
     if (req.query.alerte === '1') sql += ' AND stock<=stock_alerte';
     sql += ' ORDER BY ref';
     res.json(await db.all(sql, [q]));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+const _num = v => (v === '' || v == null) ? null : v;
 router.post('/catalogue', async (req, res) => {
   try {
-    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif, vf_product_id, taux_tva, prix_ttc_public } = req.body;
+    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif, vf_product_id, taux_tva, prix_ttc_public, poids, image_data } = req.body;
     if (!ref || !designation) return res.status(400).json({ error: 'ref et designation requis' });
     const r = await db.run(
-      'INSERT INTO catalogue (ref,designation,fournisseur,ref_fournisseur,pxht,stock,stock_alerte,stock_actif,vf_product_id,taux_tva,prix_ttc_public) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *',
+      `INSERT INTO catalogue (ref,designation,fournisseur,ref_fournisseur,pxht,stock,stock_alerte,stock_actif,vf_product_id,taux_tva,prix_ttc_public,poids,image_data)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
       [ref, designation, fournisseur||null, ref_fournisseur||null, pxht||0, stock||0, stock_alerte||2, stock_actif!==false, vf_product_id||null,
-       (taux_tva===''||taux_tva==null)?null:taux_tva, (prix_ttc_public===''||prix_ttc_public==null)?null:prix_ttc_public]
+       _num(taux_tva), _num(prix_ttc_public), _num(poids), image_data||null]
     );
     res.status(201).json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.put('/catalogue/:id', async (req, res) => {
   try {
-    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif, taux_tva, prix_ttc_public } = req.body;
-    const r = await db.run(
+    const b = req.body;
+    const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif, taux_tva, prix_ttc_public, poids } = b;
+    await db.run(
       `UPDATE catalogue SET ref=$1,designation=$2,fournisseur=$3,ref_fournisseur=$4,pxht=$5,stock=$6,stock_alerte=$7,stock_actif=$8,
-        taux_tva=$9, prix_ttc_public=$10, updated_at=NOW() WHERE id=$11 RETURNING *`,
+        taux_tva=$9, prix_ttc_public=$10, poids=$11, updated_at=NOW() WHERE id=$12`,
       [ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte||2, stock_actif!==false,
-       (taux_tva===''||taux_tva==null)?null:taux_tva, (prix_ttc_public===''||prix_ttc_public==null)?null:prix_ttc_public, req.params.id]
+       _num(taux_tva), _num(prix_ttc_public), _num(poids), req.params.id]
     );
-    res.json(r);
+    // Image : mise à jour seulement si le champ est fourni ('' ou null = suppression).
+    if (Object.prototype.hasOwnProperty.call(b, 'image_data')) {
+      await db.run('UPDATE catalogue SET image_data=$1 WHERE id=$2', [b.image_data || null, req.params.id]);
+    }
+    res.json(await db.get('SELECT id, ref FROM catalogue WHERE id=$1', [req.params.id]));
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Sert la vignette d'un article (data URL stockée → octets image).
+router.get('/catalogue/:id/image', async (req, res) => {
+  try {
+    const row = await db.get('SELECT image_data FROM catalogue WHERE id=$1', [req.params.id]);
+    if (!row || !row.image_data) return res.status(404).send('Pas d\'image');
+    const m = String(row.image_data).match(/^data:([^;]+);base64,(.*)$/);
+    if (!m) return res.status(415).send('Format image inattendu');
+    res.set('Content-Type', m[1]);
+    res.set('Cache-Control', 'private, max-age=60');
+    res.send(Buffer.from(m[2], 'base64'));
+  } catch (e) { res.status(500).send('Erreur image'); }
 });
 // Synchro produits Pennylane : rapproche le catalogue par référence, remonte TVA et prix TTC.
 router.post('/catalogue/sync-pennylane', adminOrOp, async (req, res) => {
@@ -3437,6 +3460,15 @@ router.post('/devis-public/:token/signer', async (req, res) => {
     // 1) Ajout dans le Suivi commandes (si pas déjà présent)
     let cmdId = null;
     try { cmdId = await _ajouterCommandeDepuisDevis(d); } catch (e) { console.error('[DEVIS] ajout commande:', e.message); }
+
+    // 1bis) Mise à jour Pennylane : un devis Pennylane signé passe en « accepted » (best-effort).
+    if (d.source === 'pennylane' && d.pennylane_id && (d.doc_type || 'devis') !== 'bdc'
+        && (process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) {
+      try {
+        await require('../scripts/sync-pennylane').setQuoteStatusPennylane(d.pennylane_id, 'accepted');
+        console.log('[DEVIS] Pennylane devis', d.numero, '→ accepted');
+      } catch (e) { console.error('[DEVIS] MAJ statut Pennylane:', e.message); }
+    }
 
     // 2) E-mail de confirmation — Éloflex est TOUJOURS notifié (info@eloflex.fr),
     //    le client reçoit sa copie si son e-mail est valide.

@@ -506,3 +506,6 @@ div.cards > .card {
 /* Catalogue — colonne prix achat cachée par défaut */
 #cat-table .col-prix { display: none; }
 #cat-table.show-prix .col-prix { display: table-cell; }
+.cat-mini { width: 34px; height: 34px; object-fit: cover; border-radius: 5px; border: 1px solid var(--border-s); cursor: zoom-in; display: block; background: #fff; }
+#cat-zoom { position: fixed; z-index: 9999; pointer-events: none; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 34px rgba(0,0,0,.30); padding: 6px; display: none; }
+#cat-zoom img { width: 270px; height: 270px; object-fit: contain; display: block; }

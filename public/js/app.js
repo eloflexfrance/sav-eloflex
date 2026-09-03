@@ -68,6 +68,8 @@ const isAdmin  = () => CURRENT_USER?.role === 'admin';
 // Modules de l'application (dans l'ordre d'affichage)
 // Identifiant de société Pennylane (pour construire les liens vers les fiches produit).
 const PL_COMPANY_ID = '22996810';
+// État de l'image dans la fiche article : undefined = inchangée · '' = suppression · data URL = nouvelle.
+let _PIECE_IMG;
 const MODULES = [
   { key:'dashboard',     label:'Tableau de bord' },
   { key:'clients',       label:'Clients / Distributeurs' },
@@ -2388,8 +2390,9 @@ async function chargerListeCatalogue(){
   const _tva = v => (v!=null && v!=='') ? (parseFloat(v)%1===0 ? parseFloat(v).toFixed(0) : parseFloat(v).toFixed(1)) + ' %' : '—';
   const _ttc = v => (v!=null && v!=='') ? parseFloat(v).toFixed(2) + ' €' : '—';
   el.innerHTML=`<div class="table-wrap"><table id="cat-table" class="t ${localStorage.getItem('sav_show_prix_achat')==='1'?'show-prix':''}">
-    <thead><tr><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${t('col_prix')}</th><th style="width:66px">${TR('TVA')}</th><th style="width:118px">${TR('Prix TTC public')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
+    <thead><tr><th style="width:46px"></th><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${t('col_prix')}</th><th style="width:66px">${TR('TVA')}</th><th style="width:118px">${TR('Prix TTC public')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
+      <td>${p.has_image?`<img src="/api/catalogue/${p.id}/image" class="cat-mini" onmouseenter="catZoom(event,${p.id})" onmousemove="catZoomMove(event)" onmouseleave="catZoomHide()">`:`<span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:5px;background:var(--bg);border:1px solid var(--border-s);color:var(--text3)"><i class="ti ti-photo" style="font-size:14px"></i></span>`}</td>
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
       <td>${esc(p.ref_fournisseur||'')}</td>
       <td class="col-prix" style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>
@@ -3901,8 +3904,18 @@ async function saveIntervention(id){
 
 async function modalPiece(id){
   const p=id?CACHE.catalogue.find(x=>x.id===id)||await API.catalogue().then(l=>l.find(x=>x.id===id)):null;
+  _PIECE_IMG=undefined;   // état image : inchangée par défaut
   showModal(`<div class="modal-header"><i class="ti ti-box" style="font-size:19px;color:var(--accent)"></i><h2>${id?'Modifier pièce':'Nouvelle pièce'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-    <div class="modal-body"><div class="grid-2">
+    <div class="modal-body">
+      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px">
+        <div id="f-img-preview" style="width:74px;height:74px;flex:none;border:1px solid var(--border-s);border-radius:8px;overflow:hidden;background:var(--bg);display:grid;place-items:center">${(id&&p?.has_image)?`<img src="/api/catalogue/${id}/image?ts=${Date.now()}" style="width:100%;height:100%;object-fit:cover">`:'<i class="ti ti-photo" style="color:var(--text3);font-size:20px"></i>'}</div>
+        <div style="flex:1">
+          <label class="form-label">${TR('Image')}</label>
+          <input type="file" accept="image/*" id="f-img-input" onchange="onPieceImage(event)" style="font-size:12px;display:block;margin-bottom:6px">
+          <button type="button" class="btn sm" onclick="removePieceImage()"><i class="ti ti-trash"></i> ${TR('Retirer l’image')}</button>
+        </div>
+      </div>
+      <div class="grid-2">
       <div class="form-group"><label class="form-label">${TR('Référence *')}</label><input class="form-input mono" id="f-ref" value="${esc(p?.ref||'')}"></div>
       <div class="form-group"><label class="form-label">${TR('Réf fournisseur')}</label><input class="form-input" id="f-reffou" value="${esc(p?.ref_fournisseur||'')}"></div>
       <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Désignation *')}</label><input class="form-input" id="f-des" value="${esc(p?.designation||'')}"></div>
@@ -3910,6 +3923,7 @@ async function modalPiece(id){
       <div class="form-group"><label class="form-label">${TR('Prix HT (achat) (€)')}</label><input class="form-input" id="f-px" type="number" step="0.01" value="${p?.pxht||0}"></div>
       <div class="form-group"><label class="form-label">${TR('TVA (%)')}</label><input class="form-input" id="f-tva" type="number" step="0.1" placeholder="20" value="${p?.taux_tva??''}"></div>
       <div class="form-group"><label class="form-label">${TR('Prix TTC public (€)')}</label><input class="form-input" id="f-ttc" type="number" step="0.01" value="${p?.prix_ttc_public??''}"></div>
+      <div class="form-group"><label class="form-label">${TR('Poids (kg)')}</label><input class="form-input" id="f-poids" type="number" step="0.01" value="${p?.poids??''}"></div>
       <div class="form-group"><label class="form-label">Stock</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}"></div>
       <div class="form-group"><label class="form-label">Seuil alerte stock</label><input class="form-input" id="f-stalerte" type="number" value="${p?.stock_alerte||2}"></div>
     </div>
@@ -3919,7 +3933,7 @@ async function modalPiece(id){
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);}
-async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:gv('f-tva')===''?null:parseFloat(gv('f-tva')),prix_ttc_public:gv('f-ttc')===''?null:parseFloat(gv('f-ttc')),stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:gv('f-tva')===''?null:parseFloat(gv('f-tva')),prix_ttc_public:gv('f-ttc')===''?null:parseFloat(gv('f-ttc')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
 async function deletePiece(id){if(!confirm(TR('Supprimer ?')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 async function syncCataloguePennylane(btn){
   const old = btn?btn.innerHTML:null;
@@ -3936,6 +3950,62 @@ async function syncCataloguePennylane(btn){
   finally{ if(btn){ btn.disabled=false; btn.innerHTML=old; } }
 }
 window.syncCataloguePennylane = syncCataloguePennylane;
+
+// ── Vignette catalogue : agrandissement flottant au survol (jamais rogné par le tableau) ──
+function catZoom(e, id){
+  let z=document.getElementById('cat-zoom');
+  if(!z){ z=document.createElement('div'); z.id='cat-zoom'; document.body.appendChild(z); }
+  z.innerHTML='<img src="/api/catalogue/'+id+'/image" alt="">';
+  z.style.display='block';
+  catZoomMove(e);
+}
+function catZoomMove(e){
+  const z=document.getElementById('cat-zoom'); if(!z||z.style.display==='none') return;
+  const pad=18, w=284, h=284;
+  let x=e.clientX+pad, y=e.clientY+pad;
+  if(x+w>window.innerWidth)  x=e.clientX-w-pad;
+  if(y+h>window.innerHeight) y=window.innerHeight-h-8;
+  if(y<8) y=8; if(x<8) x=8;
+  z.style.left=x+'px'; z.style.top=y+'px';
+}
+function catZoomHide(){ const z=document.getElementById('cat-zoom'); if(z) z.style.display='none'; }
+window.catZoom=catZoom; window.catZoomMove=catZoomMove; window.catZoomHide=catZoomHide;
+
+// Réduit une image (fichier) en data URL JPEG compacte pour stockage en base.
+function _downscaleImage(file, maxSize, cb){
+  const reader=new FileReader();
+  reader.onload=function(){
+    const img=new Image();
+    img.onload=function(){
+      let w=img.width, h=img.height;
+      const scale=Math.min(1, maxSize/Math.max(w,h));
+      w=Math.round(w*scale); h=Math.round(h*scale);
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      const ctx=cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+      try{ cb(cv.toDataURL('image/jpeg',0.82)); }catch(_){ cb(reader.result); }
+    };
+    img.onerror=function(){ toast(TR('Image illisible'),'ti-alert-circle','var(--danger)'); };
+    img.src=reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+// _PIECE_IMG : undefined = inchangée ; '' = suppression ; data URL = nouvelle image.
+function onPieceImage(e){
+  const f=e.target.files && e.target.files[0]; if(!f) return;
+  if(!/^image\//.test(f.type)){ toast(TR('Choisissez un fichier image'),'ti-alert-circle','var(--warning)'); return; }
+  _downscaleImage(f, 900, function(dataUrl){
+    _PIECE_IMG=dataUrl;
+    const pv=document.getElementById('f-img-preview');
+    if(pv) pv.innerHTML='<img src="'+dataUrl+'" style="width:100%;height:100%;object-fit:cover">';
+  });
+}
+function removePieceImage(){
+  _PIECE_IMG='';
+  const pv=document.getElementById('f-img-preview');
+  if(pv) pv.innerHTML='<i class="ti ti-photo" style="color:var(--text3);font-size:20px"></i>';
+  const inp=document.getElementById('f-img-input'); if(inp) inp.value='';
+}
+window.onPieceImage=onPieceImage; window.removePieceImage=removePieceImage;
 
 // ── EXPORTS PDF ───────────────────────────────────────────────────
 
