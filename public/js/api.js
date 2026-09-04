@@ -102,6 +102,7 @@ const API = {
   basculerSAVenCommande:(id)=>API.post(`/interventions/${id}/basculer-commande`,{}),
   basculerCommandeenSAV:(id)=>API.post(`/commandes/${id}/basculer-intervention`,{}),
   deleteIntervention:(id)=>API.del(`/interventions/${id}`),
+  archiverIntervention:(id,archive)=>API.post(`/interventions/${id}/archive`,{archive}),
   commentaires:(id)=>API.get(`/interventions/${id}/commentaires`),
   addCommentaire:(id,d)=>API.post(`/interventions/${id}/commentaires`,d),
   deleteCommentaire:(id,cid)=>API.del(`/interventions/${id}/commentaires/${cid}`),

@@ -323,13 +323,17 @@ async function getInterventions(f = {}) {
   if (f.date_from)   { conds.push(`i.date>=$${++idx}`);        p.push(f.date_from); }
   if (f.date_to)     { conds.push(`i.date<=$${++idx}`);        p.push(f.date_to); }
   if (f.garantie !== undefined) { conds.push(`i.garantie=$${++idx}`); p.push(f.garantie); }
+  // Archivage = état à part : on ne montre les archivées que sur demande, et on les
+  // exclut de la liste principale (exclure_archive). Les fiches fauteuil/client gardent tout.
+  if (f.archive === '1' || f.archive === true) conds.push('i.archive = TRUE');
+  else if (f.exclure_archive) conds.push('i.archive IS NOT TRUE');
   if (f.q) {
     const q = `%${f.q}%`;
     conds.push(`(i.description ILIKE $${++idx} OR f.modele ILIKE $${++idx} OR f.serie ILIKE $${++idx} OR c.nom ILIKE $${++idx} OR i.envoi_numero ILIKE $${++idx} OR i.retour_numero ILIKE $${++idx})`);
     p.push(q, q, q, q, q, q);
   }
   if (conds.length) sql += ' WHERE ' + conds.join(' AND ');
-  sql += ' ORDER BY i.date DESC, i.id DESC';
+  sql += ' ORDER BY i.created_at DESC, i.id DESC';
   const rows = await db.all(sql, p);
   for (const row of rows) {
     row.produits = await db.all('SELECT * FROM intervention_produits WHERE intervention_id=$1', [row.id]);
@@ -663,7 +667,8 @@ router.get('/interventions', async (req, res) => {
     res.json(await getInterventions({
       fauteuil_id: q.fauteuil_id, client_id: q.client_id, statut: q.statut,
       q: q.q, technicien: q.technicien, date_from: q.date_from, date_to: q.date_to,
-      garantie: q.garantie !== undefined ? q.garantie === '1' : undefined
+      garantie: q.garantie !== undefined ? q.garantie === '1' : undefined,
+      archive: q.archive, exclure_archive: !q.archive   // liste principale : masque les archivées
     }));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -916,6 +921,16 @@ router.post('/interventions/:id/photos', upload.array('photos', 20), async (req,
     }
     await logHistorique(interId, 'Système', 'photos', '', `${req.files.length} photo(s) ajoutée(s)`);
     res.status(201).json(results);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Archiver / désarchiver une intervention (état à part, distinct du statut de workflow).
+router.post('/interventions/:id/archive', async (req, res) => {
+  try {
+    const archive = !!req.body.archive;
+    const r = await db.run('UPDATE interventions SET archive=$1, updated_at=NOW() WHERE id=$2 RETURNING id', [archive, req.params.id]);
+    if (!r) return res.status(404).json({ error: 'Introuvable' });
+    try { await logHistorique(req.params.id, 'Système', 'archive', '', archive ? 'Intervention archivée' : 'Intervention désarchivée'); } catch (_) {}
+    res.json({ ok: true, archive });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.patch('/interventions/:id/photos/:pid', async (req, res) => {

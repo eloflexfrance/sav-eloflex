@@ -71,6 +71,8 @@ const isAdmin  = () => CURRENT_USER?.role === 'admin';
 const PL_COMPANY_ID = '22996810';
 // État de l'image dans la fiche article : undefined = inchangée · '' = suppression · data URL = nouvelle.
 let _PIECE_IMG;
+// Filtre de statut de la liste des interventions ('' = tous, '__arch__' = archivées).
+let INTER_FILTRE = '';
 const MODULES = [
   { key:'dashboard',     label:'Tableau de bord' },
   { key:'clients',       label:'Clients / Distributeurs' },
@@ -900,12 +902,12 @@ async function renderInterventions(ttl,c,a){
   ttl.textContent=t('nav_interventions');
   a.innerHTML=`
     <input class="search-bar" placeholder=""+t('cat_search')+"" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
-    <select class="search-bar" id="filter-statut" onchange="renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))" style="width:130px">
-      <option value="">${t('tous_statuts')}</option><option value="Ouvert">${t('inter_statut_ouvert')}</option><option value="En attente">${t('inter_statut_attente')}</option><option value="Fermé">${t('inter_statut_ferme')}</option><option value="Facturé">${t('inter_statut_facture')}</option>
+    <select class="search-bar" id="filter-statut" onchange="INTER_FILTRE=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))" style="width:140px">
+      ${[['',t('tous_statuts')],['Ouvert',t('inter_statut_ouvert')],['En attente',t('inter_statut_attente')],['Fermé',t('inter_statut_ferme')],['Facturé',t('inter_statut_facture')],['__arch__',TR('Archivées')]].map(([v,l])=>`<option value="${v}" ${INTER_FILTRE===v?'selected':''}>${l}</option>`).join('')}
     </select>
     <button class="btn primary" onclick="modalNewIntervention(null,null)"><i class="ti ti-plus"></i>${t('inter_new')}</button>`;
-  const statut=$('filter-statut')?.value||'';
-  const list=await API.interventions({q:STATE.q||undefined, statut:statut||undefined});
+  const _isArch = INTER_FILTRE==='__arch__';
+  const list=await API.interventions({q:STATE.q||undefined, statut:_isArch?undefined:(INTER_FILTRE||undefined), archive:_isArch?1:undefined});
   c.innerHTML=`<div class="table-wrap"><table class="t">
     <thead><tr><th>N° SAV</th><th>${t('col_date')}</th><th>${t('col_client')}</th><th>${t('col_modele')} / ${t('col_serie')}</th><th>${t('col_type')}</th><th>${t('col_description')}</th><th>${t('col_garantie')}</th><th>${t('col_statut')}</th><th>${t('col_technicien')}</th><th style="text-align:center">  </th></tr></thead>
     <tbody>${list.map(i=>`<tr onclick="viewIntervention(${i.id})">
@@ -914,7 +916,7 @@ async function renderInterventions(ttl,c,a){
       <td>${esc(traduireType(i.type))}</td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.description||'')}</td>
       <td><span class="badge ${i.garantie?'g':'hg'}">${i.garantie?t('badge_garantie'):t('garantie_expiree')}</span></td>
-      <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span></td>
+      <td><span class="badge ${sc(i.statut)}">${traduireStatut(i.statut)}</span>${i.archive?` <span class="badge" style="background:var(--surface-2,#eef1f4);color:var(--text2);border:0.5px solid var(--border-s)" title="${TR('Intervention archivée')}"><i class="ti ti-archive" style="font-size:11px"></i> ${TR('Archivée')}</span>`:''}</td>
       <td>${esc(i.technicien||'')}</td>
       <td style="text-align:center;color:var(--text3);font-size:12px">${i.nb_photos||''}</td>
       <td style="font-size:12px">${esc(i.envoi_transporteur||'—')}</td>
@@ -3418,9 +3420,18 @@ async function viewIntervention(id){
     </div>
     <div class="modal-footer">
       <button class="btn danger" onclick="if(confirm(TR('Supprimer ?')))API.deleteIntervention(${i.id}).then(()=>{closeModal();render();toast(t('msg_supprime'),'ti-trash');})"><i class="ti ti-trash"></i></button>
+      <button class="btn" onclick="archiverIntervention(${i.id},${i.archive?0:1})"><i class="ti ti-archive${i.archive?'-off':''}"></i>${i.archive?TR('Désarchiver'):TR('Archiver')}</button>
       <button class="btn" onclick="closeModal()">${TR('Fermer')}</button>
     </div>`);
 }
+async function archiverIntervention(id, archive){
+  try{
+    await API.archiverIntervention(id, !!archive);
+    toast(archive?TR('Intervention archivée'):TR('Intervention désarchivée'),'ti-archive','var(--success)');
+    closeModal(); render();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.archiverIntervention=archiverIntervention;
 
 function renderCommentaires(comms,interId){
   if(!comms.length) return '<div style="font-size:13px;color:var(--text3);margin-bottom:8px">'+TR("Aucun commentaire")+'</div>';
