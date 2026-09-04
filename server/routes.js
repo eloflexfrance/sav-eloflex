@@ -4,7 +4,7 @@ const crypto   = require('crypto');
 const XLSX     = require('xlsx');
 const bcrypt   = require('bcryptjs');
 const db       = require('./db');
-const { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, savePreuveLivraison, deletePreuveLivraisonFile } = require('./uploads');
+const { upload, uploadExcel, uploadPreuveLivraison, makeThumb, deleteFiles, savePreuveLivraison, deletePreuveLivraisonFile, savePhoto, getPhotoUrl } = require('./uploads');
 const router   = express.Router();
 
 // ── Auth : routes publiques (login/logout/me) ──────────────────────
@@ -893,7 +893,11 @@ router.get('/interventions/:id/historique', async (req, res) => {
 
 // ── PHOTOS ────────────────────────────────────────────────────────
 router.get('/interventions/:id/photos', async (req, res) => {
-  try { res.json(await db.all('SELECT * FROM intervention_photos WHERE intervention_id=$1 ORDER BY created_at', [req.params.id])); }
+  try {
+    const rows = await db.all('SELECT * FROM intervention_photos WHERE intervention_id=$1 ORDER BY created_at', [req.params.id]);
+    // On calcule les URLs selon le stockage actif (Cloudinary ou local) pour un affichage agnostique.
+    res.json(rows.map(p => ({ ...p, url: getPhotoUrl(p.filename, false), url_thumb: getPhotoUrl(p.filename_thumb || p.filename, true) })));
+  }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.post('/interventions/:id/photos', upload.array('photos', 20), async (req, res) => {
@@ -903,10 +907,12 @@ router.post('/interventions/:id/photos', upload.array('photos', 20), async (req,
     if (!req.files?.length) return res.status(400).json({ error: 'Aucun fichier' });
     const results = [];
     for (const file of req.files) {
-      const thumb = await makeThumb(file.filename);
+      // savePhoto gère les deux stockages (Cloudinary en mémoire OU disque local) et
+      // renvoie les bons identifiants — indispensable car en mode Cloudinary file.filename n'existe pas.
+      const saved = await savePhoto(file, interId);
       const r = await db.run('INSERT INTO intervention_photos (intervention_id,filename,filename_thumb,legende,taille,mime) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
-        [interId, file.filename, thumb, req.body.legende||null, file.size, file.mimetype]);
-      results.push(r);
+        [interId, saved.filename, saved.filename_thumb || saved.filename, req.body.legende||null, saved.taille, saved.mime]);
+      results.push({ ...r, url: getPhotoUrl(saved.filename, false), url_thumb: getPhotoUrl(saved.filename_thumb || saved.filename, true) });
     }
     await logHistorique(interId, 'Système', 'photos', '', `${req.files.length} photo(s) ajoutée(s)`);
     res.status(201).json(results);

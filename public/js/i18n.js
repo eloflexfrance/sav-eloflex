@@ -322,6 +322,7 @@ const TRANSLATIONS = {
     inter_statut_ouvert: 'Ouvert',
     inter_statut_attente: 'En attente',
     inter_statut_ferme: 'Fermé',
+    inter_statut_facture: 'Facturé',
     inter_types: ['Réparation', 'Maintenance', 'Diagnostic', 'Échange standard'],
     inter_transporteurs: ['La Poste', 'Chronopost'],
     inter_search: 'Rechercher...',
@@ -908,6 +909,7 @@ const TRANSLATIONS = {
     inter_statut_ouvert: 'Open',
     inter_statut_attente: 'Pending',
     inter_statut_ferme: 'Closed',
+    inter_statut_facture: 'Invoiced',
     inter_types: ['Repair', 'Maintenance', 'Diagnosis', 'Standard exchange'],
     inter_transporteurs: ['La Poste', 'Chronopost'],
     inter_search: 'Search...',
@@ -2047,7 +2049,7 @@ function setLang(lang) {
 
 // Traduit une valeur métier stockée en base (toujours en FR) vers la langue active
 function traduireStatut(statut) {
-  const map = { 'Ouvert': 'inter_statut_ouvert', 'En attente': 'inter_statut_attente', 'Fermé': 'inter_statut_ferme' };
+  const map = { 'Ouvert': 'inter_statut_ouvert', 'En attente': 'inter_statut_attente', 'Fermé': 'inter_statut_ferme', 'Facturé': 'inter_statut_facture' };
   return map[statut] ? t(map[statut]) : (statut || '');
 }
 function traduireType(type) {

@@ -36,7 +36,8 @@ const moisLabel = ym => {
   return `${names[parseInt(m,10)-1]} ${y.slice(2)}`;
 };
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const sc  = s => s===t('inter_statut_ouvert')?'ouvert':s===t('inter_statut_ferme')?'ferme':s===t('inter_statut_attente')?'attente':'ouvert';
+// Classe couleur du badge d'intervention (les statuts sont stockés en français). Ouvert=bleu · Fermé=vert · Facturé=violet · En attente=orange.
+const sc  = s => s==='Ouvert'?'ouvert':s==='Fermé'?'ferme':s==='Facturé'?'facture':s==='En attente'?'attente':'ouvert';
 const $   = id => document.getElementById(id);
 const gv  = id => ($( id)||{}).value||'';
 
@@ -900,7 +901,7 @@ async function renderInterventions(ttl,c,a){
   a.innerHTML=`
     <input class="search-bar" placeholder=""+t('cat_search')+"" value="${esc(STATE.q)}" oninput="STATE.q=this.value;renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))">
     <select class="search-bar" id="filter-statut" onchange="renderInterventions(document.getElementById('topbar-title'),document.getElementById('content'),document.getElementById('topbar-actions'))" style="width:130px">
-      <option value="">${t('tous_statuts')}</option><option value="Ouvert">${t('inter_statut_ouvert')}</option><option value="En attente">${t('inter_statut_attente')}</option><option value="Fermé">${t('inter_statut_ferme')}</option>
+      <option value="">${t('tous_statuts')}</option><option value="Ouvert">${t('inter_statut_ouvert')}</option><option value="En attente">${t('inter_statut_attente')}</option><option value="Fermé">${t('inter_statut_ferme')}</option><option value="Facturé">${t('inter_statut_facture')}</option>
     </select>
     <button class="btn primary" onclick="modalNewIntervention(null,null)"><i class="ti ti-plus"></i>${t('inter_new')}</button>`;
   const statut=$('filter-statut')?.value||'';
@@ -3461,11 +3462,13 @@ function toggleHistorique(id){
 
 function renderPhotoGallery(photos,interId){
   if(!photos.length) return '<div style="font-size:13px;color:var(--text3);margin-bottom:10px">'+TR("Aucune photo")+'</div>';
+  const _full = x => x.url || ('/uploads/'+x.filename);
+  const _thumb = x => x.url_thumb || ('/uploads/thumbs/'+(x.filename_thumb||x.filename));
   return `<div class="photo-grid">${photos.map((p,idx)=>`
     <div class="photo-thumb">
-      <img src="/uploads/thumbs/${esc(p.filename_thumb||p.filename)}" alt="${esc(p.legende||'Photo')}"
-        onclick="openLightbox(${interId},${idx},[${photos.map(x=>`'${x.filename}'`).join(',')}])"
-        onerror="this.src='/uploads/${esc(p.filename)}'">
+      <img src="${esc(_thumb(p))}" alt="${esc(p.legende||'Photo')}"
+        onclick="openLightbox(${interId},${idx},[${photos.map(x=>`'${esc(_full(x))}'`).join(',')}])"
+        onerror="this.src='${esc(_full(p))}'">
       <div class="photo-thumb-actions">
         <button class="photo-btn" onclick="editPhotoLegende(${interId},${p.id},'${esc(p.legende||'')}')"><i class="ti ti-pencil"></i></button>
         <button class="photo-btn danger" onclick="deletePhoto(${interId},${p.id})"><i class="ti ti-trash"></i></button>
@@ -3503,8 +3506,8 @@ function showLightbox(){
     <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.5);font-size:13px">${LB.idx+1} / ${LB.filenames.length}</div>
     ${LB.idx>0?`<button onclick="lbNav(-1)" style="position:absolute;left:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:25px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-left"></i></button>`:''}
     ${LB.idx<LB.filenames.length-1?`<button onclick="lbNav(1)" style="position:absolute;right:16px;background:rgba(255,255,255,.12);border:none;color:#fff;font-size:25px;padding:12px 16px;border-radius:8px;cursor:pointer"><i class="ti ti-chevron-right"></i></button>`:''}
-    <img src="/uploads/${fname}" style="max-width:90vw;max-height:82vh;object-fit:contain;border-radius:6px;">
-    <a href="/uploads/${fname}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:13px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
+    <img src="${esc(fname)}" style="max-width:90vw;max-height:82vh;object-fit:contain;border-radius:6px;">
+    <a href="${esc(fname)}" download style="margin-top:12px;color:rgba(255,255,255,.6);font-size:13px;display:flex;align-items:center;gap:4px;text-decoration:none"><i class="ti ti-download"></i>${TR("Télécharger l'original")}</a>`;
   document.body.appendChild(el);
   el.addEventListener('click',e=>{if(e.target===el)closeLightbox();});
   document.addEventListener('keydown',lbKey);
@@ -3765,7 +3768,7 @@ function interForm(i,clients,fauteuils,fauteuilId,clientId,fauteuilClientId){con
       <div class="form-group"><label class="form-label">${t('col_date')}</label><input class="form-input" id="f-date" type="date" value="${d.date||new Date().toISOString().split('T')[0]}"></div>
       <div class="form-group"><label class="form-label">N° SAV</label><input class="form-input mono" id="f-num-sav" placeholder="ex: SAV-2026-001" value="${esc(d.num_sav||'')}"></div>
       <div class="form-group"><label class="form-label">${t('col_type')}</label><select class="form-input" id="f-type">${['Réparation','Maintenance','Diagnostic','Échange standard'].map((v,idx)=>`<option value="${v}" ${d.type===v?'selected':''}>${t('inter_types')[idx]}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">${t('col_statut')}</label><select class="form-input" id="f-statut">${[['Ouvert','inter_statut_ouvert'],['En attente','inter_statut_attente'],['Fermé','inter_statut_ferme']].map(([v,k])=>`<option value="${v}" ${d.statut===v?'selected':''}>${t(k)}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">${t('col_statut')}</label><select class="form-input" id="f-statut">${[['Ouvert','inter_statut_ouvert'],['En attente','inter_statut_attente'],['Fermé','inter_statut_ferme'],['Facturé','inter_statut_facture']].map(([v,k])=>`<option value="${v}" ${d.statut===v?'selected':''}>${t(k)}</option>`).join('')}</select></div>
       <div class="form-group"><label class="form-label">${t('col_technicien')}</label><input class="form-input" id="f-tech" value="${esc(d.technicien||'Brice')}"></div>
     </div>
     <div class="form-group"><label class="form-label">${t('col_garantie')}</label>
