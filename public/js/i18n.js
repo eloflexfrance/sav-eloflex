@@ -1496,6 +1496,8 @@ const EN_STR = {
  "Pennylane": "Pennylane",
  "article(s) rapproché(s)": "item(s) matched",
  "Pennylane indisponible": "Pennylane unavailable",
+ "Exporter Excel": "Export to Excel",
+ "Exporter la base des distributeurs de la carte en Excel": "Export the map's distributor database to Excel",
  "Archivées": "Archived",
  "Archivée": "Archived",
  "Archiver": "Archive",

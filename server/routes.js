@@ -6015,6 +6015,38 @@ router.get('/carte/points', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Export Excel de la base complète des distributeurs de la carte (table distributeurs_carte).
+router.get('/carte/export.xlsx', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all('SELECT * FROM distributeurs_carte ORDER BY reseau, nom');
+    const data = rows.map(p => ({
+      'Réseau': p.reseau || '',
+      'Nom': p.nom || '',
+      'Description': p.description || '',
+      'Adresse': p.adresse || '',
+      'CP': p.cp || '',
+      'Ville': p.ville || '',
+      'Pays': p.pays || '',
+      'Téléphone': p.tel || '',
+      'Portable': p.portable || '',
+      'Email': p.email || '',
+      'Latitude': p.lat != null ? Number(p.lat) : '',
+      'Longitude': p.lng != null ? Number(p.lng) : '',
+      'Zone de chalandise': p.zone_chalandise || '',
+      'Rayon (km)': p.rayon_km != null ? Number(p.rayon_km) : '',
+      'Note interne': p.note_interne || ''
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{wch:22},{wch:34},{wch:30},{wch:34},{wch:8},{wch:20},{wch:12},{wch:16},{wch:16},{wch:28},{wch:12},{wch:12},{wch:26},{wch:10},{wch:44}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Distributeurs carte');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', `attachment; filename="distributeurs_carte_${new Date().toISOString().slice(0,10)}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Route: sauvegarder note interne d'un point
 router.put('/carte/points/:id/note', requireAuth, async (req, res) => {
   try {
