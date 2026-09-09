@@ -6064,7 +6064,7 @@ router.get('/carte/export.xlsx', requireAuth, async (req, res) => {
     }));
     const wsH = XLSX.utils.json_to_sheet(horsData.length ? horsData : [{ 'Nom': '', 'Réseau': '', 'Adresse': '', 'CP': '', 'Ville': '', 'Téléphone': '', 'Email': '', 'Priorité': '', 'Latitude': '', 'Longitude': '' }]);
     wsH['!cols'] = [{wch:34},{wch:20},{wch:34},{wch:8},{wch:20},{wch:16},{wch:28},{wch:10},{wch:12},{wch:12}];
-    XLSX.utils.book_append_sheet(wb, wsH, 'Autres distributeurs (hors carte)');
+    XLSX.utils.book_append_sheet(wb, wsH, 'Autres distrib. (hors carte)');
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Disposition', `attachment; filename="distributeurs_carte_${new Date().toISOString().slice(0,10)}.xlsx"`);
