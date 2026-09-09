@@ -101,6 +101,9 @@ const PERM_FALLBACK = {
   'dashboard':  'commandes',     // Tableau de bord toujours accessible si commandes
   'parc-demo':  'commandes',     // Parc démo : visible si accès au suivi commandes
   'commande-suede': 'commandes', // Commande Suède : suit le suivi commandes
+  // Vues de détail (ouvertes via setView, absentes du menu) → module qui les gouverne.
+  'client':     'clients',       // Fiche distributeur : accessible avec l'accès Clients
+  'fauteuil':   'clients',       // Fiche fauteuil : idem
 };
 
 function hasAccess(module) {
