@@ -6932,6 +6932,9 @@ function afficherMarkers(recadrer) {
     bounds.push([parseFloat(p.lat), parseFloat(p.lng)]);
   });
 
+  // La couche "Autres distributeurs (hors carte)" suit les mêmes filtres (priorité, recherche, département).
+  if (_carteHorsCarte) afficherHorsMarkers();
+
   if (!recadrer) return;
 
   var info = document.getElementById('carte-nom-result');
@@ -7218,12 +7221,19 @@ function afficherHorsMarkers() {
   (_carteHorsMarkers || []).forEach(function(m){ if (_carteMap) _carteMap.removeLayer(m); });
   _carteHorsMarkers = [];
   if (!_carteMap || !_carteHorsCarte) return;
+  var q = ((document.getElementById('carte-search') || {}).value || '').trim().toLowerCase();
   var iconAutres = L.divIcon({
     html: '<img src="/img/reseaux/inconnu.png" width="30" height="30" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">',
     className: '', iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -15]
   });
   _carteHorsPoints.forEach(function(c){
     if (c.lat == null || c.lng == null) return;
+    // Mêmes filtres que les points de la carte : priorité (T1/T2/T3 ou sans), recherche, département.
+    var prio = c.priorite;
+    if (prio === 'T1' || prio === 'T2' || prio === 'T3') { if (!_cartePriorites[prio]) return; }
+    else { if (!_cartePrioriteSans) return; }
+    if (q && ((c.nom||'') + ' ' + (c.ville||'') + ' ' + (c.adresse||'')).toLowerCase().indexOf(q) < 0) return;
+    if (_carteDeptGeo && !pointDansDepartement(c, _carteDeptGeo)) return;
     var m = L.marker([parseFloat(c.lat), parseFloat(c.lng)], { icon: iconAutres });
     m.bindPopup(popupHorsCarte(c), { maxWidth: 260 });
     m.addTo(_carteMap); _carteHorsMarkers.push(m);

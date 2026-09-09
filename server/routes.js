@@ -6040,6 +6040,32 @@ router.get('/carte/export.xlsx', requireAuth, async (req, res) => {
     const ws = XLSX.utils.json_to_sheet(data);
     ws['!cols'] = [{wch:22},{wch:34},{wch:30},{wch:34},{wch:8},{wch:20},{wch:12},{wch:16},{wch:16},{wch:28},{wch:12},{wch:12},{wch:26},{wch:10},{wch:44}];
     XLSX.utils.book_append_sheet(wb, ws, 'Distributeurs carte');
+
+    // 2ᵉ feuille : « Autres distributeurs (hors carte) » = distributeurs géolocalisés mais pas
+    // encore épinglés sur la carte (même source que la couche « Autres distributeurs »).
+    const hors = await db.all(
+      `SELECT id, nom, ville, cp, adresse, tel, email, lat, lng, priorite, reseau_carte
+         FROM clients
+        WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
+          AND lat IS NOT NULL AND lng IS NOT NULL
+        ORDER BY nom`
+    );
+    const horsData = hors.map(c => ({
+      'Nom': c.nom || '',
+      'Réseau': c.reseau_carte || '',
+      'Adresse': c.adresse || '',
+      'CP': c.cp || '',
+      'Ville': c.ville || '',
+      'Téléphone': c.tel || '',
+      'Email': c.email || '',
+      'Priorité': c.priorite || '',
+      'Latitude': c.lat != null ? Number(c.lat) : '',
+      'Longitude': c.lng != null ? Number(c.lng) : ''
+    }));
+    const wsH = XLSX.utils.json_to_sheet(horsData.length ? horsData : [{ 'Nom': '', 'Réseau': '', 'Adresse': '', 'CP': '', 'Ville': '', 'Téléphone': '', 'Email': '', 'Priorité': '', 'Latitude': '', 'Longitude': '' }]);
+    wsH['!cols'] = [{wch:34},{wch:20},{wch:34},{wch:8},{wch:20},{wch:16},{wch:28},{wch:10},{wch:12},{wch:12}];
+    XLSX.utils.book_append_sheet(wb, wsH, 'Autres distributeurs (hors carte)');
+
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Disposition', `attachment; filename="distributeurs_carte_${new Date().toISOString().slice(0,10)}.xlsx"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
