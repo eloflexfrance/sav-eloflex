@@ -6780,8 +6780,10 @@ function chargerPoints() {
       _carteRayonCircle = null; _carteGeoMarker = null; _carteMarkers = []; _carteClusterGroup = null;
       _carteMap = L.map('carte-leaflet', { preferCanvas: false });
       _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap', maxZoom: 19
+      // Fonds de carte CARTO (Voyager) : gratuits et sans clé, conçus pour un usage applicatif —
+      // contrairement aux serveurs de tuiles bénévoles d'OpenStreetMap qui bloquent ce type d'usage.
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap · © CARTO', subdomains: 'abcd', maxZoom: 20
       }).addTo(_carteMap);
       // Regroupement des points en pastilles chiffrées (leaflet.markercluster) si disponible
       if (typeof L.markerClusterGroup === 'function') {
