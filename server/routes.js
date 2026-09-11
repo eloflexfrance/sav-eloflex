@@ -6015,6 +6015,11 @@ router.get('/carte/points', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Clé MapTiler éventuelle (fond de carte "pro"). Vide = on utilise le fond sans clé (Esri).
+router.get('/carte/tiles-key', requireAuth, (req, res) => {
+  res.json({ key: process.env.MAPTILER_KEY || process.env.MAPTILER_API_KEY || '' });
+});
+
 // Export Excel de la base complète des distributeurs de la carte (table distributeurs_carte).
 router.get('/carte/export.xlsx', requireAuth, async (req, res) => {
   try {

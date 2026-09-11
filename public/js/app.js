@@ -6559,8 +6559,29 @@ function basculerPrioriteSans(actif){
 }
 window.basculerPrioriteSans = basculerPrioriteSans;
 
+// Construit le calque de fond de carte : MapTiler (clé) si disponible, sinon Esri (sans clé).
+function _carteBaseTiles() {
+  var key = window._MAPTILER_KEY || '';
+  if (key) {
+    return L.tileLayer('https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=' + encodeURIComponent(key), {
+      attribution: '© MapTiler · © OpenStreetMap', maxZoom: 20, crossOrigin: true
+    });
+  }
+  return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tuiles © Esri · © OpenStreetMap', maxZoom: 19
+  });
+}
+window._carteBaseTiles = _carteBaseTiles;
+
 function renderCarte(ttl, c, a) {
   ttl.textContent = t('nav_carte') || 'Carte';
+  // Récupère (une seule fois) la clé MapTiler éventuellement configurée côté serveur.
+  if (window._MAPTILER_KEY === undefined) {
+    window._MAPTILER_KEY = '';
+    fetch('/api/carte/tiles-key').then(function(r){ return r.json(); }).then(function(d){
+      if (d && d.key) { window._MAPTILER_KEY = d.key; }
+    }).catch(function(){});
+  }
   // Ouverture normale de la carte : aucune cible (voirDistributeurSurCarte la
   // réarmera juste après si on arrive depuis une fiche distributeur).
   _carteCible = null;
@@ -6780,11 +6801,9 @@ function chargerPoints() {
       _carteRayonCircle = null; _carteGeoMarker = null; _carteMarkers = []; _carteClusterGroup = null;
       _carteMap = L.map('carte-leaflet', { preferCanvas: false });
       _carteMap.fitBounds(FRANCE_BOUNDS, { padding: [0, 0], animate: false });
-      // Fonds de carte CARTO (Voyager) : gratuits et sans clé, conçus pour un usage applicatif —
-      // contrairement aux serveurs de tuiles bénévoles d'OpenStreetMap qui bloquent ce type d'usage.
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap · © CARTO', subdomains: 'abcd', maxZoom: 20
-      }).addTo(_carteMap);
+      // Fond de carte : MapTiler si une clé est configurée (usage « pro » garanti), sinon Esri
+      // (sans clé). On évite les tuiles bénévoles d'OpenStreetMap et CARTO qui bloquent/exigent une clé.
+      _carteBaseTiles().addTo(_carteMap);
       // Regroupement des points en pastilles chiffrées (leaflet.markercluster) si disponible
       if (typeof L.markerClusterGroup === 'function') {
         _carteClusterGroup = L.markerClusterGroup({ chunkedLoading: true, maxClusterRadius: 48, showCoverageOnHover: false, spiderfyOnMaxZoom: true });
