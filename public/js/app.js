@@ -4500,7 +4500,8 @@ async function renderParcDemo(ttl,c,a){
   // Nombre de distributeurs distincts détenant le modèle (hors "Éloflex France" et inconnus)
   Object.values(inv).forEach(g=>{
     g.units.sort((a,b)=> (a.dispo-b.dispo) || String(a.distrib).localeCompare(String(b.distrib)));
-    g.nbDistrib=[...new Set(g.units.filter(x=>!x.dispo && x.distrib && x.distrib!=='—' && x.distrib!=='Éloflex France').map(x=>x.distrib))].length;
+    g.distribNoms=[...new Set(g.units.filter(x=>!x.dispo && x.distrib && x.distrib!=='—' && x.distrib!=='Éloflex France').map(x=>x.distrib))].sort((a,b)=>a.localeCompare(b));
+    g.nbDistrib=g.distribNoms.length;
   });
   const invList=Object.values(inv).sort((a,b)=>(b.essai+b.dispo)-(a.essai+a.dispo)||a.m.localeCompare(b.m));
   const invTot=invList.reduce((t,g)=>({e:t.e+g.essai,d:t.d+g.dispo,p:t.p+g.essai+g.dispo}),{e:0,d:0,p:0});
@@ -4508,24 +4509,24 @@ async function renderParcDemo(ttl,c,a){
   const _okBadge=`<span class="badge" style="background:#0d948818;color:#0d9488;border:0.5px solid #0d948844;font-size:11px">OK</span>`;
   const _recoBadge=`<span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${TR('à recommander ?')}</span>`;
   // Détail dépliable des unités d'un modèle (n° série + distributeur détenteur)
-  const _invDetail=(g)=>`<div style="padding:6px 10px 10px">
-    <table style="width:100%;font-size:12.5px;border-collapse:collapse">
-      <thead><tr style="color:var(--text3)"><th style="text-align:left;padding:3px 6px">${TR('N° série')}</th><th style="text-align:left;padding:3px 6px">${TR('Distributeur')}</th><th style="text-align:left;padding:3px 6px">${TR('Statut')}</th><th style="text-align:left;padding:3px 6px">${TR('Échéance')}</th></tr></thead>
-      <tbody>${g.units.map(x=>`<tr>
-        <td style="padding:3px 6px;font-family:monospace">${x.serie?esc(x.serie):'<span style=\"color:var(--text3)\">—</span>'}</td>
-        <td style="padding:3px 6px;font-weight:600">${esc(x.distrib)}</td>
-        <td style="padding:3px 6px">${x.dispo?`<span class="badge g" style="font-size:11px">${TR('Disponible')}</span>`:`<span class="badge ouvert" style="font-size:11px">${TR('En essai')}</span>`}</td>
-        <td style="padding:3px 6px;color:var(--text2)">${x.echeance?fdate(x.echeance):'—'}</td></tr>`).join('')}</tbody>
+  const _invDetail=(g)=>`<div style="padding:8px 10px 12px">
+    <table style="width:100%;font-size:13px;border-collapse:collapse">
+      <thead><tr style="color:var(--text3)"><th style="text-align:left;padding:8px 8px">${TR('N° série')}</th><th style="text-align:left;padding:8px 8px">${TR('Distributeur')}</th><th style="text-align:left;padding:8px 8px">${TR('Statut')}</th><th style="text-align:left;padding:8px 8px">${TR('Échéance')}</th></tr></thead>
+      <tbody>${g.units.map(x=>`<tr style="border-top:0.5px solid var(--border-s)">
+        <td style="padding:18px 8px;font-family:monospace">${x.serie?esc(x.serie):'<span style=\"color:var(--text3)\">—</span>'}</td>
+        <td style="padding:18px 8px;font-weight:600">${esc(x.distrib)}</td>
+        <td style="padding:18px 8px">${x.dispo?`<span class="badge g" style="font-size:11px">${TR('Disponible')}</span>`:`<span class="badge ouvert" style="font-size:11px">${TR('En essai')}</span>`}</td>
+        <td style="padding:18px 8px;color:var(--text2)">${x.echeance?fdate(x.echeance):'—'}</td></tr>`).join('')}</tbody>
     </table></div>`;
   const inventaireCard = `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Inventaire par modèle')} <span style="font-size:12px;font-weight:400;color:var(--text3)">· ${TR('hors S1')} · ${TR('cliquez un modèle pour le détail')}</span>${nbReco?`<span style="margin-left:auto"><span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${nbReco} ${TR('à recommander')}</span></span>`:''}</div>
     <div class="table-wrap"><table class="t">
-      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('Total parc')}</th><th style="text-align:center">${TR('Distributeurs')}</th><th>${TR('Statut')}</th></tr></thead>
+      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('Total parc')}</th><th>${TR('Distributeurs')}</th><th>${TR('Statut')}</th></tr></thead>
       <tbody>${invList.length?invList.map((g,i)=>{const tot=g.essai+g.dispo;const reco=g.dispo===0&&tot>0;return `<tr onclick="parcInvToggle(${i})" style="cursor:pointer">
         <td style="font-weight:600"><i class="ti ti-chevron-right" id="inv-chev-${i}" style="font-size:13px;color:var(--text3);margin-right:4px"></i>${esc(g.m)}</td>
         <td style="text-align:center">${g.essai}</td>
         <td style="text-align:center;font-weight:600;color:${g.dispo===0?'var(--danger)':'#2563eb'}">${g.dispo}</td>
         <td style="text-align:center;font-weight:700">${tot}</td>
-        <td style="text-align:center;font-weight:600;color:var(--accent)">${g.nbDistrib}</td>
+        <td>${g.distribNoms.length?`<div style="display:flex;flex-wrap:wrap;gap:3px">${g.distribNoms.map(n=>_pastilleDistrib(n)).join('')}</div>`:'<span style="color:var(--text3)">—</span>'}</td>
         <td>${reco?_recoBadge:(tot>0?_okBadge:'<span style="color:var(--text3);font-size:12px">—</span>')}</td></tr>
         <tr id="inv-det-${i}" style="display:none"><td colspan="6" style="padding:0;background:var(--bg)">${_invDetail(g)}</td></tr>`;}).join(''):`<tr><td colspan="6" style="color:var(--text3);font-size:13px">${TR('Aucun fauteuil de démo actif.')}</td></tr>`}
       <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td><td style="text-align:center;font-weight:700">${invTot.e}</td><td style="text-align:center;font-weight:700">${invTot.d}</td><td style="text-align:center;font-weight:700">${invTot.p}</td><td></td><td></td></tr>
@@ -4618,6 +4619,16 @@ function parcInvToggle(i){
   if(chev){ chev.classList.toggle('ti-chevron-right', !open); chev.classList.toggle('ti-chevron-down', open); }
 }
 window.parcInvToggle = parcInvToggle;
+
+// Pastille distributeur (initiales + couleur déterministe), nom complet au survol.
+function _pastilleDistrib(nom){
+  var n=String(nom||'').trim(); if(!n) return '';
+  var parts=n.split(/\s+/).filter(Boolean);
+  var ini=((parts[0]?parts[0][0]:'')+(parts[1]?parts[1][0]:'')).toUpperCase() || (n[0]||'?').toUpperCase();
+  var h=0; for(var i=0;i<n.length;i++){ h=(h*31+n.charCodeAt(i))%360; }
+  return '<span title="'+esc(n)+'" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:hsl('+h+',55%,45%);color:#fff;font-size:10px;font-weight:700;cursor:default">'+esc(ini)+'</span>';
+}
+window._pastilleDistrib = _pastilleDistrib;
 
 function parcTogglePlanning(){
   PARC_PLANNING = !PARC_PLANNING;
