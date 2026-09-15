@@ -4489,24 +4489,46 @@ async function renderParcDemo(ttl,c,a){
   // Zone 3 — Inventaire par modèle (hors S1), source unique
   const _isS1=k=>k.replace(/^Modèle\s+/i,'').trim().toUpperCase()==='S1';
   const inv={};
-  parcActif.forEach(u=>{ const k=demoModele(u.rep.modele); if(_isS1(k))return; const g=inv[k]||(inv[k]={m:k,essai:0,dispo:0,vendu:0}); if(_stU(u)==='retour')g.dispo++; else g.essai++; });
-  vendues.forEach(u=>{ const k=demoModele(u.rep.modele); if(_isS1(k))return; (inv[k]||(inv[k]={m:k,essai:0,dispo:0,vendu:0})).vendu++; });
+  parcActif.forEach(u=>{
+    const k=demoModele(u.rep.modele); if(_isS1(k))return;
+    const g=inv[k]||(inv[k]={m:k,essai:0,dispo:0,units:[]});
+    const d=u.rep, enRetour=_stU(u)==='retour';
+    if(enRetour)g.dispo++; else g.essai++;
+    const distrib=enRetour?'Éloflex France':(d.demo_localisation_actuelle||d.client_nom||d.distributeur_nom||'—');
+    g.units.push({ serie:(u.sn||d.num_serie||''), distrib, dispo:enRetour, echeance:(!enRetour?(d.demo_rappel_date||''):'') });
+  });
+  // Nombre de distributeurs distincts détenant le modèle (hors "Éloflex France" et inconnus)
+  Object.values(inv).forEach(g=>{
+    g.units.sort((a,b)=> (a.dispo-b.dispo) || String(a.distrib).localeCompare(String(b.distrib)));
+    g.nbDistrib=[...new Set(g.units.filter(x=>!x.dispo && x.distrib && x.distrib!=='—' && x.distrib!=='Éloflex France').map(x=>x.distrib))].length;
+  });
   const invList=Object.values(inv).sort((a,b)=>(b.essai+b.dispo)-(a.essai+a.dispo)||a.m.localeCompare(b.m));
-  const invTot=invList.reduce((t,g)=>({e:t.e+g.essai,d:t.d+g.dispo,p:t.p+g.essai+g.dispo,v:t.v+g.vendu}),{e:0,d:0,p:0,v:0});
+  const invTot=invList.reduce((t,g)=>({e:t.e+g.essai,d:t.d+g.dispo,p:t.p+g.essai+g.dispo}),{e:0,d:0,p:0});
   const nbReco=invList.filter(g=>g.dispo===0&&(g.essai+g.dispo)>0).length;
   const _okBadge=`<span class="badge" style="background:#0d948818;color:#0d9488;border:0.5px solid #0d948844;font-size:11px">OK</span>`;
   const _recoBadge=`<span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${TR('à recommander ?')}</span>`;
-  const inventaireCard = `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Inventaire par modèle')} <span style="font-size:12px;font-weight:400;color:var(--text3)">· ${TR('hors S1')}</span>${nbReco?`<span style="margin-left:auto"><span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${nbReco} ${TR('à recommander')}</span></span>`:''}</div>
+  // Détail dépliable des unités d'un modèle (n° série + distributeur détenteur)
+  const _invDetail=(g)=>`<div style="padding:6px 10px 10px">
+    <table style="width:100%;font-size:12.5px;border-collapse:collapse">
+      <thead><tr style="color:var(--text3)"><th style="text-align:left;padding:3px 6px">${TR('N° série')}</th><th style="text-align:left;padding:3px 6px">${TR('Distributeur')}</th><th style="text-align:left;padding:3px 6px">${TR('Statut')}</th><th style="text-align:left;padding:3px 6px">${TR('Échéance')}</th></tr></thead>
+      <tbody>${g.units.map(x=>`<tr>
+        <td style="padding:3px 6px;font-family:monospace">${x.serie?esc(x.serie):'<span style=\"color:var(--text3)\">—</span>'}</td>
+        <td style="padding:3px 6px;font-weight:600">${esc(x.distrib)}</td>
+        <td style="padding:3px 6px">${x.dispo?`<span class="badge g" style="font-size:11px">${TR('Disponible')}</span>`:`<span class="badge ouvert" style="font-size:11px">${TR('En essai')}</span>`}</td>
+        <td style="padding:3px 6px;color:var(--text2)">${x.echeance?fdate(x.echeance):'—'}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+  const inventaireCard = `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Inventaire par modèle')} <span style="font-size:12px;font-weight:400;color:var(--text3)">· ${TR('hors S1')} · ${TR('cliquez un modèle pour le détail')}</span>${nbReco?`<span style="margin-left:auto"><span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${nbReco} ${TR('à recommander')}</span></span>`:''}</div>
     <div class="table-wrap"><table class="t">
-      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('Total parc')}</th><th style="text-align:center">${TR('Vendues (cumul)')}</th><th>${TR('Statut')}</th></tr></thead>
-      <tbody>${invList.length?invList.map(g=>{const tot=g.essai+g.dispo;const reco=g.dispo===0&&tot>0;return `<tr>
-        <td style="font-weight:600">${esc(g.m)}</td>
+      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('Total parc')}</th><th style="text-align:center">${TR('Distributeurs')}</th><th>${TR('Statut')}</th></tr></thead>
+      <tbody>${invList.length?invList.map((g,i)=>{const tot=g.essai+g.dispo;const reco=g.dispo===0&&tot>0;return `<tr onclick="parcInvToggle(${i})" style="cursor:pointer">
+        <td style="font-weight:600"><i class="ti ti-chevron-right" id="inv-chev-${i}" style="font-size:13px;color:var(--text3);margin-right:4px"></i>${esc(g.m)}</td>
         <td style="text-align:center">${g.essai}</td>
         <td style="text-align:center;font-weight:600;color:${g.dispo===0?'var(--danger)':'#2563eb'}">${g.dispo}</td>
         <td style="text-align:center;font-weight:700">${tot}</td>
-        <td style="text-align:center;color:var(--text3)">${g.vendu}</td>
-        <td>${reco?_recoBadge:(tot>0?_okBadge:'<span style="color:var(--text3);font-size:12px">—</span>')}</td></tr>`;}).join(''):`<tr><td colspan="6" style="color:var(--text3);font-size:13px">${TR('Aucun fauteuil de démo actif.')}</td></tr>`}
-      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td><td style="text-align:center;font-weight:700">${invTot.e}</td><td style="text-align:center;font-weight:700">${invTot.d}</td><td style="text-align:center;font-weight:700">${invTot.p}</td><td style="text-align:center;font-weight:700;color:var(--text3)">${invTot.v}</td><td></td></tr>
+        <td style="text-align:center;font-weight:600;color:var(--accent)">${g.nbDistrib}</td>
+        <td>${reco?_recoBadge:(tot>0?_okBadge:'<span style="color:var(--text3);font-size:12px">—</span>')}</td></tr>
+        <tr id="inv-det-${i}" style="display:none"><td colspan="6" style="padding:0;background:var(--bg)">${_invDetail(g)}</td></tr>`;}).join(''):`<tr><td colspan="6" style="color:var(--text3);font-size:13px">${TR('Aucun fauteuil de démo actif.')}</td></tr>`}
+      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td><td style="text-align:center;font-weight:700">${invTot.e}</td><td style="text-align:center;font-weight:700">${invTot.d}</td><td style="text-align:center;font-weight:700">${invTot.p}</td><td></td><td></td></tr>
       </tbody></table></div></div>`;
 
   // Zone 4 — Unités : liste OU planning sur les mêmes données
@@ -4586,6 +4608,16 @@ function parcFocus(kind){
   }
 }
 window.parcFocus = parcFocus;
+
+// Déplie/replie le détail d'un modèle dans l'« Inventaire par modèle » (liste des unités + distributeurs).
+function parcInvToggle(i){
+  var det=document.getElementById('inv-det-'+i), chev=document.getElementById('inv-chev-'+i);
+  if(!det) return;
+  var open = det.style.display==='none';
+  det.style.display = open ? '' : 'none';
+  if(chev){ chev.classList.toggle('ti-chevron-right', !open); chev.classList.toggle('ti-chevron-down', open); }
+}
+window.parcInvToggle = parcInvToggle;
 
 function parcTogglePlanning(){
   PARC_PLANNING = !PARC_PLANNING;
