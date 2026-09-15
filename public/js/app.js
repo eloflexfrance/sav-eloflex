@@ -4509,14 +4509,14 @@ async function renderParcDemo(ttl,c,a){
   const _okBadge=`<span class="badge" style="background:#0d948818;color:#0d9488;border:0.5px solid #0d948844;font-size:11px">OK</span>`;
   const _recoBadge=`<span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${TR('à recommander ?')}</span>`;
   // Détail dépliable des unités d'un modèle (n° série + distributeur détenteur)
-  const _invDetail=(g)=>`<div style="padding:6px 10px 10px">
-    <table style="width:100%;font-size:12.5px;border-collapse:collapse">
-      <thead><tr style="color:var(--text3)"><th style="text-align:left;padding:3px 6px">${TR('N° série')}</th><th style="text-align:left;padding:3px 6px">${TR('Distributeur')}</th><th style="text-align:left;padding:3px 6px">${TR('Statut')}</th><th style="text-align:left;padding:3px 6px">${TR('Échéance')}</th></tr></thead>
-      <tbody>${g.units.map(x=>`<tr>
-        <td style="padding:3px 6px;font-family:monospace">${x.serie?esc(x.serie):'<span style=\"color:var(--text3)\">—</span>'}</td>
-        <td style="padding:3px 6px;font-weight:600">${esc(x.distrib)}</td>
-        <td style="padding:3px 6px">${x.dispo?`<span class="badge g" style="font-size:11px">${TR('Disponible')}</span>`:`<span class="badge ouvert" style="font-size:11px">${TR('En essai')}</span>`}</td>
-        <td style="padding:3px 6px;color:var(--text2)">${x.echeance?fdate(x.echeance):'—'}</td></tr>`).join('')}</tbody>
+  const _invDetail=(g)=>`<div style="padding:8px 10px 12px">
+    <table style="width:100%;font-size:13px;border-collapse:collapse">
+      <thead><tr style="color:var(--text3)"><th style="text-align:left;padding:8px 8px">${TR('N° série')}</th><th style="text-align:left;padding:8px 8px">${TR('Distributeur')}</th><th style="text-align:left;padding:8px 8px">${TR('Statut')}</th><th style="text-align:left;padding:8px 8px">${TR('Échéance')}</th></tr></thead>
+      <tbody>${g.units.map(x=>`<tr style="border-top:0.5px solid var(--border-s)">
+        <td style="padding:10px 8px;font-family:monospace">${x.serie?esc(x.serie):'<span style=\"color:var(--text3)\">—</span>'}</td>
+        <td style="padding:10px 8px;font-weight:600">${esc(x.distrib)}</td>
+        <td style="padding:10px 8px">${x.dispo?`<span class="badge g" style="font-size:11px">${TR('Disponible')}</span>`:`<span class="badge ouvert" style="font-size:11px">${TR('En essai')}</span>`}</td>
+        <td style="padding:10px 8px;color:var(--text2)">${x.echeance?fdate(x.echeance):'—'}</td></tr>`).join('')}</tbody>
     </table></div>`;
   const inventaireCard = `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Inventaire par modèle')} <span style="font-size:12px;font-weight:400;color:var(--text3)">· ${TR('hors S1')} · ${TR('cliquez un modèle pour le détail')}</span>${nbReco?`<span style="margin-left:auto"><span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${nbReco} ${TR('à recommander')}</span></span>`:''}</div>
     <div class="table-wrap"><table class="t">
