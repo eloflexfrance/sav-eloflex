@@ -162,6 +162,20 @@ table.t th { background: rgba(255,255,255,.28); border-bottom: 1px solid var(--b
 table.t td { border-bottom: 1px solid var(--border-s); }
 table.t tbody tr:hover td { background: rgba(255,255,255,.45); }
 
+/* ─────────── Icône commande « fauteuil roulant » (Suivi commandes) ─────────── */
+/* Pastille verte pulsante pour repérer d'un coup d'œil les commandes de fauteuils. */
+.cmd-fauteuil-ic{
+  display:inline-flex;align-items:center;justify-content:center;width:27px;height:27px;border-radius:50%;
+  background:linear-gradient(160deg,var(--accent-2,#22c55e),var(--accent));color:#fff;font-size:16px;
+  box-shadow:0 2px 8px rgba(22,163,74,.42), inset 0 1px 0 rgba(255,255,255,.35);
+  animation:pulse-fauteuil 1.7s ease-in-out infinite;
+}
+@keyframes pulse-fauteuil{
+  0%,100%{box-shadow:0 2px 8px rgba(22,163,74,.42), 0 0 0 0 rgba(22,163,74,.45), inset 0 1px 0 rgba(255,255,255,.35)}
+  55%     {box-shadow:0 2px 8px rgba(22,163,74,.42), 0 0 0 7px rgba(22,163,74,0),   inset 0 1px 0 rgba(255,255,255,.35)}
+}
+@media (prefers-reduced-motion:reduce){ .cmd-fauteuil-ic{animation:none} }
+
 /* ─────────── BADGES (pilules) ─────────── */
 .badge { border-radius: 20px; }
 /* « Ouvert » / « En essai » restent BLEUS pour se distinguer de « Fermé » (vert),

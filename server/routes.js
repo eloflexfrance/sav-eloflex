@@ -2550,7 +2550,8 @@ function statutCommande(cmd) {
   // Statut manuel (sauf Auto)
   if (cmd.statut && cmd.statut !== 'Auto') return cmd.statut;
   // Priorité descendante : facture > livraison > expédition > préparation
-  if (cmd.num_facture) return 'Facturé';
+  // Une facture VosFactures OU Pennylane suffit à passer en « Facturé ».
+  if (cmd.num_facture || cmd.num_facture_pennylane) return 'Facturé';
   if (cmd.date_livraison) return 'Livré';
   if (isRealTracking(cmd.num_suivi)) return 'Expédié';
   // Dès qu'un BDC est renseigné → En préparation (commande reçue)
@@ -2600,7 +2601,7 @@ router.get('/commandes', async (req, res) => {
         WHEN cmd.facture_paiement_statut IN ('paye','payé','paid') THEN 'Payé'
         WHEN cmd.facture_paiement_statut IN ('impaye','impayé') THEN 'Impayé'
         WHEN cmd.statut IS NOT NULL AND cmd.statut != 'Auto' THEN cmd.statut
-        WHEN cmd.num_facture IS NOT NULL AND cmd.num_facture != '' THEN 'Facturé'
+        WHEN (cmd.num_facture IS NOT NULL AND cmd.num_facture != '') OR (cmd.num_facture_pennylane IS NOT NULL AND cmd.num_facture_pennylane != '') THEN 'Facturé'
         WHEN cmd.date_livraison IS NOT NULL THEN 'Livré'
         WHEN cmd.num_suivi IS NOT NULL AND LENGTH(TRIM(cmd.num_suivi)) >= 8 THEN 'Expédié'
         ELSE 'En préparation'
@@ -2651,7 +2652,7 @@ router.get('/commandes/stats', async (req, res) => {
         WHEN facture_paiement_statut IN ('paye','payé','paid') THEN 'Payé'
         WHEN facture_paiement_statut IN ('impaye','impayé') THEN 'Impayé'
         WHEN statut IS NOT NULL AND statut != 'Auto' THEN statut
-        WHEN num_facture IS NOT NULL AND num_facture != '' THEN 'Facturé'
+        WHEN (num_facture IS NOT NULL AND num_facture != '') OR (num_facture_pennylane IS NOT NULL AND num_facture_pennylane != '') THEN 'Facturé'
         WHEN date_livraison IS NOT NULL THEN 'Livré'
         WHEN num_suivi IS NOT NULL
           AND LENGTH(REGEXP_REPLACE(num_suivi, '\\s+', '', 'g')) >= 8

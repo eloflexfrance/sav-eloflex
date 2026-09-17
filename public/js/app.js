@@ -1256,7 +1256,7 @@ async function renderCommandesTable(page=1){
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="${TR("Filtrer par ce distributeur")}">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="${TR("Ouvrir la fiche client")}" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:12px"></i></button>`:`<span title="${TR("Commande non rattachée à une fiche client")}" style="color:var(--border-s);padding:1px 3px;font-size:12px"><i class="ti ti-user-off"></i></span>`}</td>
         <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td style="text-align:center">${estCmdFauteuil(cm)
-          ? `<i class="ti ti-wheelchair" style="color:var(--accent);font-size:17px" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"></i>`
+          ? `<span class="cmd-fauteuil-ic" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"><i class="ti ti-wheelchair"></i></span>`
           : `<i class="ti ti-box" style="color:var(--text3);font-size:14px" title="${TR("Pièces détachées")}"></i>`}</td>
         <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:11px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
@@ -1477,7 +1477,7 @@ async function modalCommande(id, prefill){
   let cm = id ? await API.commande(id) : Object.assign({statut:'Auto', quantite:1}, prefill||{});
 
   const hasExp  = !!(cm.num_suivi || cm.date_livraison || cm.num_bordereau || cm.num_serie);
-  const hasFact = !!(cm.num_facture || (cm.statut && cm.statut!=='Auto' && cm.statut!=='En préparation' && cm.statut!=='En attente confirmation'));
+  const hasFact = !!(cm.num_facture || cm.num_facture_pennylane || (cm.statut && cm.statut!=='Auto' && cm.statut!=='En préparation' && cm.statut!=='En attente confirmation'));
   const initTab = id && (cm.statut_calc==='Expédié'||cm.statut_calc==='Livré') && !hasFact ? 'expedition' : 'commande';
   const type = cm.commande_type || (/eloflex/i.test(cm.modele||'') ? 'fauteuil' : cm.modele ? 'pieces' : '');
   const isFauteuil = type==='fauteuil', isPieces=type==='pieces';
@@ -2124,7 +2124,7 @@ function majStatutBadge(){
   const bdc      = (gv('cmd-bdc')||'').trim();
   const suivi    = (gv('cmd-suivi')||'').trim();
   const livraison = (gv('cmd-livraison')||'').trim();
-  const facture  = (gv('cmd-facture')||'').trim();
+  const facture  = (gv('cmd-facture')||'').trim() || (gv('cmd-facture-pl')||'').trim();
   let calc = 'En préparation';
   if(facture)                    calc = 'Facturé';
   else if(livraison)             calc = 'Livré';
