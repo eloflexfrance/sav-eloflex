@@ -318,6 +318,14 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS type_fauteuil_neuf BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS type_fauteuil_demo BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS type_pieces BOOLEAN DEFAULT FALSE`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_suivi TEXT`);          // n° de suivi du reliquat
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_transporteur TEXT`);   // transporteur du reliquat
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_bl TEXT`);             // bon de livraison du reliquat
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_date TEXT`);           // date d'expédition/livraison du reliquat
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_bl_filename TEXT`);    // fichier BL du reliquat
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_bl_mime TEXT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_bl_data TEXT`);        // base64 (survit aux redémarrages Render)
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reliquat_bl_uploaded_at TIMESTAMPTZ`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS confirmation_mode TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_avoir TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS vf_avoir_id BIGINT`);

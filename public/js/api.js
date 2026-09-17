@@ -158,6 +158,8 @@ const API = {
   vfFactureLookup:(numero)=>API.get(`/vosfactures/facture-lookup?numero=${encodeURIComponent(numero)}`),
   uploadPreuveLivraison:async(id,file)=>{const fd=new FormData();fd.append('fichier',file);const r=await fetch(`/api/commandes/${id}/preuve-livraison`,{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
   deletePreuveLivraison:(id)=>API.del(`/commandes/${id}/preuve-livraison`),
+  uploadReliquatBL:async(id,file)=>{const fd=new FormData();fd.append('fichier',file);const r=await fetch(`/api/commandes/${id}/reliquat-bl`,{method:'POST',body:fd});if(!r.ok)throw new Error((await r.json()).error||r.statusText);return r.json();},
+  deleteReliquatBL:(id)=>API.del(`/commandes/${id}/reliquat-bl`),
   vfBdcLookup:(numero)=>API.get(`/vosfactures/bdc-lookup?numero=${encodeURIComponent(numero)}`),
   // Gestion des utilisateurs (admin)
   users:()=>API.get('/users'),

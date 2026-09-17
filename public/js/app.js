@@ -1100,6 +1100,14 @@ function majLienSuiviModal(){
     ? `<a href="${lien}" target="_blank" rel="noopener" class="btn sm" style="display:inline-flex"><i class="ti ti-external-link"></i>${t('cmd_suivre_colis')||'Suivre le colis'}</a>`
     : '';
 }
+function majLienReliquat(){
+  const wrap = $('cmd-reliquat-lien-wrap'); if(!wrap) return;
+  const lien = lienSuiviColis(gv('cmd-reliquat-transporteur'), gv('cmd-reliquat-suivi'));
+  wrap.innerHTML = lien
+    ? `<a href="${lien}" target="_blank" rel="noopener" class="btn sm" style="display:inline-flex"><i class="ti ti-external-link"></i>${TR('Suivre le reliquat')}</a>`
+    : '';
+}
+window.majLienReliquat = majLienReliquat;
 
 async function renderCommandes(ttl,c,a){
   ttl.textContent=t('cmd_title')||'Suivi des commandes';
@@ -1290,6 +1298,7 @@ async function renderCommandesTable(page=1){
           ${cm.num_retour?`<i class="ti ti-arrow-back-up" style="color:var(--danger);margin-left:2px" title="Retour : ${esc(cm.num_retour)}${cm.date_retour?' — reçu le '+fd(cm.date_retour):''}"></i>`:''}
           ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--text2);margin-left:2px" title="${esc(cm.informations)}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
+          ${(cm.reliquat && cm.reliquat_suivi && lienSuiviColis(cm.reliquat_transporteur,cm.reliquat_suivi))?`<a href="${lienSuiviColis(cm.reliquat_transporteur,cm.reliquat_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--warning);margin-left:2px" title="${TR('Suivre le reliquat')} : ${esc(cm.reliquat_suivi)}"><i class="ti ti-truck-delivery"></i></a>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table></div>
@@ -1786,6 +1795,25 @@ async function modalCommande(id, prefill){
           </div>
           <div id="cmd-reliquat-desc" style="${cm.reliquat?'':'display:none'};margin-top:8px">
             <textarea class="form-input" id="cmd-reliquat-description" rows="2" placeholder="${t('cmd_reliquat_placeholder')||'Décrire le reliquat…'}">${esc(cm.reliquat_description||'')}</textarea>
+            <div class="grid-2" style="gap:10px;margin-top:8px">
+              <div class="form-group"><label class="form-label">${TR('N° suivi reliquat')}</label>
+                <input class="form-input mono" id="cmd-reliquat-suivi" value="${esc(cm.reliquat_suivi||'')}" oninput="majLienReliquat()" placeholder="${t('cmd_num_transporteur_placeholder')||'Numéro transporteur'}">
+              </div>
+              <div class="form-group"><label class="form-label">${TR('Transporteur reliquat')}</label>
+                <select class="form-input" id="cmd-reliquat-transporteur" onchange="majLienReliquat()">
+                  <option value="">${TR("— Choisir —")}</option>
+                  ${['Chronopost','Colissimo','DB Schenker','UPS','Autre'].map(tp=>`<option value="${tp}" ${cm.reliquat_transporteur===tp?'selected':''}>${tp==='Colissimo'?'Colissimo (La Poste)':tp}</option>`).join('')}
+                </select>
+              </div>
+              <div id="cmd-reliquat-lien-wrap" style="grid-column:1/-1;margin-top:-4px"></div>
+              <div class="form-group"><label class="form-label">${TR('Bon de livraison (n°)')}</label>
+                <input class="form-input mono" id="cmd-reliquat-bl" value="${esc(cm.reliquat_bl||'')}" placeholder="${TR('N° du BL')}">
+              </div>
+              <div class="form-group"><label class="form-label">${TR('Date d’expédition reliquat')}</label>
+                <input class="form-input" id="cmd-reliquat-date" type="date" value="${cm.reliquat_date||''}">
+              </div>
+            </div>
+            <div id="cmd-reliquat-bl-zone" style="margin-top:8px"></div>
           </div>
         </div>
         <div style="margin-top:4px;padding-top:14px;border-top:0.5px solid var(--border-s)">
@@ -1824,10 +1852,11 @@ async function modalCommande(id, prefill){
     mime: cm.preuve_livraison_mime,
     taille: cm.preuve_livraison_taille
   } : {};
+  window._CMD_RELIQUAT_BL = id ? { url: cm.reliquat_bl_data || null, mime: cm.reliquat_bl_mime, nom: cm.reliquat_bl_filename } : {};
   window._CMD_CONF_DATE = cm.date_confirmation || null;
   TMP_CMD_LIGNES = (cm.lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
   TMP_RETOUR_LIGNES = (cm.retour_lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
-  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majZonePreuveLivraison(); majSerieDemoHint(); if(!id && cm.distributeur_nom) prefillGroupeDepuisDistrib(); }, 60);
+  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majLienReliquat(); majZonePreuveLivraison(); majZoneReliquatBL(); majSerieDemoHint(); if(!id && cm.distributeur_nom) prefillGroupeDepuisDistrib(); }, 60);
 }
 
 function toggleDateConfirmation(el){
@@ -1942,6 +1971,43 @@ async function supprimerPreuveLivraison(id){
     toast(t('msg_supprime')||'Supprimé');
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
+
+// ── Bon de livraison du reliquat (fichier PDF/photo) ──
+function majZoneReliquatBL(){
+  const zone = $('cmd-reliquat-bl-zone'); if(!zone) return;
+  if(!window._CMD_ID){ zone.innerHTML = `<div style="font-size:12px;color:var(--text3)">${TR('Enregistrez la commande pour joindre un fichier de BL.')}</div>`; return; }
+  const p = window._CMD_RELIQUAT_BL || {};
+  if(p.url){
+    zone.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:0.5px solid var(--border-s);border-radius:var(--radius)">
+      <a href="${p.url}" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:8px;color:var(--accent);text-decoration:none">
+        <i class="ti ${p.mime==='application/pdf'?'ti-file-type-pdf':'ti-photo'}" style="font-size:20px"></i>
+        <span style="font-size:13.5px">${esc(p.nom||TR('Bon de livraison'))}</span>
+      </a>
+      <button class="btn sm danger" type="button" onmousedown="supprimerReliquatBL(${window._CMD_ID})"><i class="ti ti-trash"></i></button>
+    </div>`;
+  } else {
+    zone.innerHTML = `<label class="btn sm" style="cursor:pointer;display:inline-flex">
+      <i class="ti ti-upload"></i>${TR('Joindre le bon de livraison (PDF, JPEG, PNG)')}
+      <input type="file" accept="application/pdf,image/jpeg,image/png" style="display:none" onchange="uploaderReliquatBL(this.files[0])">
+    </label>`;
+  }
+}
+async function uploaderReliquatBL(file){
+  if(!file || !window._CMD_ID) return;
+  toast(t('cmd_upload_en_cours')||'Envoi en cours…','ti-loader-2');
+  try{
+    const up = await API.uploadReliquatBL(window._CMD_ID, file);
+    window._CMD_RELIQUAT_BL = { url: up.reliquat_bl_data, mime: up.reliquat_bl_mime, nom: up.reliquat_bl_filename };
+    majZoneReliquatBL();
+    toast(TR('Bon de livraison enregistré'));
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+async function supprimerReliquatBL(id){
+  if(!confirm(TR('Supprimer le bon de livraison ?'))) return;
+  try{ await API.deleteReliquatBL(id); window._CMD_RELIQUAT_BL = {}; majZoneReliquatBL(); toast(t('msg_supprime')||'Supprimé'); }
+  catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.majZoneReliquatBL = majZoneReliquatBL; window.uploaderReliquatBL = uploaderReliquatBL; window.supprimerReliquatBL = supprimerReliquatBL;
 
 async function chercherFacturesVF(id, numFacture){
   const zone=$('cmd-vf-suggest-list');
@@ -2311,6 +2377,10 @@ async function enregistrerCommande(id){
     informations: gv('cmd-infos'),
     reliquat: !!document.getElementById('cmd-reliquat')?.checked,
     reliquat_description: gv('cmd-reliquat-description')||null,
+    reliquat_suivi: gv('cmd-reliquat-suivi')||null,
+    reliquat_transporteur: gv('cmd-reliquat-transporteur')||null,
+    reliquat_bl: gv('cmd-reliquat-bl')||null,
+    reliquat_date: gv('cmd-reliquat-date')||null,
     modele_demo: !!document.getElementById('cmd-demo')?.checked,
     num_retour: gv('cmd-num-retour')||null,
     transporteur_retour: gv('cmd-transporteur-retour')||null,
