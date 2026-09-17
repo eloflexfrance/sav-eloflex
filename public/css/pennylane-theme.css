@@ -1,131 +1,169 @@
 /* ================================================================
-   THÈME « PENNYLANE » — surcharge posée après le thème d'origine.
-   Reprend les codes couleur / typo de Pennylane :
-   fond clair neutre, cartes blanches, barre latérale sombre à
-   pastille verte, boutons vert foncé, accents émeraude.
+   THÈME « LIQUID GLASS » — Éloflex SAV
+   Codes visuels Apple récents (iOS 26/27) : surfaces en verre
+   translucide + flou, grands arrondis continus, profondeur douce,
+   accent vert Éloflex, contrôles en capsule. Posé APRÈS le thème
+   d'origine : il redéfinit les tokens et les composants de base,
+   donc l'essentiel de l'interface bascule sans toucher au JS.
    ================================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Fond clair neutre (fini le dégradé bleu) */
-  --bg-gradient: #F5F6F3;
-  --bg-mesh: none;
+  /* ── Fond : clair, légèrement teinté, avec un léger « mesh » coloré ── */
+  --bg-gradient: linear-gradient(155deg,#eef3f0 0%,#eaf0f5 45%,#eef1f8 100%);
+  --bg-mesh:
+    radial-gradient(42vw 42vw at 12% 8%,  rgba(34,197,94,.16)  0%, transparent 60%),
+    radial-gradient(46vw 46vw at 88% 6%,  rgba(10,132,255,.14) 0%, transparent 60%),
+    radial-gradient(40vw 40vw at 85% 92%, rgba(255,159,10,.10) 0%, transparent 60%),
+    radial-gradient(40vw 40vw at 10% 95%, rgba(10,132,255,.12) 0%, transparent 60%);
 
-  /* Surfaces solides (fini le verre givré) */
-  --glass-1:     #FFFFFF;
-  --glass-2:     #FFFFFF;
-  --glass-3:     #FFFFFF;
-  --glass-4:     #FBFBF9;
-  --glass-input: #FFFFFF;
-  --blur-sm: none; --blur-md: none; --blur-lg: none;
+  /* ── Verre givré ── */
+  --glass-1:     rgba(255,255,255,0.60);   /* sidebar, topbar */
+  --glass-2:     rgba(255,255,255,0.62);   /* cartes */
+  --glass-3:     rgba(255,255,255,0.78);   /* modales, dropdowns */
+  --glass-4:     rgba(255,255,255,0.40);
+  --glass-input: rgba(255,255,255,0.66);
+  --blur-sm:     blur(18px) saturate(1.6);
+  --blur-md:     blur(28px) saturate(1.7);
+  --blur-lg:     blur(40px) saturate(1.7);
 
-  /* Bordures neutres chaudes */
-  --border:      #E7E8E2;
-  --border-s:    #ECEDE7;
-  --border-glow: #F1F2EC;
-  --border-dark: #E7E8E2;
+  /* ── Bordures : fines lignes lumineuses ── */
+  --border:      rgba(255,255,255,0.75);
+  --border-s:    rgba(20,40,70,0.06);
+  --border-glow: rgba(255,255,255,0.92);
+  --border-dark: rgba(20,40,70,0.10);
 
-  /* Ombres discrètes et neutres */
-  --shadow-card:  0 1px 2px rgba(20,30,25,.05);
-  --shadow-modal: 0 24px 70px rgba(15,36,29,.22);
-  --shadow-btn:   none;
+  /* ── Ombres douces (profondeur) ── */
+  --shadow-card:  0 10px 30px rgba(24,40,66,.10), 0 1px 0 rgba(255,255,255,.7) inset;
+  --shadow-modal: 0 30px 80px rgba(20,34,58,.28), 0 1px 0 rgba(255,255,255,.8) inset;
+  --shadow-btn:   0 4px 14px rgba(24,40,66,.10);
 
-  /* Texte */
-  --text:  #16211E;
-  --text2: #565C58;
-  --text3: #8A908B;
+  /* ── Texte (slate) ── */
+  --text:  #0d1522;
+  --text2: #41506a;
+  --text3: #7d8aa3;
 
-  /* Accent vert Pennylane */
-  --accent:       #0B7A4B;   /* liens, actifs, petits accents (lisible sur blanc) */
-  --accent-dark:  #0C5C3C;   /* boutons pleins */
-  --accent-bg:    rgba(18,183,106,0.14);
-  --accent-soft:  rgba(18,183,106,0.08);
+  /* ── Accent vert Éloflex ── */
+  --accent:       #16a34a;
+  --accent-2:     #22c55e;
+  --accent-dark:  #0f8a3d;
+  --accent-bg:    rgba(22,163,74,0.14);
+  --accent-soft:  rgba(22,163,74,0.08);
 
-  /* Sémantique alignée Pennylane */
-  --success:      #0C7A4B;
-  --success-bg:   rgba(12,122,75,0.12);
-  --warning:      #B4551F;
-  --warning-bg:   rgba(194,98,47,0.13);
-  --danger:       #DA4A3D;
-  --danger-bg:    rgba(218,74,61,0.12);
+  /* ── Sémantique (esprit iOS) ── */
+  --blue:         #0a84ff;
+  --success:      #16a34a;
+  --success-bg:   rgba(22,163,74,0.14);
+  --warning:      #c2760a;
+  --warning-bg:   rgba(255,159,10,0.16);
+  --danger:       #e5484d;
+  --danger-bg:    rgba(229,72,77,0.14);
 
-  --radius:    12px;
-  --radius-sm: 8px;
+  --radius:    18px;
+  --radius-sm: 13px;
 }
 
-/* Police + fond */
-body { font-family: 'Manrope','Segoe UI',system-ui,-apple-system,sans-serif; background: #F5F6F3; }
-body::before { background: #F5F6F3 !important; }
-body::after  { background: none !important; }
+/* ── Police système (SF Pro sur Mac = rendu iOS authentique) + fond ── */
+body { font-family: -apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",system-ui,"Segoe UI",Roboto,sans-serif; background: #eef3f0; }
+body::before { background: var(--bg-gradient) !important; }
+body::after  { background: var(--bg-mesh) !important; }
 
-/* ─────────── BARRE LATÉRALE SOMBRE ───────────
-   On redéfinit les variables DANS la sidebar : tous les styles
-   inline en var(--text2)/var(--accent)… deviennent clairs sans
-   toucher au JS. */
+/* ─────────── BARRE LATÉRALE (verre clair, actif vert) ─────────── */
 .sidebar {
-  background: #0F241D !important;
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  border-right: 1px solid #1C3A31;
-  box-shadow: none;
-  --text:  #EAF1EE;
-  --text2: #C7D0CC;
-  --text3: #7E8F88;
-  --accent: #12B76A;
-  --border: #21382F;
-  --border-dark: #21382F;
+  background: var(--glass-1);
+  backdrop-filter: var(--blur-md); -webkit-backdrop-filter: var(--blur-md);
+  border-right: 1px solid var(--border);
+  box-shadow: 1px 0 0 rgba(255,255,255,.5), 8px 0 30px rgba(24,40,66,.06);
 }
-.sidebar-logo { color: #FFFFFF; border-bottom: 1px solid #21382F; background: none; }
-.sidebar-logo i { color: #12B76A; }
-.nav-label { color: #61706A; }
-.nav-item { margin: 1px 8px; border-radius: 9px; padding: 9px 12px; }
-.nav-item:hover { background: #1C3A31; color: #EAF1EE; }
+.sidebar-logo { color: var(--text); border-bottom: 1px solid var(--border-s); background: none; letter-spacing:-.01em; }
+.sidebar-logo i { color: var(--accent); }
+.nav-label { color: var(--text3); letter-spacing:.06em; }
+.nav-item { margin: 1px 8px; border-radius: 13px; padding: 9px 12px; color: var(--text2); font-weight: 520; }
+.nav-item:hover { background: rgba(20,40,70,.06); color: var(--text); }
 .nav-item.active {
-  background: #12B76A !important; color: #06231A !important; font-weight: 700;
-  box-shadow: none !important;
+  background: linear-gradient(160deg,var(--accent-2),var(--accent)) !important;
+  color: #fff !important; font-weight: 640;
+  box-shadow: 0 6px 16px rgba(22,163,74,.34), inset 0 1px 0 rgba(255,255,255,.35) !important;
 }
-.nav-item.active i { color: #06231A; }
-.nav-badge { background: #2A4A40; color: #B9F5D6; }
-.nav-badge.danger { background: #7a2f2a; color: #ffd9d5; }
-.sidebar-footer { border-top: 1px solid #21382F; }
+.nav-item.active i { color: #fff; }
+.nav-badge { background: rgba(20,40,70,.10); color: var(--text2); border-radius: 20px; font-weight: 700; }
+.nav-item.active .nav-badge { background: rgba(255,255,255,.25); color: #fff; }
+.nav-badge.danger { background: var(--danger); color: #fff; }
+.sidebar-footer { border-top: 1px solid var(--border-s); }
 .sidebar .btn {
-  background: transparent; border: 1px solid #274038; color: #C7D0CC;
-  box-shadow: none;
+  background: rgba(255,255,255,.55); border: 1px solid var(--border); color: var(--text2);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-.sidebar .btn:hover { background: #1C3A31; border-color: #35594d; transform: none; }
+.sidebar .btn:hover { background: rgba(255,255,255,.8); border-color: var(--border-glow); color: var(--text); }
 
-/* ─────────── TOPBAR (claire) ─────────── */
-.topbar { background: #FFFFFF; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; border-bottom: 1px solid var(--border); }
+/* ─────────── TOPBAR (verre) ─────────── */
+.topbar {
+  background: var(--glass-1);
+  backdrop-filter: var(--blur-sm); -webkit-backdrop-filter: var(--blur-sm);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(255,255,255,.6), 0 4px 18px rgba(24,40,66,.05);
+}
 
-/* ─────────── BOUTONS ─────────── */
+/* ─────────── BOUTONS (capsules) ─────────── */
 .btn {
-  background: #FFFFFF; border: 1px solid var(--border);
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  box-shadow: none; color: #3A403C; font-weight: 600;
+  background: var(--glass-3); border: 1px solid var(--border);
+  backdrop-filter: blur(14px) saturate(1.6); -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  box-shadow: var(--shadow-btn); color: var(--text); font-weight: 600;
+  border-radius: 20px;
 }
-.btn:hover { background: #F4F5F1; border-color: #DADBD3; transform: none; box-shadow: none; }
+.btn:hover { background: rgba(255,255,255,.9); border-color: var(--border-glow); transform: translateY(-1px); box-shadow: 0 8px 22px rgba(24,40,66,.14); }
+.btn.sm { border-radius: 15px; }
 .btn.primary {
-  background: var(--accent-dark); border-color: var(--accent-dark); color: #fff;
-  box-shadow: none;
+  background: linear-gradient(160deg,var(--accent-2),var(--accent)); border-color: rgba(255,255,255,.35);
+  color: #fff; box-shadow: 0 6px 16px rgba(22,163,74,.34), inset 0 1px 0 rgba(255,255,255,.3);
 }
-.btn.primary:hover { background: #0A4E33; box-shadow: none; }
-.btn.success { background: var(--success-bg); border-color: rgba(12,122,75,.30); color: var(--success); }
-.btn.danger  { background: var(--danger-bg);  border-color: rgba(218,74,61,.30);  color: var(--danger); }
+.btn.primary:hover { background: linear-gradient(160deg,#2ad06a,#17ab4f); box-shadow: 0 10px 26px rgba(22,163,74,.42); }
+.btn.success { background: var(--success-bg); border-color: rgba(22,163,74,.30); color: var(--success); }
+.btn.danger  { background: var(--danger-bg);  border-color: rgba(229,72,77,.30);  color: var(--danger); }
 
-/* ─────────── CARTES / STAT / MODAL / FORM ─────────── */
-.card { background: #FFFFFF; backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-card); }
-.stat-card { background: #FBFBF9; backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--border); border-radius: 10px; box-shadow: none; }
-.stat-card:hover { transform: none; box-shadow: none; border-color: #DADBD3; }
-.modal-overlay { background: rgba(15,36,29,.35); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
-.modal { background: #FFFFFF; backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-modal); }
-.modal-header { background: none; border-bottom: 1px solid var(--border); }
-.modal-footer { background: #FAFAF8; border-top: 1px solid var(--border); }
-.form-input { background: #FFFFFF; backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid #DCDDD5; }
-.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18,183,106,.15); background: #FFFFFF; }
+/* ─────────── CARTES / STAT / MODALES / FORM ─────────── */
+.card {
+  background: var(--glass-2);
+  backdrop-filter: var(--blur-md); -webkit-backdrop-filter: var(--blur-md);
+  border: 1px solid var(--border); border-radius: 22px; box-shadow: var(--shadow-card);
+}
+.stat-card {
+  background: var(--glass-2);
+  backdrop-filter: var(--blur-sm); -webkit-backdrop-filter: var(--blur-sm);
+  border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow-card);
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px rgba(24,40,66,.16); border-color: var(--border-glow); }
+.stat-value { letter-spacing: -.02em; }
+
+.modal-overlay { background: rgba(20,34,58,.30); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.modal {
+  background: var(--glass-3);
+  backdrop-filter: var(--blur-lg); -webkit-backdrop-filter: var(--blur-lg);
+  border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--shadow-modal);
+}
+.modal-header { background: none; border-bottom: 1px solid var(--border-s); }
+.modal-footer { background: rgba(255,255,255,.35); border-top: 1px solid var(--border-s); }
+
+.form-input {
+  background: var(--glass-input);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(20,40,70,.14); border-radius: 13px; color: var(--text);
+}
+.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); background: rgba(255,255,255,.85); }
+
+/* Barre de recherche (capsule verre) */
+.search-bar {
+  background: var(--glass-input);
+  backdrop-filter: blur(14px) saturate(1.6); -webkit-backdrop-filter: blur(14px) saturate(1.6);
+  border: 1px solid var(--border); border-radius: 22px; color: var(--text);
+}
 
 /* ─────────── TABLEAUX ─────────── */
-table.t th { background: #FAFAF8; border-bottom: 1px solid var(--border); color: var(--text3); }
+table.t th { background: rgba(255,255,255,.28); border-bottom: 1px solid var(--border-dark); color: var(--text3); }
 table.t td { border-bottom: 1px solid var(--border-s); }
-table.t tbody tr:hover td { background: #FAFAF7; }
+table.t tbody tr:hover td { background: rgba(255,255,255,.45); }
 
-/* ─────────── BADGES (coins un peu moins ronds façon Pennylane) ─────────── */
-.badge { border-radius: 8px; }
+/* ─────────── BADGES (pilules) ─────────── */
+.badge { border-radius: 20px; }
+/* « Ouvert » / « En essai » restent BLEUS pour se distinguer de « Fermé » (vert),
+   maintenant que l'accent de l'app est vert. */
+.badge.ouvert { background: rgba(10,132,255,.14); color: var(--blue); border: 0.5px solid rgba(10,132,255,.28); }
