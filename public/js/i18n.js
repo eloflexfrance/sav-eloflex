@@ -1498,6 +1498,8 @@ const EN_STR = {
  "Pennylane indisponible": "Pennylane unavailable",
  "Exporter Excel": "Export to Excel",
  "Distributeurs": "Distributors",
+ "Ouvrir la commande (compléter le n° de série)": "Open the order (fill in the serial number)",
+ "ouvrir la commande": "open the order",
  "cliquez un modèle pour le détail": "click a model for details",
  "Disponible": "Available",
  "Exporter la base des distributeurs de la carte en Excel": "Export the map's distributor database to Excel",

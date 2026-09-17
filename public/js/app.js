@@ -4340,7 +4340,7 @@ async function renderParcDemo(ttl,c,a){
       <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:13px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
       <td style="font-size:12px">${serieCell}</td>
-      <td>${esc(detenteur)}${pretBadgeHtml}${resaBadge}</td>
+      <td>${(!isHist && d.id)?`<span onclick="event.stopPropagation();modalCommande(${d.id})" title="${TR('Ouvrir la commande (compléter le n° de série)')}" style="cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px">${esc(detenteur)}</span>`:esc(detenteur)}${pretBadgeHtml}${resaBadge}</td>
       <td style="font-size:13px;color:var(--text2)">${d.demo_origine_nom?esc(d.demo_origine_nom):'—'}</td>
       <td style="white-space:nowrap">${fdate(mise)}${(!isHist && !d.demo_suivi_resultat && mise)?(()=>{const j=Math.round((new Date(_today+'T00:00:00')-new Date((''+mise).slice(0,10)+'T00:00:00'))/86400000);return j>=0?` <span style="color:${j>60?'var(--danger)':'var(--text3)'};font-size:11px">(${j} j)</span>`:'';})():''}</td>
       <td style="white-space:nowrap;${echEchue?'color:var(--danger);font-weight:600':''}">${echeance?fdate(echeance):'—'}</td>
@@ -4495,13 +4495,16 @@ async function renderParcDemo(ttl,c,a){
     const d=u.rep, enRetour=_stU(u)==='retour';
     if(enRetour)g.dispo++; else g.essai++;
     const distrib=enRetour?'Éloflex France':(d.demo_localisation_actuelle||d.client_nom||d.distributeur_nom||'—');
-    g.units.push({ serie:(u.sn||d.num_serie||''), distrib, dispo:enRetour, echeance:(!enRetour?(d.demo_rappel_date||''):'') });
+    g.units.push({ id:d.id, serie:(u.sn||d.num_serie||''), distrib, dispo:enRetour, echeance:(!enRetour?(d.demo_rappel_date||''):'') });
   });
   // Nombre de distributeurs distincts détenant le modèle (hors "Éloflex France" et inconnus)
   Object.values(inv).forEach(g=>{
     g.units.sort((a,b)=> (a.dispo-b.dispo) || String(a.distrib).localeCompare(String(b.distrib)));
-    g.distribNoms=[...new Set(g.units.filter(x=>!x.dispo && x.distrib && x.distrib!=='—' && x.distrib!=='Éloflex France').map(x=>x.distrib))].sort((a,b)=>a.localeCompare(b));
+    const enEssaiU=g.units.filter(x=>!x.dispo && x.distrib && x.distrib!=='—' && x.distrib!=='Éloflex France');
+    g.distribNoms=[...new Set(enEssaiU.map(x=>x.distrib))].sort((a,b)=>a.localeCompare(b));
     g.nbDistrib=g.distribNoms.length;
+    // Distributeur → id de sa 1ʳᵉ commande (pour ouvrir la fiche au clic sur la pastille)
+    g.distribCmd={}; enEssaiU.forEach(x=>{ if(g.distribCmd[x.distrib]==null && x.id) g.distribCmd[x.distrib]=x.id; });
   });
   const invList=Object.values(inv).sort((a,b)=>(b.essai+b.dispo)-(a.essai+a.dispo)||a.m.localeCompare(b.m));
   const invTot=invList.reduce((t,g)=>({e:t.e+g.essai,d:t.d+g.dispo,p:t.p+g.essai+g.dispo}),{e:0,d:0,p:0});
@@ -4514,7 +4517,7 @@ async function renderParcDemo(ttl,c,a){
       <thead><tr style="color:var(--text3)"><th style="text-align:left;padding:8px 8px">${TR('N° série')}</th><th style="text-align:left;padding:8px 8px">${TR('Distributeur')}</th><th style="text-align:left;padding:8px 8px">${TR('Statut')}</th><th style="text-align:left;padding:8px 8px">${TR('Échéance')}</th></tr></thead>
       <tbody>${g.units.map(x=>`<tr style="border-top:0.5px solid var(--border-s)">
         <td style="padding:22px 8px;font-family:monospace">${x.serie?esc(x.serie):'<span style=\"color:var(--text3)\">—</span>'}</td>
-        <td style="padding:22px 8px;font-weight:600">${esc(x.distrib)}</td>
+        <td style="padding:22px 8px;font-weight:600">${x.id?`<span onclick="event.stopPropagation();modalCommande(${x.id})" title="${TR('Ouvrir la commande (compléter le n° de série)')}" style="cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px">${esc(x.distrib)}</span>`:esc(x.distrib)}</td>
         <td style="padding:22px 8px">${x.dispo?`<span class="badge g" style="font-size:11px">${TR('Disponible')}</span>`:`<span class="badge ouvert" style="font-size:11px">${TR('En essai')}</span>`}</td>
         <td style="padding:22px 8px;color:var(--text2)">${x.echeance?fdate(x.echeance):'—'}</td></tr>`).join('')}</tbody>
     </table></div>`;
@@ -4526,7 +4529,7 @@ async function renderParcDemo(ttl,c,a){
         <td style="text-align:center">${g.essai}</td>
         <td style="text-align:center;font-weight:600;color:${g.dispo===0?'var(--danger)':'#2563eb'}">${g.dispo}</td>
         <td style="text-align:center;font-weight:700">${tot}</td>
-        <td>${g.distribNoms.length?`<div style="display:flex;flex-wrap:wrap;gap:3px">${g.distribNoms.map(n=>_pastilleDistrib(n)).join('')}</div>`:'<span style="color:var(--text3)">—</span>'}</td>
+        <td>${g.distribNoms.length?`<div style="display:flex;flex-wrap:wrap;gap:3px">${g.distribNoms.map(n=>_pastilleDistrib(n,g.distribCmd[n])).join('')}</div>`:'<span style="color:var(--text3)">—</span>'}</td>
         <td>${reco?_recoBadge:(tot>0?_okBadge:'<span style="color:var(--text3);font-size:12px">—</span>')}</td></tr>
         <tr id="inv-det-${i}" style="display:none"><td colspan="6" style="padding:0;background:var(--bg)">${_invDetail(g)}</td></tr>`;}).join(''):`<tr><td colspan="6" style="color:var(--text3);font-size:13px">${TR('Aucun fauteuil de démo actif.')}</td></tr>`}
       <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td><td style="text-align:center;font-weight:700">${invTot.e}</td><td style="text-align:center;font-weight:700">${invTot.d}</td><td style="text-align:center;font-weight:700">${invTot.p}</td><td></td><td></td></tr>
@@ -4621,12 +4624,16 @@ function parcInvToggle(i){
 window.parcInvToggle = parcInvToggle;
 
 // Pastille distributeur (initiales + couleur déterministe), nom complet au survol.
-function _pastilleDistrib(nom){
+// Si un id de commande est fourni, un clic ouvre la fiche commande en pop-up.
+function _pastilleDistrib(nom, cmdId){
   var n=String(nom||'').trim(); if(!n) return '';
   var parts=n.split(/\s+/).filter(Boolean);
   var ini=((parts[0]?parts[0][0]:'')+(parts[1]?parts[1][0]:'')).toUpperCase() || (n[0]||'?').toUpperCase();
   var h=0; for(var i=0;i<n.length;i++){ h=(h*31+n.charCodeAt(i))%360; }
-  return '<span title="'+esc(n)+'" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:hsl('+h+',55%,45%);color:#fff;font-size:10px;font-weight:700;cursor:default">'+esc(ini)+'</span>';
+  var click = cmdId ? ' onclick="event.stopPropagation();modalCommande('+cmdId+')" ' : '';
+  var cur = cmdId ? 'pointer' : 'default';
+  var titre = cmdId ? esc(n)+' — '+TR('ouvrir la commande') : esc(n);
+  return '<span'+click+' title="'+titre+'" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:hsl('+h+',55%,45%);color:#fff;font-size:10px;font-weight:700;cursor:'+cur+'">'+esc(ini)+'</span>';
 }
 window._pastilleDistrib = _pastilleDistrib;
 
