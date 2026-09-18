@@ -110,6 +110,19 @@ async function resolvePennylaneProduct(api, id) {
 }
 function _plNum(v) { if (v == null || v === '') return null; const n = parseFloat(String(v).replace(',', '.')); return isNaN(n) ? null : n; }
 
+// Une ligne « frais d'envoi / de port / livraison » (à renvoyer en dernier, jamais prise pour modèle).
+function _estFraisLigne(designation) {
+  return /frais|\bport\b|livraison|exp[ée]dition|transport|shipping|\benvoi\b|colissimo|chronopost/i.test(String(designation || ''));
+}
+// Réordonne les lignes : produits d'abord, frais d'envoi à la fin (tri stable sous Node/V8).
+function _fraisEnDernier(lignes) {
+  return lignes.slice().sort((a, b) => (_estFraisLigne(a.designation) ? 1 : 0) - (_estFraisLigne(b.designation) ? 1 : 0));
+}
+// Ligne « fauteuil » servant à déduire le modèle : jamais une ligne de frais.
+function _ligneModele(lignes) {
+  return lignes.find(l => /eloflex/i.test(l.designation)) || lignes.find(l => !_estFraisLigne(l.designation)) || lignes[0];
+}
+
 // ── Vérification du token ───────────────────────────────────────────────────
 async function checkStatus() {
   const api = plApi();
@@ -191,13 +204,13 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
   const dateCommande = (detail.date || detail.issue_date || detail.emitted_at || detail.document_date || detail.created_at || '').slice(0, 10) || null;
   const annee = dateCommande ? parseInt(dateCommande.slice(0, 4)) : new Date().getFullYear();
 
-  const lignes = (detail.invoice_lines || detail.line_items || []).map(l => ({
+  const lignes = _fraisEnDernier((detail.invoice_lines || detail.line_items || []).map(l => ({
     designation: l.label || l.description || l.product_name || '',
     reference:   l.product?.reference || l.reference || null,
     quantite:    parseInt(l.quantity) || 1,
-  })).filter(l => l.designation);
+  })).filter(l => l.designation));
 
-  const ligneFauteuil = lignes.find(l => /eloflex/i.test(l.designation)) || lignes[0];
+  const ligneFauteuil = _ligneModele(lignes);
   const modele   = ligneFauteuil?.designation || '';
   const quantite = ligneFauteuil?.quantite || 1;
 
@@ -375,7 +388,9 @@ async function lookupDocumentPennylane(numero) {
           });
         }
 
-        const ligneFauteuil = lignes.find(l => /eloflex/i.test(l.designation)) || lignes[0];
+        const lignesTriees = _fraisEnDernier(lignes);
+        lignes.length = 0; lignes.push(...lignesTriees);   // frais d'envoi rangés en dernier
+        const ligneFauteuil = _ligneModele(lignes);
         const modele   = ligneFauteuil?.designation || '';
         const quantite = ligneFauteuil?.quantite || 1;
         const texte    = lignes.map(l => l.designation + ' ' + (l.reference || '')).join(' ');
@@ -730,9 +745,50 @@ async function setQuoteStatusPennylane(quoteId, status) {
   return { ok: true, data };
 }
 
+// Statut de paiement d'une facture client Pennylane (par numéro).
+// Renvoie { found, statut:'paye'|'impaye'|'en_attente', deadline, remaining, id }.
+async function getPaiementFacturePennylane(numero) {
+  if (!numero) return { found: false };
+  const api = plApi();
+  const norm = s => String(s || '').toLowerCase().replace(/[\s\-\/\.]+/g, '');
+  const n = norm(numero);
+  const match = d => { const dn = norm(d.invoice_number || d.number || d.label); return dn === n || dn.endsWith(n) || n.endsWith(dn); };
+  let inv = null;
+  // 1) filtre exact sur le numéro
+  try {
+    const { data } = await api.get('/customer_invoices', {
+      params: { filter: JSON.stringify([{ field: 'invoice_number', operator: 'eq', value: numero }]), limit: 5 }
+    });
+    const items = data.items || data.customer_invoices || [];
+    inv = items.find(match) || items[0] || null;
+  } catch (_) {}
+  // 2) repli : parcours borné des factures récentes (le filtre JSON est parfois vide)
+  if (!inv) {
+    try {
+      const pages = await fetchAllPages(api, '/customer_invoices', {}, 100, 4); // ~400 plus récentes
+      inv = pages.find(match) || null;
+    } catch (_) {}
+  }
+  if (!inv) return { found: false };
+  const remaining = _plNum(
+    inv.remaining_amount != null ? inv.remaining_amount
+    : inv.outstanding_balance != null ? inv.outstanding_balance
+    : inv.remaining_amount_with_tax != null ? inv.remaining_amount_with_tax
+    : inv.outstanding_amount);
+  const paid = inv.is_paid === true || inv.paid === true || inv.reconciled === true
+    || /paid|pay[ée]|reconcil|regl/i.test(String(inv.payment_status || inv.status || ''))
+    || (remaining != null && remaining <= 0.009);
+  const deadline = String(inv.deadline || inv.date_due || inv.payment_deadline || '').slice(0, 10) || null;
+  const today = new Date().toISOString().slice(0, 10);
+  const overdue = deadline && deadline < today && !paid;
+  const statut = paid ? 'paye' : overdue ? 'impaye' : 'en_attente';
+  return { found: true, id: inv.id, statut, deadline, remaining, raw: { is_paid: inv.is_paid, status: inv.status, remaining } };
+}
+
 module.exports = {
   checkStatus,
   setQuoteStatusPennylane,
+  getPaiementFacturePennylane,
   syncCommandesPennylane,
   syncDevisPennylane,
   debugDevisPennylane,

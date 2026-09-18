@@ -5390,8 +5390,18 @@ module.exports.syncPaiementsAuto = syncPaiementsAuto;
 // ── Sync paiement commande individuelle ──────────────────────────
 router.post('/commandes/:id/sync-paiement', adminOrOp, async (req, res) => {
   try {
-    const cmd = await db.get('SELECT id, num_facture, facture_vf_id FROM commandes WHERE id=$1', [req.params.id]);
-    if (!cmd || !cmd.num_facture) return res.json({ ok: false, reason: 'Pas de numéro de facture' });
+    const cmd = await db.get('SELECT id, num_facture, num_facture_pennylane, facture_vf_id FROM commandes WHERE id=$1', [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    // Sans facture VosFactures mais avec une facture Pennylane → on interroge Pennylane.
+    if (!cmd.num_facture && cmd.num_facture_pennylane) {
+      if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ ok: false, reason: 'Pennylane non configuré' });
+      const r = await require('../scripts/sync-pennylane').getPaiementFacturePennylane(cmd.num_facture_pennylane);
+      if (!r.found) return res.json({ ok: false, reason: 'Facture "' + cmd.num_facture_pennylane + '" introuvable dans Pennylane' });
+      await db.run('UPDATE commandes SET facture_paiement_statut=$1, facture_date_echeance=$2 WHERE id=$3', [r.statut, r.deadline || null, cmd.id]);
+      console.log('[PAIEMENT PL]', cmd.num_facture_pennylane, JSON.stringify(r.raw), '->', r.statut);
+      return res.json({ ok: true, source: 'pennylane', statut: r.statut, raw: r.raw });
+    }
+    if (!cmd.num_facture) return res.json({ ok: false, reason: 'Pas de numéro de facture' });
     if (!process.env.VOSFACTURES_API_TOKEN) return res.json({ ok: false, reason: 'VosFactures non configuré' });
     const axios = require('axios');
     const vfApi = axios.create({

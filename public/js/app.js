@@ -1608,7 +1608,7 @@ async function modalCommande(id, prefill){
                 ${['mail','vosfactures','fiche de mesure'].map(m=>`
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px">
                   <input type="radio" name="cmd-confirmation-mode" value="${m}" ${cm.confirmation_mode===m?'checked':''} onchange="toggleDateConfirmation(this)" style="accent-color:var(--accent)">
-                  ${m==='mail'?t('cmd_mail')||'✉ Mail':m==='vosfactures'?'📋 VosFactures':`📐 ${t('cmd_fiche_mesure')||'Fiche de mesure'}`}
+                  ${m==='mail'?t('cmd_mail')||'✉ Mail':m==='vosfactures'?'📋 Pennylane/VosFactures':`📐 ${t('cmd_fiche_mesure')||'Fiche de mesure'}`}
                 </label>`).join('')}
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text3)">
                   <input type="radio" name="cmd-confirmation-mode" value="" ${!cm.confirmation_mode?'checked':''} onchange="toggleDateConfirmation(this)" style="accent-color:var(--text3)">
@@ -1781,6 +1781,7 @@ async function modalCommande(id, prefill){
           <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
               <input class="form-input mono" id="cmd-facture-pl" value="${esc(cm.num_facture_pennylane||'')}" placeholder="FAC-2026-..." style="flex:1" oninput="majStatutBadge()">
+              ${id&&cm.num_facture_pennylane?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="${TR("Vérifier le paiement dans Pennylane")}"><i class="ti ti-refresh"></i></button>`:''}
               ${id?`<button class="btn sm" type="button" onclick="genererFacturePennylaneModal(${id})" title="${TR("Créer la facture dans Pennylane (brouillon)")}"><i class="ti ti-brand-stripe"></i></button>`:''}
             </div>
           </div>
@@ -5386,14 +5387,17 @@ applyNavTranslations();
 
 
 async function syncPaiementCommande(id){
-  toast(TR('Vérification paiement VF…'),'ti-loader-2');
+  toast(TR('Vérification du paiement…'),'ti-loader-2');
   try{
     const resp = await fetch('/api/commandes/'+id+'/sync-paiement',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const r = await resp.json();
     if(r.ok){
-      const label = r.statut==='payé'?'✅ Payé':r.statut==='impayé'?'⚠️ Impayé':'⏳ En attente';
-      toast(TR('Statut paiement : ')+label,'ti-check',r.statut==='payé'?'var(--success)':r.statut==='impayé'?'var(--danger)':'var(--warning)');
-      console.log('[VF RAW]', JSON.stringify(r.raw,null,2));
+      const st = (r.statut||'').toLowerCase();
+      const paid = st==='paye'||st==='payé'||st==='paid';
+      const imp  = st==='impaye'||st==='impayé'||st==='unpaid';
+      const label = paid?'✅ Payé':imp?'⚠️ Impayé':'⏳ En attente';
+      toast(TR('Statut paiement : ')+label,'ti-check',paid?'var(--success)':imp?'var(--danger)':'var(--warning)');
+      console.log('[PAIEMENT RAW]', (r.source||'')+' ', JSON.stringify(r.raw,null,2));
       modalCommande(id);
     } else toast(TR('Erreur : ')+(r.reason||r.error||'Inconnu'),'ti-alert-circle','var(--warning)');
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
