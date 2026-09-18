@@ -1112,7 +1112,8 @@ window.majLienReliquat = majLienReliquat;
 async function renderCommandes(ttl,c,a){
   ttl.textContent=t('cmd_title')||'Suivi des commandes';
   a.innerHTML=`<button class="btn success" onclick="API.exportExcel('commandes')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')||'Excel'}</button>
-    <button class="btn" onclick="syncCommandesVF()"><i class="ti ti-refresh"></i>${t('cmd_sync_vf')||'Synchroniser VosFactures'}</button>`;
+    <button class="btn" onclick="syncCommandesVF()"><i class="ti ti-refresh"></i>${t('cmd_sync_vf')||'Synchroniser VosFactures'}</button>
+    <button class="btn" onclick="syncPaiementsPennylane(this)"><i class="ti ti-cash"></i>${TR('Vérifier paiements Pennylane')}</button>`;
 
   // Stats filtrées par l'année sélectionnée (ou année en cours par défaut pour les compteurs)
   const anneeFiltre = CMD_FILTERS.annee ? parseInt(CMD_FILTERS.annee) : new Date().getFullYear();
@@ -5403,6 +5404,20 @@ async function syncPaiementCommande(id){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.syncPaiementCommande = syncPaiementCommande;
+
+async function syncPaiementsPennylane(btn){
+  if(btn){ btn.disabled=true; btn.dataset._html=btn.innerHTML; btn.innerHTML='<i class="ti ti-loader-2"></i>'+TR('Vérification…'); }
+  toast(TR('Vérification des paiements Pennylane…'),'ti-loader-2');
+  try{
+    const r = await API.syncPaiementsPennylane();
+    if(r.ok){
+      toast(TR('Paiements Pennylane : ')+`${r.total} ${TR('vérifiés')} · ✅ ${r.paye} · ⚠️ ${r.impaye} · ⏳ ${r.attente}`+(r.introuvable?` · ${r.introuvable} ${TR('introuvables')}`:''),'ti-check','var(--success)');
+      renderCommandesView();
+    } else toast(TR('Erreur : ')+(r.reason||r.error||'Inconnu'),'ti-alert-circle','var(--warning)');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+  finally{ if(btn){ btn.disabled=false; if(btn.dataset._html) btn.innerHTML=btn.dataset._html; } }
+}
+window.syncPaiementsPennylane = syncPaiementsPennylane;
 
 
 // ══════════════════════════════════════════════════════════════════

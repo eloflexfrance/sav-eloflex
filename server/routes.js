@@ -5448,6 +5448,34 @@ router.post('/commandes/:id/sync-paiement', adminOrOp, async (req, res) => {
   } catch(e) { console.error('[PAIEMENT ERR]', e.message); res.status(500).json({ error: e.message }); }
 });
 
+// ── Balayage global des paiements Pennylane ──────────────────────
+// Pour toutes les commandes facturées via Pennylane (num_facture_pennylane renseigné,
+// pas de facture VosFactures) dont le paiement n'est pas encore confirmé « payé » :
+// interroge Pennylane et met à jour facture_paiement_statut + date d'échéance.
+router.post('/commandes/sync-paiements-pennylane', adminOrOp, async (req, res) => {
+  try {
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) {
+      return res.json({ ok: false, reason: 'Pennylane non configuré' });
+    }
+    const { getPaiementFacturePennylane } = require('../scripts/sync-pennylane');
+    const lot = await db.all(`SELECT id, num_facture_pennylane FROM commandes
+      WHERE num_facture_pennylane IS NOT NULL AND num_facture_pennylane <> ''
+        AND (num_facture IS NULL OR num_facture = '')
+        AND (facture_paiement_statut IS NULL OR facture_paiement_statut NOT IN ('paye','payé','paid'))
+      ORDER BY id DESC`);
+    let paye = 0, impaye = 0, attente = 0, introuvable = 0, erreurs = 0;
+    for (const c of lot) {
+      try {
+        const r = await getPaiementFacturePennylane(c.num_facture_pennylane);
+        if (!r.found) { introuvable++; continue; }
+        await db.run('UPDATE commandes SET facture_paiement_statut=$1, facture_date_echeance=$2 WHERE id=$3', [r.statut, r.deadline || null, c.id]);
+        if (r.statut === 'paye') paye++; else if (r.statut === 'impaye') impaye++; else attente++;
+      } catch (e) { erreurs++; console.error('[PAIEMENT PL BATCH]', c.num_facture_pennylane, e.message); }
+    }
+    res.json({ ok: true, total: lot.length, paye, impaye, attente, introuvable, erreurs });
+  } catch(e) { console.error('[PAIEMENT PL BATCH ERR]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // ── Rattrapage global VosFactures ────────────────────────────────
 // Pour TOUTES les commandes ayant un n° BDC ou un n° de facture : retrouve le document
 // VosFactures (recherche robuste period=all + variantes de slash), enregistre le LIEN,
