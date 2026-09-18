@@ -1300,6 +1300,7 @@ async function renderCommandesTable(page=1){
           ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--text2);margin-left:2px" title="${esc(cm.informations)}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
           ${(cm.reliquat && cm.reliquat_suivi && lienSuiviColis(cm.reliquat_transporteur,cm.reliquat_suivi))?`<a href="${lienSuiviColis(cm.reliquat_transporteur,cm.reliquat_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--warning);margin-left:2px" title="${TR('Suivre le reliquat')} : ${esc(cm.reliquat_suivi)}"><i class="ti ti-truck-delivery"></i></a>`:''}
+          ${cm.proforma?`<i class="ti ti-file-invoice" style="color:${cm.proforma_payee?'var(--success)':'var(--warning)'};margin-left:2px" title="${cm.proforma_payee?TR('Proforma réglée — OK expédition'):TR('Proforma en attente de règlement')}${cm.num_proforma?' ('+esc(cm.num_proforma)+')':''}"></i>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table></div>
@@ -1782,8 +1783,28 @@ async function modalCommande(id, prefill){
           <div class="form-group"><label class="form-label">${t('cmd_facture_pl_label')||'N° facture Pennylane'}</label>
             <div style="display:flex;gap:6px">
               <input class="form-input mono" id="cmd-facture-pl" value="${esc(cm.num_facture_pennylane||'')}" placeholder="FAC-2026-..." style="flex:1" oninput="majStatutBadge()">
-              ${id&&cm.num_facture_pennylane?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="${TR("Vérifier le paiement dans Pennylane")}"><i class="ti ti-refresh"></i></button>`:''}
+              ${id?`<button class="btn sm" type="button" onclick="syncPaiementCommande(${id})" title="${TR("Vérifier le paiement dans Pennylane")}"><i class="ti ti-cash"></i></button>`:''}
               ${id?`<button class="btn sm" type="button" onclick="genererFacturePennylaneModal(${id})" title="${TR("Créer la facture dans Pennylane (brouillon)")}"><i class="ti ti-brand-stripe"></i></button>`:''}
+            </div>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:${cm.proforma?'var(--warning-bg)':'var(--surface)'}">
+              <input type="checkbox" id="cmd-proforma" ${cm.proforma?'checked':''} onchange="majProformaSection()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+              <label for="cmd-proforma" style="font-size:14px;font-weight:600;cursor:pointer">${TR('Proforma')}</label>
+            </div>
+            <div id="cmd-proforma-desc" style="${cm.proforma?'':'display:none'};margin-top:8px">
+              <div class="grid-2" style="gap:10px">
+                <div class="form-group"><label class="form-label">${TR('N° proforma')}</label>
+                  <input class="form-input mono" id="cmd-num-proforma" value="${esc(cm.num_proforma||'')}" placeholder="PRO-2026-...">
+                </div>
+                <div class="form-group"><label class="form-label">${TR('Date proforma')}</label>
+                  <input class="form-input" id="cmd-proforma-date" type="date" value="${cm.proforma_date||''}">
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-top:6px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:${cm.proforma_payee?'var(--success-bg)':'var(--surface)'}">
+                <input type="checkbox" id="cmd-proforma-payee" ${cm.proforma_payee?'checked':''} onchange="majStatutBadge()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--success)">
+                <label for="cmd-proforma-payee" style="font-size:14px;font-weight:600;cursor:pointer;color:var(--success)">✅ ${TR('Proforma réglée — OK pour expédition')}</label>
+              </div>
             </div>
           </div>
           <div class="form-group" style="grid-column:1/-1"><label class="form-label">Informations</label>
@@ -2179,6 +2200,16 @@ async function lookupBordereauVF(){
   }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
 }
 
+function majProformaSection(){
+  const on = !!$('cmd-proforma')?.checked;
+  const desc = $('cmd-proforma-desc'); if(desc) desc.style.display = on ? '' : 'none';
+  const box = $('cmd-proforma')?.closest('div');
+  if(box) box.style.background = on ? 'var(--warning-bg)' : 'var(--surface)';
+  if(!on){ const pe = $('cmd-proforma-payee'); if(pe) pe.checked = false; }
+  majStatutBadge();
+}
+window.majProformaSection = majProformaSection;
+
 function majStatutBadge(){
   const sel = $('cmd-statut'); if(!sel) return;
   const badge = $('cmd-statut-badge');
@@ -2193,8 +2224,10 @@ function majStatutBadge(){
   const suivi    = (gv('cmd-suivi')||'').trim();
   const livraison = (gv('cmd-livraison')||'').trim();
   const facture  = (gv('cmd-facture')||'').trim() || (gv('cmd-facture-pl')||'').trim();
+  const proformaPayee = !!$('cmd-proforma-payee')?.checked;
   let calc = 'En préparation';
-  if(facture)                    calc = 'Facturé';
+  if(proformaPayee)              calc = 'Payé';
+  else if(facture)               calc = 'Facturé';
   else if(livraison)             calc = 'Livré';
   else if(isRealTracking(suivi)) calc = 'Expédié';
   // bdc → En préparation (déjà valeur par défaut)
@@ -2400,6 +2433,10 @@ async function enregistrerCommande(id){
     date_confirmation: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value ? (gv('cmd-date-confirmation') || window._CMD_CONF_DATE || new Date().toISOString().slice(0,10)) : null,
     num_avoir: gv('cmd-avoir')||null,
     num_facture_pennylane: gv('cmd-facture-pl')||null,
+    proforma: !!document.getElementById('cmd-proforma')?.checked,
+    num_proforma: gv('cmd-num-proforma')||null,
+    proforma_date: gv('cmd-proforma-date')||null,
+    proforma_payee: !!document.getElementById('cmd-proforma-payee')?.checked,
     pays: gv('cmd-pays')||CURRENT_USER.pays||'France',
   };
   // Si une proposition a été sélectionnée dans l'autocomplétion, on rattache à la fiche exacte

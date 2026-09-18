@@ -2568,6 +2568,7 @@ router.get('/commandes', async (req, res) => {
          cmd.num_facture, cmd.num_facture_pennylane, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
          cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.annee_onglet, cmd.groupe,
+         cmd.proforma, cmd.num_proforma, cmd.proforma_payee,
          cmd.commande_type, cmd.type_fauteuil_neuf, cmd.type_fauteuil_demo, cmd.type_pieces,
          (cmd.informations ILIKE '%avoir%') AS est_avoir,
          c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,
@@ -4168,8 +4169,10 @@ router.post('/commandes', async (req, res) => {
         invoice_se, informations, statut, num_bordereau, reliquat, reliquat_description, modele_demo,
         num_retour, transporteur_retour, date_retour, num_commande_distrib,
         commande_type, ref_suede, date_envoi_suede, confirmation_recue, date_confirmation,
-        facture_vf_id, bdc_source, bdc_doc_id, reliquat_suivi, reliquat_transporteur, reliquat_bl, reliquat_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48) RETURNING *`,
+        facture_vf_id, bdc_source, bdc_doc_id, reliquat_suivi, reliquat_transporteur, reliquat_bl, reliquat_date,
+        proforma, num_proforma, proforma_date, proforma_payee, facture_paiement_statut,
+        type_fauteuil_neuf, type_fauteuil_demo, type_pieces, confirmation_mode)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51,$52,$53,$54,$55,$56,$57) RETURNING *`,
       [clientId, d.fauteuil_id || null, d.annee_onglet || new Date().getFullYear(), d.groupe || null,
        d.distributeur_nom, d.modele || null, parseInt(d.quantite) || 1, d.accessoire || null, d.bdc || null, d.date_commande || null,
        d.vf_order_id || null, d.client_final || null, d.client_final_type || null, d.cf_nom||null, d.cf_prenom||null, d.cf_adresse||null, d.cf_cp||null, d.cf_ville||null, d.cf_tel||null, d.cf_email||null, d.num_suivi || null, d.transporteur || null, d.date_livraison || null,
@@ -4179,7 +4182,10 @@ router.post('/commandes', async (req, res) => {
        d.commande_type || null, d.ref_suede || null, d.date_envoi_suede || null,
        d.confirmation_recue ? true : false, d.date_confirmation || null,
        d.facture_vf_id || null, d.bdc_source || null, d.bdc_doc_id || null,
-       d.reliquat_suivi || null, d.reliquat_transporteur || null, d.reliquat_bl || null, d.reliquat_date || null]
+       d.reliquat_suivi || null, d.reliquat_transporteur || null, d.reliquat_bl || null, d.reliquat_date || null,
+       d.proforma ? true : false, d.num_proforma || null, d.proforma_date || null, d.proforma_payee ? true : false,
+       d.proforma_payee ? 'paye' : null,
+       d.type_fauteuil_neuf ? true : false, d.type_fauteuil_demo ? true : false, d.type_pieces ? true : false, d.confirmation_mode || null]
     );
     await majFauteuilVente(row);
     await majRappelDemo(row);
@@ -4200,12 +4206,15 @@ router.put('/commandes/:id', async (req, res) => {
       'num_retour', 'transporteur_retour', 'date_retour', 'num_commande_distrib',
       'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
       'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation',
-      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'facture_vf_id', 'bdc_source', 'bdc_doc_id', 'pays'];
+      'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'facture_vf_id', 'bdc_source', 'bdc_doc_id', 'pays',
+      'proforma', 'num_proforma', 'proforma_date', 'proforma_payee'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
       if (d[champ] !== undefined) { sets.push(`${champ}=$${++idx}`); p.push(d[champ] === '' ? null : d[champ]); }
     }
+    // Proforma réglée → feu vert expédition + passage du statut de paiement à « Payé ».
+    if (d.proforma_payee === true) { sets.push(`facture_paiement_statut=$${++idx}`); p.push('paye'); }
     if (!sets.length) return res.status(400).json({ error: 'Aucun champ à mettre à jour' });
     sets.push(`updated_at=NOW()`);
     p.push(req.params.id);

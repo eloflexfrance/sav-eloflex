@@ -340,6 +340,10 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_paiement_statut TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_date_echeance TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS facture_vf_id BIGINT`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS proforma BOOLEAN DEFAULT FALSE`);       // commande sur proforma (paiement d'avance)
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS num_proforma TEXT`);                    // n° du document proforma
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS proforma_date TEXT`);                   // date de la proforma
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS proforma_payee BOOLEAN DEFAULT FALSE`); // proforma réglée → feu vert expédition + statut Payé
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS bdc_source TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS bdc_doc_id TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_final_type TEXT`);
