@@ -8534,29 +8534,35 @@ function pretBonHTML(p){
       <td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;color:#1F5C8C;font-weight:bold;width:50%">FORMULE : ${esc(formuleTxt)}</td>
       <td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;color:#1F5C8C;font-weight:bold;width:50%">DURÉE</td>
     </tr><tr>
-      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.formule==='long_terme'?bx+' Prêt Long Terme (&ge; 3 mois)':bx+' Essai Court (15 à 30 j)'}</td>
-      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">Date de remise : ${fdi(p.date_remise)}<br>Date de retour prévue : ${fdi(p.date_retour_prevue)}<br>Prorogation jusqu'au : ${fdi(p.prorogation_date)}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.formule==='long_terme'?bx+' Prêt Long Terme (&ge; 3 mois, renouvelable)':bx+' Essai Court (15 à 30 j) — essai patient : 7 jours maximum'}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">Mise à disposition sous 15 j (21 j max)<br>Date de remise : ${fdi(p.date_remise)}<br>Date de retour prévue : ${fdi(p.date_retour_prevue)}<br>Prorogation jusqu'au : ${fdi(p.prorogation_date)}</td>
     </tr></table>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
       <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Désignation / Modèle</td>
-      <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Réf.</td>
       <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">N° de série</td>
       <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Valeur HT</td>
+      <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Emballage OK ?</td>
+      <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">État général</td>
     </tr>
     ${pretArticlesOf(p).map(a=>`<tr>
       <td style="border:1px solid #CCC;padding:6px 7px">${esc(a.designation||'')}</td>
-      <td style="border:1px solid #CCC;padding:6px 7px">${esc(a.reference||'')}</td>
       <td style="border:1px solid #CCC;padding:6px 7px">${esc(a.num_serie||'')}</td>
       <td style="border:1px solid #CCC;padding:6px 7px">${a.prix!=null&&a.prix!==''?esc(Number(a.prix).toFixed(2))+' € HT':''}</td>
+      <td style="border:1px solid #CCC;padding:6px 7px;white-space:nowrap">${bx} Oui &nbsp; ${bx} Non</td>
+      <td style="border:1px solid #CCC;padding:6px 7px;white-space:nowrap">${bx} Neuf &nbsp; ${bx} TB &nbsp; ${bx} Bon</td>
     </tr>`).join('')}
-    <tr><td colspan="3" style="border:1px solid #CCC;padding:5px 7px;text-align:right;font-weight:bold">Total HT</td>
-      <td style="border:1px solid #CCC;padding:5px 7px;font-weight:bold">${esc(Number(pretArticlesOf(p).reduce((s,a)=>s+(parseFloat(a.prix)||0),0)).toFixed(2))} € HT</td></tr></table>
+    <tr><td colspan="2" style="border:1px solid #CCC;padding:5px 7px;text-align:right;font-weight:bold">Total HT</td>
+      <td style="border:1px solid #CCC;padding:5px 7px;font-weight:bold">${esc(Number(pretArticlesOf(p).reduce((s,a)=>s+(parseFloat(a.prix)||0),0)).toFixed(2))} € HT</td>
+      <td style="border:1px solid #CCC;padding:5px 7px"></td><td style="border:1px solid #CCC;padding:5px 7px"></td></tr></table>
     ${p.observations?`<p style="margin:0 0 8px;font-style:italic;color:#555;font-size:11px">Observations sur l'état initial : ${esc(p.observations)}</p>`:''}
     <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">ENGAGEMENTS DE L'EMPRUNTEUR</div>
     <p style="margin:6px 0 6px;font-style:italic;color:#555;font-size:11px">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions. Il confirme notamment :</p>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px;table-layout:fixed"><tr>
       <td style="padding:0 12px 0 0;vertical-align:top;width:50%;font-size:11px;line-height:1.5">
+        <span style="color:#1F5C8C">&#9679;</span> Veiller au bon fonctionnement et à une utilisation dans un environnement convenable<br>
         <span style="color:#1F5C8C">&#9679;</span> Utiliser le matériel uniquement pour des essais patients supervisés par un ergothérapeute<br>
+        <span style="color:#1F5C8C">&#9679;</span> Laisser le fauteuil au client final 7 jours maximum par essai<br>
+        <span style="color:#1F5C8C">&#9679;</span> Faire signer une décharge de responsabilité à chaque patient et la retourner à ELOFLEX<br>
         <span style="color:#1F5C8C">&#9679;</span> Conserver l'emballage et les mousses de protection<br>
         <span style="color:#1F5C8C">&#9679;</span> Signaler immédiatement tout incident ou dommage à ELOFLEX
       </td>
@@ -8564,7 +8570,8 @@ function pretBonHTML(p){
         <span style="color:#1F5C8C">&#9679;</span> Maintenir le matériel en état quasi-neuf (Prêt Long Terme)<br>
         <span style="color:#1F5C8C">&#9679;</span> Assurer au moins 1 essai / mois (Prêt Long Terme)<br>
         <span style="color:#1F5C8C">&#9679;</span> Confirmer par e-mail le bon état du fauteuil avant retour<br>
-        <span style="color:#1F5C8C">&#9679;</span> Prendre en charge les frais de retour (50 € HT / fauteuil)
+        <span style="color:#1F5C8C">&#9679;</span> Prendre en charge les frais de retour (50 € HT / fauteuil)<br>
+        <span style="color:#1F5C8C">&#9679;</span> Retourner le fauteuil dans son carton d'origine, propre et fonctionnel
       </td>
     </tr></table>
     <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">CONDITIONS FINANCIÈRES EN CAS DE DOMMAGE OU PERTE</div>
@@ -8768,10 +8775,26 @@ function contratBonHTML(c){
     <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 4 – Obligations de l'Emprunteur</h3>
     <p style="margin:0 0 3px">4.1 – Communes : essais supervisés par un ergothérapeute ; bon état et propreté ; interdiction de prêter/céder à un tiers ; signalement des incidents ; retour emballé avec mousses ; confirmation par e-mail avant retour ; respect du délai ; frais de retour 50 € HT/fauteuil ; prise en charge MO + pièces de remise en état.</p>
     <p style="margin:0">4.2 – Long Terme : état « quasi neuf » ; ≥ 1 essai/mois ; information en cas d'indisponibilité ; bilan trimestriel simplifié.</p>
-    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 5 – Responsabilité et garantie</h3>
-    <p>Responsabilité de la réception au retour (art. 1880-1884 C. civ.). Perte/destruction totale : prix catalogue public HT à la date du sinistre. Dommages partiels : frais réels (pièces + MO tarif SAV) sur devis ou facture ; usure normale non facturée. Assurance RC pro recommandée.</p>
+    <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 5 – Responsabilité et garantie du matériel</h3>
+    <p>L'Emprunteur est responsable du matériel dès sa réception et jusqu'à son retour effectif chez ELOFLEX (accusé de réception ou bon de livraison signé), articles 1880 à 1884 du Code civil. En cas de perte, vol, destruction ou détérioration importante, et si le matériel n'est pas retourné dans les délais impartis :</p>
+    <ul style="margin:4px 0 8px;padding-left:18px">
+      <li><b>Perte ou destruction totale</b> : la valeur déclarée dans le Bon de Prêt ou, à défaut, le prix catalogue public HT en vigueur à la date du sinistre.</li>
+      <li><b>Dommages partiels</b> : ELOFLEX adresse un devis détaillé des réparations ; à défaut de contestation motivée dans un délai de quinze (15) jours, il est réputé accepté. En cas de contestation motivée, les Parties recherchent un accord amiable ; à défaut d'accord dans un délai de quinze (15) jours, le montant est déterminé par un réparateur indépendant spécialisé choisi d'un commun accord, dont les frais sont supportés par la Partie dont la position a été écartée. L'usure normale n'est pas facturée.</li>
+    </ul>
+    <p>L'Emprunteur est invité à s'assurer que sa police d'assurance RC professionnelle couvre les biens confiés à titre de prêt. ELOFLEX pourra demander une attestation d'assurance.</p>
     <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 6 – Frais de retour et d'emballage</h3>
-    <p>Retour : 50 € HT/fauteuil. Emballage/mousses manquants : 90 € HT au total si l'emballage complet est absent. Facturés séparément, sans contrepartie du prêt.</p>
+    <table style="border-collapse:collapse;width:100%;font-size:12px;margin:4px 0 8px">
+      <tr><th style="border:1px solid #CCC;padding:5px 8px;background:#F2F5F8;text-align:left">Prestation</th>
+        <th style="border:1px solid #CCC;padding:5px 8px;background:#F2F5F8">Essai Court</th>
+        <th style="border:1px solid #CCC;padding:5px 8px;background:#F2F5F8">Long Terme</th></tr>
+      <tr><td style="border:1px solid #CCC;padding:5px 8px">Frais de retour (transport) par fauteuil</td>
+        <td style="border:1px solid #CCC;padding:5px 8px;text-align:center">50 € HT</td>
+        <td style="border:1px solid #CCC;padding:5px 8px;text-align:center">50 € HT</td></tr>
+      <tr><td style="border:1px solid #CCC;padding:5px 8px">Supplément si emballage / mousses manquants</td>
+        <td style="border:1px solid #CCC;padding:5px 8px;text-align:center">90 € HT*</td>
+        <td style="border:1px solid #CCC;padding:5px 8px;text-align:center">90 € HT*</td></tr>
+    </table>
+    <p>* Soit 90 € HT au total si l'emballage complet est absent. Ces frais sont facturés séparément à l'issue du prêt et ne constituent en aucun cas une contrepartie financière du prêt.</p>
     <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 7 – Cession du matériel</h3>
     <p>Offre de rachat possible à tout moment, sans engagement pour ELOFLEX ; prix librement fixé au jour de la vente, formalisé par un bon de commande distinct + facture de vente. Le transfert de propriété met fin au prêt pour ce matériel.</p>
     <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 8 – Durée et fin du prêt</h3>

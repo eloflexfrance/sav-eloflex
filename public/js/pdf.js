@@ -152,7 +152,7 @@ const PDF = {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     const L = 15, R = 195, W = R - L;
-    const FORM = { essai_court:'Essai court (15 à 30 jours)', long_terme:'Prêt long terme (≥ 3 mois, renouvelable)' };
+    const FORM = { essai_court:'Essai court (15 à 30 jours) — essai patient : 7 j max', long_terme:'Prêt long terme (≥ 3 mois, renouvelable)' };
     let y = 18;
     doc.setFontSize(15); doc.setFont('helvetica','bold'); doc.setTextColor(31,92,140);
     doc.text('BON DE PRÊT — FAUTEUIL ROULANT ÉLECTRIQUE', 105, y, { align:'center' }); y += 5;
@@ -173,6 +173,7 @@ const PDF = {
 
     band('2 · FORMULE & DURÉE');
     line2('Formule', FORM[p.formule] || p.formule || '—');
+    line2('Mise à disposition', 'sous 15 j (21 j max)');
     line2('Date de remise', this.fd((p.date_remise||'').slice(0,10)));
     line2('Retour prévu', this.fd((p.date_retour_prevue||'').slice(0,10)));
     if (p.prorogation_date) line2('Prorogation', this.fd((p.prorogation_date||'').slice(0,10)));
@@ -182,18 +183,19 @@ const PDF = {
     let arts = p.articles;
     if (typeof arts === 'string') { try { arts = JSON.parse(arts); } catch(e){ arts = null; } }
     if (!Array.isArray(arts) || !arts.length) arts = (p.designation||p.num_serie||p.valeur_ht!=null) ? [{designation:p.designation||'', reference:'', num_serie:p.num_serie||'', prix:p.valeur_ht}] : [];
-    doc.setFontSize(8); doc.setFont('helvetica','bold');
-    doc.text('Désignation', L, y); doc.text('Réf.', L+95, y); doc.text('N° série', L+120, y); doc.text('Prix HT', L+160, y); y += 4.5;
+    doc.setFontSize(7.5); doc.setFont('helvetica','bold');
+    doc.text('Désignation / Modèle', L, y); doc.text('N° série', L+56, y); doc.text('Valeur HT', L+88, y); doc.text('Emballage OK ?', L+110, y); doc.text('État général', L+143, y); y += 4.5;
     doc.setFont('helvetica','normal'); let totArt = 0;
     arts.forEach(a => {
       const prix = parseFloat(a.prix)||0; totArt += prix;
-      doc.text(doc.splitTextToSize(String(a.designation||''), 78)[0] || '', L, y);
-      doc.text(String(a.reference||''), L+95, y);
-      doc.text(String(a.num_serie||''), L+120, y);
-      doc.text(a.prix!=null&&a.prix!==''?(prix.toFixed(2)+' €'):'', L+160, y);
+      doc.text(doc.splitTextToSize(String(a.designation||''), 52)[0] || '', L, y);
+      doc.text(String(a.num_serie||''), L+56, y);
+      doc.text(a.prix!=null&&a.prix!==''?(prix.toFixed(2)+' €'):'', L+88, y);
+      doc.text('[ ] Oui  [ ] Non', L+110, y);
+      doc.text('[ ] Neuf [ ] TB [ ] Bon', L+143, y);
       y += 4.5;
     });
-    doc.setFont('helvetica','bold'); doc.text('Total HT : ' + totArt.toFixed(2) + ' €', L+120, y+1); doc.setFont('helvetica','normal'); y += 6;
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.text('Total HT : ' + totArt.toFixed(2) + ' €', L+56, y+1); doc.setFont('helvetica','normal'); y += 6;
     if (p.observations) { doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(90,90,90);
       doc.text(doc.splitTextToSize('Observations : ' + p.observations, W), L, y); y += 5 + Math.min(20, doc.splitTextToSize(p.observations, W).length*4); doc.setTextColor(0,0,0); }
     y += 2;
@@ -206,11 +208,15 @@ const PDF = {
     doc.text("Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions. Il confirme notamment :", L, y); y += 5;
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(45,45,45);
     const engs = [
+      "Veiller au bon fonctionnement et à une utilisation dans un environnement convenable",
       "Utiliser le matériel uniquement pour des essais patients supervisés par un ergothérapeute",
+      "Laisser le fauteuil au client final 7 jours maximum par essai",
+      "Faire signer une décharge de responsabilité à chaque patient et la retourner à ELOFLEX",
       "Conserver l'emballage et les mousses de protection",
       "Signaler immédiatement tout incident ou dommage à ELOFLEX",
       "Confirmer par e-mail le bon état du fauteuil avant retour",
       "Prendre en charge les frais de retour (50 € HT / fauteuil)",
+      "Retourner le fauteuil dans son carton d'origine, propre et fonctionnel",
       "Maintenir le matériel en état quasi-neuf (Prêt Long Terme)",
       "Assurer au moins 1 essai / mois (Prêt Long Terme)",
     ];
@@ -332,13 +338,35 @@ const PDF = {
     ].forEach(bullet);
 
     art('Article 5 – Responsabilité et garantie du matériel');
-    para("L'Emprunteur est responsable du matériel dès sa réception et jusqu'à son retour effectif chez ELOFLEX (articles 1880 à 1884 du Code civil). En cas de perte, vol, destruction ou détérioration importante, et si le matériel n'est pas retourné dans les délais :");
-    bullet("Perte ou destruction totale : prix catalogue public HT du matériel en vigueur à la date du sinistre.");
-    bullet("Dommages partiels : frais réels de remise en état (pièces + main d'œuvre au tarif SAV ELOFLEX) sur devis préalable accepté ou facture. L'usure normale n'est pas facturée.");
-    para("L'Emprunteur est invité à vérifier que sa police d'assurance RC professionnelle couvre les biens confiés à titre de prêt. ELOFLEX pourra demander une attestation d'assurance.");
+    para("L'Emprunteur est responsable du matériel dès sa réception et jusqu'à son retour effectif chez ELOFLEX (constaté par accusé de réception ou bon de livraison signé), dans les conditions des articles 1880 à 1884 du Code civil. En cas de perte, vol, destruction ou détérioration importante, et si le matériel n'est pas retourné dans les délais impartis, l'Emprunteur sera tenu de régler à ELOFLEX, le cas échéant :");
+    bullet("Perte ou destruction totale : la valeur déclarée dans le Bon de Prêt ou, à défaut, le prix catalogue public HT du matériel en vigueur à la date du sinistre.");
+    bullet("Dommages partiels : ELOFLEX adresse un devis détaillé des réparations. À défaut de contestation motivée dans un délai de quinze (15) jours à compter de sa réception, ce devis est réputé accepté et ELOFLEX peut procéder aux réparations. En cas de contestation motivée, les Parties s'efforcent de parvenir à un accord amiable ; à défaut d'accord dans un délai de quinze (15) jours, le montant des réparations est déterminé sur la base d'un devis établi par un réparateur indépendant spécialisé choisi d'un commun accord, dont les frais sont supportés par la Partie dont la position a été écartée. L'usure normale résultant d'une utilisation conforme au présent contrat n'est pas facturée.");
+    para("L'Emprunteur est invité à s'assurer que sa police d'assurance responsabilité civile professionnelle couvre les biens confiés à titre de prêt. ELOFLEX pourra demander une attestation d'assurance.");
 
     art("Article 6 – Frais de retour et d'emballage");
-    para("Frais de retour (transport) : 50 € HT par fauteuil. Supplément si emballage / mousses manquants : soit 90 € HT au total si l'emballage complet est absent. Ces frais sont facturés séparément à l'issue du prêt et ne constituent pas une contrepartie du prêt.");
+    // Tableau des frais : Prestation | Essai Court | Long Terme
+    (() => {
+      const rh = 7, c0 = L, c1 = L + 110, c2 = L + 144, c3 = R;
+      const rows6 = [
+        ['Prestation', 'Essai Court', 'Long Terme'],
+        ['Frais de retour (transport) par fauteuil', '50 € HT', '50 € HT'],
+        ['Supplément si emballage / mousses manquants', '90 € HT*', '90 € HT*'],
+      ];
+      doc.setFontSize(8.5);
+      rows6.forEach((r, ri) => {
+        ensure(rh);
+        if (ri === 0) { doc.setFillColor(238, 242, 246); doc.rect(c0, y - 4.6, c3 - c0, rh, 'F'); doc.setFont('helvetica', 'bold'); }
+        else doc.setFont('helvetica', 'normal');
+        doc.setDrawColor(200, 205, 212);
+        doc.rect(c0, y - 4.6, c1 - c0, rh); doc.rect(c1, y - 4.6, c2 - c1, rh); doc.rect(c2, y - 4.6, c3 - c2, rh);
+        doc.text(doc.splitTextToSize(r[0], c1 - c0 - 4)[0] || '', c0 + 2, y);
+        doc.text(r[1], (c1 + c2) / 2, y, { align: 'center' });
+        doc.text(r[2], (c2 + c3) / 2, y, { align: 'center' });
+        y += rh;
+      });
+      y += 2; doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    })();
+    para("* Soit 90 € HT au total si l'emballage complet est absent. Ces frais sont facturés séparément à l'issue du prêt et ne constituent en aucun cas une contrepartie financière du prêt.");
 
     art('Article 7 – Cession du matériel');
     para("L'Emprunteur peut, à tout moment, formuler une offre d'achat du matériel prêté. Cette offre n'engage pas ELOFLEX. En cas d'accord, le prix est librement déterminé par les Parties au jour de la vente et formalisé par un bon de commande distinct émis par ELOFLEX ainsi qu'une facture de vente. Le transfert de propriété met fin au prêt pour ce matériel. En Prêt Long Terme, une remise à neuf préalable pourra être organisée avec le service technique ELOFLEX.");
