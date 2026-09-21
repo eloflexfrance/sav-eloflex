@@ -2786,6 +2786,7 @@ async function renderParametres(ttl,c,a){
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn primary" id="btn-scan-siren" onclick="lancerScanSiren()"><i class="ti ti-search"></i> ${TR('Analyser les clients sans SIREN')}</button>
         <button class="btn" id="btn-export-siren" onclick="telechargerExcelSiren()" style="display:none"><i class="ti ti-file-spreadsheet"></i> ${TR("Télécharger l'Excel")}</button>
+        <button class="btn" onclick="telechargerClientsPennylane()"><i class="ti ti-download"></i> ${TR('Exporter tous les clients Pennylane (état actuel)')}</button>
       </div>
       <div id="scan-siren-result" style="margin-top:10px"></div>
     </div>
@@ -3479,6 +3480,8 @@ async function lancerScanSiren(){
 window.lancerScanSiren = lancerScanSiren;
 function telechargerExcelSiren(){ window.open('/api/admin/pennylane-siren/export.xlsx','_blank'); }
 window.telechargerExcelSiren = telechargerExcelSiren;
+function telechargerClientsPennylane(){ toast(TR('Export en cours… (garde l\'onglet ouvert)'),'ti-loader-2'); window.open('/api/admin/pennylane-customers-export.xlsx','_blank'); }
+window.telechargerClientsPennylane = telechargerClientsPennylane;
 
 function telechargerRapportRattrapage(){
   const S=RATT_LAST; if(!S){ toast(TR('Aucun rapport disponible'),'ti-alert-circle','var(--danger)'); return; }

@@ -5625,6 +5625,50 @@ router.get('/admin/pennylane-siren', adminOnly, async (req, res) => {
   } catch (e) { console.error('[PL SIREN]', e.message); res.status(500).json({ error: e.message }); }
 });
 
+// Type de client Pennylane : Particulier / Entreprise (détection tolérante).
+function _typeCustomer(c) {
+  const t = String(c.customer_type || c.type || c.kind || c.category || '').toLowerCase();
+  if (/indiv|particulier|person|private|individual/.test(t)) return 'Particulier';
+  if (/compan|corp|business|entreprise|soci[ée]t|pro|legal|organization/.test(t)) return 'Entreprise';
+  if (c.company_name) return 'Entreprise';
+  if ((c.first_name || c.last_name) && !c.name) return 'Particulier';
+  return c.name ? 'Entreprise' : '';
+}
+
+// Export Excel de l'ÉTAT ACTUEL de tous les clients Pennylane (pour comparaison hors ligne).
+// Colonnes : ID source, ID Pennylane, Nom, Type, SIREN Pennylane, N° TVA Pennylane, Adresse, CP, Ville + champ type brut.
+router.get('/admin/pennylane-customers-export.xlsx', adminOnly, async (req, res) => {
+  try {
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) {
+      return res.status(400).json({ error: 'Pennylane non configuré' });
+    }
+    const { plApi, fetchAllPages } = require('../scripts/sync-pennylane');
+    const XLSX = require('xlsx');
+    const api = plApi();
+    const custs = await fetchAllPages(api, '/customers', {}, 100, 300);
+    const rows = custs.map(c => ({
+      'ID source': c.source_id || '',
+      'ID Pennylane': c.id != null ? c.id : '',
+      'Nom': _custNom(c),
+      'Type': _typeCustomer(c),
+      'SIREN Pennylane': _sirenDeCustomer(c),
+      'N° TVA Pennylane': _custTva(c),
+      'Adresse': _custAdresseLigne(c),
+      'Code postal': _custCP(c),
+      'Ville': _custVille(c),
+      'type_brut': String(c.customer_type || c.type || c.kind || ''),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 38 }, { wch: 12 }, { wch: 34 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 40 }, { wch: 10 }, { wch: 20 }, { wch: 16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Clients Pennylane');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Pennylane_clients_actuels.xlsx"');
+    res.send(buf);
+  } catch (e) { console.error('[PL CUSTOMERS EXPORT]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // Export Excel du dernier scan : GET /admin/pennylane-siren/export.xlsx
 router.get('/admin/pennylane-siren/export.xlsx', adminOnly, async (req, res) => {
   try {
