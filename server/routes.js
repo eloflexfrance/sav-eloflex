@@ -5485,6 +5485,178 @@ router.post('/commandes/sync-paiements-pennylane', adminOrOp, async (req, res) =
   } catch(e) { console.error('[PAIEMENT PL BATCH ERR]', e.message); res.status(500).json({ error: e.message }); }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// ── CLIENTS PENNYLANE SANS SIREN : recherche annuaire + export Excel
+// ══════════════════════════════════════════════════════════════════
+const PL_COMPANY_ID_SRV = process.env.PENNYLANE_COMPANY_ID || '22996810';
+
+// Extrait un SIREN (9 chiffres) d'un objet customer Pennylane, quel que soit le nom du champ.
+function _sirenDeCustomer(c) {
+  const champs = [c.reg_no, c.registration_number, c.siren, c.siret, c.company_registration_number,
+    c.legal_registration_number, c.registration_no, c.company_number];
+  for (const v of champs) {
+    const digits = String(v == null ? '' : v).replace(/\D/g, '');
+    if (digits.length >= 9) return digits.slice(0, 9);
+  }
+  return '';
+}
+function _custNom(c) {
+  return (c.name || c.company_name || c.reference
+    || [c.first_name, c.last_name].filter(Boolean).join(' ')).trim();
+}
+function _custAdrObj(c) { return c.billing_address || c.address || c.headquarter_address || c || {}; }
+function _custCP(c) { const a = _custAdrObj(c); return String(a.postal_code || a.zip_code || a.postcode || c.postal_code || '').trim(); }
+function _custVille(c) { const a = _custAdrObj(c); return String(a.city || a.town || c.city || '').trim(); }
+function _custAdresseLigne(c) {
+  const a = _custAdrObj(c);
+  const rue = a.address || a.street_address || a.line1 || [a.street_number, a.street].filter(Boolean).join(' ') || '';
+  return [rue, [_custCP(c), _custVille(c)].filter(Boolean).join(' '), a.country || ''].filter(Boolean).join(', ').trim();
+}
+function _custTel(c) { return String(c.phone || c.phone_number || c.tel || (_custAdrObj(c).phone) || '').trim(); }
+function _custMail(c) { return String(c.billing_email || c.email || c.emails && c.emails[0] || '').trim(); }
+function _custTva(c) { return String(c.vat_number || c.intracom_vat || c.tva || '').trim(); }
+
+// N° TVA intracommunautaire FR calculé depuis le SIREN : FR + clé(2) + SIREN.
+function _tvaFrDeSiren(siren) {
+  if (!/^\d{9}$/.test(siren)) return '';
+  const cle = (12 + 3 * (parseInt(siren, 10) % 97)) % 97;
+  return 'FR' + String(cle).padStart(2, '0') + siren;
+}
+function _normNom(s) {
+  return String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\b(SARL|SASU|SAS|EURL|SCI|EIRL|SA)\b/g, ' ') // formes juridiques seulement
+    .replace(/[^A-Z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function _scoreNoms(a, b) {
+  const ta = new Set(_normNom(a).split(' ').filter(Boolean));
+  const tb = new Set(_normNom(b).split(' ').filter(Boolean));
+  if (!ta.size || !tb.size) return 0;
+  let inter = 0; ta.forEach(t => { if (tb.has(t)) inter++; });
+  return Math.round((100 * inter) / Math.max(ta.size, tb.size));
+}
+// Recherche annuaire officiel (gratuit, sans clé) : renvoie les candidats entreprises.
+async function _rechercheEntrepriseGouv(nom, cp) {
+  const q = _normNom(nom); if (!q) return [];
+  const params = { q, per_page: 5, page: 1 };
+  if (/^\d{5}$/.test(cp)) params.code_postal = cp;
+  const { data } = await axios.get('https://recherche-entreprises.api.gouv.fr/search', { params, timeout: 15000 });
+  return (data.results || []).map(r => {
+    const siege = r.siege || {};
+    return {
+      siren: String(r.siren || '').replace(/\D/g, ''),
+      nom: r.nom_complet || r.nom_raison_sociale || '',
+      cp: String(siege.code_postal || '').trim(),
+      ville: siege.libelle_commune || '',
+      naf: siege.activite_principale || r.activite_principale || '',
+      etat: r.etat_administratif || siege.etat_administratif || '',
+    };
+  }).filter(x => /^\d{9}$/.test(x.siren));
+}
+// Meilleur candidat : score = ressemblance du nom (+30 si CP identique).
+function _meilleurSiren(nom, cp, candidats) {
+  let best = null, bestScore = -1;
+  for (const cand of candidats) {
+    let sc = _scoreNoms(nom, cand.nom);
+    if (cp && cand.cp && cp === cand.cp) sc += 30;
+    if (sc > bestScore) { bestScore = sc; best = cand; }
+  }
+  return best ? { ...best, score: Math.min(100, bestScore) } : null;
+}
+
+// Cache serveur du dernier scan (outil admin mono-utilisateur).
+let _plSirenScan = { at: 0, sans: [], nbAvec: 0, nbTotal: 0 };
+
+// Scan batché : GET /admin/pennylane-siren?offset=&limit=
+// offset=0 → (re)charge tous les customers Pennylane et isole ceux sans SIREN ;
+// chaque appel enrichit un LOT via l'annuaire officiel. Boucler jusqu'à done=true.
+router.get('/admin/pennylane-siren', adminOnly, async (req, res) => {
+  try {
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) {
+      return res.json({ ok: false, reason: 'Pennylane non configuré' });
+    }
+    const { plApi, fetchAllPages } = require('../scripts/sync-pennylane');
+    const offset = Math.max(0, parseInt(req.query.offset) || 0);
+    const limit = Math.min(40, Math.max(1, parseInt(req.query.limit) || 20));
+    let echantillon = null;
+
+    if (offset === 0) {
+      const api = plApi();
+      const custs = await fetchAllPages(api, '/customers', {}, 100, 300);
+      echantillon = custs.length ? Object.keys(custs[0]) : [];
+      const sans = [];
+      let nbAvec = 0;
+      for (const c of custs) {
+        if (_sirenDeCustomer(c)) { nbAvec++; continue; }
+        const nom = _custNom(c);
+        if (!nom) continue;
+        sans.push({
+          id: c.id, nom, adresse: _custAdresseLigne(c), cp: _custCP(c), ville: _custVille(c),
+          tel: _custTel(c), mail: _custMail(c), tva: _custTva(c),
+          siren_propose: '', tva_calc: '', cand_nom: '', cand_ville: '', score: null, enrichi: false,
+        });
+      }
+      _plSirenScan = { at: Date.now(), sans, nbAvec, nbTotal: custs.length };
+    }
+
+    const scan = _plSirenScan;
+    const lot = scan.sans.slice(offset, offset + limit);
+    for (const row of lot) {
+      if (row.enrichi) continue;
+      try {
+        const cands = await _rechercheEntrepriseGouv(row.nom, row.cp);
+        const best = _meilleurSiren(row.nom, row.cp, cands);
+        if (best && best.score >= 50) {
+          row.siren_propose = best.siren;
+          row.tva_calc = _tvaFrDeSiren(best.siren);
+          row.cand_nom = best.nom; row.cand_ville = best.ville; row.score = best.score;
+        } else if (best) {
+          row.cand_nom = best.nom; row.cand_ville = best.ville; row.score = best.score;
+        }
+      } catch (e) { row.err = e.message; }
+      row.enrichi = true;
+      await new Promise(r => setTimeout(r, 150)); // respect du rate-limit annuaire
+    }
+    const traite = Math.min(offset + limit, scan.sans.length);
+    res.json({
+      ok: true, total: scan.sans.length, nb_avec_siren: scan.nbAvec, nb_total: scan.nbTotal,
+      traite, next_offset: traite, done: traite >= scan.sans.length,
+      items: lot, echantillon,
+    });
+  } catch (e) { console.error('[PL SIREN]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// Export Excel du dernier scan : GET /admin/pennylane-siren/export.xlsx
+router.get('/admin/pennylane-siren/export.xlsx', adminOnly, async (req, res) => {
+  try {
+    const XLSX = require('xlsx');
+    const rows = (_plSirenScan.sans || []).map(r => {
+      const siren = r.siren_propose || '';
+      const lienAnnuaire = siren
+        ? `https://annuaire-entreprises.data.gouv.fr/entreprise/${siren}`
+        : `https://annuaire-entreprises.data.gouv.fr/rechercher?terme=${encodeURIComponent(r.nom + (r.cp ? ' ' + r.cp : ''))}`;
+      return {
+        'Nom': r.nom || '',
+        'Adresse': r.adresse || '',
+        'Téléphone': r.tel || '',
+        'Mail': r.mail || '',
+        'Numéro SIREN': siren,
+        'Numéro TVA': r.tva || r.tva_calc || '',
+        'Correspondance annuaire': r.cand_nom ? `${r.cand_nom}${r.cand_ville ? ' (' + r.cand_ville + ')' : ''} — score ${r.score}%` : '',
+        'Lien Pennylane': `https://app.pennylane.com/companies/${PL_COMPANY_ID_SRV}/clients/${r.id}`,
+        'Lien annuaire gouvernement': lienAnnuaire,
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch: 34 }, { wch: 40 }, { wch: 16 }, { wch: 28 }, { wch: 14 }, { wch: 16 }, { wch: 36 }, { wch: 46 }, { wch: 52 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Clients sans SIREN');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Clients_Pennylane_sans_SIREN.xlsx"');
+    res.send(buf);
+  } catch (e) { console.error('[PL SIREN XLSX]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // ── Rattrapage global VosFactures ────────────────────────────────
 // Pour TOUTES les commandes ayant un n° BDC ou un n° de facture : retrouve le document
 // VosFactures (recherche robuste period=all + variantes de slash), enregistre le LIEN,

@@ -2778,6 +2778,18 @@ async function renderParametres(ttl,c,a){
       <div id="pl-sync-result" style="margin-top:8px"></div>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-id-badge-2"></i> ${TR('Clients Pennylane sans SIREN')}</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
+        ${TR("Récupère les clients Pennylane dépourvus de numéro SIREN, recherche automatiquement le SIREN dans l'annuaire officiel des entreprises (par nom + code postal) et calcule le n° de TVA intracommunautaire. Aucune écriture dans Pennylane : le résultat est exporté en Excel (nom, adresse, téléphone, mail, SIREN, TVA, lien Pennylane, lien annuaire).")}
+        ${TR("Garde l'onglet ouvert pendant le traitement.")}
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" id="btn-scan-siren" onclick="lancerScanSiren()"><i class="ti ti-search"></i> ${TR('Analyser les clients sans SIREN')}</button>
+        <button class="btn" id="btn-export-siren" onclick="telechargerExcelSiren()" style="display:none"><i class="ti ti-file-spreadsheet"></i> ${TR("Télécharger l'Excel")}</button>
+      </div>
+      <div id="scan-siren-result" style="margin-top:10px"></div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-copy"></i> Doublons de commandes</h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Commandes ayant le même numéro de BDC ou devis pour le même distributeur.')}</p>
       <button class="btn danger" onclick="supprimerTousDoublons()" id="btn-suppr-doublons"><i class="ti ti-trash"></i> ${TR('Supprimer tous les doublons')}</button>
@@ -3399,6 +3411,74 @@ async function lancerRattrapageVF(){
   }
 }
 window.lancerRattrapageVF = lancerRattrapageVF;
+
+// ── Clients Pennylane sans SIREN : scan annuaire + export Excel ──
+let SIREN_SCAN=null;
+async function lancerScanSiren(){
+  const btn=document.getElementById('btn-scan-siren');
+  const exp=document.getElementById('btn-export-siren');
+  const out=document.getElementById('scan-siren-result');
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Analyse en cours…'); }
+  if(exp) exp.style.display='none';
+  const S={ offset:0, total:null, nbAvec:0, nbTotal:0, items:[], errors:0 };
+  const LIMIT=20;
+  const maj=(fini)=>{
+    const pct=S.total?Math.round(100*S.offset/S.total):0;
+    const trouves=S.items.filter(x=>x.siren_propose).length;
+    if(out) out.innerHTML=
+      '<div style="background:#eef2f7;border-radius:8px;overflow:hidden;height:14px;margin-bottom:8px">'+
+        '<div style="width:'+pct+'%;height:100%;background:var(--success,#1b8a3a);transition:width .3s"></div></div>'+
+      '<div style="font-size:13px;color:var(--text2)">'+pct+'% — '+(S.offset||0)+'/'+(S.total==null?'?':S.total)+' '+TR('clients sans SIREN analysés')+
+        ' · <b style="color:var(--success)">'+trouves+'</b> '+TR('SIREN trouvés')+
+        (S.nbAvec?(' · '+S.nbAvec+' '+TR('clients ont déjà un SIREN')):'')+
+        (S.errors?(' · '+S.errors+' '+TR('erreurs réseau')):'')+'</div>';
+  };
+  maj();
+  try{
+    while(true){
+      let data=null;
+      for(let a=0;a<3 && !data;a++){
+        try{
+          const r=await fetch('/api/admin/pennylane-siren?offset='+S.offset+'&limit='+LIMIT);
+          const j=await r.json();
+          if(j && j.ok) data=j;
+          else if(j && j.reason) throw new Error(j.reason);
+          else throw new Error(j&&j.error||'réponse inattendue');
+        }catch(e){ if(/non configuré/.test(e.message)) throw e; S.errors++; await new Promise(x=>setTimeout(x,3000)); }
+      }
+      if(!data) throw new Error(TR('Échec réseau répété au lot ')+S.offset);
+      S.total=data.total; S.nbAvec=data.nb_avec_siren||0; S.nbTotal=data.nb_total||0;
+      if(data.items && data.items.length) S.items.push(...data.items);
+      S.offset=data.next_offset; maj();
+      if(data.done) break;
+    }
+    SIREN_SCAN=S;
+    const trouves=S.items.filter(x=>x.siren_propose).length;
+    const apercu=S.items.slice(0,8).map(x=>'<tr>'+
+      '<td style="border-bottom:1px solid var(--border-s);padding:4px 6px">'+esc(x.nom||'')+'</td>'+
+      '<td style="border-bottom:1px solid var(--border-s);padding:4px 6px">'+esc(x.ville||'')+'</td>'+
+      '<td style="border-bottom:1px solid var(--border-s);padding:4px 6px;font-family:monospace">'+(x.siren_propose?('<span style="color:var(--success)">'+esc(x.siren_propose)+'</span>'):'<span style="color:var(--text3)">—</span>')+'</td>'+
+      '<td style="border-bottom:1px solid var(--border-s);padding:4px 6px;color:var(--text3);font-size:12px">'+(x.score!=null?esc(x.cand_nom||'')+' ('+x.score+'%)':'')+'</td>'+
+      '</tr>').join('');
+    if(out) out.innerHTML=
+      '<div style="background:var(--success,#1b8a3a);color:#fff;border-radius:8px;padding:12px 14px;font-size:14px;margin-bottom:8px">'+
+        '✓ '+TR('Analyse terminée')+' — '+S.total+' '+TR('clients sans SIREN')+' · '+trouves+' '+TR('SIREN proposés par l\'annuaire')+' · '+S.nbAvec+' '+TR('clients avec SIREN')+' (/'+S.nbTotal+').</div>'+
+      (S.items.length?('<div style="overflow:auto;max-height:280px;border:0.5px solid var(--border-s);border-radius:8px;margin-bottom:8px"><table style="width:100%;border-collapse:collapse;font-size:13px">'+
+        '<thead><tr style="position:sticky;top:0;background:var(--surface)"><th style="text-align:left;padding:5px 6px">'+TR('Client')+'</th><th style="text-align:left;padding:5px 6px">'+TR('Ville')+'</th><th style="text-align:left;padding:5px 6px">SIREN</th><th style="text-align:left;padding:5px 6px">'+TR('Correspondance annuaire')+'</th></tr></thead>'+
+        '<tbody>'+apercu+'</tbody></table></div>'+(S.items.length>8?('<div style="font-size:12px;color:var(--text3);margin-bottom:8px">'+TR('… et')+' '+(S.items.length-8)+' '+TR('autres — tout est dans l\'Excel.')+'</div>'):'')):'')+
+      '<div style="font-size:13px;color:var(--text2)">'+TR('Vérifie les SIREN proposés via le lien annuaire de chaque ligne avant de les reporter dans Pennylane.')+'</div>';
+    if(exp) exp.style.display='';
+    toast(TR('Analyse SIREN terminée'),'ti-check');
+  }catch(e){
+    if(out) out.innerHTML='<div style="color:var(--danger);font-size:14px">'+TR('Erreur : ')+esc(e.message)+'</div>';
+    toast(e.message,'ti-alert-circle','var(--danger)');
+  }finally{
+    if(btn){ btn.disabled=false; btn.innerHTML='<i class="ti ti-search"></i> '+TR('Analyser les clients sans SIREN'); }
+  }
+}
+window.lancerScanSiren = lancerScanSiren;
+function telechargerExcelSiren(){ window.open('/api/admin/pennylane-siren/export.xlsx','_blank'); }
+window.telechargerExcelSiren = telechargerExcelSiren;
 
 function telechargerRapportRattrapage(){
   const S=RATT_LAST; if(!S){ toast(TR('Aucun rapport disponible'),'ti-alert-circle','var(--danger)'); return; }

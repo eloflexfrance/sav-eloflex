@@ -797,5 +797,6 @@ module.exports = {
   suggestFacturesPennylane,
   syncProduitsPennylane,
   plApi,
+  fetchAllPages,
   BASE_URL,
 };
