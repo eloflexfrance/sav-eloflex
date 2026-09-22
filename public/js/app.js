@@ -1302,14 +1302,15 @@ async function renderCommandesTable(page=1){
   :'—'}</td>`:''}
         ${CMD_COLS.retour?`<td class="mono" style="font-size:12px">${esc(cm.num_retour||'—')}</td>`:''}
         ${CMD_COLS.date_retour?`<td style="font-size:12px;color:var(--text2)">${cm.date_retour?fd(cm.date_retour):'—'}</td>`:''}
-        ${CMD_COLS.notes?`<td style="font-size:12px;color:var(--text2)" title="${esc(cm.informations||'')}"><div style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cm.informations?esc(cm.informations):'<span style="color:var(--text3)">—</span>'}</div></td>`:''}
+        ${CMD_COLS.notes?`<td style="font-size:12px;color:var(--text2)" title="${esc(cm.derniere_note||'')}"><div style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cm.notes_count?esc(cm.derniere_note||'')+(cm.notes_count>1?` <span style="color:var(--text3)">(+${cm.notes_count-1})</span>`:''):'<span style="color:var(--text3)">—</span>'}</div></td>`:''}
         <td onclick="event.stopPropagation()" style="position:relative">
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:10px;opacity:.6"></i></span>
         </td>
         <td style="text-align:center">
           ${cm.client_final ? clientFinalBadge(cm) : ''}
           ${cm.num_retour?`<i class="ti ti-arrow-back-up" style="color:var(--danger);margin-left:2px" title="Retour : ${esc(cm.num_retour)}${cm.date_retour?' — reçu le '+fd(cm.date_retour):''}"></i>`:''}
-          ${(!CMD_COLS.notes && cm.informations)?`<i class="ti ti-note" style="color:var(--accent);margin-left:2px;cursor:help" title="${esc(cm.informations)}"></i>`:''}
+          ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--text2);margin-left:2px;cursor:help" title="${esc(cm.informations)}"></i>`:''}
+          ${(!CMD_COLS.notes && cm.notes_count)?`<i class="ti ti-message-circle" style="color:var(--accent);margin-left:2px;cursor:help" title="${esc(cm.derniere_note||'')}${cm.notes_count>1?' (+'+(cm.notes_count-1)+' note'+(cm.notes_count>2?'s':'')+')':''}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
           ${(cm.reliquat && cm.reliquat_suivi && lienSuiviColis(cm.reliquat_transporteur,cm.reliquat_suivi))?`<a href="${lienSuiviColis(cm.reliquat_transporteur,cm.reliquat_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--warning);margin-left:2px" title="${TR('Suivre le reliquat')} : ${esc(cm.reliquat_suivi)}"><i class="ti ti-truck-delivery"></i></a>`:''}
           ${cm.proforma?`<i class="ti ti-file-invoice" style="color:${cm.proforma_payee?'var(--success)':'var(--warning)'};margin-left:2px" title="${cm.proforma_payee?TR('Proforma réglée — OK expédition'):TR('Proforma en attente de règlement')}${cm.num_proforma?' ('+esc(cm.num_proforma)+')':''}"></i>`:''}

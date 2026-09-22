@@ -2613,6 +2613,8 @@ router.get('/commandes', async (req, res) => {
          cmd.proforma, cmd.num_proforma, cmd.proforma_payee, cmd.informations,
          cmd.commande_type, cmd.type_fauteuil_neuf, cmd.type_fauteuil_demo, cmd.type_pieces,
          (cmd.informations ILIKE '%avoir%') AS est_avoir,
+         (SELECT COUNT(*) FROM commande_notes n WHERE n.commande_id=cmd.id)::int AS notes_count,
+         (SELECT n.texte FROM commande_notes n WHERE n.commande_id=cmd.id ORDER BY n.created_at DESC LIMIT 1) AS derniere_note,
          c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,
          ROW_NUMBER() OVER (
            PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
