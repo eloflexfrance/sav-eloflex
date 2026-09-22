@@ -2610,7 +2610,7 @@ router.get('/commandes', async (req, res) => {
          cmd.num_facture, cmd.num_facture_pennylane, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
          cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.annee_onglet, cmd.groupe,
-         cmd.proforma, cmd.num_proforma, cmd.proforma_payee,
+         cmd.proforma, cmd.num_proforma, cmd.proforma_payee, cmd.informations,
          cmd.commande_type, cmd.type_fauteuil_neuf, cmd.type_fauteuil_demo, cmd.type_pieces,
          (cmd.informations ILIKE '%avoir%') AS est_avoir,
          c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,

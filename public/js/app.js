@@ -4,7 +4,7 @@ let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'', type:'' };
 let _cmdReqId = 0; // anti-race condition pour la recherche commandes
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
-const CMD_COLS_DEFAULT = { num_annuel: false, paiement: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false };
+const CMD_COLS_DEFAULT = { num_annuel: false, paiement: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false, notes: false };
 // Merge stored prefs with defaults — nouvelles colonnes héritent de false si absentes du stockage
 let CMD_COLS = { ...CMD_COLS_DEFAULT, ...JSON.parse(localStorage.getItem('sav_cmd_cols') || '{}') };
 let CACHE = { catalogue:[], params:{} };
@@ -104,6 +104,10 @@ const PERM_FALLBACK = {
   // Vues de détail (ouvertes via setView, absentes du menu) → module qui les gouverne.
   'client':     'clients',       // Fiche distributeur : accessible avec l'accès Clients
   'fauteuil':   'clients',       // Fiche fauteuil : idem
+  // La vue « Retours Suède » s'appelle 'retours-suede' (tiret) côté menu/rendu, mais la
+  // permission est stockée sous 'retours_suede' (underscore) → on fait le pont ici, sinon
+  // aucun non-admin ne pourrait y accéder même avec le droit accordé.
+  'retours-suede': 'retours_suede',
 };
 
 function hasAccess(module) {
@@ -115,6 +119,11 @@ function hasAccess(module) {
   // → on utilise le module parent comme fallback
   if (p === undefined && PERM_FALLBACK[module]) {
     p = perms[PERM_FALLBACK[module]];
+  }
+  // Filet de sécurité : tolérer une variante tiret/underscore de la clé (ex. retours-suede ↔ retours_suede)
+  if (p === undefined) {
+    const alt = module.indexOf('-') >= 0 ? module.replace(/-/g, '_') : module.replace(/_/g, '-');
+    if (alt !== module && perms[alt] !== undefined) p = perms[alt];
   }
   return p === 'write' || p === 'read';
 }
@@ -1185,6 +1194,7 @@ async function renderCommandes(ttl,c,a){
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.pays?'checked':''} onchange="CMD_COLS.pays=this.checked;saveCmdCols();renderCommandesTable(1)"> 🌍 Pays</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.retour?'checked':''} onchange="CMD_COLS.retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR('↩ Retour')}</label>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.date_retour?'checked':''} onchange="CMD_COLS.date_retour=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR("📅 Date retour")}</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:14px"><input type="checkbox" ${CMD_COLS.notes?'checked':''} onchange="CMD_COLS.notes=this.checked;saveCmdCols();renderCommandesTable(1)"> ${TR("📝 Notes")}</label>
       </div>
     </div>
       ${CMD_FILTERS.distributeur
@@ -1255,6 +1265,7 @@ async function renderCommandesTable(page=1){
         ${CMD_COLS.paiement?'<th>Paiement</th>':''}
         ${CMD_COLS.retour?'<th>'+TR("↩ Retour")+'</th>':''}
         ${CMD_COLS.date_retour?'<th>'+TR("Date retour")+'</th>':''}
+        ${CMD_COLS.notes?'<th>'+TR("📝 Notes")+'</th>':''}
         <th>${t('col_statut')||'Statut'}</th><th></th>
       </tr></thead>
       <tbody>${list.map(cm=>`<tr onclick="modalCommande(${cm.id})">
@@ -1291,13 +1302,14 @@ async function renderCommandesTable(page=1){
   :'—'}</td>`:''}
         ${CMD_COLS.retour?`<td class="mono" style="font-size:12px">${esc(cm.num_retour||'—')}</td>`:''}
         ${CMD_COLS.date_retour?`<td style="font-size:12px;color:var(--text2)">${cm.date_retour?fd(cm.date_retour):'—'}</td>`:''}
+        ${CMD_COLS.notes?`<td style="font-size:12px;color:var(--text2)" title="${esc(cm.informations||'')}"><div style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cm.informations?esc(cm.informations):'<span style="color:var(--text3)">—</span>'}</div></td>`:''}
         <td onclick="event.stopPropagation()" style="position:relative">
           <span class="badge ${cmdStatutClass(cm.statut_calc)}" style="cursor:pointer" onclick="toggleStatutMenu(event,${cm.id},'${esc(cm.statut||'Auto')}')">${esc(tStatut(cm.statut_calc))} <i class="ti ti-chevron-down" style="font-size:10px;opacity:.6"></i></span>
         </td>
         <td style="text-align:center">
           ${cm.client_final ? clientFinalBadge(cm) : ''}
           ${cm.num_retour?`<i class="ti ti-arrow-back-up" style="color:var(--danger);margin-left:2px" title="Retour : ${esc(cm.num_retour)}${cm.date_retour?' — reçu le '+fd(cm.date_retour):''}"></i>`:''}
-          ${cm.informations?`<i class="ti ti-info-circle" style="color:var(--text2);margin-left:2px" title="${esc(cm.informations)}"></i>`:''}
+          ${(!CMD_COLS.notes && cm.informations)?`<i class="ti ti-note" style="color:var(--accent);margin-left:2px;cursor:help" title="${esc(cm.informations)}"></i>`:''}
           ${cm.reliquat?`<i class="ti ti-clock-exclamation" style="color:var(--warning);margin-left:2px" title="Reliquat${cm.reliquat_description?' : '+cm.reliquat_description:''}"></i>`:''}
           ${(cm.reliquat && cm.reliquat_suivi && lienSuiviColis(cm.reliquat_transporteur,cm.reliquat_suivi))?`<a href="${lienSuiviColis(cm.reliquat_transporteur,cm.reliquat_suivi)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--warning);margin-left:2px" title="${TR('Suivre le reliquat')} : ${esc(cm.reliquat_suivi)}"><i class="ti ti-truck-delivery"></i></a>`:''}
           ${cm.proforma?`<i class="ti ti-file-invoice" style="color:${cm.proforma_payee?'var(--success)':'var(--warning)'};margin-left:2px" title="${cm.proforma_payee?TR('Proforma réglée — OK expédition'):TR('Proforma en attente de règlement')}${cm.num_proforma?' ('+esc(cm.num_proforma)+')':''}"></i>`:''}
@@ -1366,7 +1378,7 @@ window.prefillGroupeDepuisDistrib = prefillGroupeDepuisDistrib;
 
 // ── Nouvelle commande : fenêtre initiale d'import VosFactures / Pennylane ──────────
 function modalNouvelleCommande(){
-  window._NC_SOURCE = 'vf';
+  window._NC_SOURCE = 'pennylane';
   showModal(`
     <div class="modal-header">
       <i class="ti ti-clipboard-plus" style="font-size:19px;color:var(--accent)"></i>
@@ -1376,12 +1388,12 @@ function modalNouvelleCommande(){
     <div style="padding:22px;display:flex;flex-direction:column;gap:14px">
       <div style="font-size:14px;color:var(--text2)">${TR('Importer une commande depuis son numéro :')}</div>
       <div style="display:flex;gap:8px">
-        <button type="button" id="nc-src-vf" class="btn" onclick="ncSetSource('vf')" style="flex:1"><i class="ti ti-file-invoice"></i> VosFactures</button>
         <button type="button" id="nc-src-pl" class="btn" onclick="ncSetSource('pennylane')" style="flex:1"><i class="ti ti-brand-stripe"></i> Pennylane</button>
+        <button type="button" id="nc-src-vf" class="btn" onclick="ncSetSource('vf')" style="flex:1"><i class="ti ti-file-invoice"></i> VosFactures</button>
       </div>
       <div>
         <label class="form-label">${TR('Numéro de commande (BDC / devis)')}</label>
-        <input class="form-input mono" id="nc-numero" placeholder="${TR("Numéro VosFactures ou Pennylane")}" onkeydown="if(event.key==='Enter')importerNouvelleCommande()" style="width:100%">
+        <input class="form-input mono" id="nc-numero" placeholder="${TR("Numéro Pennylane ou VosFactures")}" onkeydown="if(event.key==='Enter')importerNouvelleCommande()" style="width:100%">
       </div>
       <div id="nc-msg" style="font-size:13px;color:var(--text3);min-height:16px"></div>
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:4px">
@@ -1390,7 +1402,7 @@ function modalNouvelleCommande(){
       </div>
     </div>
   `);
-  setTimeout(function(){ ncSetSource('vf'); var i=document.getElementById('nc-numero'); if(i) i.focus(); }, 50);
+  setTimeout(function(){ ncSetSource('pennylane'); var i=document.getElementById('nc-numero'); if(i) i.focus(); }, 50);
 }
 function ncSetSource(src){
   window._NC_SOURCE = src;
