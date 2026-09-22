@@ -478,6 +478,48 @@ router.get('/clients/adresses-incompletes', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Export Excel de TOUS les distributeurs de l'appli avec leur statut carte
+// (pour comparer une liste externe : présent dans l'appli ? sur la carte ?).
+// ⚠ Défini AVANT /clients/:id sinon capturé comme un id.
+router.get('/clients/export-distributeurs.xlsx', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(
+      `SELECT c.id, c.nom, c.type, c.reseau_carte, c.ville, c.cp, c.adresse, c.tel, c.email,
+              c.sur_carte, c.lat, c.lng, c.priorite, c.vf_id,
+              COALESCE(nf.n,0) AS nb_fauteuils
+         FROM clients c
+         LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM fauteuils GROUP BY client_id) nf ON nf.client_id=c.id
+        ORDER BY c.nom`
+    );
+    const data = rows.map(c => ({
+      'ID': c.id,
+      'Nom': c.nom || '',
+      'Type': c.type || '',
+      'Réseau': c.reseau_carte || '',
+      'Ville': c.ville || '',
+      'Code postal': c.cp || '',
+      'Adresse': c.adresse || '',
+      'Téléphone': c.tel || '',
+      'Email': c.email || '',
+      'Sur la carte': c.sur_carte === true ? 'Oui' : 'Non',
+      'Géolocalisé': (c.lat != null && c.lng != null) ? 'Oui' : 'Non',
+      'Latitude': c.lat != null ? Number(c.lat) : '',
+      'Longitude': c.lng != null ? Number(c.lng) : '',
+      'Priorité': c.priorite || '',
+      'Nb fauteuils': c.nb_fauteuils || 0,
+      'vf_id': c.vf_id || '',
+    }));
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{ 'Nom': '' }]);
+    ws['!cols'] = [{wch:8},{wch:34},{wch:12},{wch:18},{wch:20},{wch:10},{wch:36},{wch:16},{wch:28},{wch:12},{wch:11},{wch:11},{wch:11},{wch:9},{wch:11},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Distributeurs app');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Distributeurs_app_statut_carte.xlsx"');
+    res.send(buf);
+  } catch(e) { console.error('[EXPORT DISTRIB]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 router.get('/clients/:id', async (req, res) => {
   try {
     const cid = parseInt(req.params.id);
@@ -6311,47 +6353,6 @@ router.get('/carte/tiles-key', requireAuth, (req, res) => {
 });
 
 // Export Excel de la base complète des distributeurs de la carte (table distributeurs_carte).
-// Export Excel de TOUS les distributeurs de l'appli avec leur statut carte
-// (pour comparer une liste externe : présent dans l'appli ? sur la carte ?).
-router.get('/clients/export-distributeurs.xlsx', requireAuth, async (req, res) => {
-  try {
-    const rows = await db.all(
-      `SELECT c.id, c.nom, c.type, c.reseau_carte, c.ville, c.cp, c.adresse, c.tel, c.email,
-              c.sur_carte, c.lat, c.lng, c.priorite, c.vf_id,
-              COALESCE(nf.n,0) AS nb_fauteuils
-         FROM clients c
-         LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM fauteuils GROUP BY client_id) nf ON nf.client_id=c.id
-        ORDER BY c.nom`
-    );
-    const data = rows.map(c => ({
-      'ID': c.id,
-      'Nom': c.nom || '',
-      'Type': c.type || '',
-      'Réseau': c.reseau_carte || '',
-      'Ville': c.ville || '',
-      'Code postal': c.cp || '',
-      'Adresse': c.adresse || '',
-      'Téléphone': c.tel || '',
-      'Email': c.email || '',
-      'Sur la carte': c.sur_carte === true ? 'Oui' : 'Non',
-      'Géolocalisé': (c.lat != null && c.lng != null) ? 'Oui' : 'Non',
-      'Latitude': c.lat != null ? Number(c.lat) : '',
-      'Longitude': c.lng != null ? Number(c.lng) : '',
-      'Priorité': c.priorite || '',
-      'Nb fauteuils': c.nb_fauteuils || 0,
-      'vf_id': c.vf_id || '',
-    }));
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{ 'Nom': '' }]);
-    ws['!cols'] = [{wch:8},{wch:34},{wch:12},{wch:18},{wch:20},{wch:10},{wch:36},{wch:16},{wch:28},{wch:12},{wch:11},{wch:11},{wch:11},{wch:9},{wch:11},{wch:10}];
-    XLSX.utils.book_append_sheet(wb, ws, 'Distributeurs app');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="Distributeurs_app_statut_carte.xlsx"');
-    res.send(buf);
-  } catch(e) { console.error('[EXPORT DISTRIB]', e.message); res.status(500).json({ error: e.message }); }
-});
-
 router.get('/carte/export.xlsx', requireAuth, async (req, res) => {
   try {
     const rows = await db.all('SELECT * FROM distributeurs_carte ORDER BY reseau, nom');
