@@ -586,7 +586,61 @@ async function suggestFacturesPennylane(distributeurNom, numFacture) {
 // ── Synchro des DEVIS et BONS DE COMMANDE Pennylane vers la table `devis` ──────
 // Miroir de la synchro VosFactures : mêmes fonctions ensuite (signature, relance,
 // converti/ignoré). Les documents Pennylane sont dédupliqués sur `pennylane_id`.
-async function upsertDevisPennylane(api, doc) {
+// ── Détection des Bons de livraison (BL) issus d'un devis ─────────────────────
+// Un devis transformé en BL dans Pennylane doit sortir de « Devis en attente » (→ converti).
+function _estBL(x) {
+  if (!x || typeof x !== 'object') return false;
+  const t = String(x.type || x.document_type || x.kind || x.category || x.commercial_document_type || '').toLowerCase();
+  const num = String(x.invoice_number || x.number || x.label || '');
+  return /deliver|livr|shipping|dispatch/.test(t) || /^BL[\s\-_./]?\d/i.test(num);
+}
+// Références à un devis portées par un document (clés quote/devis/source/origin/parent/linked…)
+function _refsDevis(d, out) {
+  if (!d || typeof d !== 'object') return out;
+  for (const [k, v] of Object.entries(d)) {
+    if (!/quote|devis|estimate|source|origin|parent|linked|related|from_doc|converted_from/i.test(k)) continue;
+    if (/address|date|url|file|method|currency|amount|label_?template/i.test(k)) continue;
+    const add = x => {
+      if (x == null || x === '') return;
+      if (typeof x === 'object') {
+        ['id', 'invoice_number', 'number', 'label', 'quote_number', 'quote_id'].forEach(f => {
+          if (x[f] != null && x[f] !== '' && typeof x[f] !== 'object') out.add(_canon(String(x[f])));
+        });
+      } else out.add(_canon(String(x)));
+    };
+    if (Array.isArray(v)) v.forEach(add); else add(v);
+  }
+  return out;
+}
+// Le devis lui-même liste-t-il un BL parmi ses documents liés ?
+function _devisALienBL(d) {
+  for (const [k, v] of Object.entries(d || {})) {
+    if (!/linked|related|documents|delivery_notes|delivery_receipts|transform|converted|children/i.test(k)) continue;
+    if (/address/i.test(k)) continue;
+    const arr = Array.isArray(v) ? v : (v && typeof v === 'object' ? [v] : []);
+    if (arr.some(_estBL)) return true;
+  }
+  return false;
+}
+// Le texte d'un BL mentionne-t-il le numéro du devis (en entier, pas un préfixe) ?
+function _texteContientNumero(txt, numero) {
+  const n = String(numero || '').toUpperCase().replace(/\s+/g, ''); if (!txt || n.length < 4) return false;
+  let i = txt.indexOf(n);
+  while (i >= 0) {
+    const av = txt[i - 1], ap = txt[i + n.length];
+    if ((!av || !/[A-Z0-9]/.test(av)) && (!ap || !/[0-9]/.test(ap))) return true;
+    i = txt.indexOf(n, i + 1);
+  }
+  return false;
+}
+function _texteBL(b) {
+  // Majuscules, espaces conservés (frontières de mots) — ne pas utiliser _norm qui colle tout
+  return ' ' + [b.label, b.reference, b.external_reference, b.pdf_description, b.pdf_invoice_subject,
+    b.free_text, b.notes, b.special_mention, b.description, b.subject].filter(x => typeof x === 'string')
+    .join(' | ').toUpperCase().replace(/\s+/g, ' ') + ' ';
+}
+
+async function upsertDevisPennylane(api, doc, opts = {}) {
   const ep = doc._ep || '/quotes';
   let detail = doc;
   if (!doc.invoice_lines && doc.id) {
@@ -618,9 +672,17 @@ async function upsertDevisPennylane(api, doc) {
     return { nom: l.label || l.description || l.product_name || '', qte, prix, total: tot };
   }).filter(l => l.nom);
   const st = String(detail.status || detail.state || '').toLowerCase();
-  const statut = /accept|validat|signed|paid|complet|convert/.test(st) ? 'converti'
+  let statut = /accept|validat|signed|paid|complet|convert|invoic|factur|deliver|livr|transform/.test(st) ? 'converti'
                : /refus|reject|cancel|expir/.test(st) ? 'ignoré' : 'ouvert';
   const docType = doc._doc === 'bdc' ? 'bdc' : 'devis';
+  // Devis déjà transformé en Bon de livraison dans Pennylane → converti (sort de la liste)
+  if (statut === 'ouvert' && docType === 'devis') {
+    const cles = [String(detail.id), numero].filter(Boolean).map(x => _canon(String(x)));
+    let viaBL = !!(opts.blRefs && cles.some(k => opts.blRefs.has(k)));
+    if (!viaBL && opts.blTextes && numero) viaBL = opts.blTextes.some(t => _texteContientNumero(t, numero));
+    if (!viaBL) viaBL = _devisALienBL(detail);
+    if (viaBL) { statut = 'converti'; if (opts.stats) opts.stats.converti_bl++; }
+  }
   const docUrl = detail.public_file_url || detail.file_url || detail.pdf_url || null;
   const plid = detail.id;
 
@@ -655,8 +717,32 @@ async function syncDevisPennylane(fullHistory = false) {
   const dateOK = d => { if (!cutoff) return true; const dd = _docDate(d); return !dd || dd >= cutoff; };
 
   const quotes = (await _fetchNoFilter(api, '/quotes')).filter(dateOK);
-  let orders = (await _fetchNoFilter(api, '/commercial_documents')).filter(d =>
-    dateOK(d) && (() => { const t = String(d.type || d.document_type || d.kind || '').toLowerCase(); return !t || /order|commande|purchase|bon/.test(t); })());
+  const tousCD = await _fetchNoFilter(api, '/commercial_documents');
+  let orders = tousCD.filter(d =>
+    dateOK(d) && !_estBL(d) && (() => { const t = String(d.type || d.document_type || d.kind || '').toLowerCase(); return !t || /order|commande|purchase|bon/.test(t); })());
+
+  // Bons de livraison : on relève les devis auxquels ils se rattachent
+  const types_cd = {};
+  tousCD.forEach(d => { const t = String(d.type || d.document_type || d.kind || '—'); types_cd[t] = (types_cd[t] || 0) + 1; });
+  const bls = tousCD.filter(_estBL);
+  const blRefs = new Set(), blTextes = [];
+  const cutBL = (() => { const d = new Date(); d.setDate(d.getDate() - (fullHistory ? 3650 : 180)); return d.toISOString().slice(0, 10); })();
+  let nDetail = 0;
+  for (const b of bls) {
+    let full = b;
+    const dd = _docDate(b);
+    if ((!dd || dd >= cutBL) && nDetail < 300 && b.id) {
+      nDetail++;
+      try {
+        const { data } = await api.get(`/commercial_documents/${b.id}`);
+        const f = data.commercial_document || data;
+        if (f && typeof f === 'object') full = Object.assign({}, b, f);
+      } catch (_) {}
+    }
+    _refsDevis(full, blRefs);
+    blTextes.push(_texteBL(full));
+  }
+  const stats = { converti_bl: 0 };
 
   const all = [
     ...quotes.map(d => ({ ...d, _ep: '/quotes', _doc: 'devis' })),
@@ -665,10 +751,11 @@ async function syncDevisPennylane(fullHistory = false) {
   console.log(`  📄 Pennylane devis/BDC : ${quotes.length} devis + ${orders.length} BDC = ${all.length} document(s)`);
   let created = 0, updated = 0, skipped = 0;
   for (const doc of all) {
-    try { const r = await upsertDevisPennylane(api, doc); if (r === 'created') created++; else if (r === 'updated') updated++; else skipped++; }
+    try { const r = await upsertDevisPennylane(api, doc, { blRefs, blTextes, stats }); if (r === 'created') created++; else if (r === 'updated') updated++; else skipped++; }
     catch (e) { console.warn('  ⚠️ Devis PL #' + doc.id + ' : ' + e.message); skipped++; }
   }
-  return { ok: true, total: all.length, created, updated, skipped };
+  console.log(`  🚚 Pennylane BL : ${bls.length} bon(s) de livraison, ${stats.converti_bl} devis passé(s) en converti`);
+  return { ok: true, total: all.length, created, updated, skipped, nb_bl: bls.length, converti_bl: stats.converti_bl, types_cd };
 }
 
 // Diagnostic : que renvoie réellement Pennylane sur chaque endpoint ?

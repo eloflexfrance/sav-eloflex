@@ -41,7 +41,8 @@ async function syncDevisPL(manuel=false){
     const r = await API.devisSyncPennylane();
     if(r && r.ok){
       _devisPlLastSync = Date.now(); localStorage.setItem('sav_devis_pl_last_sync', _devisPlLastSync);
-      if(manuel) toast(`Pennylane — ${r.total||0} ${TR('document(s)')} (${r.created||0} ${TR('nouveaux')}, ${r.updated||0} ${TR('maj')})`,'ti-check');
+      if(manuel) toast(`Pennylane — ${r.total||0} ${TR('document(s)')} (${r.created||0} ${TR('nouveaux')}, ${r.updated||0} ${TR('maj')})${r.converti_bl?` · ${r.converti_bl} ${TR('devis passé(s) en converti (bon de livraison)')}`:''}`,'ti-check');
+      if(r.nb_bl===0) console.info('[Devis PL] Aucun bon de livraison détecté. Types de documents commerciaux :', r.types_cd);
       chargerDevis();
     } else if(manuel) toast(`Erreur : ${(r&&(r.reason||r.error))||'Pennylane'}`,'ti-alert-circle','var(--warning)');
   }catch(e){ if(manuel) toast(e.message,'ti-alert-circle','var(--danger)'); }
