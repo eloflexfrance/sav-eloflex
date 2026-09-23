@@ -435,6 +435,20 @@ async function initDB() {
       )`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_commande ON commande_notes(commande_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_notes_created ON commande_notes(created_at DESC)`);
+      // Historique des e-mails de demande / confirmation de SIREN
+      await client.query(`CREATE TABLE IF NOT EXISTS siren_demandes (
+        id SERIAL PRIMARY KEY,
+        pl_customer_id TEXT,
+        client_id INTEGER,
+        nom TEXT,
+        email TEXT,
+        type TEXT,
+        siren TEXT,
+        envoye_par TEXT,
+        envoye_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_siren_dem_pl ON siren_demandes(pl_customer_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_siren_dem_cl ON siren_demandes(client_id)`);
 
       // ── Fil d'équipe (discussions / annonces internes) ─────────────
       await client.query(`CREATE TABLE IF NOT EXISTS discussion_messages (

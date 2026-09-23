@@ -5745,6 +5745,155 @@ router.get('/admin/pennylane-siren/export.xlsx', adminOnly, async (req, res) => 
   } catch (e) { console.error('[PL SIREN XLSX]', e.message); res.status(500).json({ error: e.message }); }
 });
 
+// ══════════════════════════════════════════════════════════════════
+// ── DEMANDES DE SIREN PAR E-MAIL (confirmation si présent, relance si absent)
+// ══════════════════════════════════════════════════════════════════
+let _plCustCache = { at: 0, list: [] };
+async function _plCustomersCache(force) {
+  if (!force && _plCustCache.list.length && Date.now() - _plCustCache.at < 10 * 60 * 1000) return _plCustCache.list;
+  const { plApi, fetchAllPages } = require('../scripts/sync-pennylane');
+  const list = await fetchAllPages(plApi(), '/customers', {}, 100, 300);
+  _plCustCache = { at: Date.now(), list };
+  return list;
+}
+const SIREN_TPL_DEFAUT = {
+  confirm_objet: 'Confirmation de votre numéro SIREN — Eloflex France',
+  confirm_corps: "Bonjour,\n\nDans le cadre de la mise à jour de nos fichiers clients et de la généralisation de la facturation électronique, nous vérifions les informations de votre société {nom}.\n\nNous avons enregistré le numéro SIREN suivant : {siren}\n\nPouvez-vous nous confirmer qu'il est correct, ou nous indiquer le bon numéro en répondant simplement à ce message ?\n\nMerci d'avance et bonne journée,\nL'équipe Eloflex France",
+  relance_objet: 'Votre numéro SIREN — Eloflex France',
+  relance_corps: "Bonjour,\n\nDans le cadre de la mise à jour de nos fichiers clients et de la généralisation de la facturation électronique, nous avons besoin du numéro SIREN de votre société {nom}, qui n'apparaît pas encore dans nos fichiers.\n\nPouvez-vous nous le communiquer en répondant simplement à ce message (SIREN à 9 chiffres, ou SIRET à 14 chiffres) ?\n\nMerci d'avance et bonne journée,\nL'équipe Eloflex France",
+};
+async function _paramsSiren() {
+  const p = {}; (await db.all('SELECT cle,valeur FROM parametres')).forEach(r => p[r.cle] = r.valeur);
+  return p;
+}
+function _sirenModeles(p) {
+  return {
+    confirm_objet: p.siren_confirm_objet || SIREN_TPL_DEFAUT.confirm_objet,
+    confirm_corps: p.siren_confirm_corps || SIREN_TPL_DEFAUT.confirm_corps,
+    relance_objet: p.siren_relance_objet || SIREN_TPL_DEFAUT.relance_objet,
+    relance_corps: p.siren_relance_corps || SIREN_TPL_DEFAUT.relance_corps,
+  };
+}
+function _sirenMailContenu(p, type, nom, siren) {
+  const m = _sirenModeles(p);
+  const k = type === 'confirm' ? 'confirm' : 'relance';
+  const fill = s => String(s)
+    .replace(/\{nom\}/g, nom || '')
+    .replace(/\{siren\}/g, siren || '')
+    .replace(/\{tva\}/g, _tvaFrDeSiren(siren || ''));
+  const escH = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const html = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.55">'
+    + escH(fill(m[k + '_corps'])).replace(/\n/g, '<br>') + '</div>';
+  return { subject: fill(m[k + '_objet']), html };
+}
+const _emailOk = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim());
+async function _envoyerDemandeSiren(p, { type, nom, email, siren, pl_id, client_id, user }) {
+  const c = _sirenMailContenu(p, type, nom, siren);
+  await sendBrevoMail({
+    from: p.email_from || 'sav@eloflex.fr', fromName: 'Eloflex France',
+    to: String(email).trim(), bcc: p.email_cc_sav || 'sav@eloflex.fr',
+    subject: c.subject, html: c.html,
+  });
+  await db.run(`INSERT INTO siren_demandes (pl_customer_id, client_id, nom, email, type, siren, envoye_par)
+                VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [pl_id != null ? String(pl_id) : null, client_id || null, nom || null, String(email).trim(), type, siren || null, user || null]);
+}
+function _itemSirenDepuisCustomer(c, lm) {
+  const siren = _sirenDeCustomer(c);
+  const l = lm ? lm[String(c.id)] : null;
+  return {
+    pl_id: c.id, nom: _custNom(c), email: _custMail(c), ville: _custVille(c),
+    siren, type: siren ? 'confirm' : 'relance',
+    dernier_envoi: l ? l.dernier : null, nb_envois: l ? l.n : 0,
+  };
+}
+
+// Modèles d'e-mail effectifs (défauts si non personnalisés)
+router.get('/admin/siren-demandes/modeles', adminOnly, async (req, res) => {
+  try { res.json({ ok: true, modeles: _sirenModeles(await _paramsSiren()), defauts: SIREN_TPL_DEFAUT }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Liste préparée : entreprises Pennylane, classées confirmation / relance, avec historique d'envoi
+router.get('/admin/siren-demandes/preview', adminOnly, async (req, res) => {
+  try {
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ ok: false, reason: 'Pennylane non configuré' });
+    const list = await _plCustomersCache(req.query.refresh === '1');
+    const last = await db.all(`SELECT pl_customer_id, MAX(envoye_at) AS dernier, COUNT(*)::int AS n
+                                 FROM siren_demandes WHERE pl_customer_id IS NOT NULL GROUP BY pl_customer_id`);
+    const lm = {}; last.forEach(r => lm[r.pl_customer_id] = r);
+    const entreprises = list.filter(c => _typeCustomer(c) !== 'Particulier');
+    const items = entreprises.map(c => _itemSirenDepuisCustomer(c, lm)).filter(x => x.nom)
+      .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    res.json({ ok: true, items, nb_particuliers: list.length - entreprises.length });
+  } catch (e) { console.error('[SIREN DEM PREVIEW]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// Envoi (lot ≤ 25) : body { pl_ids:[...] } — type et SIREN re-déduits de Pennylane (source de vérité)
+router.post('/admin/siren-demandes/envoyer', adminOnly, async (req, res) => {
+  try {
+    const ids = (req.body.pl_ids || []).map(String).slice(0, 25);
+    if (!ids.length) return res.status(400).json({ error: 'Aucun client sélectionné' });
+    const list = await _plCustomersCache(false);
+    const byId = {}; list.forEach(c => byId[String(c.id)] = c);
+    const p = await _paramsSiren();
+    const user = (res.locals.user || {}).nom || null;
+    const resultats = [];
+    for (const id of ids) {
+      const c = byId[id];
+      if (!c) { resultats.push({ pl_id: id, ok: false, erreur: 'introuvable dans Pennylane' }); continue; }
+      const it = _itemSirenDepuisCustomer(c, null);
+      if (_typeCustomer(c) === 'Particulier') { resultats.push({ pl_id: id, nom: it.nom, ok: false, erreur: 'particulier' }); continue; }
+      if (!_emailOk(it.email)) { resultats.push({ pl_id: id, nom: it.nom, ok: false, erreur: 'pas d\'e-mail' }); continue; }
+      try {
+        await _envoyerDemandeSiren(p, { ...it, user });
+        resultats.push({ pl_id: id, nom: it.nom, type: it.type, ok: true });
+      } catch (e) { resultats.push({ pl_id: id, nom: it.nom, ok: false, erreur: e.message }); }
+    }
+    res.json({ ok: true, envoyes: resultats.filter(r => r.ok).length, resultats });
+  } catch (e) { console.error('[SIREN DEM ENVOI]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// Demande individuelle depuis la fiche distributeur de l'appli.
+// Rapproche la fiche du client Pennylane par nom (source du SIREN). ?dry=1 = aperçu sans envoi.
+const clientsWrite = (req, res, next) => {
+  const user = res.locals.user;
+  if (!user) return res.status(403).json({ error: 'Non authentifié' });
+  if (user.role === 'admin' || user.role === 'operateur') return next();
+  if ((user.permissions || {})['clients'] === 'write') return next();
+  return res.status(403).json({ error: 'Accès en écriture refusé sur le module "clients".' });
+};
+router.post('/clients/:id/siren-demande', clientsWrite, async (req, res) => {
+  try {
+    const cid = parseInt(req.params.id);
+    if (!Number.isInteger(cid)) return res.status(404).json({ error: 'Client introuvable' });
+    const cl = await db.get('SELECT id, nom, email, type FROM clients WHERE id=$1', [cid]);
+    if (!cl) return res.status(404).json({ error: 'Client introuvable' });
+    if (cl.type === 'Particulier') return res.status(400).json({ error: 'Client particulier : pas de SIREN à demander' });
+    let pc = null;
+    if (process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN) {
+      try {
+        const list = await _plCustomersCache(false);
+        const n = _normNom(cl.nom);
+        const cands = list.filter(c => _normNom(_custNom(c)) === n);
+        pc = cands[0] || null;
+      } catch (_) {}
+    }
+    const siren = pc ? _sirenDeCustomer(pc) : '';
+    const type = siren ? 'confirm' : 'relance';
+    const email = _emailOk(cl.email) ? String(cl.email).trim() : (pc && _emailOk(_custMail(pc)) ? _custMail(pc) : '');
+    const hist = await db.all(`SELECT type, envoye_at, envoye_par FROM siren_demandes
+                                WHERE client_id=$1 ${pc ? 'OR pl_customer_id=$2' : ''} ORDER BY envoye_at DESC LIMIT 5`,
+      pc ? [cid, String(pc.id)] : [cid]);
+    const apercu = { nom: cl.nom, email, siren, type, pennylane_trouve: !!pc, historique: hist };
+    if (req.query.dry === '1') return res.json({ ok: true, ...apercu });
+    if (!email) return res.status(400).json({ error: "Aucune adresse e-mail (ni sur la fiche, ni dans Pennylane)" });
+    const p = await _paramsSiren();
+    await _envoyerDemandeSiren(p, { type, nom: cl.nom, email, siren, pl_id: pc ? pc.id : null, client_id: cid, user: (res.locals.user || {}).nom || null });
+    res.json({ ok: true, envoye: true, ...apercu });
+  } catch (e) { console.error('[SIREN DEM CLIENT]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // ── Rattrapage global VosFactures ────────────────────────────────
 // Pour TOUTES les commandes ayant un n° BDC ou un n° de facture : retrouve le document
 // VosFactures (recherche robuste period=all + variantes de slash), enregistre le LIEN,

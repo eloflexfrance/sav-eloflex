@@ -763,6 +763,7 @@ async function renderClient(ttl,c,a){
     <button class="btn sm" onclick="modalNewFauteuil(${cl.id})"><i class="ti ti-plus"></i>${TR('Fauteuil')}</button>
     <button class="btn sm" onclick="modalPret(null,${cl.id})"><i class="ti ti-file-certificate"></i>${TR('Bon de prêt')}</button>
     ${cl.type!=='Particulier'?`<button class="btn sm" onclick="modalContrat(${cl.id})"><i class="ti ti-file-description"></i>${TR('Contrat-cadre')}</button>`:''}
+    ${cl.type!=='Particulier'&&canWrite('clients')?`<button class="btn sm" onclick="demanderSirenClient(${cl.id})" title="${TR('Envoyer un e-mail de confirmation (SIREN présent dans Pennylane) ou de demande (SIREN manquant)')}"><i class="ti ti-id-badge-2"></i>SIREN</button>`:''}
     <button class="btn sm primary" onclick="modalNewIntervention(null,${cl.id})"><i class="ti ti-plus"></i>Intervention</button>`;
   const s=cl.stats||{};
   c.innerHTML=`
@@ -2803,6 +2804,17 @@ async function renderParametres(ttl,c,a){
         <button class="btn" onclick="telechargerDistributeursApp()"><i class="ti ti-map-pin"></i> ${TR("Exporter les distributeurs de l'appli (statut carte)")}</button>
       </div>
       <div id="scan-siren-result" style="margin-top:10px"></div>
+      <div style="margin-top:16px;padding-top:14px;border-top:0.5px solid var(--border-s)">
+        <div style="font-weight:600;font-size:14px;margin-bottom:6px"><i class="ti ti-mail"></i> ${TR('Demandes de SIREN par e-mail')}</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
+          ${TR("Pour les entreprises de Pennylane (particuliers exclus) : un e-mail de confirmation quand le SIREN est présent, un e-mail de relance quand il manque. Rien n'est envoyé sans ta validation ; chaque envoi est historisé.")}
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="chargerDemandesSiren()"><i class="ti ti-list-check"></i> ${TR('Préparer la liste')}</button>
+          <button class="btn" onclick="modalModelesSiren()"><i class="ti ti-template"></i> ${TR("Modèles d'e-mail")}</button>
+        </div>
+        <div id="siren-demandes-zone" style="margin-top:10px"></div>
+      </div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-copy"></i> Doublons de commandes</h3>
@@ -3498,6 +3510,163 @@ function telechargerClientsPennylane(){ toast(TR('Export en cours… (garde l\'o
 window.telechargerClientsPennylane = telechargerClientsPennylane;
 function telechargerDistributeursApp(){ toast(TR('Export en cours…'),'ti-loader-2'); window.open('/api/clients/export-distributeurs.xlsx','_blank'); }
 window.telechargerDistributeursApp = telechargerDistributeursApp;
+
+// ── Demandes de SIREN par e-mail (confirmation / relance) ──
+let SIREN_DEM = { items: [], filtre: 'tous', exclureRecents: true, q: '' };
+const SIREN_DELAI_JOURS = 30;
+function _sirenRecent(it){ return it.dernier_envoi && (Date.now()-new Date(it.dernier_envoi).getTime()) < SIREN_DELAI_JOURS*86400000; }
+function _sirenEmailOk(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e||'').trim()); }
+function _sirenEligibles(type){
+  return SIREN_DEM.items.filter(it => it.type===type && _sirenEmailOk(it.email) && !(SIREN_DEM.exclureRecents && _sirenRecent(it)));
+}
+async function chargerDemandesSiren(refresh){
+  const z=document.getElementById('siren-demandes-zone'); if(!z) return;
+  z.innerHTML='<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> '+TR('Lecture des clients Pennylane…')+'</div>';
+  try{
+    const r=await API.sirenDemandesPreview(!!refresh);
+    if(!r.ok){ z.innerHTML='<div style="color:var(--danger);font-size:13px">'+esc(r.reason||'Erreur')+'</div>'; return; }
+    SIREN_DEM.items=r.items||[]; SIREN_DEM.nbPart=r.nb_particuliers||0;
+    renderDemandesSiren();
+  }catch(e){ z.innerHTML='<div style="color:var(--danger);font-size:13px">'+TR('Erreur : ')+esc(e.message)+'</div>'; }
+}
+function renderDemandesSiren(){
+  const z=document.getElementById('siren-demandes-zone'); if(!z) return;
+  const it=SIREN_DEM.items;
+  const nbC=it.filter(x=>x.type==='confirm').length, nbR=it.filter(x=>x.type==='relance').length;
+  const nbSansMail=it.filter(x=>!_sirenEmailOk(x.email)).length;
+  const eC=_sirenEligibles('confirm').length, eR=_sirenEligibles('relance').length;
+  const q=(SIREN_DEM.q||'').toLowerCase();
+  const vis=it.filter(x=>{
+    if(SIREN_DEM.filtre==='confirm' && x.type!=='confirm') return false;
+    if(SIREN_DEM.filtre==='relance' && x.type!=='relance') return false;
+    if(SIREN_DEM.filtre==='sansmail' && _sirenEmailOk(x.email)) return false;
+    if(q && !((x.nom||'').toLowerCase().includes(q) || (x.ville||'').toLowerCase().includes(q) || (x.email||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+  const opt=(v,l)=>`<option value="${v}" ${SIREN_DEM.filtre===v?'selected':''}>${l}</option>`;
+  z.innerHTML=`
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:13px">
+      <span class="badge g">✅ ${nbC} ${TR('à confirmer')}</span>
+      <span class="badge attente">✉️ ${nbR} ${TR('à relancer')}</span>
+      <span class="badge urgent">${nbSansMail} ${TR('sans e-mail')}</span>
+      <span style="color:var(--text3)">${SIREN_DEM.nbPart} ${TR('particuliers exclus')}</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <select class="form-input" style="width:auto" onchange="SIREN_DEM.filtre=this.value;renderDemandesSiren()">
+        ${opt('tous',TR('Tous'))}${opt('confirm',TR('À confirmer'))}${opt('relance',TR('À relancer'))}${opt('sansmail',TR('Sans e-mail'))}
+      </select>
+      <input class="form-input" style="width:200px" placeholder="${TR('Rechercher…')}" value="${esc(SIREN_DEM.q||'')}" oninput="SIREN_DEM.q=this.value;clearTimeout(window._sdq);window._sdq=setTimeout(renderDemandesSiren,250)">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" ${SIREN_DEM.exclureRecents?'checked':''} onchange="SIREN_DEM.exclureRecents=this.checked;renderDemandesSiren()"> ${TR('Ignorer ceux contactés il y a moins de')} ${SIREN_DELAI_JOURS} ${TR('jours')}</label>
+      <button class="btn sm" onclick="chargerDemandesSiren(true)" title="${TR('Relire Pennylane')}"><i class="ti ti-refresh"></i></button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn success" ${eC?'':'disabled'} onclick="envoyerDemandesSiren('confirm')"><i class="ti ti-send"></i> ${TR('Envoyer les confirmations')} (${eC})</button>
+      <button class="btn primary" ${eR?'':'disabled'} onclick="envoyerDemandesSiren('relance')"><i class="ti ti-send"></i> ${TR('Envoyer les relances')} (${eR})</button>
+    </div>
+    <div id="siren-dem-progress"></div>
+    <div style="overflow:auto;max-height:360px;border:0.5px solid var(--border-s);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="position:sticky;top:0;background:var(--surface)">
+          <th style="text-align:left;padding:6px">${TR('Client')}</th><th style="text-align:left;padding:6px">${TR('E-mail')}</th>
+          <th style="text-align:left;padding:6px">SIREN</th><th style="text-align:left;padding:6px">${TR('Demande')}</th>
+          <th style="text-align:left;padding:6px">${TR('Dernier envoi')}</th><th></th>
+        </tr></thead>
+        <tbody>${vis.slice(0,400).map(x=>`<tr style="border-top:0.5px solid var(--border-s)">
+          <td style="padding:5px 6px">${esc(x.nom)}${x.ville?`<div style="font-size:11px;color:var(--text3)">${esc(x.ville)}</div>`:''}</td>
+          <td style="padding:5px 6px;font-size:12px">${_sirenEmailOk(x.email)?esc(x.email):'<span style="color:var(--danger)">—</span>'}</td>
+          <td style="padding:5px 6px" class="mono">${x.siren?esc(x.siren):'<span style="color:var(--text3)">—</span>'}</td>
+          <td style="padding:5px 6px">${x.type==='confirm'?'<span class="badge g" style="font-size:11px">'+TR('Confirmation')+'</span>':'<span class="badge attente" style="font-size:11px">'+TR('Relance')+'</span>'}</td>
+          <td style="padding:5px 6px;font-size:12px;color:var(--text2)">${x.dernier_envoi?fd(String(x.dernier_envoi).slice(0,10))+(x.nb_envois>1?' (×'+x.nb_envois+')':''):'—'}</td>
+          <td style="padding:5px 6px;text-align:right">${_sirenEmailOk(x.email)?`<button class="btn sm" onclick="envoyerDemandeSirenUne('${esc(String(x.pl_id))}')" title="${TR('Envoyer à ce client')}"><i class="ti ti-send"></i></button>`:''}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+      ${vis.length>400?`<div style="padding:6px;font-size:12px;color:var(--text3)">${TR('Affichage limité à 400 lignes — affine avec la recherche.')}</div>`:''}
+      ${!vis.length?`<div style="padding:10px;font-size:13px;color:var(--text3)">${TR('Aucun client pour ce filtre.')}</div>`:''}
+    </div>`;
+}
+async function _envoyerLotsSiren(ids, libelle){
+  const prog=document.getElementById('siren-dem-progress');
+  let ok=0, ko=[];
+  for(let i=0;i<ids.length;i+=20){
+    const lot=ids.slice(i,i+20);
+    if(prog) prog.innerHTML=`<div style="font-size:13px;color:var(--text2);margin-bottom:8px"><i class="ti ti-loader-2"></i> ${esc(libelle)} : ${i}/${ids.length}…</div>`;
+    try{
+      const r=await API.sirenDemandesEnvoyer(lot);
+      (r.resultats||[]).forEach(x=>{ if(x.ok) ok++; else ko.push((x.nom||x.pl_id)+' — '+x.erreur); });
+    }catch(e){ lot.forEach(id=>ko.push(id+' — '+e.message)); }
+  }
+  if(prog) prog.innerHTML=`<div style="font-size:13px;margin-bottom:8px;padding:8px 10px;border-radius:8px;background:${ko.length?'var(--warning-bg)':'var(--success-bg)'}">
+    ✓ ${ok} ${TR('e-mail(s) envoyé(s)')}${ko.length?` · ${ko.length} ${TR('échec(s)')} :<div style="font-size:12px;color:var(--text2);margin-top:4px">${ko.slice(0,15).map(esc).join('<br>')}</div>`:''}</div>`;
+  toast(ok+' '+TR('e-mail(s) envoyé(s)'),'ti-check');
+  return ok;
+}
+async function envoyerDemandesSiren(type){
+  const cibles=_sirenEligibles(type);
+  if(!cibles.length) return;
+  const lib = type==='confirm' ? TR('confirmations de SIREN') : TR('relances pour SIREN manquant');
+  if(!confirm(TR('Envoyer')+' '+cibles.length+' '+lib+' ?\n\n'+TR('Les e-mails partent immédiatement, en copie cachée à l\'adresse SAV.'))) return;
+  await _envoyerLotsSiren(cibles.map(x=>String(x.pl_id)), TR('Envoi'));
+  const prog=document.getElementById('siren-dem-progress'); const garde=prog?prog.innerHTML:'';
+  await chargerDemandesSiren(false);
+  const p2=document.getElementById('siren-dem-progress'); if(p2) p2.innerHTML=garde;
+}
+async function envoyerDemandeSirenUne(plId){
+  const x=SIREN_DEM.items.find(i=>String(i.pl_id)===String(plId)); if(!x) return;
+  const quoi = x.type==='confirm' ? TR('une demande de confirmation du SIREN')+' '+x.siren : TR('une demande de SIREN (manquant)');
+  const deja = x.dernier_envoi ? '\n\n'+TR('Attention : déjà contacté le')+' '+fd(String(x.dernier_envoi).slice(0,10))+'.' : '';
+  if(!confirm(TR('Envoyer')+' '+quoi+'\n'+TR('à')+' '+x.nom+' ('+x.email+') ?'+deja)) return;
+  await _envoyerLotsSiren([String(plId)], x.nom);
+  const prog=document.getElementById('siren-dem-progress'); const garde=prog?prog.innerHTML:'';
+  await chargerDemandesSiren(false);
+  const p2=document.getElementById('siren-dem-progress'); if(p2) p2.innerHTML=garde;
+}
+async function modalModelesSiren(){
+  let m;
+  try{ m=(await API.sirenModeles()).modeles; }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); return; }
+  showModal(`
+    <div class="modal-header"><i class="ti ti-template" style="color:var(--accent)"></i><h2 style="flex:1">${TR("Modèles d'e-mail — SIREN")}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div style="padding:18px;display:flex;flex-direction:column;gap:10px;max-height:70vh;overflow:auto">
+      <div style="font-size:12px;color:var(--text2)">${TR('Variables disponibles')} : <code>{nom}</code> ${TR('(société)')}, <code>{siren}</code>, <code>{tva}</code> ${TR('(n° TVA calculé)')}.</div>
+      <div style="font-weight:600;color:var(--success)">✅ ${TR('Confirmation (SIREN présent)')}</div>
+      <input class="form-input" id="sm-co" value="${esc(m.confirm_objet)}">
+      <textarea class="form-input" id="sm-cc" rows="9">${esc(m.confirm_corps)}</textarea>
+      <div style="font-weight:600;color:var(--warning)">✉️ ${TR('Relance (SIREN manquant)')}</div>
+      <input class="form-input" id="sm-ro" value="${esc(m.relance_objet)}">
+      <textarea class="form-input" id="sm-rc" rows="9">${esc(m.relance_corps)}</textarea>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:6px">
+        <button class="btn" onclick="reinitModelesSiren()"><i class="ti ti-restore"></i> ${TR('Revenir aux textes par défaut')}</button>
+        <button class="btn primary" onclick="saveModelesSiren()"><i class="ti ti-check"></i> ${TR('Enregistrer')}</button>
+      </div>
+    </div>`);
+}
+async function saveModelesSiren(){
+  const g=id=>(document.getElementById(id)||{}).value||'';
+  try{
+    await API.saveParametres({ siren_confirm_objet:g('sm-co'), siren_confirm_corps:g('sm-cc'), siren_relance_objet:g('sm-ro'), siren_relance_corps:g('sm-rc') });
+    closeModal(); toast(TR('Modèles enregistrés'),'ti-check');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+async function reinitModelesSiren(){
+  if(!confirm(TR('Remettre les textes par défaut ?'))) return;
+  try{
+    await API.saveParametres({ siren_confirm_objet:'', siren_confirm_corps:'', siren_relance_objet:'', siren_relance_corps:'' });
+    closeModal(); modalModelesSiren();
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+// Demande individuelle depuis la fiche distributeur
+async function demanderSirenClient(id){
+  let a;
+  try{ a=await API.sirenDemandeClient(id,true); }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); return; }
+  if(!a.email){ alert(TR("Aucune adresse e-mail pour ce distributeur (ni sur la fiche, ni dans Pennylane). Ajoute-la sur la fiche puis réessaie.")); return; }
+  const quoi = a.type==='confirm'
+    ? TR('Confirmation du SIREN')+' '+a.siren+' ('+TR('trouvé dans Pennylane')+')'
+    : (a.pennylane_trouve ? TR('Relance : SIREN absent dans Pennylane') : TR('Relance : client non retrouvé dans Pennylane, SIREN inconnu'));
+  const hist = (a.historique||[]).length ? '\n\n'+TR('Déjà contacté')+' : '+a.historique.map(h=>fd(String(h.envoye_at).slice(0,10))+' ('+(h.type==='confirm'?TR('confirmation'):TR('relance'))+')').join(', ') : '';
+  if(!confirm(TR('Envoyer un e-mail à')+' '+a.nom+'\n'+a.email+'\n\n'+quoi+hist+'\n\n'+TR('Confirmer l\'envoi ?'))) return;
+  try{ await API.sirenDemandeClient(id,false); toast(TR('E-mail SIREN envoyé'),'ti-check'); }
+  catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+Object.assign(window,{chargerDemandesSiren,renderDemandesSiren,envoyerDemandesSiren,envoyerDemandeSirenUne,modalModelesSiren,saveModelesSiren,reinitModelesSiren,demanderSirenClient});
 
 function telechargerRapportRattrapage(){
   const S=RATT_LAST; if(!S){ toast(TR('Aucun rapport disponible'),'ti-alert-circle','var(--danger)'); return; }
