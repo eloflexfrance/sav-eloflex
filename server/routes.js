@@ -4376,6 +4376,71 @@ router.post('/admin/fauteuils-resync', adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Rattrapage : créer les fiches fauteuils manquantes depuis les commandes ──
+// Toute commande portant un n° de série sans fiche fauteuil → création de la fiche,
+// rattachée au distributeur de la commande la plus pertinente pour cette série
+// (vente facturée la plus récente, sinon commande la plus récente hors SAV).
+// ?dry=1 = aperçu sans rien écrire.
+function _extraireSeries(txt) {
+  const up = String(txt || '').toUpperCase();
+  const re = /\b(EL\d{6,}|[A-Z]{1,3}\d{2}L?\d{8,}|A\d{12,})\b/g;
+  const out = new Set(); let m;
+  while ((m = re.exec(up))) out.add(m[1]);
+  if (!out.size) {
+    const compact = up.replace(/[^A-Z0-9]/g, '');
+    if (/^(EL\d{6,}|[A-Z]{1,3}\d{2}L?\d{8,}|A\d{12,})$/.test(compact)) out.add(compact);
+  }
+  return [...out];
+}
+router.post('/admin/fauteuils-depuis-commandes', adminOnly, async (req, res) => {
+  try {
+    const dry = req.query.dry === '1';
+    const cmds = await db.all(
+      `SELECT cmd.id, cmd.num_serie, cmd.client_id, cmd.modele, cmd.bdc, cmd.num_facture, cmd.facture_vf_id,
+              cmd.date_commande, cmd.date_livraison, cmd.origine, cmd.modele_demo, c.nom AS client_nom
+         FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id
+        WHERE cmd.num_serie IS NOT NULL AND cmd.num_serie <> ''`);
+    const existants = new Set((await db.all(
+      `SELECT UPPER(REGEXP_REPLACE(serie,'[^A-Za-z0-9]','','g')) AS sn FROM fauteuils WHERE serie IS NOT NULL`)).map(r => r.sn));
+    const estVente = c => !!c.facture_vf_id || /^[A-Za-z]?[0-9]{3,}/.test(String(c.num_facture || '').trim());
+    const dt = c => String(c.date_livraison || c.date_commande || '').slice(0, 10);
+    // meilleure commande par série
+    const parSerie = {};
+    for (const c of cmds) {
+      for (const sn of _extraireSeries(c.num_serie)) {
+        if (existants.has(sn)) continue;
+        const cur = parSerie[sn];
+        const score = x => [x.client_id ? 1 : 0, x.origine === 'sav' ? 0 : 1, estVente(x) ? 1 : 0, dt(x), x.id];
+        if (!cur) { parSerie[sn] = c; continue; }
+        const a = score(c), b = score(cur);
+        for (let i = 0; i < a.length; i++) { if (a[i] > b[i]) { parSerie[sn] = c; break; } if (a[i] < b[i]) break; }
+      }
+    }
+    const aCreer = [], sansClient = [];
+    for (const [sn, c] of Object.entries(parSerie)) {
+      const item = { serie: sn, cmd_id: c.id, bdc: c.bdc, client_id: c.client_id, client_nom: c.client_nom,
+                     modele: c.modele || 'Eloflex', date: dt(c) || null, facture: c.num_facture || null,
+                     demo: !!c.modele_demo, vente: estVente(c) };
+      (c.client_id ? aCreer : sansClient).push(item);
+    }
+    aCreer.sort((x, y) => String(x.client_nom || '').localeCompare(String(y.client_nom || ''), 'fr'));
+    let crees = 0;
+    if (!dry) {
+      for (const it of aCreer) {
+        const r = await db.run(
+          `INSERT INTO fauteuils (client_id, modele, serie, date_achat, num_facture, notes)
+           VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (serie) DO NOTHING RETURNING id`,
+          [it.client_id, it.modele, it.serie, it.date, it.vente ? it.facture : null,
+           'Fiche créée automatiquement depuis la commande ' + (it.bdc || ('#' + it.cmd_id)) + '.']);
+        if (r && r.id) crees++;
+      }
+    }
+    res.json({ ok: true, dry, commandes_avec_serie: cmds.length, fiches_existantes: existants.size,
+      a_creer: aCreer.length, crees, sans_client: sansClient.length,
+      liste: aCreer.slice(0, 2000), liste_sans_client: sansClient.slice(0, 500) });
+  } catch (e) { console.error('[FAUTEUILS DEPUIS CMD]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // ── Suivi des fauteuils de démonstration (rappels J+30) ──────────────
 // ── Parc démo : liste complète des fauteuils déclarés en démo (modele_demo),
 // avec leurs infos de suivi. Non plafonné, toutes années confondues. ─────────

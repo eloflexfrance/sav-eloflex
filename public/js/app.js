@@ -2780,6 +2780,17 @@ async function renderParametres(ttl,c,a){
       <div id="rattrapage-vf-result" style="margin-top:10px"></div>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-wheelchair"></i> ${TR('Fiches fauteuils manquantes')}</h3>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
+        ${TR("Crée une fiche fauteuil pour chaque n° de série présent dans une commande mais sans fiche (souvent les démos). La fiche est rattachée au distributeur de la vente facturée la plus récente pour ce n° de série, sinon de la commande la plus récente. Rien n'est modifié sur les fiches existantes. Commence par l'aperçu.")}
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btn-fdc-apercu" onclick="fauteuilsDepuisCommandes(true)"><i class="ti ti-eye"></i> ${TR('Aperçu')}</button>
+        <button class="btn primary" id="btn-fdc-go" onclick="fauteuilsDepuisCommandes(false)" style="display:none"><i class="ti ti-plus"></i> ${TR('Créer les fiches')}</button>
+      </div>
+      <div id="fdc-result" style="margin-top:10px"></div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-brand-stripe"></i> Pennylane <span id="pl-status-badge" style="font-size:12px;margin-left:8px"></span></h3>
       <p style="font-size:13px;color:var(--text2);margin-bottom:10px">
         Intégration Pennylane V2 — parallèle à VosFactures.<br>
@@ -3438,6 +3449,43 @@ async function lancerRattrapageVF(){
   }
 }
 window.lancerRattrapageVF = lancerRattrapageVF;
+
+// ── Créer les fiches fauteuils manquantes depuis les commandes ──
+async function fauteuilsDepuisCommandes(dry){
+  const out=document.getElementById('fdc-result'), go=document.getElementById('btn-fdc-go');
+  if(!dry){
+    const n=(window._FDC_LAST||{}).a_creer||0;
+    if(!confirm(TR('Créer')+' '+n+' '+TR('fiche(s) fauteuil ?'))) return;
+  }
+  if(out) out.innerHTML='<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> '+(dry?TR('Analyse des commandes…'):TR('Création en cours…'))+'</div>';
+  try{
+    const r=await API.post('/admin/fauteuils-depuis-commandes'+(dry?'?dry=1':''),{});
+    window._FDC_LAST=r;
+    const ligne=x=>`<tr style="border-top:0.5px solid var(--border-s)">
+      <td style="padding:4px 6px" class="mono">${esc(x.serie)}</td>
+      <td style="padding:4px 6px">${esc(x.client_nom||'—')}</td>
+      <td style="padding:4px 6px;font-size:12px">${esc(x.modele||'')}</td>
+      <td style="padding:4px 6px;font-size:12px">${esc(x.bdc||('#'+x.cmd_id))}${x.demo?' <span class="badge hg" style="font-size:10px">Démo</span>':''}${x.vente?' <span class="badge g" style="font-size:10px">'+TR('Vendu')+'</span>':''}</td>
+      <td style="padding:4px 6px;font-size:12px;color:var(--text2)">${x.date?fd(x.date):'—'}</td></tr>`;
+    const tableau=(rows)=>`<div style="overflow:auto;max-height:320px;border:0.5px solid var(--border-s);border-radius:8px;margin-top:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="position:sticky;top:0;background:var(--surface)">
+      <th style="text-align:left;padding:5px 6px">${TR('N° série')}</th><th style="text-align:left;padding:5px 6px">${TR('Distributeur')}</th>
+      <th style="text-align:left;padding:5px 6px">${TR('Modèle')}</th><th style="text-align:left;padding:5px 6px">${TR('Commande')}</th>
+      <th style="text-align:left;padding:5px 6px">${TR('Date')}</th></tr></thead><tbody>${rows.map(ligne).join('')}</tbody></table></div>`;
+    if(dry){
+      out.innerHTML=`<div style="font-size:14px;margin-bottom:4px"><b>${r.a_creer}</b> ${TR('fiche(s) fauteuil à créer')}
+        <span style="color:var(--text3);font-size:13px"> · ${r.commandes_avec_serie} ${TR('commandes avec n° de série')} · ${r.fiches_existantes} ${TR('fiches déjà existantes')}</span></div>
+        ${r.sans_client?`<div style="font-size:13px;color:var(--warning)">${r.sans_client} ${TR('n° de série ignoré(s) : commande non rattachée à une fiche distributeur')}</div>`:''}
+        ${r.a_creer?tableau(r.liste):''}`;
+      if(go) go.style.display=r.a_creer?'':'none';
+    } else {
+      out.innerHTML=`<div style="background:var(--success-bg);border-radius:8px;padding:10px 12px;font-size:14px">✓ ${r.crees} ${TR('fiche(s) fauteuil créée(s).')}</div>`;
+      if(go) go.style.display='none';
+      toast(r.crees+' '+TR('fiche(s) fauteuil créée(s)'),'ti-check');
+    }
+  }catch(e){ if(out) out.innerHTML='<div style="color:var(--danger);font-size:13px">'+TR('Erreur : ')+esc(e.message)+'</div>'; }
+}
+window.fauteuilsDepuisCommandes=fauteuilsDepuisCommandes;
 
 // ── Clients Pennylane sans SIREN : scan annuaire + export Excel ──
 let SIREN_SCAN=null;
