@@ -660,6 +660,40 @@ router.get('/fauteuils', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Recherche d'un fauteuil par n° de série (tolérante aux espaces/tirets). Si aucune fiche
+// fauteuil n'existe mais qu'une commande porte ce n° de série, on la propose et, avec
+// ?creer=1, on crée la fiche fauteuil depuis cette commande (distributeur, modèle, facture).
+router.get('/fauteuils/par-serie', requireAuth, async (req, res) => {
+  try {
+    const brut = String(req.query.serie || '').trim();
+    const norm = brut.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (norm.length < 5) return res.json({ ok: true, fauteuil: null, commande: null });
+    const NS = "regexp_replace(UPPER(COALESCE(%s,'')),'[^A-Z0-9]','','g')";
+    let f = await db.get(`SELECT f.*, c.nom AS client_nom FROM fauteuils f JOIN clients c ON c.id=f.client_id
+                           WHERE ${NS.replace('%s','f.serie')} = $1 LIMIT 1`, [norm]);
+    if (f) return res.json({ ok: true, fauteuil: f, source: 'fauteuils' });
+    // Le champ num_serie d'une commande peut contenir plusieurs n° → recherche par inclusion
+    const cmd = await db.get(`SELECT cmd.id, cmd.bdc, cmd.num_facture, cmd.modele, cmd.num_serie, cmd.client_id,
+                                     cmd.distributeur_nom, cmd.date_commande, c.nom AS client_nom
+                                FROM commandes cmd LEFT JOIN clients c ON c.id=cmd.client_id
+                               WHERE ${NS.replace('%s','cmd.num_serie')} LIKE '%' || $1 || '%'
+                               ORDER BY (cmd.client_id IS NOT NULL) DESC, cmd.date_commande DESC NULLS LAST, cmd.id DESC
+                               LIMIT 1`, [norm]);
+    if (!cmd) return res.json({ ok: true, fauteuil: null, commande: null });
+    if (req.query.creer !== '1') return res.json({ ok: true, fauteuil: null, commande: cmd });
+    if (!cmd.client_id) return res.status(400).json({ error: "La commande trouvée n'est rattachée à aucune fiche distributeur" });
+    // Série au format saisi (majuscules, sans espaces superflus)
+    const serie = brut.toUpperCase().replace(/\s+/g, '');
+    await db.run(`INSERT INTO fauteuils (client_id, modele, serie, date_achat, num_facture, notes)
+                  VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (serie) DO NOTHING`,
+      [cmd.client_id, cmd.modele || 'Eloflex', serie, cmd.date_commande || null, cmd.num_facture || null,
+       'Fiche créée depuis la commande ' + (cmd.bdc || ('#' + cmd.id)) + ' (organisation d\'un transfert).']);
+    f = await db.get(`SELECT f.*, c.nom AS client_nom FROM fauteuils f JOIN clients c ON c.id=f.client_id
+                       WHERE ${NS.replace('%s','f.serie')} = $1 LIMIT 1`, [norm]);
+    res.json({ ok: true, fauteuil: f, source: 'cree_depuis_commande', commande: cmd });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/fauteuils/:id', async (req, res) => {
   try {
     const f = await db.get('SELECT f.*,c.nom AS client_nom FROM fauteuils f JOIN clients c ON c.id=f.client_id WHERE f.id=$1', [req.params.id]);
@@ -2096,6 +2130,8 @@ router.get('/recherche', async (req, res) => {
         (SELECT cmd.id FROM commandes cmd WHERE cmd.num_serie=f.serie LIMIT 1) AS commande_id
       FROM fauteuils f JOIN clients c ON c.id=f.client_id
       WHERE LOWER(f.serie) = LOWER($1)
+         OR regexp_replace(UPPER(f.serie),'[^A-Z0-9]','','g') = regexp_replace(UPPER($1),'[^A-Z0-9]','','g')
+      LIMIT 1
     `, [q]);
 
     const fauteuils = exactSerie
@@ -2108,8 +2144,9 @@ router.get('/recherche', async (req, res) => {
           LEFT JOIN interventions iv ON iv.fauteuil_id=f.id
           WHERE f.modele ILIKE $1 OR c.nom ILIKE $1 OR iv.num_sav ILIKE $1
              OR f.serie ILIKE $1
+             OR ($2 <> '' AND regexp_replace(UPPER(f.serie),'[^A-Z0-9]','','g') LIKE '%' || $2 || '%')
           ORDER BY f.updated_at DESC LIMIT 50
-        `, [`%${q}%`]);
+        `, [`%${q}%`, q.toUpperCase().replace(/[^A-Z0-9]/g, '').length >= 5 ? q.toUpperCase().replace(/[^A-Z0-9]/g, '') : '']);
 
     const clients = await db.all(`
       SELECT c.*, COUNT(f.id)::int AS nb_fauteuils

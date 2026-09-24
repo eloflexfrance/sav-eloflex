@@ -5199,7 +5199,23 @@ async function searchFauteuilTransfert(q){
   if(!q||q.trim().length<2){drop.style.display='none';return;}
   try{
     const res=await API.recherche(q.trim());
-    const fauteuils=res.fauteuils||[];
+    let fauteuils=res.fauteuils||[];
+    if(!fauteuils.length){
+      // Pas de fiche fauteuil : on tente le n° de série exact (tolérant) puis les commandes
+      let ps=null; try{ ps=await API.get('/fauteuils/par-serie?serie='+encodeURIComponent(q.trim())); }catch(_){}
+      if(ps && ps.fauteuil){ fauteuils=[ps.fauteuil]; }
+      else if(ps && ps.commande){
+        const c=ps.commande;
+        drop.innerHTML=`<div style="padding:10px 12px;font-size:13px">
+          <div style="color:var(--text2);margin-bottom:6px">${TR("Aucune fiche fauteuil pour ce n° de série, mais il figure dans une commande :")}</div>
+          <div style="font-weight:600">${esc(c.modele||'?')} <span class="mono" style="color:var(--accent)">${esc(c.num_serie||'')}</span></div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">${esc(c.client_nom||c.distributeur_nom||'')} · ${TR('commande')} ${esc(c.bdc||('#'+c.id))}${c.date_commande?' · '+fd(String(c.date_commande).slice(0,10)):''}</div>
+          ${c.client_id?`<button class="btn sm primary" type="button" onmousedown="event.preventDefault();creerFauteuilDepuisCommandeTransfert('${esc(q.trim())}')"><i class="ti ti-plus"></i> ${TR('Créer la fiche fauteuil et l\'utiliser')}</button>`
+            :`<span style="color:var(--danger);font-size:12px">${TR("Commande non rattachée à une fiche distributeur — rattache-la d'abord.")}</span>`}
+        </div>`;
+        drop.style.display='block'; return;
+      }
+    }
     if(!fauteuils.length){drop.innerHTML=`<div class="qs-empty" style="padding:10px 12px;font-size:13px;color:var(--text3)">${t('qs_no_result')} "${esc(q)}"</div>`;drop.style.display='block';return;}
     drop.innerHTML=fauteuils.map(f=>`<div class="piece-option" onmousedown="event.preventDefault();selectFauteuilTransfert(${f.id},'${esc(f.modele||'')}','${esc(f.serie||'')}',${f.client_id||'null'},'${esc(f.client_nom||'')}')">
       <div style="font-size:14px;font-weight:700">${esc(f.modele||'?')} <span class="mono" style="font-weight:400;font-size:13px;color:var(--accent)">${esc(f.serie)}</span></div>
@@ -5208,6 +5224,17 @@ async function searchFauteuilTransfert(q){
     drop.style.display='block';
   }catch(e){}
 }
+
+async function creerFauteuilDepuisCommandeTransfert(serie){
+  try{
+    const r=await API.get('/fauteuils/par-serie?creer=1&serie='+encodeURIComponent(serie));
+    if(!r.fauteuil){ toast(TR('Création impossible'),'ti-alert-circle','var(--danger)'); return; }
+    const f=r.fauteuil;
+    selectFauteuilTransfert(f.id,f.modele||'',f.serie||'',f.client_id||null,f.client_nom||'');
+    toast(TR('Fiche fauteuil créée depuis la commande'),'ti-check');
+  }catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.creerFauteuilDepuisCommandeTransfert=creerFauteuilDepuisCommandeTransfert;
 
 function selectFauteuilTransfert(id,modele,serie,clientId,clientNom){
   document.getElementById('tr-fauteuil-id').value=id;
