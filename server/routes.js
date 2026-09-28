@@ -103,6 +103,7 @@ function moduleFromPath(p) {
   if (p.startsWith('/expeditions'))                 return 'expeditions';
   if (p.startsWith('/commandes'))                   return 'commandes';
   if (p.startsWith('/produits')||p.startsWith('/catalogue')) return 'catalogue';
+  if (p.startsWith('/eclates'))                     return 'eclates';
   if (p.startsWith('/rapports')||p.startsWith('/export')) return 'rapports';
   if (p.startsWith('/alertes'))                     return 'alertes';
   if (p.startsWith('/retours'))                     return 'retours_suede';
@@ -124,6 +125,8 @@ router.use((req, res, next) => {
   // (utilisateurs créés avant l'ajout du module carte)
   let perm = perms[module];
   if (perm === undefined && module === 'carte') perm = perms['clients'];
+  // Éclatés : hérite du catalogue pièces tant que la permission n'est pas réglée
+  if (perm === undefined && module === 'eclates') perm = perms['catalogue'];
   perm = perm || 'none';
   // Méthodes en écriture : exiger 'write'
   if (['POST','PUT','DELETE','PATCH'].includes(req.method) && perm !== 'write') {
@@ -1040,6 +1043,168 @@ router.get('/expeditions', async (req, res) => {
       jours_attente: r.envoi_date ? Math.floor((Date.now()-new Date(r.envoi_date))/86400000) : null
     })));
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── ÉCLATÉS INTERACTIFS ───────────────────────────────────────────
+// Schémas de pièces détachées (un « modèle » = un PDF d'éclaté). Les SVG des pages sont stockés
+// en base (eclates_pages) ; les vues portent les repères (bulles) et les lignes de nomenclature.
+// La désignation française vient en priorité du catalogue pièces (rapprochement par référence),
+// sauf si une désignation manuelle (desc_fr) a été saisie.
+const _ECL_NORM = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const _ECL_CAT_JOIN = `LEFT JOIN LATERAL (
+    SELECT c.id, c.designation, c.stock, c.stock_alerte, c.prix_ttc_public, c.stock_actif
+    FROM catalogue c
+    WHERE regexp_replace(UPPER(c.ref),'[^A-Z0-9]','','g') = regexp_replace(UPPER(COALESCE(l.ref,'')),'[^A-Z0-9]','','g')
+      AND COALESCE(l.ref,'') <> ''
+    ORDER BY c.id LIMIT 1) cat ON TRUE`;
+
+router.get('/eclates', async (req, res) => {
+  try {
+    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at,
+        (SELECT COUNT(*) FROM eclates_vues v WHERE v.modele_id = m.id)::int AS nb_vues,
+        (SELECT COUNT(*) FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id WHERE v.modele_id = m.id)::int AS nb_lignes
+      FROM eclates_modeles m ORDER BY m.ordre, m.nom`));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Où apparaît une référence ? (liens depuis le catalogue)
+router.get('/eclates/par-ref/:ref', async (req, res) => {
+  try {
+    const r = _ECL_NORM(req.params.ref);
+    if (!r) return res.json([]);
+    res.json(await db.all(`SELECT m.id AS modele_id, m.nom AS modele, v.id AS vue_id, v.code, v.nom_fr, v.nom_en, l.pos
+      FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id JOIN eclates_modeles m ON m.id = v.modele_id
+      WHERE regexp_replace(UPPER(COALESCE(l.ref,'')),'[^A-Z0-9]','','g') = $1
+      ORDER BY m.nom, v.ordre`, [r]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/eclates/:id', async (req, res) => {
+  try {
+    const m = await db.get('SELECT id, slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, updated_at FROM eclates_modeles WHERE id=$1', [req.params.id]);
+    if (!m) return res.status(404).json({ error: 'Éclaté introuvable' });
+    const vues = await db.all(`SELECT v.id, v.code, v.page, v.ordre, v.nom_en, v.nom_fr, v.assembly_ref, v.clip, v.reperes, v.ocr,
+        (SELECT c.designation FROM catalogue c WHERE COALESCE(v.assembly_ref,'') <> ''
+           AND regexp_replace(UPPER(c.ref),'[^A-Z0-9]','','g') = regexp_replace(UPPER(v.assembly_ref),'[^A-Z0-9]','','g') LIMIT 1) AS assembly_designation
+      FROM eclates_vues v WHERE v.modele_id=$1 ORDER BY v.ordre, v.id`, [m.id]);
+    const lignes = await db.all(`SELECT l.id, l.vue_id, l.ordre, l.pos, l.ref, l.desc_en, l.desc_fr, l.desc_fr_auto, l.qty, l.note, l.cable,
+        l.modifie_par, l.updated_at, cat.id AS cat_id, cat.designation AS cat_designation, cat.stock AS cat_stock,
+        cat.stock_alerte AS cat_stock_alerte, cat.prix_ttc_public AS cat_prix_ttc
+      FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id ${_ECL_CAT_JOIN}
+      WHERE v.modele_id=$1 ORDER BY l.vue_id, l.cable, l.ordre, l.id`, [m.id]);
+    const pages = (await db.all('SELECT page FROM eclates_pages WHERE modele_id=$1 ORDER BY page', [m.id])).map(p => p.page);
+    res.json({ ...m, pages, vues, lignes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// SVG d'une page (mis en cache par le navigateur : le contenu ne change qu'à la réimportation)
+router.get('/eclates/:id/pages/:page', async (req, res) => {
+  try {
+    const p = await db.get('SELECT svg FROM eclates_pages WHERE modele_id=$1 AND page=$2', [req.params.id, req.params.page]);
+    if (!p) return res.status(404).send('Page introuvable');
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.send(p.svg);
+  } catch (e) { res.status(500).send(e.message); }
+});
+
+// Import d'un éclaté (fichier .json préparé à partir du PDF). Remplace l'existant si remplacer=true.
+router.post('/eclates/import', adminOnly, async (req, res) => {
+  const b = req.body || {};
+  const meta = b.meta || {};
+  if (b.format !== 'eclate-v1' || !meta.slug || !Array.isArray(b.views) || !b.pages) {
+    return res.status(400).json({ error: "Fichier d'éclaté invalide" });
+  }
+  const pg = await db.pool.connect();
+  try {
+    const ex = await pg.query('SELECT id FROM eclates_modeles WHERE slug=$1', [meta.slug]);
+    if (ex.rows.length && b.remplacer !== true) {
+      return res.status(409).json({ error: 'existe', message: `L'éclaté « ${meta.modele} » existe déjà.` });
+    }
+    await pg.query('BEGIN');
+    if (ex.rows.length) await pg.query('DELETE FROM eclates_modeles WHERE id=$1', [ex.rows[0].id]);
+    const m = (await pg.query(`INSERT INTO eclates_modeles (slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, ordre)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [meta.slug, meta.modele || meta.slug, meta.ref_modele || null, meta.fichier || null, meta.date_doc || null,
+       meta.W || 842, meta.H || 596, meta.ordre || 0])).rows[0];
+    for (const [page, svg] of Object.entries(b.pages)) {
+      await pg.query('INSERT INTO eclates_pages (modele_id, page, svg) VALUES ($1,$2,$3)', [m.id, parseInt(page), svg]);
+    }
+    let nl = 0;
+    for (const [k, v] of b.views.entries()) {
+      const vr = (await pg.query(`INSERT INTO eclates_vues (modele_id, code, page, ordre, nom_en, nom_fr, assembly_ref, clip, reperes, ocr)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [m.id, v.code || null, v.page, k, v.nom_en || null, v.nom_fr || null, v.assembly_ref || null,
+         JSON.stringify(v.clip || null), JSON.stringify(v.reperes || []), !!v.ocr])).rows[0];
+      const all = [...(v.items || []).map(i => ({ ...i, cable: false })), ...(v.extras || []).map(i => ({ ...i, cable: true }))];
+      for (const [j, i] of all.entries()) {
+        await pg.query(`INSERT INTO eclates_lignes (vue_id, ordre, pos, ref, desc_en, desc_fr_auto, qty, note, cable)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [vr.id, j, i.pos || null, i.ref || null, i.desc || null, i.fr_auto || null, i.qty || null, i.note || null, !!i.cable]);
+        nl++;
+      }
+    }
+    await pg.query('COMMIT');
+    res.json({ ok: true, id: m.id, remplace: !!ex.rows.length, vues: b.views.length, lignes: nl });
+  } catch (e) {
+    try { await pg.query('ROLLBACK'); } catch (_) {}
+    res.status(500).json({ error: e.message });
+  } finally { try { pg.release(); } catch (_) {} }
+});
+
+router.delete('/eclates/:id', adminOnly, async (req, res) => {
+  try { await db.run('DELETE FROM eclates_modeles WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Vue : nom FR/EN, sous-ensemble, repères (bulles renumérotées / ajoutées / supprimées)
+router.put('/eclates/vues/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const sets = [], vals = [];
+    for (const k of ['nom_en', 'nom_fr', 'assembly_ref']) {
+      if (Object.prototype.hasOwnProperty.call(b, k)) { vals.push(b[k] === '' ? null : b[k]); sets.push(`${k}=$${vals.length}`); }
+    }
+    if (Array.isArray(b.reperes)) { vals.push(JSON.stringify(b.reperes)); sets.push(`reperes=$${vals.length}`); }
+    if (!sets.length) return res.json({ ok: true });
+    vals.push(req.params.id);
+    await db.run(`UPDATE eclates_vues SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${vals.length}`, vals);
+    await db.run('UPDATE eclates_modeles SET updated_at=NOW() WHERE id=(SELECT modele_id FROM eclates_vues WHERE id=$1)', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/eclates/vues/:id/lignes', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const u = res.locals.user || {};
+    const o = await db.get('SELECT COALESCE(MAX(ordre),0)+1 AS o FROM eclates_lignes WHERE vue_id=$1', [req.params.id]);
+    const r = await db.get(`INSERT INTO eclates_lignes (vue_id, ordre, pos, ref, desc_en, desc_fr, qty, cable, modifie_par)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+      [req.params.id, o.o, b.pos || null, b.ref || null, b.desc_en || null, b.desc_fr || null, b.qty || null, !!b.cable, u.nom || null]);
+    res.status(201).json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/eclates/lignes/:id', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const u = res.locals.user || {};
+    const sets = [], vals = [];
+    for (const k of ['pos', 'ref', 'desc_en', 'desc_fr', 'qty', 'note']) {
+      if (Object.prototype.hasOwnProperty.call(b, k)) { vals.push(b[k] === '' ? null : b[k]); sets.push(`${k}=$${vals.length}`); }
+    }
+    if (!sets.length) return res.json({ ok: true });
+    vals.push(u.nom || null); sets.push(`modifie_par=$${vals.length}`);
+    vals.push(req.params.id);
+    await db.run(`UPDATE eclates_lignes SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${vals.length}`, vals);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/eclates/lignes/:id', async (req, res) => {
+  try { await db.run('DELETE FROM eclates_lignes WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── CATALOGUE ─────────────────────────────────────────────────────

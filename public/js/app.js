@@ -82,6 +82,7 @@ const MODULES = [
   { key:'commandes',     label:'Suivi commandes' },
   { key:'devis',         label:'Devis en attente' },
   { key:'catalogue',     label:'Catalogue pièces' },
+  { key:'eclates',       label:'Éclatés (schémas pièces)' },
   { key:'prets',         label:'Prêts' },
   { key:'parc-demo',     label:'Parc de démo' },
   { key:'transferts',    label:'Transferts fauteuils' },
@@ -101,6 +102,7 @@ const PERM_FALLBACK = {
   'dashboard':  'commandes',     // Tableau de bord toujours accessible si commandes
   'parc-demo':  'commandes',     // Parc démo : visible si accès au suivi commandes
   'commande-suede': 'commandes', // Commande Suède : suit le suivi commandes
+  'eclates':    'catalogue',     // Éclatés : suivent le catalogue pièces
   // Vues de détail (ouvertes via setView, absentes du menu) → module qui les gouverne.
   'client':     'clients',       // Fiche distributeur : accessible avec l'accès Clients
   'fauteuil':   'clients',       // Fiche fauteuil : idem
@@ -129,7 +131,10 @@ function hasAccess(module) {
 }
 function canWrite(module) {
   if (isAdmin()) return true;
-  return (CURRENT_USER?.permissions || {})[module] === 'write';
+  const perms = CURRENT_USER?.permissions || {};
+  let p = perms[module];
+  if (p === undefined && module === 'eclates') p = perms['catalogue'];
+  return p === 'write';
 }
 // Droit d'écriture sur la carte : admin, ou permission 'carte'=write (repli 'clients').
 function canWriteCarte() {
@@ -223,6 +228,7 @@ async function render(){
     else if(STATE.view==='expeditions')   await renderExpeditions(ttl,c,a);
     else if(STATE.view==='commandes')     await renderCommandes(ttl,c,a);
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
+    else if(STATE.view==='eclates')       await renderEclates(ttl,c,a);
     else if(STATE.view==='commande-suede') await renderCommandeSuede(ttl,c,a);
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
     else if(STATE.view==='alertes')       await renderAlertes(ttl,c,a);

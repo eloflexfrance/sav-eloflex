@@ -36,7 +36,7 @@ const info  = t => console.log(`      ${C.gris(t)}`);
 
 const FICHIERS_JS = [
   'server/routes.js', 'server/index.js', 'server/db.js',
-  'public/js/app.js', 'public/js/api.js', 'public/js/devis.js',
+  'public/js/app.js', 'public/js/api.js', 'public/js/devis.js', 'public/js/eclates.js',
   'public/js/i18n.js', 'public/js/pdf.js', 'scripts/init-db.js'
 ].filter(f => fs.existsSync(P(f)));
 

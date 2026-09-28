@@ -450,6 +450,60 @@ async function initDB() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_siren_dem_pl ON siren_demandes(pl_customer_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_siren_dem_cl ON siren_demandes(client_id)`);
 
+      // ── Éclatés interactifs (schémas de pièces détachées) ─────────
+      await client.query(`CREATE TABLE IF NOT EXISTS eclates_modeles (
+        id SERIAL PRIMARY KEY,
+        slug TEXT UNIQUE NOT NULL,
+        nom TEXT NOT NULL,
+        ref_modele TEXT,
+        fichier TEXT,
+        date_doc TEXT,
+        largeur NUMERIC DEFAULT 842,
+        hauteur NUMERIC DEFAULT 596,
+        ordre INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE TABLE IF NOT EXISTS eclates_pages (
+        id SERIAL PRIMARY KEY,
+        modele_id INTEGER NOT NULL REFERENCES eclates_modeles(id) ON DELETE CASCADE,
+        page INTEGER NOT NULL,
+        svg TEXT NOT NULL,
+        UNIQUE (modele_id, page)
+      )`);
+      await client.query(`CREATE TABLE IF NOT EXISTS eclates_vues (
+        id SERIAL PRIMARY KEY,
+        modele_id INTEGER NOT NULL REFERENCES eclates_modeles(id) ON DELETE CASCADE,
+        code TEXT,
+        page INTEGER NOT NULL,
+        ordre INTEGER DEFAULT 0,
+        nom_en TEXT,
+        nom_fr TEXT,
+        assembly_ref TEXT,
+        clip JSONB,
+        reperes JSONB DEFAULT '[]'::jsonb,
+        ocr BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE TABLE IF NOT EXISTS eclates_lignes (
+        id SERIAL PRIMARY KEY,
+        vue_id INTEGER NOT NULL REFERENCES eclates_vues(id) ON DELETE CASCADE,
+        ordre INTEGER DEFAULT 0,
+        pos TEXT,
+        ref TEXT,
+        desc_en TEXT,
+        desc_fr TEXT,
+        desc_fr_auto TEXT,
+        qty TEXT,
+        note TEXT,
+        cable BOOLEAN DEFAULT FALSE,
+        modifie_par TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ecl_vues_modele ON eclates_vues(modele_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ecl_lignes_vue ON eclates_lignes(vue_id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_ecl_lignes_ref ON eclates_lignes(ref)`);
+
       // ── Fil d'équipe (discussions / annonces internes) ─────────────
       await client.query(`CREATE TABLE IF NOT EXISTS discussion_messages (
         id SERIAL PRIMARY KEY,
