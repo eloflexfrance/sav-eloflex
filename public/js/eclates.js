@@ -136,7 +136,7 @@ function css(){
 .ecl-pen{display:none}
 #ecl-ov .hs{cursor:pointer}
 #ecl-ov .ring{fill:transparent;stroke:transparent;stroke-width:1.6}
-#ecl-ov .hs:hover .ring,#ecl-ov .hs.on .ring{fill:rgba(232,89,12,.16);stroke:#e8590c}
+#ecl-ov .hs:hover .ring,#ecl-ov .hs.on .ring{fill:none;stroke:#e8590c;stroke-width:2.2}
 #ecl-ov .lead{stroke:#e8590c;stroke-width:1.4;opacity:0;pointer-events:none}
 #ecl-ov .dot{fill:#e8590c;opacity:0;pointer-events:none}
 #ecl-ov .halo{fill:none;stroke:#e8590c;stroke-width:1.2;opacity:0;pointer-events:none}
@@ -376,7 +376,7 @@ function list(){
         ${it.horscat && L() === 'fr' ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
         ${it.note ? `<span class="ecl-tag warn">${T('sold')}</span>` : ''}
       </div>
-      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_prix_ttc != null && L() === 'fr' ? `<br>${(+it.cat_prix_ttc).toFixed(2)} €` : ''}<br>${stockBadge(it)}</div>
+      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}</div>
     </div>`;
   };
   v.items.forEach(it => h += row(it, false));

@@ -101,6 +101,15 @@ async function initDB() {
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS pl_product_id BIGINT`);       // produit Pennylane rapproché
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS taux_tva NUMERIC`);           // taux de TVA (%)
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_ttc_public NUMERIC`);    // prix TTC public
+      // Tarifs façon VosFactures. pxht = prix de vente DISTRIBUTEUR HT (valeur historique issue de VosFactures),
+      // prix_achat_suede = prix d'achat Eloflex AB (TVA 0 %), tva_distributeur = 5,5 % ou 20 % (défaut 5,5 %),
+      // prix_public_ttc = prix de vente public conseillé TTC (saisi à la main ; TVA 20 % calculée dessus).
+      // prix_ttc_public reste l'ancien champ rempli par Pennylane (= TTC distributeur), conservé tel quel.
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_achat_suede NUMERIC`);
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_public_ttc NUMERIC`);
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS tva_distributeur NUMERIC`);
+      await client.query(`UPDATE catalogue SET tva_distributeur = CASE WHEN taux_tva = 20 THEN 20 ELSE 5.5 END WHERE tva_distributeur IS NULL`);
+      await client.query(`ALTER TABLE catalogue ALTER COLUMN tva_distributeur SET DEFAULT 5.5`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS poids NUMERIC`);              // poids (kg)
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS image_data TEXT`);            // vignette produit (data URL base64)
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS vf_ignore BOOLEAN DEFAULT FALSE`);

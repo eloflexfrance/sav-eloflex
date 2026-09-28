@@ -1052,7 +1052,7 @@ router.get('/expeditions', async (req, res) => {
 // sauf si une désignation manuelle (desc_fr) a été saisie.
 const _ECL_NORM = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const _ECL_CAT_JOIN = `LEFT JOIN LATERAL (
-    SELECT c.id, c.designation, c.stock, c.stock_alerte, c.prix_ttc_public, c.stock_actif
+    SELECT c.id, c.designation, c.stock, c.stock_alerte, c.pxht, c.prix_public_ttc, c.stock_actif
     FROM catalogue c
     WHERE regexp_replace(UPPER(c.ref),'[^A-Z0-9]','','g') = regexp_replace(UPPER(COALESCE(l.ref,'')),'[^A-Z0-9]','','g')
       AND COALESCE(l.ref,'') <> ''
@@ -1089,7 +1089,7 @@ router.get('/eclates/:id', async (req, res) => {
       FROM eclates_vues v WHERE v.modele_id=$1 ORDER BY v.ordre, v.id`, [m.id]);
     const lignes = await db.all(`SELECT l.id, l.vue_id, l.ordre, l.pos, l.ref, l.desc_en, l.desc_fr, l.desc_fr_auto, l.qty, l.note, l.cable,
         l.modifie_par, l.updated_at, cat.id AS cat_id, cat.designation AS cat_designation, cat.stock AS cat_stock,
-        cat.stock_alerte AS cat_stock_alerte, cat.prix_ttc_public AS cat_prix_ttc
+        cat.stock_alerte AS cat_stock_alerte, cat.pxht AS cat_prix_distrib, cat.prix_public_ttc AS cat_prix_public
       FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id ${_ECL_CAT_JOIN}
       WHERE v.modele_id=$1 ORDER BY l.vue_id, l.cable, l.ordre, l.id`, [m.id]);
     const pages = (await db.all('SELECT page FROM eclates_pages WHERE modele_id=$1 ORDER BY page', [m.id])).map(p => p.page);
@@ -1213,7 +1213,7 @@ router.get('/catalogue', async (req, res) => {
     const q = `%${req.query.q || ''}%`;
     // On exclut image_data (volumineux) de la liste ; un drapeau has_image suffit pour l'affichage.
     let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif,
-                 vf_product_id, pl_product_id, taux_tva, prix_ttc_public, poids,
+                 vf_product_id, pl_product_id, taux_tva, prix_ttc_public, poids, prix_achat_suede, prix_public_ttc, tva_distributeur,
                  (image_data IS NOT NULL) AS has_image, created_at, updated_at
                FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1)`;
     if (req.query.alerte === '1') sql += ' AND stock<=stock_alerte';
@@ -1222,6 +1222,20 @@ router.get('/catalogue', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 const _num = v => (v === '' || v == null) ? null : v;
+// Prix d'achat Suède, prix public conseillé TTC et TVA distributeur (5,5 % ou 20 %) : mis à jour seulement s'ils sont fournis.
+async function _majTarifsDistributeur(id, b) {
+  const sets = [], vals = [];
+  for (const k of ['prix_achat_suede', 'prix_public_ttc']) {
+    if (Object.prototype.hasOwnProperty.call(b, k)) { vals.push(_num(b[k])); sets.push(`${k}=$${vals.length}`); }
+  }
+  if (Object.prototype.hasOwnProperty.call(b, 'tva_distributeur')) {
+    const t = parseFloat(b.tva_distributeur);
+    vals.push(t === 20 ? 20 : 5.5); sets.push(`tva_distributeur=$${vals.length}`);
+  }
+  if (!sets.length || !id) return;
+  vals.push(id);
+  await db.run(`UPDATE catalogue SET ${sets.join(', ')} WHERE id=$${vals.length}`, vals);
+}
 router.post('/catalogue', async (req, res) => {
   try {
     const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif, vf_product_id, taux_tva, prix_ttc_public, poids, image_data } = req.body;
@@ -1232,6 +1246,7 @@ router.post('/catalogue', async (req, res) => {
       [ref, designation, fournisseur||null, ref_fournisseur||null, pxht||0, stock||0, stock_alerte||2, stock_actif!==false, vf_product_id||null,
        _num(taux_tva), _num(prix_ttc_public), _num(poids), image_data||null]
     );
+    await _majTarifsDistributeur(r.id, req.body);
     res.status(201).json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1245,6 +1260,7 @@ router.put('/catalogue/:id', async (req, res) => {
       [ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte||2, stock_actif!==false,
        _num(taux_tva), _num(prix_ttc_public), _num(poids), req.params.id]
     );
+    await _majTarifsDistributeur(req.params.id, b);
     // Image : mise à jour seulement si le champ est fourni ('' ou null = suppression).
     if (Object.prototype.hasOwnProperty.call(b, 'image_data')) {
       await db.run('UPDATE catalogue SET image_data=$1 WHERE id=$2', [b.image_data || null, req.params.id]);
@@ -1777,7 +1793,16 @@ router.get('/export/excel', adminOnly, async (req, res) => {
       const cat = await db.all('SELECT * FROM catalogue ORDER BY ref');
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cat.map(p => ({
         'Référence': p.ref, 'Désignation': p.designation, 'Fournisseur': p.fournisseur||'',
-        'Réf fournisseur': p.ref_fournisseur||'', 'Prix HT': parseFloat(p.pxht||0), 'Stock': p.stock, 'Seuil alerte': p.stock_alerte
+        'Réf fournisseur': p.ref_fournisseur||'',
+        "Prix d'achat Suède HT": p.prix_achat_suede != null ? parseFloat(p.prix_achat_suede) : '', 'TVA Suède (%)': 0,
+        'Prix distributeur HT': parseFloat(p.pxht||0),
+        'TVA distributeur (%)': parseFloat(p.tva_distributeur ?? 5.5),
+        'TVA distributeur (€)': Math.round(parseFloat(p.pxht||0) * parseFloat(p.tva_distributeur ?? 5.5)) / 100,
+        'Prix distributeur TTC': Math.round(parseFloat(p.pxht||0) * (100 + parseFloat(p.tva_distributeur ?? 5.5))) / 100,
+        'Prix public conseillé TTC': p.prix_public_ttc != null ? parseFloat(p.prix_public_ttc) : '',
+        'Prix public HT': p.prix_public_ttc != null ? Math.round(parseFloat(p.prix_public_ttc) / 1.2 * 100) / 100 : '',
+        'TVA 20 % (public)': p.prix_public_ttc != null ? Math.round((parseFloat(p.prix_public_ttc) - parseFloat(p.prix_public_ttc) / 1.2) * 100) / 100 : '',
+        'Stock': p.stock, 'Seuil alerte': p.stock_alerte
       }))), 'Catalogue');
     }
     if (type === 'expeditions' || type === 'complet') {

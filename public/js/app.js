@@ -2525,14 +2525,15 @@ async function chargerListeCatalogue(){
   const _tva = v => (v!=null && v!=='') ? (parseFloat(v)%1===0 ? parseFloat(v).toFixed(0) : parseFloat(v).toFixed(1)) + ' %' : '—';
   const _ttc = v => (v!=null && v!=='') ? parseFloat(v).toFixed(2) + ' €' : '—';
   el.innerHTML=`<div class="table-wrap"><table id="cat-table" class="t ${localStorage.getItem('sav_show_prix_achat')==='1'?'show-prix':''}">
-    <thead><tr><th style="width:46px"></th><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${t('col_prix')}</th><th style="width:66px">${TR('TVA')}</th><th style="width:118px">${TR('Prix TTC public')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
+    <thead><tr><th style="width:46px"></th><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${TR('Achat Suède HT')}</th><th style="width:110px">${TR('Distributeur HT')}</th><th style="width:66px">${TR('TVA distrib.')}</th><th style="width:118px">${TR('Public TTC conseillé')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
       <td>${p.has_image?`<img src="/api/catalogue/${p.id}/image" class="cat-mini" onmouseenter="catZoom(event,${p.id})" onmousemove="catZoomMove(event)" onmouseleave="catZoomHide()">`:`<span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:5px;background:var(--bg);border:1px solid var(--border-s);color:var(--text3)"><i class="ti ti-photo" style="font-size:14px"></i></span>`}</td>
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
       <td>${esc(p.ref_fournisseur||'')}</td>
-      <td class="col-prix" style="font-weight:700">${parseFloat(p.pxht||0).toFixed(2)} €</td>
-      <td style="color:var(--text2)">${_tva(p.taux_tva)}</td>
-      <td style="font-weight:600">${_ttc(p.prix_ttc_public)}</td>
+      <td class="col-prix" style="font-weight:700">${_ttc(p.prix_achat_suede)}</td>
+      <td style="font-weight:600">${parseFloat(p.pxht||0).toFixed(2)} €</td>
+      <td style="color:var(--text2)">${_tva(p.tva_distributeur!=null?p.tva_distributeur:5.5)}</td>
+      <td style="font-weight:600">${_ttc(p.prix_public_ttc)}</td>
       <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
       <td style="font-size:12px;color:var(--text3)">${p.stock_alerte}</td>
       <td style="text-align:center">${p.pl_product_id?`<a href="https://app.pennylane.com/companies/${PL_COMPANY_ID}/products?id=${p.pl_product_id}" target="_blank" onclick="event.stopPropagation()" title="${TR('Voir dans Pennylane')}" style="color:var(--accent);font-size:14px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
@@ -4368,9 +4369,16 @@ async function modalPiece(id){
       <div class="form-group"><label class="form-label">${TR('Réf fournisseur')}</label><input class="form-input" id="f-reffou" value="${esc(p?.ref_fournisseur||'')}"></div>
       <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Désignation *')}</label><input class="form-input" id="f-des" value="${esc(p?.designation||'')}"></div>
       <div class="form-group"><label class="form-label">Fournisseur</label><input class="form-input" id="f-fou" value="${esc(p?.fournisseur||'Eloflex AB')}"></div>
-      <div class="form-group"><label class="form-label">${TR('Prix HT (achat) (€)')}</label><input class="form-input" id="f-px" type="number" step="0.01" value="${p?.pxht||0}"></div>
-      <div class="form-group"><label class="form-label">${TR('TVA (%)')}</label><input class="form-input" id="f-tva" type="number" step="0.1" placeholder="20" value="${p?.taux_tva??''}"></div>
-      <div class="form-group"><label class="form-label">${TR('Prix TTC public (€)')}</label><input class="form-input" id="f-ttc" type="number" step="0.01" value="${p?.prix_ttc_public??''}"></div>
+      <div style="grid-column:1/-1;border-top:1px solid var(--border-s);margin-top:4px;padding-top:10px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text3)">${TR('Tarifs')}</div>
+      <div class="form-group"><label class="form-label">${TR("Prix d'achat Suède HT (€)")}</label><input class="form-input" id="f-achat" type="number" step="0.01" value="${p?.prix_achat_suede??''}" oninput="majTarifsPiece()"></div>
+      <div class="form-group"><label class="form-label">${TR('TVA Suède')}</label><input class="form-input" value="0 %" disabled></div>
+      <div class="form-group"><label class="form-label">${TR('Prix de vente distributeur HT (€)')}</label><input class="form-input" id="f-px" type="number" step="0.01" value="${p?.pxht||0}" oninput="majTarifsPiece()"></div>
+      <div class="form-group"><label class="form-label">${TR('TVA distributeur')}</label><div style="display:flex;gap:8px;align-items:center"><select class="form-input" id="f-tvadist" onchange="majTarifsPiece()" style="flex:1">
+        <option value="5.5" ${parseFloat(p?.tva_distributeur)===20?'':'selected'}>5,5 %</option>
+        <option value="20" ${parseFloat(p?.tva_distributeur)===20?'selected':''}>20 %</option></select><span id="f-tvadist-mt" style="white-space:nowrap;font-weight:600;color:var(--text2)"></span></div></div>
+      <div class="form-group"><label class="form-label">${TR('Prix de vente public conseillé TTC (€)')}</label><input class="form-input" id="f-pub" type="number" step="0.01" value="${p?.prix_public_ttc??''}" oninput="majTarifsPiece()"></div>
+      <div class="form-group"><label class="form-label">${TR('TVA 20 % (sur le prix public)')}</label><input class="form-input" id="f-tva20" disabled></div>
+      <div id="f-tarifs-recap" style="grid-column:1/-1;font-size:12.5px;color:var(--text2);background:var(--bg);border:1px solid var(--border-s);border-radius:8px;padding:8px 10px;line-height:1.7"></div>
       <div class="form-group"><label class="form-label">${TR('Poids (kg)')}</label><input class="form-input" id="f-poids" type="number" step="0.01" value="${p?.poids??''}"></div>
       <div class="form-group"><label class="form-label">Stock</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}"></div>
       <div class="form-group"><label class="form-label">Seuil alerte stock</label><input class="form-input" id="f-stalerte" type="number" value="${p?.stock_alerte||2}"></div>
@@ -4380,8 +4388,24 @@ async function modalPiece(id){
       ${id?`<button class="btn danger" onclick="deletePiece(${id})"><i class="ti ti-trash"></i></button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
-    </div>`);}
-async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:gv('f-tva')===''?null:parseFloat(gv('f-tva')),prix_ttc_public:gv('f-ttc')===''?null:parseFloat(gv('f-ttc')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+    </div>`);majTarifsPiece();}
+// Calculs affichés dans la fiche article : TTC distributeur, TVA 20 % du prix public, marges.
+function majTarifsPiece(){
+  const n = id => { const el=document.getElementById(id); const v=el?parseFloat(el.value):NaN; return isNaN(v)?null:v; };
+  const f = v => v==null ? '—' : v.toFixed(2).replace('.',',')+' €';
+  const achat=n('f-achat'), dist=n('f-px'), tvaD=n('f-tvadist')||5.5, pub=n('f-pub');
+  const pubHT = pub!=null ? Math.round(pub/1.2*100)/100 : null, tva20 = pub!=null ? Math.round((pub-pub/1.2)*100)/100 : null;
+  const e20=document.getElementById('f-tva20'); if(e20) e20.value = tva20!=null ? f(tva20) : '';
+  const tvaMt = dist!=null ? Math.round(dist*tvaD)/100 : null;
+  const distTTC = dist!=null ? dist+tvaMt : null;
+  const em=document.getElementById('f-tvadist-mt'); if(em) em.textContent = tvaMt!=null ? 'soit '+f(tvaMt) : '';
+  const r=document.getElementById('f-tarifs-recap'); if(!r) return;
+  r.innerHTML = `${TR('Distributeur')} : <b>${f(dist)}</b> HT → <b>${f(distTTC)}</b> TTC (${String(tvaD).replace('.',',')} %)<br>`+
+    `${TR('Public conseillé')} : <b>${f(pubHT)}</b> HT + ${f(tva20)} TVA 20 % = <b>${f(pub)}</b> TTC<br>`+
+    `${TR('Marge distributeur')} : <b>${pubHT!=null&&dist!=null?f(pubHT-dist):'—'}</b> HT · ${TR('Marge Éloflex')} : <b>${dist!=null&&achat!=null?f(dist-achat):'—'}</b> HT`;
+}
+window.majTarifsPiece = majTarifsPiece;
+async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:parseFloat(gv('f-tvadist'))||5.5,tva_distributeur:parseFloat(gv('f-tvadist'))||5.5,prix_ttc_public:Math.round((parseFloat(gv('f-px'))||0)*(100+(parseFloat(gv('f-tvadist'))||5.5)))/100,prix_achat_suede:gv('f-achat')===''?null:parseFloat(gv('f-achat')),prix_public_ttc:gv('f-pub')===''?null:parseFloat(gv('f-pub')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
 async function deletePiece(id){if(!confirm(TR('Supprimer ?')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 async function syncCataloguePennylane(btn){
   const old = btn?btn.innerHTML:null;
