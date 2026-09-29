@@ -105,6 +105,13 @@ async function syncProducts() {
             updated_at  = NOW()
         `, [ref, p.name||'—', p.supplier_code||null, pxht, Math.max(0, Math.round(stock)), p.id]);
         count++;
+        // Tarifs : prix d'achat Suède (TVA 0 %) et TVA distributeur (5,5 % ou 20 %), si renseignés dans VosFactures
+        const pa = parseFloat(p.purchase_price_net || 0);
+        const tx = parseFloat(String(p.tax ?? '').replace(',', '.'));
+        await client.query(`UPDATE catalogue SET
+            prix_achat_suede = CASE WHEN $1::numeric > 0 THEN $1::numeric ELSE prix_achat_suede END,
+            tva_distributeur = CASE WHEN $2::numeric IN (5.5, 20) THEN $2::numeric ELSE tva_distributeur END
+          WHERE vf_product_id = $3`, [pa, isNaN(tx) ? 0 : tx, p.id]).catch(() => {});
       } catch(e) {
         try {
           await client.query(`

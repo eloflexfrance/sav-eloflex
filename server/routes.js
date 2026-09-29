@@ -1797,8 +1797,8 @@ router.get('/export/excel', adminOnly, async (req, res) => {
         "Prix d'achat Suède HT": p.prix_achat_suede != null ? parseFloat(p.prix_achat_suede) : '', 'TVA Suède (%)': 0,
         'Prix distributeur HT': parseFloat(p.pxht||0),
         'TVA distributeur (%)': parseFloat(p.tva_distributeur ?? 5.5),
-        'TVA distributeur (€)': Math.round(parseFloat(p.pxht||0) * parseFloat(p.tva_distributeur ?? 5.5)) / 100,
-        'Prix distributeur TTC': Math.round(parseFloat(p.pxht||0) * (100 + parseFloat(p.tva_distributeur ?? 5.5))) / 100,
+        'TVA distributeur (€)': Math.round((Math.round(parseFloat(p.pxht||0) * (1 + parseFloat(p.tva_distributeur ?? 5.5) / 100) * 100) / 100 - parseFloat(p.pxht||0)) * 100) / 100,
+        'Prix distributeur TTC': Math.round(parseFloat(p.pxht||0) * (1 + parseFloat(p.tva_distributeur ?? 5.5) / 100) * 100) / 100,
         'Prix public conseillé TTC': p.prix_public_ttc != null ? parseFloat(p.prix_public_ttc) : '',
         'Prix public HT': p.prix_public_ttc != null ? Math.round(parseFloat(p.prix_public_ttc) / 1.2 * 100) / 100 : '',
         'TVA 20 % (public)': p.prix_public_ttc != null ? Math.round((parseFloat(p.prix_public_ttc) - parseFloat(p.prix_public_ttc) / 1.2) * 100) / 100 : '',
@@ -6443,6 +6443,58 @@ async function alerterImpayes() {
   } catch(e) { console.error('[ALERTE IMPAYES ERR]', e.message); }
 }
 
+
+// ── Tarifs depuis VosFactures : prix d'achat Suède, prix distributeur HT, TVA distributeur ──
+// Pour chaque produit VF (rapproché par vf_product_id, sinon par code = référence) :
+//   purchase_price_net → prix_achat_suede · price_net → pxht · tax (5,5 / 20) → tva_distributeur · price_gross → prix_ttc_public
+function _vfTaux(t) {
+  const n = parseFloat(String(t ?? '').replace(',', '.'));
+  return (n === 20 || n === 5.5) ? n : null;
+}
+router.post('/catalogue/sync-tarifs-vf', adminOnly, async (req, res) => {
+  try {
+    if (!process.env.VOSFACTURES_API_TOKEN) return res.json({ ok: false, reason: 'VosFactures non configuré' });
+    const axios = require('axios');
+    const vfApi = axios.create({
+      baseURL: `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr`,
+      headers: { 'Accept': 'application/json' },
+      params: { api_token: process.env.VOSFACTURES_API_TOKEN }
+    });
+    let produits = [], page = 1;
+    while (page < 60) {
+      const { data } = await vfApi.get('/products.json', { params: { per_page: 100, page } });
+      if (!Array.isArray(data) || !data.length) break;
+      produits = produits.concat(data);
+      if (data.length < 100) break;
+      page++;
+      await new Promise(r => setTimeout(r, 300));
+    }
+    const norm = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const parId = new Map(), parCode = new Map();
+    for (const p of produits) { if (p.deleted) continue; parId.set(String(p.id), p); if (p.code && !parCode.has(norm(p.code))) parCode.set(norm(p.code), p); }
+    const cat = await db.all('SELECT id, ref, vf_product_id FROM catalogue');
+    let maj = 0, achat = 0, sansCorrespondance = 0;
+    for (const c of cat) {
+      const p = (c.vf_product_id && parId.get(String(c.vf_product_id))) || parCode.get(norm(c.ref));
+      if (!p) { sansCorrespondance++; continue; }
+      const pa = p.purchase_price_net != null && p.purchase_price_net !== '' ? parseFloat(p.purchase_price_net) : null;
+      const pv = p.price_net != null && p.price_net !== '' ? parseFloat(p.price_net) : null;
+      const tx = _vfTaux(p.tax);
+      const ttc = p.price_gross != null && p.price_gross !== '' ? parseFloat(p.price_gross) : null;
+      await db.run(`UPDATE catalogue SET
+          prix_achat_suede = COALESCE($1, prix_achat_suede),
+          pxht = COALESCE($2, pxht),
+          tva_distributeur = COALESCE($3, tva_distributeur),
+          taux_tva = COALESCE($3, taux_tva),
+          prix_ttc_public = COALESCE($4, prix_ttc_public),
+          vf_product_id = COALESCE(vf_product_id, $5),
+          updated_at = NOW()
+        WHERE id = $6`, [pa && pa > 0 ? pa : null, pv, tx, ttc, p.id, c.id]);
+      maj++; if (pa && pa > 0) achat++;
+    }
+    res.json({ ok: true, produits_vf: produits.length, articles_mis_a_jour: maj, avec_prix_achat: achat, sans_correspondance: sansCorrespondance });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // ── Import IDs produits VosFactures en masse ─────────────────────
 router.post('/catalogue/import-vf-ids', adminOnly, async (req, res) => {

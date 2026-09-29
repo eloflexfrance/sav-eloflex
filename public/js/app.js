@@ -2502,6 +2502,7 @@ async function renderCatalogue(ttl,c,a){
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>
     ${isAdmin()?'<button class="btn" onclick="importerVFIds()" title="Lier IDs VosFactures"><i class="ti ti-plug-connected"></i> Lier VF</button>':''}
     <button class="btn" onclick="syncCataloguePennylane(this)" title="${TR('Rapprocher les articles avec les produits Pennylane (référence → TVA, prix TTC)')}"><i class="ti ti-refresh"></i> ${TR('Sync Pennylane')}</button>
+    ${isAdmin()?`<button class="btn" onclick="syncTarifsVF(this)" title="${TR("Récupérer depuis VosFactures : prix d'achat Suède, prix distributeur HT et TVA")}"><i class="ti ti-currency-euro"></i> ${TR('Tarifs VosFactures')}</button>`:''}
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-left:8px;color:var(--text2)" title="Afficher le prix d'achat fournisseur (Eloflex AB)">
       <input type="checkbox" id="cat-show-price" ${localStorage.getItem('sav_show_prix_achat')==='1'?'checked':''} onchange="localStorage.setItem('sav_show_prix_achat',this.checked?'1':'0');document.getElementById('cat-table')?.classList.toggle('show-prix',this.checked)">
       Prix achat 🇸🇪
@@ -4396,8 +4397,9 @@ function majTarifsPiece(){
   const achat=n('f-achat'), dist=n('f-px'), tvaD=n('f-tvadist')||5.5, pub=n('f-pub');
   const pubHT = pub!=null ? Math.round(pub/1.2*100)/100 : null, tva20 = pub!=null ? Math.round((pub-pub/1.2)*100)/100 : null;
   const e20=document.getElementById('f-tva20'); if(e20) e20.value = tva20!=null ? f(tva20) : '';
-  const tvaMt = dist!=null ? Math.round(dist*tvaD)/100 : null;
-  const distTTC = dist!=null ? dist+tvaMt : null;
+  // Même arrondi que VosFactures : TTC = arrondi(HT × (1 + taux)), TVA = TTC − HT (17 € à 5,5 % → 17,93 €, TVA 0,93 €)
+  const distTTC = dist!=null ? Math.round(dist*(1+tvaD/100)*100)/100 : null;
+  const tvaMt = dist!=null ? Math.round((distTTC-dist)*100)/100 : null;
   const em=document.getElementById('f-tvadist-mt'); if(em) em.textContent = tvaMt!=null ? 'soit '+f(tvaMt) : '';
   const r=document.getElementById('f-tarifs-recap'); if(!r) return;
   r.innerHTML = `${TR('Distributeur')} : <b>${f(dist)}</b> HT → <b>${f(distTTC)}</b> TTC (${String(tvaD).replace('.',',')} %)<br>`+
@@ -4405,7 +4407,7 @@ function majTarifsPiece(){
     `${TR('Marge distributeur')} : <b>${pubHT!=null&&dist!=null?f(pubHT-dist):'—'}</b> HT · ${TR('Marge Éloflex')} : <b>${dist!=null&&achat!=null?f(dist-achat):'—'}</b> HT`;
 }
 window.majTarifsPiece = majTarifsPiece;
-async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:parseFloat(gv('f-tvadist'))||5.5,tva_distributeur:parseFloat(gv('f-tvadist'))||5.5,prix_ttc_public:Math.round((parseFloat(gv('f-px'))||0)*(100+(parseFloat(gv('f-tvadist'))||5.5)))/100,prix_achat_suede:gv('f-achat')===''?null:parseFloat(gv('f-achat')),prix_public_ttc:gv('f-pub')===''?null:parseFloat(gv('f-pub')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:parseFloat(gv('f-tvadist'))||5.5,tva_distributeur:parseFloat(gv('f-tvadist'))||5.5,prix_ttc_public:Math.round((parseFloat(gv('f-px'))||0)*(1+(parseFloat(gv('f-tvadist'))||5.5)/100)*100)/100,prix_achat_suede:gv('f-achat')===''?null:parseFloat(gv('f-achat')),prix_public_ttc:gv('f-pub')===''?null:parseFloat(gv('f-pub')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
 async function deletePiece(id){if(!confirm(TR('Supprimer ?')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 async function syncCataloguePennylane(btn){
   const old = btn?btn.innerHTML:null;
@@ -4422,6 +4424,20 @@ async function syncCataloguePennylane(btn){
   finally{ if(btn){ btn.disabled=false; btn.innerHTML=old; } }
 }
 window.syncCataloguePennylane = syncCataloguePennylane;
+async function syncTarifsVF(btn){
+  if(!confirm(TR("Mettre à jour le prix d'achat Suède, le prix distributeur HT et la TVA de tous les articles depuis VosFactures ?"))) return;
+  const old = btn?btn.innerHTML:null;
+  if(btn){ btn.disabled=true; btn.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Synchro…'); }
+  try{
+    const r = await API.catalogueSyncTarifsVF();
+    if(r && r.ok){
+      toast(`${r.articles_mis_a_jour} ${TR('article(s) mis à jour')} · ${r.avec_prix_achat} ${TR("avec prix d'achat")}${r.sans_correspondance?` · ${r.sans_correspondance} ${TR('sans correspondance VF')}`:''}`,'ti-check','var(--success)');
+      CACHE.catalogue=[]; chargerListeCatalogue();
+    } else toast((r&&r.reason)||TR('VosFactures indisponible'),'ti-alert-circle','var(--warning)');
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+  finally{ if(btn){ btn.disabled=false; btn.innerHTML=old; } }
+}
+window.syncTarifsVF = syncTarifsVF;
 
 // ── Vignette catalogue : agrandissement flottant au survol (jamais rogné par le tableau) ──
 function catZoom(e, id){

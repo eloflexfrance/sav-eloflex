@@ -117,6 +117,7 @@ const API = {
   updatePiece:(id,d)=>API.put(`/catalogue/${id}`,d),
   deletePiece:(id)=>API.del(`/catalogue/${id}`),
   catalogueSyncPennylane:()=>API.post('/catalogue/sync-pennylane',{}),
+  catalogueSyncTarifsVF:()=>API.post('/catalogue/sync-tarifs-vf',{}),
   syncPaiementsPennylane:()=>API.post('/commandes/sync-paiements-pennylane',{}),
   sirenDemandesPreview:(refresh)=>API.get('/admin/siren-demandes/preview'+(refresh?'?refresh=1':'')),
   sirenDemandesEnvoyer:(pl_ids)=>API.post('/admin/siren-demandes/envoyer',{pl_ids}),
