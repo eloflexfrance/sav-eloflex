@@ -6473,7 +6473,7 @@ router.post('/catalogue/sync-tarifs-vf', adminOnly, async (req, res) => {
     const parId = new Map(), parCode = new Map();
     for (const p of produits) { if (p.deleted) continue; parId.set(String(p.id), p); if (p.code && !parCode.has(norm(p.code))) parCode.set(norm(p.code), p); }
     const cat = await db.all('SELECT id, ref, vf_product_id FROM catalogue');
-    let maj = 0, achat = 0, sansCorrespondance = 0;
+    let maj = 0, achat = 0, sansCorrespondance = 0; const erreurs = [];
     for (const c of cat) {
       const p = (c.vf_product_id && parId.get(String(c.vf_product_id))) || parCode.get(norm(c.ref));
       if (!p) { sansCorrespondance++; continue; }
@@ -6481,18 +6481,19 @@ router.post('/catalogue/sync-tarifs-vf', adminOnly, async (req, res) => {
       const pv = p.price_net != null && p.price_net !== '' ? parseFloat(p.price_net) : null;
       const tx = _vfTaux(p.tax);
       const ttc = p.price_gross != null && p.price_gross !== '' ? parseFloat(p.price_gross) : null;
-      await db.run(`UPDATE catalogue SET
-          prix_achat_suede = COALESCE($1, prix_achat_suede),
-          pxht = COALESCE($2, pxht),
-          tva_distributeur = COALESCE($3, tva_distributeur),
-          taux_tva = COALESCE($3, taux_tva),
-          prix_ttc_public = COALESCE($4, prix_ttc_public),
-          vf_product_id = COALESCE(vf_product_id, $5),
-          updated_at = NOW()
-        WHERE id = $6`, [pa && pa > 0 ? pa : null, pv, tx, ttc, p.id, c.id]);
-      maj++; if (pa && pa > 0) achat++;
+      try {
+        await db.run(`UPDATE catalogue SET
+            prix_achat_suede = COALESCE($1, prix_achat_suede),
+            pxht = COALESCE($2, pxht),
+            tva_distributeur = COALESCE($3, tva_distributeur),
+            taux_tva = COALESCE($3, taux_tva),
+            prix_ttc_public = COALESCE($4, prix_ttc_public),
+            updated_at = NOW()
+          WHERE id = $5`, [pa && pa > 0 ? pa : null, pv, tx, ttc, c.id]);
+        maj++; if (pa && pa > 0) achat++;
+      } catch (e) { erreurs.push(`${c.ref} : ${e.message}`); }
     }
-    res.json({ ok: true, produits_vf: produits.length, articles_mis_a_jour: maj, avec_prix_achat: achat, sans_correspondance: sansCorrespondance });
+    res.json({ ok: true, produits_vf: produits.length, articles_mis_a_jour: maj, avec_prix_achat: achat, sans_correspondance: sansCorrespondance, erreurs: erreurs.slice(0, 20) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
