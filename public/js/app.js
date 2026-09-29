@@ -4024,7 +4024,10 @@ function clientForm(d={}){return `<div class="grid-2">
   </div>
 </div>`;}
 // Cache léger des clients (id/nom/ville) pour le sélecteur « Facturer à » de la fiche
-async function ensureClientsCache(){ if(!window._clientsCache){ try{ const cs = await API.clients(); window._clientsCache = (cs||[]).map(c=>({id:c.id,nom:c.nom,ville:c.ville})); }catch(e){ window._clientsCache=[]; } } }
+// Cache léger des fiches clients (listes déroulantes, recherches). Rechargé si force=true ou après
+// création / modification / suppression d'une fiche (sinon un nouveau distributeur restait introuvable
+// dans les recherches — ex. contrat-cadre — jusqu'au rechargement de la page).
+async function ensureClientsCache(force){ if(force || !window._clientsCache){ try{ const cs = await API.clients(); window._clientsCache = (cs||[]).map(c=>({id:c.id,nom:c.nom,ville:c.ville,type:c.type})); }catch(e){ if(!window._clientsCache) window._clientsCache=[]; } } }
 window.ensureClientsCache = ensureClientsCache;
 function toggleFacturation(mode){ const w=document.getElementById('f-entite-wrap'); if(w) w.style.display=(mode==='autre')?'':'none'; }
 window.toggleFacturation = toggleFacturation;
@@ -4068,10 +4071,11 @@ async function saveClient(id){
     } else if (surCarte && r && r.carte && r.carte.action === 'cree') {
       setTimeout(function(){ toast(TR('Placé sur la carte'), 'ti-map-pin', 'var(--success)'); }, 600);
     }
+    window._clientsCache = null;
     closeModal(); render();
   }catch(e){ alert(e.message); }
 }
-async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;await API.deleteClient(id);toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
+async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;await API.deleteClient(id);window._clientsCache=null;toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
 
 async function modalPortail(id,token){
   const base=window.location.origin;
@@ -9011,7 +9015,7 @@ window.majContratCadreHint = majContratCadreHint;
 
 // Gestionnaire global : liste des contrats-cadre + création
 async function ouvrirContratsModal(){
-  await ensureClientsCache();
+  await ensureClientsCache(true);
   let rows=[]; try{ rows = await API.contratsCadre(); }catch(e){}
   const lignes = rows.map(cc=>{
     const nom = esc(cc.client_nom_actuel || cc.distributeur_nom || '—');

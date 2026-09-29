@@ -8042,8 +8042,10 @@ router.post('/contrats-cadre', requireAuth, async (req, res) => {
     const existing = await db.get('SELECT * FROM contrats_cadre WHERE client_id=$1', [d.client_id]);
     if (existing) {
       const row = await db.run(
-        `UPDATE contrats_cadre SET distributeur_nom=COALESCE($1,distributeur_nom), lieu=$2,
-           representant_eloflex=$3, representant_distrib=$4, siret_distrib=$5, siege_distrib=$6, updated_at=NOW()
+        // Réouverture de la fiche : on ne complète que les champs vides (ne jamais effacer ce qui a été saisi)
+        `UPDATE contrats_cadre SET distributeur_nom=COALESCE(distributeur_nom,$1), lieu=COALESCE(lieu,$2),
+           representant_eloflex=COALESCE(representant_eloflex,$3), representant_distrib=COALESCE(representant_distrib,$4),
+           siret_distrib=COALESCE(NULLIF(siret_distrib,''),$5), siege_distrib=COALESCE(NULLIF(siege_distrib,''),$6), updated_at=NOW()
          WHERE id=$7 RETURNING *`,
         [d.distributeur_nom || null, d.lieu || null, d.representant_eloflex || null,
          d.representant_distrib || null, d.siret_distrib || null, d.siege_distrib || null, existing.id]);
