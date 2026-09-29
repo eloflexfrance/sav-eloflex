@@ -298,7 +298,8 @@ const PDF = {
     doc.text('ENTRE LES SOUSSIGNÉS :', L, y); y += 5;
     para("ELOFLEX SAS, ci-après dénommée « ELOFLEX » ou « le Prêteur »" + (c.representant_eloflex ? ', représentée par ' + c.representant_eloflex : '') + '.');
     para("ET " + (c.distributeur_nom || c.client_nom_actuel || '……………………………') + ", distributeur, ci-après dénommé « l'Emprunteur »"
-      + (c.siret_distrib ? ' (SIRET : ' + c.siret_distrib + ')' : '')
+      + (c.siege_distrib ? ', dont le siège social est situé ' + c.siege_distrib : '')
+      + (c.siret_distrib ? ' (' + (String(c.siret_distrib).replace(/\s+/g,'').length === 9 ? 'SIREN' : 'SIRET') + ' : ' + c.siret_distrib + ')' : '')
       + (c.representant_distrib ? ', représenté par ' + c.representant_distrib : '') + '.');
     para('Ci-après ensemble dénommées « les Parties », il a été convenu ce qui suit.');
 

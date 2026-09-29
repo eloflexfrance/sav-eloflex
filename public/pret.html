@@ -6,6 +6,7 @@
 <title>Bon de prêt Eloflex — signature</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="/js/pdf.js"></script>
+<script src="/js/contrat-texte.js"></script>
 <style>
   body{font-family:Calibri,Arial,Helvetica,sans-serif;background:#eef2f6;color:#222;margin:0;padding:20px}
   .wrap{max-width:820px;margin:0 auto}
@@ -25,10 +26,50 @@
   .muted{color:#888;font-size:12px}
   .req{color:#b42318;font-weight:700}
   #btnSign:disabled{background:#9db4c7}
+  h3{color:#1F5C8C;font-size:14px;margin:14px 0 5px}
+  p.a{font-size:12.5px;line-height:1.5;margin:0 0 8px;color:#333}
+  #ccdoc ul{margin:4px 0 8px;padding-left:20px}
+  #ccdoc li{font-size:12.5px;line-height:1.5;margin:2px 0;color:#333}
+  .intro{background:#fff;border-left:5px solid #1F5C8C}
+  .intro h1{font-size:18px}
+  .steps{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
+  .step{flex:1 1 220px;background:#F2F5F8;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.45}
+  .step b.n{display:inline-block;width:22px;height:22px;border-radius:50%;background:#1F5C8C;color:#fff;text-align:center;line-height:22px;margin-right:6px;font-size:12px}
+  .doctag{display:inline-block;background:#1F5C8C;color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em;border-radius:4px;padding:3px 8px;margin-bottom:8px}
+  .ccbox{max-height:460px;overflow:auto;border:1px solid #e3e8ee;border-radius:8px;padding:12px 14px}
+  .infos{background:#fff8eb;border:1px solid #f3d19c;border-radius:8px;padding:12px 14px;margin-top:12px}
+  .infos h2{font-size:14px;margin:0 0 4px;color:#8a5300}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+  @media (max-width:640px){ .grid2{grid-template-columns:1fr} body{padding:10px} }
+  input.bad{border-color:#b42318}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div class="card intro" id="intro" style="display:none">
+    <h1>Contrat-cadre et bon de prêt — une seule signature</h1>
+    <div class="sub" style="margin-bottom:6px">C'est votre premier prêt Eloflex : deux documents sont réunis sur cette page.</div>
+    <div class="steps">
+      <div class="step"><b class="n">1</b><b>Le contrat-cadre de prêt</b> fixe une fois pour toutes les règles communes à tous les prêts. Il n'est signé <b>qu'une seule fois</b> : vos prochains prêts ne comporteront plus que le bon de prêt.</div>
+      <div class="step"><b class="n">2</b><b>Le bon de prêt</b> décrit le fauteuil prêté et les dates de remise et de retour.</div>
+      <div class="step"><b class="n">✍</b>Relisez les deux documents, complétez si besoin les informations de votre société, puis <b>signez une seule fois</b> en bas de page : cette signature vaut pour les deux documents.</div>
+    </div>
+  </div>
+
+  <div class="card" id="cccard" style="display:none">
+    <span class="doctag">DOCUMENT 1 / 2</span>
+    <div class="ccbox" id="ccdoc"></div>
+    <div class="infos" id="ccinfos" style="display:none">
+      <h2>Informations de votre société à compléter</h2>
+      <div class="muted" style="font-size:13px">Ces informations figurent sur le contrat-cadre.</div>
+      <div class="grid2">
+        <div id="f-siret-w"><label for="f-siret">SIREN (9 chiffres) ou SIRET (14 chiffres) <span class="req">*</span></label><input type="text" id="f-siret" inputmode="numeric" placeholder="ex. 123 456 789" oninput="majContrat()"></div>
+        <div id="f-rep-w"><label for="f-rep">Représentant légal (nom, fonction)</label><input type="text" id="f-rep" placeholder="par défaut : le signataire" oninput="majContrat()"></div>
+      </div>
+      <div id="f-siege-w"><label for="f-siege">Adresse du siège social <span class="req">*</span></label><input type="text" id="f-siege" placeholder="N°, rue, code postal, ville" oninput="majContrat()"></div>
+    </div>
+  </div>
+
   <div class="card" id="doc"><p class="muted">Chargement du bon de prêt…</p></div>
 
   <div class="card" id="signcard" style="display:none">
@@ -53,7 +94,7 @@
 
 <script>
 var TOKEN = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
-var PRET = null;
+var PRET = null, CC = null;
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function fd(d){ if(!d) return '___ / ___ / ______'; var v=(''+d).slice(0,10).split('-'); return v.length===3? v[2]+' / '+v[1]+' / '+v[0] : d; }
 var FORM={essai_court:'Essai court (15 à 30 jours)',long_terme:'Prêt long terme (≥ 3 mois, renouvelable)'};
@@ -120,8 +161,9 @@ fetch('/api/pret-public/'+encodeURIComponent(TOKEN)).then(function(r){
   if(!r.ok) return r.json().then(function(j){ throw new Error(j.error||'Lien invalide'); });
   return r.json();
 }).then(function(p){
-  PRET=p;
-  document.getElementById('doc').innerHTML = bonHTML(p);
+  PRET=p; CC=p.contrat||null;
+  document.getElementById('doc').innerHTML = (CC?'<span class="doctag">DOCUMENT 2 / 2</span>':'')+bonHTML(p);
+  if(CC && !p.signed_at) initContrat();
   if(p.signed_at){
     document.getElementById('signcard').style.display='none';
     var d=document.getElementById('done'); d.style.display='block';
@@ -133,6 +175,47 @@ fetch('/api/pret-public/'+encodeURIComponent(TOKEN)).then(function(r){
 }).catch(function(e){
   document.getElementById('doc').innerHTML = '<div class="msg err">'+esc(e.message)+'</div>';
 });
+
+// ── Contrat-cadre joint (signature unique) ──
+function vide(v){ return !String(v||'').trim(); }
+function initContrat(){
+  document.getElementById('intro').style.display='block';
+  document.getElementById('cccard').style.display='block';
+  document.title='Contrat-cadre et bon de prêt Eloflex — signature';
+  var m = CC.manquants||[];
+  document.getElementById('f-siret-w').style.display = m.indexOf('siret_distrib')>=0 ? '' : 'none';
+  document.getElementById('f-siege-w').style.display = m.indexOf('siege_distrib')>=0 ? '' : 'none';
+  document.getElementById('f-rep-w').style.display = m.indexOf('representant_distrib')>=0 ? '' : 'none';
+  if(m.length) document.getElementById('ccinfos').style.display='block';
+  document.querySelector('#signcard h1').textContent='Signature unique — contrat-cadre et bon de prêt';
+  document.querySelector('#signcard .sub').textContent='Une seule signature pour les deux documents ci-dessus (contrat-cadre de prêt et bon de prêt).';
+  document.querySelector('label[for=accept]').innerHTML="J'ai lu et j'approuve le <b>contrat-cadre de prêt</b> et le <b>bon de prêt</b> — « Lu et approuvé, bon pour accord ». <span class=\"req\">*</span>";
+  document.getElementById('btnSign').textContent='Signer les deux documents';
+  majContrat();
+}
+function contratCourant(){
+  if(!CC) return null;
+  var c = Object.assign({}, CC);
+  var sir = (document.getElementById('f-siret').value||'').replace(/\s+/g,'');
+  if(vide(c.siret_distrib) && sir) c.siret_distrib = sir;
+  if(vide(c.siege_distrib)) c.siege_distrib = (document.getElementById('f-siege').value||'').trim();
+  if(vide(c.representant_distrib)) c.representant_distrib = (document.getElementById('f-rep').value||'').trim() || (document.getElementById('signame').value||'').trim();
+  return c;
+}
+function majContrat(){
+  if(!CC) return;
+  document.getElementById('ccdoc').innerHTML = contratHTML(contratCourant());
+  if(typeof refresh==='function' && ctx) refresh();
+}
+function manquesContrat(){
+  var miss=[]; if(!CC) return miss;
+  var m = CC.manquants||[];
+  var sir=(document.getElementById('f-siret').value||'').replace(/\s+/g,'');
+  var fs=document.getElementById('f-siret'), fg=document.getElementById('f-siege');
+  if(m.indexOf('siret_distrib')>=0){ var ok=/^\d{9}(\d{5})?$/.test(sir); fs.classList.toggle('bad', !!sir && !ok); if(!ok) miss.push('le SIREN/SIRET de votre société'); }
+  if(m.indexOf('siege_distrib')>=0 && vide(fg.value)) miss.push('l\'adresse du siège');
+  return miss;
+}
 
 // ── Canvas signature ──
 var pad, ctx, drawing=false, hasSig=false;
@@ -146,7 +229,7 @@ function initPad(){
   pad.addEventListener('mousedown',start); pad.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
   pad.addEventListener('touchstart',start,{passive:false}); pad.addEventListener('touchmove',move,{passive:false}); pad.addEventListener('touchend',end);
   document.getElementById('accept').addEventListener('change',refresh);
-  document.getElementById('signame').addEventListener('input',refresh);
+  document.getElementById('signame').addEventListener('input',function(){ if(CC) majContrat(); else refresh(); });
   refresh();
 }
 function clearPad(){ if(ctx){ctx.clearRect(0,0,pad.width,pad.height);} hasSig=false; refresh(); }
@@ -157,30 +240,48 @@ function refresh(){
   if(!name || name.length<2) miss.push('votre nom');
   if(!hasSig) miss.push('votre signature');
   if(!checked) miss.push('cocher la case d\'approbation');
+  miss = manquesContrat().concat(miss);
   var btn = document.getElementById('btnSign');
   btn.disabled = miss.length > 0;
-  btn.title = miss.length ? ('Obligatoire : ' + miss.join(', ')) : 'Signer le bon de prêt';
+  btn.title = miss.length ? ('Obligatoire : ' + miss.join(', ')) : (CC ? 'Signer les deux documents' : 'Signer le bon de prêt');
   var hint = document.getElementById('signhint');
   if(hint) hint.innerHTML = miss.length ? ('<span class="muted">Pour signer, il reste à renseigner : <b>' + miss.join('</b>, <b>') + '</b>.</span>') : '';
 }
-var SIGNED_PDF=null;
+var SIGNED_PDF=null, SIGNED_CC_PDF=null;
 function signer(){
   var name=document.getElementById('signame').value.trim();
   var sig=pad.toDataURL('image/png');
-  var p=Object.assign({}, PRET, {signataire_nom:name, signature_data:sig, signed_at:new Date().toISOString().slice(0,10)});
-  var pdfData=null;
+  var today=new Date().toISOString().slice(0,10);
+  var p=Object.assign({}, PRET, {signataire_nom:name, signature_data:sig, signed_at:today});
+  var pdfData=null, ccPdf=null, contrat=null;
   try{ if(typeof PDF!=='undefined'&&PDF.pretDoc){ pdfData=PDF.pretDoc(p).output('datauristring'); SIGNED_PDF=pdfData; } }catch(e){}
-  var btn=document.getElementById('btnSign'); btn.disabled=true; btn.textContent='Envoi…';
+  if(CC){
+    var c=contratCourant();
+    contrat={siret_distrib:c.siret_distrib||'', siege_distrib:c.siege_distrib||'', representant_distrib:c.representant_distrib||name};
+    try{ if(typeof PDF!=='undefined'&&PDF.contratCadreDoc){ ccPdf=PDF.contratCadreDoc(Object.assign({}, c, {representant_distrib:contrat.representant_distrib, signataire_nom:name, signature_data:sig, signed_at:today})).output('datauristring'); SIGNED_CC_PDF=ccPdf; } }catch(e){}
+  }
+  var btn=document.getElementById('btnSign'); var lib=btn.textContent; btn.disabled=true; btn.textContent='Envoi…';
   fetch('/api/pret-public/'+encodeURIComponent(TOKEN)+'/signer',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({signataire_nom:name, signature_data:sig, pdf_data:pdfData})
+    body:JSON.stringify({signataire_nom:name, signature_data:sig, pdf_data:pdfData, contrat:contrat, contrat_pdf_data:ccPdf})
   }).then(function(r){ if(!r.ok) return r.json().then(function(j){throw new Error(j.error||'Erreur');}); return r.json(); })
-    .then(function(){ document.getElementById('signcard').style.display='none'; document.getElementById('done').style.display='block'; })
-    .catch(function(e){ btn.disabled=false; btn.textContent='Signer le bon de prêt'; document.getElementById('msg').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; });
+    .then(function(){
+      document.getElementById('signcard').style.display='none';
+      var d=document.getElementById('done'); d.style.display='block';
+      if(CC){
+        d.querySelector('.msg').textContent='✔ Merci, votre signature a bien été enregistrée pour le contrat-cadre de prêt et le bon de prêt. Une copie des deux documents signés vous a été envoyée par e-mail. Vos prochains prêts ne comporteront plus que le bon de prêt.';
+        d.querySelector('.btns').innerHTML='<button class="ghost" type="button" onclick="telechargerCC()">Télécharger le contrat-cadre signé</button><button class="ghost" type="button" onclick="telechargerPDF()">Télécharger le bon de prêt signé</button>';
+      }
+      window.scrollTo(0, document.body.scrollHeight);
+    })
+    .catch(function(e){ btn.disabled=false; btn.textContent=lib; document.getElementById('msg').innerHTML='<div class="msg err">'+esc(e.message)+'</div>'; });
 }
 function telechargerPDF(){
   if(SIGNED_PDF){ var a=document.createElement('a'); a.href=SIGNED_PDF; a.download='Bon_de_pret_signe.pdf'; a.click(); }
   else if(typeof PDF!=='undefined'&&PDF.pret&&PRET){ PDF.pret(Object.assign({},PRET)); }
+}
+function telechargerCC(){
+  if(SIGNED_CC_PDF){ var a=document.createElement('a'); a.href=SIGNED_CC_PDF; a.download='Contrat_cadre_pret_signe.pdf'; a.click(); }
 }
 </script>
 </body>

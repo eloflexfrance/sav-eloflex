@@ -7822,6 +7822,61 @@ async function apresContratSigne(clientId) {
   } catch (e) { console.error('[CONTRAT] apresContratSigne:', e.message); }
 }
 
+// ── Contrat-cadre joint au bon de prêt (une seule signature) ──
+// Garantit l'existence du contrat-cadre du distributeur (pré-rempli depuis la fiche client et le bon).
+// Renvoie le contrat s'il reste à signer, null s'il est déjà signé (ou pas de distributeur).
+async function _contratPourPret(p, userId) {
+  if (!p || !p.client_id) return null;
+  const cl = await db.get('SELECT * FROM clients WHERE id=$1', [p.client_id]);
+  if (!cl || cl.type === 'Particulier') return null;
+  let cc = await db.get('SELECT * FROM contrats_cadre WHERE client_id=$1', [p.client_id]);
+  if (cc && cc.statut === 'signe') return null;
+  // siège : uniquement si l'adresse (rue) est connue — sinon le distributeur le complète à la signature
+  const siege = cl.adresse ? [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(' ') : null;
+  let repEloflex = null;
+  const uid = userId || p.cree_par;
+  if (uid) { try { const u = await db.get('SELECT nom FROM users WHERE id=$1', [uid]); repEloflex = u && u.nom || null; } catch(_){} }
+  if (!cc) {
+    const token = crypto.randomBytes(20).toString('hex');
+    cc = await db.run(
+      `INSERT INTO contrats_cadre (client_id, distributeur_nom, lieu, representant_eloflex,
+        representant_distrib, siret_distrib, siege_distrib, statut, token_signature, cree_par)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'brouillon',$8,$9)
+       ON CONFLICT (client_id) DO NOTHING RETURNING *`,
+      [p.client_id, cl.nom || p.distributeur_nom || null, cl.ville || null, repEloflex,
+       p.contact || cl.contact || null, cl.siret || cl.siren || null, siege, token, uid || null]);
+    if (!cc) cc = await db.get('SELECT * FROM contrats_cadre WHERE client_id=$1', [p.client_id]);
+    try { await addAlerte('contrat_cree', cc.id, `📄 Contrat-cadre créé automatiquement pour ${cl.nom || ''} (nouveau bon de prêt) — il sera joint au bon de prêt pour une signature unique.`); } catch(_){}
+  } else {
+    // on complète seulement les champs vides
+    cc = await db.run(
+      `UPDATE contrats_cadre SET distributeur_nom=COALESCE(NULLIF(distributeur_nom,''),$1), lieu=COALESCE(NULLIF(lieu,''),$2),
+         representant_eloflex=COALESCE(NULLIF(representant_eloflex,''),$3), representant_distrib=COALESCE(NULLIF(representant_distrib,''),$4),
+         siret_distrib=COALESCE(NULLIF(siret_distrib,''),$5), siege_distrib=COALESCE(NULLIF(siege_distrib,''),$6),
+         token_signature=COALESCE(token_signature,$7), updated_at=NOW()
+       WHERE id=$8 RETURNING *`,
+      [cl.nom || null, cl.ville || null, repEloflex, p.contact || cl.contact || null,
+       cl.siret || cl.siren || null, siege, crypto.randomBytes(20).toString('hex'), cc.id]);
+  }
+  return cc;
+}
+function _contratManquants(cc) {
+  const m = [];
+  const vide = v => !String(v || '').trim();
+  if (vide(cc.siret_distrib)) m.push('siret_distrib');
+  if (vide(cc.representant_distrib)) m.push('representant_distrib');
+  if (vide(cc.siege_distrib)) m.push('siege_distrib');
+  return m;
+}
+function _contratPublic(cc) {
+  return {
+    id: cc.id, distributeur_nom: cc.distributeur_nom, lieu: cc.lieu,
+    representant_eloflex: cc.representant_eloflex, representant_distrib: cc.representant_distrib,
+    siret_distrib: cc.siret_distrib, siege_distrib: cc.siege_distrib,
+    statut: cc.statut, eloflex_date: cc.created_at || null, manquants: _contratManquants(cc)
+  };
+}
+
 // Liste des prêts (avec nom distributeur à jour)
 router.get('/prets', requireAuth, async (req, res) => {
   try {
@@ -7860,7 +7915,28 @@ router.post('/prets', requireAuth, async (req, res) => {
        d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
        d.observations || null, d.statut || 'brouillon', token,
        (req.session.user && req.session.user.id) || null]);
+    // Contrat-cadre généré automatiquement s'il n'est pas encore signé (il sera joint au bon de prêt)
+    try {
+      const cc = await _contratPourPret(row, (req.session.user && req.session.user.id) || null);
+      if (cc) row.contrat_cadre = { id: cc.id, statut: cc.statut, manquants: _contratManquants(cc) };
+    } catch (e) { console.error('[PRET] contrat auto:', e.message); }
     res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Contrat-cadre qui sera joint au bon de prêt (null si déjà signé)
+router.get('/prets/:id/contrat-joint', requireAuth, async (req, res) => {
+  try {
+    const p = await db.get('SELECT * FROM prets WHERE id=$1', [req.params.id]);
+    if (!p) return res.status(404).json({ error: 'Prêt introuvable' });
+    const cc = await _contratPourPret(p, (req.session.user && req.session.user.id) || null);
+    if (!cc) return res.json({ contrat: null });
+    const full = await db.get(
+      `SELECT cc.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
+         FROM contrats_cadre cc LEFT JOIN clients c ON c.id = cc.client_id WHERE cc.id=$1`, [cc.id]);
+    full.manquants = _contratManquants(full);
+    delete full.signature_data; delete full.pdf_data;
+    res.json({ contrat: full });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -7931,36 +8007,55 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
     if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail pour ce distributeur' });
     const base = process.env.APP_URL || (req.protocol + '://' + req.get('host'));
     const lien = `${base}/pret/${p.token_signature}`;
+    const nomFic = (p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_');
+    // Contrat-cadre à joindre ? (uniquement s'il n'est pas encore signé)
+    let cc = null;
+    try { cc = await _contratPourPret(p, (req.session.user && req.session.user.id) || null); } catch (e) { console.error('[PRET] contrat joint:', e.message); }
     const pdfData = req.body && req.body.pdf_data;
-    const attachments = pdfData
-      ? [{ filename: `Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
-           content: String(pdfData).replace(/^data:application\/pdf;base64,/, '') }]
-      : [];
-    const blocManuel = pdfData
+    const ccPdf = cc && req.body && req.body.contrat_pdf_data;
+    const attachments = [];
+    if (cc && ccPdf) attachments.push({ filename: `1_Contrat_cadre_pret_${nomFic}.pdf`, content: String(ccPdf).replace(/^data:application\/pdf;base64,/, '') });
+    if (pdfData) attachments.push({ filename: `${cc ? '2_' : ''}Bon_de_pret_${nomFic}.pdf`, content: String(pdfData).replace(/^data:application\/pdf;base64,/, '') });
+    const blocManuel = attachments.length
       ? `<div style="border:1px dashed #cbd5e1;border-radius:8px;padding:14px 16px;margin-top:16px;background:#f8fafc;font-size:13px;color:#334">
            <b>Vous préférez signer à la main ?</b><br>
-           Vous pouvez télécharger le PDF ci-joint, le signer et le renvoyer scanné à l'adresse :
+           Vous pouvez télécharger ${attachments.length > 1 ? 'les PDF ci-joints, les signer et les' : 'le PDF ci-joint, le signer et le'} renvoyer scanné${attachments.length > 1 ? 's' : ''} à l'adresse :
            <a href="mailto:info@eloflex.fr" style="color:#1F5C8C;font-weight:600">info@eloflex.fr</a>.
          </div>`
       : '';
+    const fauteuil = [p.designation, p.num_serie].filter(Boolean).join(' ');
+    const corps = cc
+      ? `<p>Bonjour,</p>
+         <p>Nous avons le plaisir de vous confier ${fauteuil ? 'le fauteuil <b>' + fauteuil + '</b>' : 'un fauteuil Eloflex'} en prêt. Comme il s'agit de votre premier prêt avec Eloflex, <b>deux documents</b> sont à valider :</p>
+         <table role="presentation" style="width:100%;border-collapse:collapse;margin:6px 0 14px;font-size:14px">
+           <tr><td style="padding:8px 10px;border:1px solid #e5e7eb;background:#f8fafc;width:34px;text-align:center;font-weight:700;color:#1F5C8C">1</td>
+               <td style="padding:8px 10px;border:1px solid #e5e7eb"><b>Le contrat-cadre de prêt</b> : il fixe une fois pour toutes les règles communes à tous les prêts (durée, responsabilités, assurance, retour). <b>Il ne sera à signer qu'une seule fois</b> : vos prochains prêts ne comporteront plus que le bon de prêt.</td></tr>
+           <tr><td style="padding:8px 10px;border:1px solid #e5e7eb;background:#f8fafc;text-align:center;font-weight:700;color:#1F5C8C">2</td>
+               <td style="padding:8px 10px;border:1px solid #e5e7eb"><b>Le bon de prêt</b> : il décrit le fauteuil prêté, les dates de remise et de retour.</td></tr>
+         </table>
+         <p>Pour vous simplifier la démarche, <b>les deux documents sont réunis sur une seule page</b> : vous les relisez, complétez si besoin les informations manquantes de votre société, puis <b>vous signez une seule fois</b>. Cette signature unique vaut acceptation du contrat-cadre et du bon de prêt.</p>
+         <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer (une seule signature)</a></p>
+         <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>`
+      : `<p>Bonjour,</p>
+         <p>Vous trouverez ci-dessous votre bon de prêt de fauteuil roulant électrique${fauteuil ? ' (<b>' + fauteuil + '</b>)' : ''}. Votre contrat-cadre de prêt étant déjà signé, seul ce bon est à valider. Merci de le relire et de le <b>signer en ligne</b> :</p>
+         <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le bon de prêt</a></p>
+         <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>`;
     await envoyerEmailPret({
       to: dest,
-      subject: `Bon de prêt Eloflex — à signer en ligne`,
+      subject: cc ? `Contrat-cadre et bon de prêt Eloflex — une seule signature en ligne` : `Bon de prêt Eloflex — à signer en ligne`,
       attachments,
       html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
-        <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">Eloflex — Bon de prêt à signer</h2></div>
+        <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">${cc ? 'Eloflex — Contrat-cadre et bon de prêt à signer' : 'Eloflex — Bon de prêt à signer'}</h2></div>
         <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px">
-          <p>Bonjour,</p>
-          <p>Vous trouverez ci-dessous votre bon de prêt de fauteuil roulant électrique. Merci de le relire et de le <b>signer en ligne</b> :</p>
-          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le bon de prêt</a></p>
-          <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>
+          ${corps}
           ${blocManuel}
         </div>
         <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
       </div>`
     });
     const updated = await db.run("UPDATE prets SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END, updated_at=NOW() WHERE id=$1 RETURNING id, statut", [p.id]);
-    res.json({ ok: true, to: dest, statut: updated.statut });
+    if (cc) await db.run("UPDATE contrats_cadre SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END, updated_at=NOW() WHERE id=$1", [cc.id]);
+    res.json({ ok: true, to: dest, statut: updated.statut, contrat_inclus: !!cc });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -7980,7 +8075,12 @@ router.get('/pret-public/:token', async (req, res) => {
       date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
       prorogation_date: p.prorogation_date, observations: p.observations, statut: p.statut,
       signataire_nom: p.signataire_nom, signed_at: p.signed_at,
-      signataire_eloflex: p.signataire_eloflex || null, eloflex_date: p.created_at || null
+      signataire_eloflex: p.signataire_eloflex || null, eloflex_date: p.created_at || null,
+      contrat: await (async () => {
+        if (p.signed_at || !p.client_id) return null;
+        const cc = await db.get('SELECT * FROM contrats_cadre WHERE client_id=$1', [p.client_id]);
+        return (cc && cc.statut !== 'signe') ? _contratPublic(cc) : null;
+      })()
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -7994,23 +8094,61 @@ router.post('/pret-public/:token/signer', async (req, res) => {
     if (!d.signataire_nom || !d.signature_data) return res.status(400).json({ error: 'Nom et signature requis' });
     const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
     const ua = (req.headers['user-agent'] || '').toString().slice(0, 250);
+    const nomSign = String(d.signataire_nom).slice(0,120);
+    const nomFic = (p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_');
+    // Contrat-cadre joint (non signé) → signé avec la même signature
+    let ccSigne = null;
+    if (p.client_id) {
+      const cc = await db.get('SELECT * FROM contrats_cadre WHERE client_id=$1', [p.client_id]);
+      if (cc && cc.statut !== 'signe') {
+        const ci = d.contrat || {};
+        const sir = String(ci.siret_distrib || '').replace(/\s+/g, '');
+        if (sir && !/^\d{9}(\d{5})?$/.test(sir)) return res.status(400).json({ error: 'Le SIREN doit comporter 9 chiffres (ou le SIRET 14 chiffres).' });
+        const siret = cc.siret_distrib || sir || null;
+        const siege = cc.siege_distrib || String(ci.siege_distrib || '').trim() || null;
+        const rep = cc.representant_distrib || String(ci.representant_distrib || '').trim() || nomSign;
+        if (!siret || !siege) return res.status(400).json({ error: 'Merci de compléter le SIREN/SIRET et l\'adresse du siège de votre société (contrat-cadre).' });
+        await db.run(
+          `UPDATE contrats_cadre SET siret_distrib=$1, siege_distrib=$2, representant_distrib=$3,
+             signataire_nom=$4, signature_data=$5, pdf_data=$6, sign_ip=$7, sign_ua=$8,
+             signed_at=NOW(), statut='signe', updated_at=NOW() WHERE id=$9`,
+          [siret, siege, rep, nomSign, d.signature_data, d.contrat_pdf_data || null, ip, ua, cc.id]);
+        ccSigne = cc;
+        // SIREN / SIRET / TVA dans la fiche distributeur si absents
+        if (sir) {
+          try {
+            const siren = sir.slice(0, 9);
+            const tva = 'FR' + String((12 + 3 * (Number(siren) % 97)) % 97).padStart(2, '0') + siren;
+            await db.run(
+              `UPDATE clients SET siren=COALESCE(NULLIF(siren,''),$1), siret=COALESCE(NULLIF(siret,''),$2),
+                 tva=COALESCE(NULLIF(tva,''),$3), updated_at=NOW() WHERE id=$4`,
+              [siren, sir.length === 14 ? sir : null, tva, p.client_id]);
+          } catch (e) { console.error('[PRET] maj SIREN client:', e.message); }
+        }
+        try { await addAlerte('contrat_signe', cc.id, `✍️ Contrat-cadre de prêt signé en ligne (avec le bon de prêt) par ${nomSign} — ${cc.distributeur_nom || ''}.`); } catch(_){}
+      }
+    }
     await db.run(
       `UPDATE prets SET signataire_nom=$1, signature_data=$2, pdf_data=$3, sign_ip=$4, sign_ua=$5,
         signed_at=NOW(), statut='signe', updated_at=NOW() WHERE id=$6`,
-      [String(d.signataire_nom).slice(0,120), d.signature_data, d.pdf_data || null, ip, ua, p.id]);
-    // e-mail aux deux parties avec le PDF signé en pièce jointe (si fourni)
+      [nomSign, d.signature_data, d.pdf_data || null, ip, ua, p.id]);
+    // e-mail aux deux parties avec le(s) PDF signé(s) en pièce jointe (si fournis)
     try {
-      const attachments = d.pdf_data
-        ? [{ filename: `Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^\w-]+/g,'_')}.pdf`,
-             content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' }]
-        : [];
+      const attachments = [];
+      if (ccSigne && d.contrat_pdf_data) attachments.push({ filename: `Contrat_cadre_pret_${nomFic}_signe.pdf`,
+             content: String(d.contrat_pdf_data).replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' });
+      if (d.pdf_data) attachments.push({ filename: `Bon_de_pret_${nomFic}${ccSigne ? '_signe' : ''}.pdf`,
+             content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' });
       await envoyerEmailPret({
         to: p.email || 'sav@eloflex.fr',
         cc: p.email ? 'sav@eloflex.fr' : undefined,
-        subject: `Bon de prêt Eloflex — signé par ${d.signataire_nom}`,
+        subject: ccSigne ? `Contrat-cadre et bon de prêt Eloflex — signés par ${nomSign}` : `Bon de prêt Eloflex — signé par ${nomSign}`,
         html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
-          <p>Le bon de prêt du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> a été signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
-          ${attachments.length ? '<p>Le document signé est joint à cet e-mail (PDF).</p>' : ''}
+          ${ccSigne
+            ? `<p>Le <b>contrat-cadre de prêt</b> et le <b>bon de prêt</b> du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> ont été signés en ligne (signature unique) par <b>${nomSign}</b>.</p>
+               <p>Le contrat-cadre est désormais en place : vos prochains prêts ne comporteront plus que le bon de prêt.</p>`
+            : `<p>Le bon de prêt du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> a été signé en ligne par <b>${nomSign}</b>.</p>`}
+          ${attachments.length ? `<p>${attachments.length > 1 ? 'Les documents signés sont joints' : 'Le document signé est joint'} à cet e-mail (PDF).</p>` : ''}
           <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
         attachments
       });
@@ -8019,6 +8157,7 @@ router.post('/pret-public/:token/signer', async (req, res) => {
     try { await addAlerte('pret_signe', p.id, `✍️ Bon de prêt signé en ligne par ${d.signataire_nom} — ${p.distributeur_nom || ''} (${p.designation || ''} ${p.num_serie || ''}).`); } catch(_){}
     // Si le contrat-cadre du distributeur est aussi signé → ajout auto au Suivi commandes (démo)
     await apresPretSigne(p.id);
+    if (ccSigne) await apresContratSigne(p.client_id);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

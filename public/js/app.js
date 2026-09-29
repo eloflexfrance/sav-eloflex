@@ -8825,11 +8825,12 @@ async function savePret(){
   };
   const id = gv('pret-id');
   try{
-    if(id){ await API.updatePret(id, data); } else { await API.createPret(data); }
+    let cree=null;
+    if(id){ await API.updatePret(id, data); } else { cree = await API.createPret(data); }
     closeModal(); toast(TR('Bon de prêt enregistré'),'ti-check','var(--success)');
     if(STATE.view==='prets') render();
-    // Nouveau prêt : vérifier le contrat-cadre du distributeur (création + informations à compléter)
-    if(!id && data.client_id) setTimeout(()=>assistantContratApresPret(data.client_id, data), 350);
+    // Nouveau prêt : contrat-cadre généré automatiquement s'il n'est pas signé → envoi groupé (une seule signature)
+    if(cree && cree.id && cree.contrat_cadre) setTimeout(()=>assistantContratApresPret(cree.id, true), 350);
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.savePret = savePret;
@@ -8838,64 +8839,63 @@ window.savePret = savePret;
 // S'il n'existe aucun contrat-cadre pour ce distributeur : il est créé (brouillon) et pré-rempli,
 // puis on affiche ce qu'il reste à compléter (SIREN/SIRET, représentant, e-mail…) avec l'envoi à signer.
 // S'il existe mais n'est pas signé : même fenêtre, pour relancer la signature.
-async function assistantContratApresPret(clientId, pret){
-  let cl=null, etat=null;
-  try{ cl = await API.client(clientId); }catch(e){ return; }
-  if(!cl || cl.type==='Particulier') return;
-  try{ etat = await API.contratCadreByClient(clientId); }catch(e){ return; }
-  if(etat && etat.statut==='signe') return;
-  const nouveau = !etat || etat.statut==='aucun';
-  let cc;
-  try{
-    cc = await API.createContratCadre({
-      client_id: clientId, distributeur_nom: cl.nom,
-      representant_eloflex: (CURRENT_USER&&CURRENT_USER.nom)||null,
-      representant_distrib: (pret&&pret.contact) || cl.contact || null,
-      lieu: cl.ville || null,
-      siret_distrib: cl.siret || cl.siren || '',
-      siege_distrib: [cl.adresse,cl.cp,cl.ville].filter(Boolean).join(' ')
-    });
-    cc = await API.contratCadre(cc.id);
-  }catch(e){ toast('Erreur contrat-cadre : '+e.message,'ti-alert-circle','var(--danger)'); return; }
-  const email = (pret&&pret.email) || cl.email || '';
+// ── Envoi à signer : bon de prêt + contrat-cadre (si pas encore signé) → une seule signature ──
+async function assistantContratApresPret(pretId, apresCreation){
+  let p, j;
+  try{ p = await API.pret(pretId); j = await API.pretContratJoint(pretId); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const cc = j && j.contrat;
+  const email = p.email || p.client_email_actuel || '';
+  if(!cc){ // contrat déjà signé : envoi du bon de prêt seul
+    if(apresCreation) return;
+    const dest = prompt(TR('Contrat-cadre déjà signé : seul le bon de prêt sera envoyé.')+'\n'+TR('Envoyer le lien de signature à :'), email);
+    if(!dest) return;
+    let pdfData=null; try{ if(typeof PDF!=='undefined' && PDF.pretDoc) pdfData = PDF.pretDoc(p).output('datauristring'); }catch(e){}
+    try{ const r = await API.envoyerPret(pretId, dest, pdfData); toast(TR('Bon de prêt envoyé à signer à ')+r.to,'ti-mail','var(--success)'); if(STATE.view==='prets') render(); }
+    catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+    return;
+  }
   const manque = v => !String(v||'').trim();
-  const champ = (id,label,val,req,extra) => `<div class="form-group"><label class="form-label">${label}${req&&manque(val)?' <span style="color:#dc2626;font-weight:700">— '+TR('à compléter')+'</span>':''}</label>
-      <input class="form-input${extra||''}" id="${id}" value="${esc(val||'')}" style="${req&&manque(val)?'border-color:#dc2626':''}"></div>`;
+  const champ = (id,label,val,req,extra) => `<div class="form-group"><label class="form-label">${label}${req&&manque(val)?' <span style="color:#d97706;font-weight:700">— '+TR('manquant')+'</span>':''}</label>
+      <input class="form-input${extra||''}" id="${id}" value="${esc(val||'')}" style="${req&&manque(val)?'border-color:#d97706':''}"></div>`;
   const aFaire = [];
-  if(manque(cc.siret_distrib)) aFaire.push(TR('SIREN / SIRET du distributeur'));
-  if(manque(cc.representant_distrib)) aFaire.push(TR('nom du représentant (signataire) du distributeur'));
-  if(manque(email)) aFaire.push(TR('e-mail pour l’envoi à signer'));
+  if(manque(cc.siret_distrib)) aFaire.push(TR('SIREN / SIRET'));
+  if(manque(cc.representant_distrib)) aFaire.push(TR('représentant du distributeur'));
   if(manque(cc.siege_distrib)) aFaire.push(TR('adresse du siège'));
-  showModal(`<div class="modal-header"><i class="ti ti-file-description" style="color:var(--accent)"></i><h2>${TR('Contrat-cadre de prêt')} — ${esc(cl.nom)}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  const nouveauCC = cc.statut==='brouillon';
+  showModal(`<div class="modal-header"><i class="ti ti-file-description" style="color:var(--accent)"></i><h2>${TR('Bon de prêt + contrat-cadre')} — ${esc(p.distributeur_nom||cc.distributeur_nom||'')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <div style="padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;${nouveau?'background:rgba(217,119,6,.10);border:1px solid rgba(217,119,6,.35)':'background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3)'}">
-        <i class="ti ${nouveau?'ti-alert-triangle':'ti-info-circle'}"></i>
-        ${nouveau ? TR('Aucun contrat-cadre n’existait pour ce distributeur : il vient d’être créé (brouillon) et pré-rempli à partir de la fiche et du bon de prêt.')
-                  : TR('Le contrat-cadre de ce distributeur n’est pas encore signé')+' ('+contratBadge(cc.statut)+').'}
-        ${aFaire.length?'<div style="margin-top:6px"><b>'+TR('À compléter')+' :</b> '+aFaire.join(', ')+'</div>':'<div style="margin-top:6px">'+TR('Toutes les informations sont renseignées : il ne reste qu’à l’envoyer à signer.')+'</div>'}
+      <div style="padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);line-height:1.5">
+        <i class="ti ti-info-circle"></i>
+        ${nouveauCC ? TR('Le contrat-cadre de ce distributeur a été généré automatiquement (pas encore signé).') : TR('Le contrat-cadre de ce distributeur n’est pas encore signé')+' ('+contratBadge(cc.statut)+').'}
+        ${TR('Il sera joint au bon de prêt dans le même e-mail : le distributeur relit les deux documents sur une seule page et signe une seule fois.')}
+        ${aFaire.length
+          ? '<div style="margin-top:6px"><b>'+TR('Informations manquantes')+' :</b> '+aFaire.join(', ')+'. '+TR('Tu peux les compléter maintenant ; sinon le distributeur les renseignera lui-même au moment de signer.')+'</div>'
+          : '<div style="margin-top:6px">'+TR('Toutes les informations du contrat sont renseignées.')+'</div>'}
       </div>
-      <input type="hidden" id="acp-id" value="${cc.id}"><input type="hidden" id="acp-client" value="${cl.id}">
+      <input type="hidden" id="acp-id" value="${cc.id}"><input type="hidden" id="acp-client" value="${cc.client_id||''}"><input type="hidden" id="acp-pret" value="${p.id}">
       <div class="grid-2">
         ${champ('acp-siret',TR('SIREN / SIRET du distributeur'),cc.siret_distrib,true,' mono')}
         ${champ('acp-rep-distrib',TR('Représentant du distributeur (signataire)'),cc.representant_distrib,true)}
-        ${champ('acp-email',TR('E-mail pour la signature'),email,true)}
         ${champ('acp-rep-eloflex',TR('Représentant Eloflex'),cc.representant_eloflex||(CURRENT_USER&&CURRENT_USER.nom)||'',false)}
         ${champ('acp-lieu',TR('Lieu (Fait à)'),cc.lieu,false)}
       </div>
       ${champ('acp-siege',TR('Siège du distributeur'),cc.siege_distrib,true)}
-      ${(manque(cl.siret)&&manque(cl.siren))?`<label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text2)"><input type="checkbox" id="acp-maj-fiche" checked> ${TR('Enregistrer aussi le SIREN / SIRET dans la fiche du distributeur')}</label>`:''}
+      ${champ('acp-email',TR('E-mail pour la signature'),email,true)}
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text2)"><input type="checkbox" id="acp-maj-fiche" checked> ${TR('Enregistrer aussi le SIREN / SIRET dans la fiche du distributeur (si absent)')}</label>
+      <details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px;color:var(--accent)">${TR('Aperçu du contrat-cadre')}</summary>
+        <div style="max-height:45vh;overflow:auto;background:#fff;color:#222;border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:6px">${contratBonHTML(cc)}</div></details>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${TR('Plus tard')}</button>
-      <button class="btn" onclick="apercuContrat(${cc.id})"><i class="ti ti-eye"></i> ${TR('Aperçu')}</button>
       <button class="btn" onclick="enregistrerAssistantContrat(false)"><i class="ti ti-check"></i> ${TR('Enregistrer')}</button>
-      <button class="btn primary" onclick="enregistrerAssistantContrat(true)"><i class="ti ti-mail"></i> ${TR('Enregistrer et envoyer à signer')}</button>
+      <button class="btn primary" onclick="enregistrerAssistantContrat(true)"><i class="ti ti-mail"></i> ${TR('Envoyer à signer (une seule signature)')}</button>
     </div>`);
 }
 window.assistantContratApresPret = assistantContratApresPret;
 
 async function enregistrerAssistantContrat(envoyer){
-  const id = gv('acp-id'), clientId = gv('acp-client');
+  const id = gv('acp-id'), clientId = gv('acp-client'), pretId = gv('acp-pret');
   const siret = (gv('acp-siret')||'').replace(/\s+/g,'');
   if(siret && !/^\d{9}(\d{5})?$/.test(siret)){ alert(TR('Le SIREN doit comporter 9 chiffres (ou le SIRET 14 chiffres).')); return; }
   const d = { lieu:gv('acp-lieu')||null, representant_eloflex:gv('acp-rep-eloflex')||null, representant_distrib:gv('acp-rep-distrib')||null,
@@ -8903,19 +8903,29 @@ async function enregistrerAssistantContrat(envoyer){
   try{
     await API.updateContratCadre(id, d);
     const box = document.getElementById('acp-maj-fiche');
-    if(siret && box && box.checked){ try{ await API.majSiretClient(clientId, siret); }catch(e){ toast(TR('SIREN non enregistré dans la fiche : ')+e.message,'ti-alert-circle','var(--warning)'); } }
+    if(siret && clientId && box && box.checked){ try{ await API.majSiretClient(clientId, siret); window._clientsCache=null; }catch(e){ toast(TR('SIREN non enregistré dans la fiche : ')+e.message,'ti-alert-circle','var(--warning)'); } }
     if(!envoyer){ toast(TR('Contrat-cadre enregistré'),'ti-check','var(--success)'); closeModal(); return; }
     const dest = (gv('acp-email')||'').trim();
     if(!dest){ alert(TR('Indique l’e-mail du distributeur pour l’envoi à signer.')); return; }
-    const manquants = [!d.siret_distrib&&TR('SIREN/SIRET'), !d.representant_distrib&&TR('représentant'), !d.siege_distrib&&TR('siège')].filter(Boolean);
-    if(manquants.length && !confirm(TR('Il manque encore')+' : '+manquants.join(', ')+'.\n'+TR('Envoyer quand même ?'))) return;
-    const cc = await API.contratCadre(id);
-    let pdfData=null; try{ if(typeof PDF!=='undefined' && PDF.contratCadreDoc) pdfData = PDF.contratCadreDoc(cc).output('datauristring'); }catch(e){}
-    const r = await API.envoyerContratCadre(id, dest, pdfData);
-    toast(TR('Contrat-cadre envoyé à signer à ')+r.to,'ti-mail','var(--success)'); closeModal();
+    await envoyerPretEtContrat(pretId, dest);
+    closeModal();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.enregistrerAssistantContrat = enregistrerAssistantContrat;
+
+// Envoi groupé : PDF du bon de prêt + PDF du contrat-cadre (s'il reste à signer)
+async function envoyerPretEtContrat(pretId, dest){
+  const p = await API.pret(pretId);
+  const j = await API.pretContratJoint(pretId);
+  let pdfData=null, ccPdf=null;
+  try{ if(typeof PDF!=='undefined' && PDF.pretDoc) pdfData = PDF.pretDoc(p).output('datauristring'); }catch(e){}
+  if(j && j.contrat){ try{ if(typeof PDF!=='undefined' && PDF.contratCadreDoc) ccPdf = PDF.contratCadreDoc(await API.contratCadre(j.contrat.id)).output('datauristring'); }catch(e){} }
+  const r = await API.envoyerPret(pretId, dest, pdfData, ccPdf);
+  toast((r.contrat_inclus ? TR('Bon de prêt + contrat-cadre envoyés (une seule signature) à ') : TR('Bon de prêt envoyé à signer à '))+r.to,'ti-mail','var(--success)');
+  if(STATE.view==='prets') render();
+  return r;
+}
+window.envoyerPretEtContrat = envoyerPretEtContrat;
 
 function menuPretStatut(id){
   showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut du prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
@@ -8958,16 +8968,13 @@ async function pretStatut(id, statut){
 window.pretStatut = pretStatut;
 
 async function envoyerPretLien(id){
+  // Contrat-cadre non signé → fenêtre d'envoi groupé ; sinon envoi du bon seul
+  let j=null; try{ j = await API.pretContratJoint(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  if(j && j.contrat) return assistantContratApresPret(id, false);
   let p; try{ p = await API.pret(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
-  const dest = p.email || p.client_email_actuel || '';
-  const email = prompt(TR('Envoyer le lien de signature à :'), dest);
+  const email = prompt(TR('Envoyer le lien de signature à :'), p.email || p.client_email_actuel || '');
   if(!email) return;
-  // génère le PDF (pour le joindre au mail : option signature manuelle)
-  let pdfData=null;
-  try{ if(typeof PDF!=='undefined' && PDF.pretDoc) pdfData = PDF.pretDoc(p).output('datauristring'); }catch(e){}
-  try{ const r = await API.envoyerPret(id, email, pdfData); toast(TR('Lien de signature envoyé à ')+r.to,'ti-mail','var(--success)');
-    if(STATE.view==='prets') render();
-  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+  try{ await envoyerPretEtContrat(id, email); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.envoyerPretLien = envoyerPretLien;
 
@@ -9265,7 +9272,7 @@ function contratBonHTML(c){
   return `<div style="font-family:Calibri,Arial,sans-serif;color:#222;font-size:12px;line-height:1.5;max-width:760px;margin:0 auto">
     <div style="text-align:center;color:#1F5C8C;font-size:17px;font-weight:bold">CONTRAT-CADRE DE PRÊT À USAGE</div>
     <div style="text-align:center;font-style:italic;color:#666;font-size:12px;margin:0 0 10px;border-bottom:2px solid #1F5C8C;padding-bottom:7px">Commodat – Articles 1875 à 1891 du Code civil</div>
-    <p><b>Entre</b> ELOFLEX SAS (« le Prêteur »)${c.representant_eloflex?', représentée par '+esc(c.representant_eloflex):''} <b>et</b> ${nom} (« l'Emprunteur »)${c.siret_distrib?' — SIRET : '+esc(c.siret_distrib):''}${c.representant_distrib?', représenté par '+esc(c.representant_distrib):''}.</p>
+    <p><b>Entre</b> ELOFLEX SAS (« le Prêteur »)${c.representant_eloflex?', représentée par '+esc(c.representant_eloflex):''} <b>et</b> ${nom} (« l'Emprunteur »)${c.siege_distrib?', dont le siège social est situé '+esc(c.siege_distrib):''}${c.siret_distrib?' — '+(String(c.siret_distrib).replace(/\s+/g,'').length===9?'SIREN':'SIRET')+' : '+esc(c.siret_distrib):''}${c.representant_distrib?', représenté par '+esc(c.representant_distrib):''}.</p>
     <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 1 – Objet et nature juridique</h3>
     <p>Mise à disposition, à titre gratuit et temporaire, de fauteuils roulants électriques Eloflex aux fins exclusives d'essai patient supervisé par un ergothérapeute (arrêté du 6 février 2025 modifié, VPH, art. L.165-1 CSS). Commodat : ELOFLEX conserve la pleine propriété ; aucun transfert de propriété ne résulte de la remise. Chaque prêt fait l'objet d'un Bon de Prêt distinct.</p>
     <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 2 – Formules de prêt</h3>

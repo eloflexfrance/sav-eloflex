@@ -60,7 +60,8 @@ const API = {
   updatePret:(id,d)=>API.put(`/prets/${id}`,d),
   setPretStatut:(id,statut,extra)=>API.post(`/prets/${id}/statut`,Object.assign({statut},extra||{})),
   deletePret:(id)=>API.del(`/prets/${id}`),
-  envoyerPret:(id,email,pdf)=>API.post(`/prets/${id}/envoyer`,{...(email?{email}:{}),...(pdf?{pdf_data:pdf}:{})}),
+  envoyerPret:(id,email,pdf,ccPdf)=>API.post(`/prets/${id}/envoyer`,{...(email?{email}:{}),...(pdf?{pdf_data:pdf}:{}),...(ccPdf?{contrat_pdf_data:ccPdf}:{})}),
+  pretContratJoint:(id)=>API.get(`/prets/${id}/contrat-joint`),
   signePretMail:(id,date)=>API.post(`/prets/${id}/signe-mail`,{date}),
   // ── Contrat-cadre de prêt ──
   contratsCadre:()=>API.get('/contrats-cadre'),
