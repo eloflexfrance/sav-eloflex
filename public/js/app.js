@@ -1332,7 +1332,7 @@ async function renderCommandesTable(page=1){
 // Correspondance réseau distributeur (reseau_carte) → libellé du champ "Groupe" des commandes
 var RESEAU_VERS_GROUPE = {
   base: 'De base', bastide: 'Bastide', providom: 'Providom',
-  districlub: 'Distri club', negocies: 'Négocié'
+  districlub: 'Distri club', negocies: 'Négocié', capvital: 'Cap Vital'
 };
 
 // Pré-remplit le "Groupe" d'une commande à partir du réseau du distributeur saisi,
@@ -1578,7 +1578,7 @@ async function modalCommande(id, prefill){
           <div class="form-group"><label class="form-label">${t('cmd_groupe')||'Groupe'}</label>
             <select class="form-input" id="cmd-groupe">
               <option value="">${TR("— Choisir —")}</option>
-              ${['De base','Bastide','Providom','Distri club','Négocié','Particulier'].map(g=>`<option value="${g}" ${cm.groupe===g?'selected':''}>${g}</option>`).join('')}
+              ${['De base','Bastide','Providom','Distri club','Cap Vital','Négocié','Particulier'].map(g=>`<option value="${g}" ${cm.groupe===g?'selected':''}>${g}</option>`).join('')}
             </select>
           </div>
           <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('cmd_modele')||'Modèle / Article'}</label>
