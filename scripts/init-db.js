@@ -414,6 +414,10 @@ async function initDB() {
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse2 TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS cp TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS pays TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS siren TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS siret TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tva TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS entite_facturation_id INTEGER`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_client ON distributeurs_carte(client_id)`);
       await client.query(`ALTER TABLE distributeurs_carte ADD COLUMN IF NOT EXISTS pays TEXT`);
       await client.query(`UPDATE distributeurs_carte SET pays='France' WHERE pays IS NULL`);

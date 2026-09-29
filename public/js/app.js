@@ -729,6 +729,8 @@ function ficheDistributeurBloc(cl){
       ${row('ti-mail', TR('Mail'), cl.email?`<a href="mailto:${esc(cl.email)}" style="color:var(--accent);text-decoration:none">${esc(cl.email)}</a>`:'<span style="color:var(--text3)">—</span>')}
       ${row('ti-user', TR('Personne de contact'), cl.contact?esc(cl.contact):'<span style="color:var(--text3)">—</span>')}
       ${row('ti-users-group', TR("Groupe d'appartenance"), cl.reseau_carte?esc(cl.reseau_carte):'<span style="color:var(--text3)">—</span>')}
+      ${cl.type!=='Particulier'?row('ti-id-badge-2', TR('SIREN / SIRET'), (cl.siren||cl.siret)?`<span class="mono">${esc(cl.siren||'')}${cl.siret?(cl.siren?' · ':'')+esc(cl.siret):''}</span>`:'<span style="color:#d97706">'+TR('à renseigner')+'</span>'):''}
+      ${cl.type!=='Particulier'?row('ti-receipt-tax', TR('TVA intracom.'), cl.tva?`<span class="mono">${esc(cl.tva)}</span>`:'<span style="color:var(--text3)">—</span>'):''}
     </div>
     ${chips.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:11px">${chips.join('')}</div>`:''}
     <div style="margin-top:12px;background:rgba(250,204,21,.08);border:0.5px solid var(--border);border-radius:12px;padding:10px 12px">
@@ -3977,6 +3979,9 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
   <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
   <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays">${optionsPays(d.pays||'France')}</select></div>
+  <div class="form-group"><label class="form-label">${TR('SIREN')} <span style="font-weight:400;color:var(--text3)">(9 ${TR('chiffres')})</span></label><input class="form-input mono" id="f-siren" value="${esc(d.siren||'')}" placeholder="123456789" oninput="majTvaDepuisSiren()"></div>
+  <div class="form-group"><label class="form-label">${TR('SIRET')} <span style="font-weight:400;color:var(--text3)">(14 ${TR('chiffres')})</span></label><input class="form-input mono" id="f-siret" value="${esc(d.siret||'')}" placeholder="12345678900012" oninput="majTvaDepuisSiren()"></div>
+  <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('N° TVA intracommunautaire')}</label><div style="display:flex;gap:8px"><input class="form-input mono" id="f-tva-intra" value="${esc(d.tva||'')}" placeholder="FR12123456789" style="flex:1"><button type="button" class="btn sm" onclick="majTvaDepuisSiren(true)" title="${TR('Calculer le numéro de TVA français à partir du SIREN')}"><i class="ti ti-calculator"></i> ${TR('Calculer')}</button></div></div>
   <div class="form-group"><label class="form-label">${TR('Réseau')}</label>
     <select class="form-input" id="f-reseau">
       <option value="">${TR('— Aucun —')}</option>
@@ -4029,6 +4034,17 @@ function clientForm(d={}){return `<div class="grid-2">
 // dans les recherches — ex. contrat-cadre — jusqu'au rechargement de la page).
 async function ensureClientsCache(force){ if(force || !window._clientsCache){ try{ const cs = await API.clients(); window._clientsCache = (cs||[]).map(c=>({id:c.id,nom:c.nom,ville:c.ville,type:c.type})); }catch(e){ if(!window._clientsCache) window._clientsCache=[]; } } }
 window.ensureClientsCache = ensureClientsCache;
+// N° de TVA intracommunautaire français déduit du SIREN : FR + clé ((12 + 3 × (SIREN mod 97)) mod 97) + SIREN
+function tvaFrDepuisSiren(siren){ siren=String(siren||'').replace(/\D/g,''); if(siren.length!==9) return ''; const cle=(12+3*(Number(siren)%97))%97; return 'FR'+String(cle).padStart(2,'0')+siren; }
+function majTvaDepuisSiren(force){
+  let siren=(gv('f-siren')||'').replace(/\D/g,''); const siret=(gv('f-siret')||'').replace(/\D/g,'');
+  if(!siren && siret.length===14){ siren=siret.slice(0,9); const e=document.getElementById('f-siren'); if(e) e.value=siren; }
+  const t=document.getElementById('f-tva-intra'); if(!t) return;
+  const pays=gv('f-pays')||'France';
+  if(siren.length===9 && (force || !t.value.trim()) && /france/i.test(pays)) t.value=tvaFrDepuisSiren(siren);
+  else if(force && siren.length!==9) toast(TR('Saisis d’abord un SIREN à 9 chiffres'),'ti-alert-circle','var(--warning)');
+}
+window.majTvaDepuisSiren = majTvaDepuisSiren;
 function toggleFacturation(mode){ const w=document.getElementById('f-entite-wrap'); if(w) w.style.display=(mode==='autre')?'':'none'; }
 window.toggleFacturation = toggleFacturation;
 async function modalNewClient(){await ensureClientsCache();showModal(`<div class="modal-header"><i class="ti ti-user-plus" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Nouveau client')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div><div class="modal-body">${clientForm()}</div><div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')}</button><button class="btn primary" onclick="saveClient()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button></div>`);}
@@ -4047,8 +4063,14 @@ async function saveClient(id){
     sur_carte: surCarte,
     public_site: !!document.getElementById('f-public-site')?.checked,
     priorite: gv('f-priorite') || null,
-    reseau_carte: reseau
+    reseau_carte: reseau,
+    siren: (gv('f-siren')||'').replace(/\s+/g,'') || null,
+    siret: (gv('f-siret')||'').replace(/\s+/g,'') || null,
+    tva: (gv('f-tva-intra')||'').replace(/\s+/g,'').toUpperCase() || null
   };
+  if (data.siren && !/^\d{9}$/.test(data.siren)) { alert(TR('Le SIREN doit comporter 9 chiffres.')); return; }
+  if (data.siret && !/^\d{14}$/.test(data.siret)) { alert(TR('Le SIRET doit comporter 14 chiffres.')); return; }
+  if (data.siret && !data.siren) data.siren = data.siret.slice(0,9);
   // Facturation : Identique (=null) ou Autre (id d'un distributeur existant)
   const factEl = document.getElementById('f-facturation-mode');
   if (factEl) {
@@ -8806,9 +8828,94 @@ async function savePret(){
     if(id){ await API.updatePret(id, data); } else { await API.createPret(data); }
     closeModal(); toast(TR('Bon de prêt enregistré'),'ti-check','var(--success)');
     if(STATE.view==='prets') render();
+    // Nouveau prêt : vérifier le contrat-cadre du distributeur (création + informations à compléter)
+    if(!id && data.client_id) setTimeout(()=>assistantContratApresPret(data.client_id, data), 350);
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.savePret = savePret;
+
+// ── Assistant contrat-cadre après un nouveau bon de prêt ─────────────
+// S'il n'existe aucun contrat-cadre pour ce distributeur : il est créé (brouillon) et pré-rempli,
+// puis on affiche ce qu'il reste à compléter (SIREN/SIRET, représentant, e-mail…) avec l'envoi à signer.
+// S'il existe mais n'est pas signé : même fenêtre, pour relancer la signature.
+async function assistantContratApresPret(clientId, pret){
+  let cl=null, etat=null;
+  try{ cl = await API.client(clientId); }catch(e){ return; }
+  if(!cl || cl.type==='Particulier') return;
+  try{ etat = await API.contratCadreByClient(clientId); }catch(e){ return; }
+  if(etat && etat.statut==='signe') return;
+  const nouveau = !etat || etat.statut==='aucun';
+  let cc;
+  try{
+    cc = await API.createContratCadre({
+      client_id: clientId, distributeur_nom: cl.nom,
+      representant_eloflex: (CURRENT_USER&&CURRENT_USER.nom)||null,
+      representant_distrib: (pret&&pret.contact) || cl.contact || null,
+      lieu: cl.ville || null,
+      siret_distrib: cl.siret || cl.siren || '',
+      siege_distrib: [cl.adresse,cl.cp,cl.ville].filter(Boolean).join(' ')
+    });
+    cc = await API.contratCadre(cc.id);
+  }catch(e){ toast('Erreur contrat-cadre : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const email = (pret&&pret.email) || cl.email || '';
+  const manque = v => !String(v||'').trim();
+  const champ = (id,label,val,req,extra) => `<div class="form-group"><label class="form-label">${label}${req&&manque(val)?' <span style="color:#dc2626;font-weight:700">— '+TR('à compléter')+'</span>':''}</label>
+      <input class="form-input${extra||''}" id="${id}" value="${esc(val||'')}" style="${req&&manque(val)?'border-color:#dc2626':''}"></div>`;
+  const aFaire = [];
+  if(manque(cc.siret_distrib)) aFaire.push(TR('SIREN / SIRET du distributeur'));
+  if(manque(cc.representant_distrib)) aFaire.push(TR('nom du représentant (signataire) du distributeur'));
+  if(manque(email)) aFaire.push(TR('e-mail pour l’envoi à signer'));
+  if(manque(cc.siege_distrib)) aFaire.push(TR('adresse du siège'));
+  showModal(`<div class="modal-header"><i class="ti ti-file-description" style="color:var(--accent)"></i><h2>${TR('Contrat-cadre de prêt')} — ${esc(cl.nom)}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;${nouveau?'background:rgba(217,119,6,.10);border:1px solid rgba(217,119,6,.35)':'background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3)'}">
+        <i class="ti ${nouveau?'ti-alert-triangle':'ti-info-circle'}"></i>
+        ${nouveau ? TR('Aucun contrat-cadre n’existait pour ce distributeur : il vient d’être créé (brouillon) et pré-rempli à partir de la fiche et du bon de prêt.')
+                  : TR('Le contrat-cadre de ce distributeur n’est pas encore signé')+' ('+contratBadge(cc.statut)+').'}
+        ${aFaire.length?'<div style="margin-top:6px"><b>'+TR('À compléter')+' :</b> '+aFaire.join(', ')+'</div>':'<div style="margin-top:6px">'+TR('Toutes les informations sont renseignées : il ne reste qu’à l’envoyer à signer.')+'</div>'}
+      </div>
+      <input type="hidden" id="acp-id" value="${cc.id}"><input type="hidden" id="acp-client" value="${cl.id}">
+      <div class="grid-2">
+        ${champ('acp-siret',TR('SIREN / SIRET du distributeur'),cc.siret_distrib,true,' mono')}
+        ${champ('acp-rep-distrib',TR('Représentant du distributeur (signataire)'),cc.representant_distrib,true)}
+        ${champ('acp-email',TR('E-mail pour la signature'),email,true)}
+        ${champ('acp-rep-eloflex',TR('Représentant Eloflex'),cc.representant_eloflex||(CURRENT_USER&&CURRENT_USER.nom)||'',false)}
+        ${champ('acp-lieu',TR('Lieu (Fait à)'),cc.lieu,false)}
+      </div>
+      ${champ('acp-siege',TR('Siège du distributeur'),cc.siege_distrib,true)}
+      ${(manque(cl.siret)&&manque(cl.siren))?`<label style="display:flex;gap:8px;align-items:center;font-size:13px;color:var(--text2)"><input type="checkbox" id="acp-maj-fiche" checked> ${TR('Enregistrer aussi le SIREN / SIRET dans la fiche du distributeur')}</label>`:''}
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">${TR('Plus tard')}</button>
+      <button class="btn" onclick="apercuContrat(${cc.id})"><i class="ti ti-eye"></i> ${TR('Aperçu')}</button>
+      <button class="btn" onclick="enregistrerAssistantContrat(false)"><i class="ti ti-check"></i> ${TR('Enregistrer')}</button>
+      <button class="btn primary" onclick="enregistrerAssistantContrat(true)"><i class="ti ti-mail"></i> ${TR('Enregistrer et envoyer à signer')}</button>
+    </div>`);
+}
+window.assistantContratApresPret = assistantContratApresPret;
+
+async function enregistrerAssistantContrat(envoyer){
+  const id = gv('acp-id'), clientId = gv('acp-client');
+  const siret = (gv('acp-siret')||'').replace(/\s+/g,'');
+  if(siret && !/^\d{9}(\d{5})?$/.test(siret)){ alert(TR('Le SIREN doit comporter 9 chiffres (ou le SIRET 14 chiffres).')); return; }
+  const d = { lieu:gv('acp-lieu')||null, representant_eloflex:gv('acp-rep-eloflex')||null, representant_distrib:gv('acp-rep-distrib')||null,
+              siret_distrib:siret||null, siege_distrib:gv('acp-siege')||null };
+  try{
+    await API.updateContratCadre(id, d);
+    const box = document.getElementById('acp-maj-fiche');
+    if(siret && box && box.checked){ try{ await API.majSiretClient(clientId, siret); }catch(e){ toast(TR('SIREN non enregistré dans la fiche : ')+e.message,'ti-alert-circle','var(--warning)'); } }
+    if(!envoyer){ toast(TR('Contrat-cadre enregistré'),'ti-check','var(--success)'); closeModal(); return; }
+    const dest = (gv('acp-email')||'').trim();
+    if(!dest){ alert(TR('Indique l’e-mail du distributeur pour l’envoi à signer.')); return; }
+    const manquants = [!d.siret_distrib&&TR('SIREN/SIRET'), !d.representant_distrib&&TR('représentant'), !d.siege_distrib&&TR('siège')].filter(Boolean);
+    if(manquants.length && !confirm(TR('Il manque encore')+' : '+manquants.join(', ')+'.\n'+TR('Envoyer quand même ?'))) return;
+    const cc = await API.contratCadre(id);
+    let pdfData=null; try{ if(typeof PDF!=='undefined' && PDF.contratCadreDoc) pdfData = PDF.contratCadreDoc(cc).output('datauristring'); }catch(e){}
+    const r = await API.envoyerContratCadre(id, dest, pdfData);
+    toast(TR('Contrat-cadre envoyé à signer à ')+r.to,'ti-mail','var(--success)'); closeModal();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.enregistrerAssistantContrat = enregistrerAssistantContrat;
 
 function menuPretStatut(id){
   showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut du prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>

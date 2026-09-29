@@ -553,6 +553,20 @@ router.get('/clients/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// SIREN / SIRET / TVA intracommunautaire : mis à jour seulement s'ils sont fournis (sans toucher au reste de la fiche)
+async function _majIdentifiantsClient(id, b) {
+  if (!id || !b) return;
+  const sets = [], vals = [];
+  for (const k of ['siren', 'siret', 'tva']) {
+    if (Object.prototype.hasOwnProperty.call(b, k)) {
+      const v = b[k] == null ? null : String(b[k]).replace(/\s+/g, '').toUpperCase() || null;
+      vals.push(v); sets.push(`${k}=$${vals.length}`);
+    }
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  await db.run(`UPDATE clients SET ${sets.join(', ')} WHERE id=$${vals.length}`, vals);
+}
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
@@ -569,6 +583,7 @@ router.post('/clients', async (req, res) => {
     );
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
+    await _majIdentifiantsClient(cl.id, req.body);
     res.status(201).json({ ...cl, carte });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -594,6 +609,7 @@ router.put('/clients/:id', async (req, res) => {
     if (avant && (avant.ville !== ville || avant.adresse !== (adresse||null) || avant.cp !== (cp||null))) {
       await db.run('UPDATE clients SET lat=NULL, lng=NULL WHERE id=$1', [req.params.id]);
     }
+    await _majIdentifiantsClient(req.params.id, req.body);
     const carte = await syncClientCarte(req.params.id);
     res.json({ ...cl, carte });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -6155,6 +6171,19 @@ const clientsWrite = (req, res, next) => {
   if ((user.permissions || {})['clients'] === 'write') return next();
   return res.status(403).json({ error: 'Accès en écriture refusé sur le module "clients".' });
 };
+// Complète le SIRET / SIREN d'une fiche sans toucher au reste (utilisé par l'assistant contrat-cadre)
+router.put('/clients/:id/siret', async (req, res) => {
+  try {
+    const v = String((req.body && req.body.siret) || '').replace(/\s+/g, '');
+    if (!/^\d{9}(\d{5})?$/.test(v)) return res.status(400).json({ error: 'SIREN (9 chiffres) ou SIRET (14 chiffres) attendu' });
+    const siren = v.slice(0, 9), siret = v.length === 14 ? v : null;
+    const cle = (12 + 3 * (Number(siren) % 97)) % 97;
+    const tva = 'FR' + String(cle).padStart(2, '0') + siren;
+    await db.run(`UPDATE clients SET siren=$1, siret=COALESCE($2, siret), tva=COALESCE(NULLIF(tva,''), $3) WHERE id=$4`, [siren, siret, tva, req.params.id]);
+    res.json({ ok: true, siren, siret });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/clients/:id/siren-demande', clientsWrite, async (req, res) => {
   try {
     const cid = parseInt(req.params.id);

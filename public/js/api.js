@@ -71,6 +71,7 @@ const API = {
   deleteContratCadre:(id)=>API.del(`/contrats-cadre/${id}`),
   envoyerContratCadre:(id,email,pdf)=>API.post(`/contrats-cadre/${id}/envoyer`,{...(email?{email}:{}),...(pdf?{pdf_data:pdf}:{})}),
   signeContratCadreMail:(id,date)=>API.post(`/contrats-cadre/${id}/signe-mail`,{date}),
+  majSiretClient:(id,siret)=>API.put(`/clients/${id}/siret`,{siret}),
   // ── Demandes d'informations (distributeurs) ──
   logs:(params)=>API.get('/logs'+(params&&Object.keys(params).length?('?'+new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v])=>v!=null&&v!==''))).toString()):'')),
   demandesInfo:(params)=>API.get('/demandes-info'+(params?('?'+new URLSearchParams(params).toString()):'')),
