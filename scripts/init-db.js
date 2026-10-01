@@ -212,6 +212,16 @@ async function initDB() {
     try { await client.query(`UPDATE commandes SET date_commande=NULL WHERE date_commande ~ '^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) '`); } catch(e) {}
 
     // Table du contrat-cadre de prêt (commodat) — signé une fois par distributeur
+    await client.query(`CREATE TABLE IF NOT EXISTS documents_signes (
+      id SERIAL PRIMARY KEY,
+      objet TEXT NOT NULL,            -- 'pret' ou 'contrat'
+      objet_id INTEGER NOT NULL,
+      nom TEXT, mime TEXT, taille INTEGER,
+      data TEXT NOT NULL,             -- data-URL base64
+      ajoute_par INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_docsign_objet ON documents_signes(objet, objet_id)`);
     await client.query(`CREATE TABLE IF NOT EXISTS contrats_cadre (
       id SERIAL PRIMARY KEY,
       client_id INTEGER UNIQUE REFERENCES clients(id) ON DELETE CASCADE,

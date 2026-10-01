@@ -63,6 +63,9 @@ const API = {
   envoyerPret:(id,email,pdf,ccPdf)=>API.post(`/prets/${id}/envoyer`,{...(email?{email}:{}),...(pdf?{pdf_data:pdf}:{}),...(ccPdf?{contrat_pdf_data:ccPdf}:{})}),
   pretContratJoint:(id)=>API.get(`/prets/${id}/contrat-joint`),
   signePretMail:(id,date)=>API.post(`/prets/${id}/signe-mail`,{date}),
+  docsSignes:(objet,id)=>API.get(`/documents-signes/${objet}/${id}`),
+  ajouterDocSigne:(objet,id,d)=>API.post(`/documents-signes/${objet}/${id}`,d),
+  supprDocSigne:(docId)=>API.del(`/documents-signes/fichier/${docId}`),
   // ── Contrat-cadre de prêt ──
   contratsCadre:()=>API.get('/contrats-cadre'),
   contratCadre:(id)=>API.get(`/contrats-cadre/${id}`),

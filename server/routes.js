@@ -7967,7 +7967,8 @@ function _contratPublic(cc) {
 router.get('/prets', requireAuth, async (req, res) => {
   try {
     const rows = await db.all(
-      `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel, u.nom AS signataire_eloflex
+      `SELECT p.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel, u.nom AS signataire_eloflex,
+              (SELECT COUNT(*)::int FROM documents_signes d WHERE d.objet='pret' AND d.objet_id=p.id) AS nb_docs
        FROM prets p LEFT JOIN clients c ON c.id = p.client_id LEFT JOIN users u ON u.id = p.cree_par
        ORDER BY p.created_at DESC`);
     res.json(rows);
@@ -8078,6 +8079,74 @@ router.post('/prets/:id/lier-client', adminOnly, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Documents signés reçus hors interface (PDF scanné / photo renvoyés par e-mail) ──
+const DOC_OBJETS = { pret: 'prets', contrat: 'contrats_cadre' };
+router.get('/documents-signes/fichier/:docId', requireAuth, async (req, res) => {
+  try {
+    const d = await db.get('SELECT nom, mime, data FROM documents_signes WHERE id=$1', [req.params.docId]);
+    if (!d) return res.status(404).send('Document introuvable');
+    const b64 = String(d.data).replace(/^data:[^;]+;base64,/, '');
+    res.setHeader('Content-Type', d.mime || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${String(d.nom || 'document').replace(/[^\w.\- ]+/g, '_')}"`);
+    res.send(Buffer.from(b64, 'base64'));
+  } catch (e) { res.status(500).send(e.message); }
+});
+router.delete('/documents-signes/fichier/:docId', requireAuth, async (req, res) => {
+  try { await db.run('DELETE FROM documents_signes WHERE id=$1', [req.params.docId]); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.get('/documents-signes/:objet/:id', requireAuth, async (req, res) => {
+  try {
+    if (!DOC_OBJETS[req.params.objet]) return res.status(400).json({ error: 'Objet invalide' });
+    res.json(await db.all(`SELECT d.id, d.nom, d.mime, d.taille, d.created_at, u.nom AS ajoute_par_nom
+      FROM documents_signes d LEFT JOIN users u ON u.id=d.ajoute_par WHERE d.objet=$1 AND d.objet_id=$2 ORDER BY d.created_at`,
+      [req.params.objet, req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Ajoute un document signé à un bon de prêt / contrat-cadre ; option : marquer signé (date) au passage.
+// Pour un bon de prêt, `contrat` = { meme_fichier:true } ou { data, nom } : le contrat-cadre du distributeur est aussi marqué signé.
+router.post('/documents-signes/:objet/:id', requireAuth, async (req, res) => {
+  try {
+    const objet = req.params.objet, id = parseInt(req.params.id), b = req.body || {};
+    if (!DOC_OBJETS[objet]) return res.status(400).json({ error: 'Objet invalide' });
+    const uid = (req.session.user && req.session.user.id) || null;
+    const ok = f => f && /^data:(application\/pdf|image\/(jpeg|png|webp));base64,/.test(f.data || '');
+    const mimeDe = f => /^data:([^;]+);/.exec(f.data)[1];
+    const ajouter = async (obj, oid, f) => {
+      if (String(f.data).length > 22000000) throw new Error('Fichier trop lourd (15 Mo max)');
+      return db.run(`INSERT INTO documents_signes (objet, objet_id, nom, mime, taille, data, ajoute_par) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+        [obj, oid, String(f.nom || 'document').slice(0, 200), mimeDe(f), Math.round(String(f.data).length * 0.75), f.data, uid]);
+    };
+    const signer = async (table, oid, date) => {
+      await db.run(`UPDATE ${table} SET statut='signe', signed_at = COALESCE(signed_at, COALESCE($1::date::timestamptz, NOW())),
+          signataire_nom = COALESCE(NULLIF(signataire_nom,''), 'Signé par e-mail'), updated_at=NOW() WHERE id=$2`, [date || null, oid]);
+    };
+    const obj = await db.get(`SELECT * FROM ${DOC_OBJETS[objet]} WHERE id=$1`, [id]);
+    if (!obj) return res.status(404).json({ error: 'Document introuvable' });
+    if (b.fichier && !ok(b.fichier)) return res.status(400).json({ error: 'Fichier PDF, JPG, PNG ou WEBP attendu' });
+    const out = {};
+    if (b.fichier) out.doc = (await ajouter(objet, id, b.fichier)).id;
+    const date = b.date ? String(b.date).slice(0, 10) : null;
+    if (b.marquer_signe) await signer(DOC_OBJETS[objet], id, date);
+    if (objet === 'pret' && b.contrat && obj.client_id) {
+      const cc = await _contratPourPret(obj, uid) || await db.get('SELECT * FROM contrats_cadre WHERE client_id=$1', [obj.client_id]);
+      if (cc) {
+        const fc = b.contrat.meme_fichier ? b.fichier : b.contrat.fichier;
+        if (fc && ok(fc)) out.doc_contrat = (await ajouter('contrat', cc.id, Object.assign({}, fc, { nom: fc.nom || 'contrat-cadre signé' }))).id;
+        if (b.marquer_signe && cc.statut !== 'signe') {
+          await signer('contrats_cadre', cc.id, date);
+          try { await addAlerte('contrat_signe', cc.id, `✍️ Contrat-cadre de ${cc.distributeur_nom || ''} signé (reçu par e-mail).`); } catch (_) {}
+          await apresContratSigne(obj.client_id);
+        }
+        out.contrat = cc.id;
+      }
+    }
+    if (b.marquer_signe && objet === 'pret') await apresPretSigne(id);
+    if (b.marquer_signe && objet === 'contrat') await apresContratSigne(obj.client_id);
+    res.json(Object.assign({ ok: true }, out));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Contrat-cadre qui sera joint au bon de prêt (null si déjà signé)
 router.get('/prets/:id/contrat-joint', requireAuth, async (req, res) => {
   try {
@@ -8150,6 +8219,7 @@ router.post('/prets/:id/signe-mail', requireAuth, async (req, res) => {
 router.delete('/prets/:id', requireAuth, async (req, res) => {
   try {
     await db.run('DELETE FROM prets WHERE id=$1', [req.params.id]);
+    await db.run("DELETE FROM documents_signes WHERE objet='pret' AND objet_id=$1", [req.params.id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -8329,6 +8399,7 @@ router.get('/contrats-cadre', requireAuth, async (req, res) => {
       `SELECT cc.id, cc.client_id, cc.distributeur_nom, cc.statut, cc.signataire_nom,
               cc.signed_at, cc.created_at, cc.updated_at,
               (cc.pdf_data IS NOT NULL) AS has_pdf,
+              (SELECT COUNT(*)::int FROM documents_signes d WHERE d.objet='contrat' AND d.objet_id=cc.id) AS nb_docs,
               c.nom AS client_nom_actuel, c.email AS client_email_actuel
          FROM contrats_cadre cc LEFT JOIN clients c ON c.id = cc.client_id
         ORDER BY cc.updated_at DESC`);
@@ -8403,6 +8474,7 @@ router.put('/contrats-cadre/:id', requireAuth, async (req, res) => {
 router.delete('/contrats-cadre/:id', requireAuth, async (req, res) => {
   try {
     await db.run('DELETE FROM contrats_cadre WHERE id=$1', [req.params.id]);
+    await db.run("DELETE FROM documents_signes WHERE objet='contrat' AND objet_id=$1", [req.params.id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

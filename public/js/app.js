@@ -8557,6 +8557,7 @@ async function renderPrets(ttl,c,a){
       <td style="text-align:right;white-space:nowrap">
         <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
         <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
+        ${p.nb_docs?`<button class="btn sm" title="${TR('Document(s) signé(s) reçu(s)')}" onclick="modalDocsSignes('pret',${p.id},'${esc(String(p.distributeur_nom||'')).replace(/'/g,'&#39;')}')" style="color:#16a34a"><i class="ti ti-paperclip"></i>${p.nb_docs>1?p.nb_docs:''}</button>`:''}
         <button class="btn sm" title="Lien de signature (test, sans e-mail)" onclick="montrerLienSignature(location.origin+'/pret/'+'${p.token_signature||''}')"><i class="ti ti-link"></i></button>
         <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
         <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
@@ -8945,6 +8946,7 @@ function menuPretStatut(id){
   showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut du prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:7px">
       <button class="btn primary" onclick="modalPretSigneMail(${id})"><i class="ti ti-mail-check"></i> ${TR('Offre de prêt signée par mail')}</button>
+      <button class="btn" onclick="modalDocsSignes('pret',${id},'')"><i class="ti ti-paperclip"></i> ${TR('Joindre / voir les documents signés')}</button>
       <button class="btn" onclick="pretStatut(${id},'en_cours')">${PRET_STATUTS_UI.en_cours.l}</button>
       <button class="btn" onclick="pretStatut(${id},'prolonge')">${PRET_STATUTS_UI.prolonge.l} (${TR('choisir une date')})</button>
       <button class="btn success" onclick="pretStatut(${id},'cloture')">${PRET_STATUTS_UI.cloture.l} — ${TR('retour effectué')}</button>
@@ -8954,23 +8956,87 @@ function menuPretStatut(id){
 }
 window.menuPretStatut = menuPretStatut;
 
-// Enregistre une signature reçue par e-mail (hors ligne), avec la date choisie
-function modalPretSigneMail(id){
+// Enregistre une signature reçue par e-mail (hors ligne) : date + document signé (PDF scanné / photo),
+// et, si le contrat-cadre du distributeur n'était pas signé, il peut être marqué signé avec le même envoi.
+async function modalPretSigneMail(id){
   const today = new Date().toISOString().slice(0,10);
+  let cc=null; try{ const j = await API.pretContratJoint(id); cc = j && j.contrat; }catch(_){}
   showModal(`<div class="modal-header"><i class="ti ti-mail-check" style="color:var(--accent)"></i><h2>${TR('Offre de prêt signée par mail')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      <p style="font-size:14px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le bon signé par e-mail. Indiquez la date de signature.')}</p>
+      <p style="font-size:14px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le document signé par e-mail. Indiquez la date de signature et joignez le fichier reçu.')}</p>
       <div class="form-group"><label class="form-label">${TR('Date de signature')}</label><input class="form-input" id="pret-signe-date" type="date" value="${today}" style="max-width:200px"></div>
+      <div class="form-group"><label class="form-label">${TR('Bon de prêt signé (PDF ou photo)')}</label><input class="form-input" id="pret-signe-file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></div>
+      ${cc ? `<div style="border:1px solid rgba(59,130,246,.3);background:rgba(59,130,246,.06);border-radius:8px;padding:10px 12px;margin-top:6px">
+        <label style="display:flex;gap:8px;align-items:center;font-weight:600;font-size:14px"><input type="checkbox" id="pret-signe-cc" checked onchange="document.getElementById('pret-signe-cc-opts').style.display=this.checked?'':'none'"> ${TR('Le contrat-cadre a aussi été signé')} (${contratBadge(cc.statut)})</label>
+        <div id="pret-signe-cc-opts" style="margin:8px 0 0 24px;font-size:13px;display:flex;flex-direction:column;gap:6px">
+          <label><input type="radio" name="pret-signe-ccf" value="meme" checked onchange="document.getElementById('pret-signe-ccfile').style.display='none'"> ${TR('Les 2 documents sont dans le même fichier')}</label>
+          <label><input type="radio" name="pret-signe-ccf" value="sep" onchange="document.getElementById('pret-signe-ccfile').style.display=''"> ${TR('Le contrat-cadre est dans un fichier séparé')}</label>
+          <input class="form-input" id="pret-signe-ccfile" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" style="display:none">
+        </div></div>` : ''}
     </div>
-    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="validerSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" id="pret-signe-ok" onclick="validerSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
 }
 window.modalPretSigneMail = modalPretSigneMail;
+
+function lireFichierSigne(inputId){
+  const inp = document.getElementById(inputId); const f = inp && inp.files && inp.files[0];
+  if(!f) return Promise.resolve(null);
+  if(f.size > 15*1024*1024) return Promise.reject(new Error(TR('Fichier trop lourd (15 Mo max)')));
+  return new Promise((ok,ko)=>{ const r=new FileReader(); r.onload=()=>ok({ nom:f.name, data:r.result }); r.onerror=()=>ko(new Error(TR('Lecture du fichier impossible'))); r.readAsDataURL(f); });
+}
+window.lireFichierSigne = lireFichierSigne;
+
 async function validerSigneMail(id){
   const d = gv('pret-signe-date'); if(!d){ toast(TR('Date requise'),'ti-alert-circle','var(--warning)'); return; }
-  try{ await API.signePretMail(id, d); closeModal(); toast(TR('Offre de prêt signée par mail'),'ti-check','var(--success)'); if(STATE.view==='prets') render(); }
-  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+  const btn = document.getElementById('pret-signe-ok'); if(btn) btn.disabled = true;
+  try{
+    const fichier = await lireFichierSigne('pret-signe-file');
+    const body = { date:d, marquer_signe:true };
+    if(fichier) body.fichier = fichier;
+    const box = document.getElementById('pret-signe-cc');
+    if(box && box.checked){
+      const sep = (document.querySelector('input[name=pret-signe-ccf]:checked')||{}).value === 'sep';
+      body.contrat = sep ? { fichier: await lireFichierSigne('pret-signe-ccfile') } : { meme_fichier: !!fichier };
+    }
+    await API.ajouterDocSigne('pret', id, body);
+    closeModal(); toast(body.contrat ? TR('Bon de prêt et contrat-cadre signés par mail') : TR('Offre de prêt signée par mail'),'ti-check','var(--success)');
+    if(STATE.view==='prets') render();
+  }catch(e){ if(btn) btn.disabled=false; toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.validerSigneMail = validerSigneMail;
+
+// Documents signés joints (bon de prêt ou contrat-cadre) : consulter, ajouter, supprimer
+async function modalDocsSignes(objet, id, titre){
+  let docs=[]; try{ docs = await API.docsSignes(objet, id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const ico = m => /pdf/.test(m||'') ? 'ti-file-type-pdf' : 'ti-photo';
+  showModal(`<div class="modal-header"><i class="ti ti-paperclip" style="color:var(--accent)"></i><h2>${TR('Documents signés')} — ${esc(titre||'')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      ${docs.length ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">${docs.map(d=>`<div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+          <i class="ti ${ico(d.mime)}" style="font-size:20px;color:var(--accent)"></i>
+          <div style="flex:1;min-width:0"><a href="/api/documents-signes/fichier/${d.id}" target="_blank" rel="noopener" style="font-weight:600;color:var(--text1)">${esc(d.nom||'document')}</a>
+            <div style="font-size:12px;color:var(--text3)">${TR('ajouté le')} ${d.created_at?new Date(d.created_at).toLocaleDateString('fr-FR'):''}${d.ajoute_par_nom?' · '+esc(d.ajoute_par_nom):''}${d.taille?' · '+Math.round(d.taille/1024)+' Ko':''}</div></div>
+          <a class="btn sm" href="/api/documents-signes/fichier/${d.id}" target="_blank" rel="noopener" title="${TR('Ouvrir')}"><i class="ti ti-external-link"></i></a>
+          <button class="btn sm danger" title="${TR('Supprimer')}" onclick="supprDocSigne(${d.id},'${objet}',${id},'${esc(String(titre||'')).replace(/'/g,'&#39;')}')"><i class="ti ti-trash"></i></button></div>`).join('')}</div>`
+        : `<p style="color:var(--text3);font-size:14px;margin-top:0">${TR('Aucun document signé joint pour le moment.')}</p>`}
+      <div class="form-group"><label class="form-label">${TR('Ajouter un document signé (PDF ou photo)')}</label><input class="form-input" id="doc-signe-file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Fermer')}</button><button class="btn primary" id="doc-signe-ok" onclick="ajouterDocSigneUI('${objet}',${id},'${esc(String(titre||'')).replace(/'/g,'&#39;')}')"><i class="ti ti-upload"></i>${TR('Ajouter')}</button></div>`);
+}
+window.modalDocsSignes = modalDocsSignes;
+async function ajouterDocSigneUI(objet, id, titre){
+  const b = document.getElementById('doc-signe-ok'); if(b) b.disabled = true;
+  try{ const f = await lireFichierSigne('doc-signe-file'); if(!f){ if(b) b.disabled=false; toast(TR('Choisis un fichier'),'ti-alert-circle','var(--warning)'); return; }
+    await API.ajouterDocSigne(objet, id, { fichier:f }); toast(TR('Document ajouté'),'ti-check','var(--success)');
+    if(STATE.view==='prets') render(); modalDocsSignes(objet, id, titre);
+  }catch(e){ if(b) b.disabled=false; toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.ajouterDocSigneUI = ajouterDocSigneUI;
+async function supprDocSigne(docId, objet, id, titre){
+  if(!confirm(TR('Supprimer ce document ?'))) return;
+  try{ await API.supprDocSigne(docId); if(STATE.view==='prets') render(); modalDocsSignes(objet, id, titre); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.supprDocSigne = supprDocSigne;
 
 async function pretStatut(id, statut){
   let extra=null;
@@ -9209,6 +9275,7 @@ async function modalContrat(clientId){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         <button class="btn" onclick="apercuContrat(${cc.id})"><i class="ti ti-eye"></i> ${TR('Aperçu')}</button>
         <button class="btn" onclick="exportContratPDF(${cc.id})"><i class="ti ti-file-type-pdf"></i> PDF</button>
+        <button class="btn" onclick="modalDocsSignes('contrat',${cc.id},'${esc(String(cc.distributeur_nom||'')).replace(/'/g,'&#39;')}')"><i class="ti ti-paperclip"></i> ${TR('Documents signés')}</button>
         ${signe?'':`<button class="btn" onclick="montrerLienSignature(location.origin+'/contrat/'+'${cc.token_signature||''}')"><i class="ti ti-link"></i> ${TR('Lien de signature')}</button>
         <button class="btn primary" onclick="envoyerContratLien(${cc.id})"><i class="ti ti-mail"></i> ${TR('Envoyer à signer')}</button>
         <button class="btn success" onclick="modalContratSigneMail(${cc.id})"><i class="ti ti-mail-check"></i> ${TR('Signé par mail')}</button>`}
@@ -9247,13 +9314,17 @@ function modalContratSigneMail(id){
     <div class="modal-body">
       <p style="font-size:14px;color:var(--text2);margin-top:0">${TR('Le distributeur a renvoyé le contrat-cadre signé par e-mail. Indiquez la date de signature.')}</p>
       <div class="form-group"><label class="form-label">${TR('Date de signature')}</label><input class="form-input" id="cc-signe-date" type="date" value="${today}" style="max-width:200px"></div>
+      <div class="form-group"><label class="form-label">${TR('Contrat signé reçu (PDF ou photo)')}</label><input class="form-input" id="cc-signe-file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp"></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="validerContratSigneMail(${id})"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
 }
 window.modalContratSigneMail = modalContratSigneMail;
 async function validerContratSigneMail(id){
   const d = gv('cc-signe-date'); if(!d){ toast(TR('Date requise'),'ti-alert-circle','var(--warning)'); return; }
-  try{ await API.signeContratCadreMail(id, d); closeModal(); toast(TR('Contrat-cadre signé par mail'),'ti-check','var(--success)'); }
+  try{ const f = await lireFichierSigne('cc-signe-file');
+    await API.signeContratCadreMail(id, d);
+    if(f) await API.ajouterDocSigne('contrat', id, { fichier:f });
+    closeModal(); toast(TR('Contrat-cadre signé par mail'),'ti-check','var(--success)'); }
   catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.validerContratSigneMail = validerContratSigneMail;
