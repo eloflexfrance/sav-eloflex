@@ -485,6 +485,13 @@ async function initDB() {
         UNIQUE (modele_id, page)
       )`);
       await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS photo TEXT`);
+      await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS lien_web TEXT`);
+      // Liens par défaut vers les pages modèles du site eloflex.fr (uniquement si jamais renseignés ; '' = aucun lien)
+      for (const [slug, code] of [['Eloflex_C3','c3'],['Eloflex_D2','d2'],['Eloflex_D2_Pre_2022','d2'],['Eloflex_F','f'],['Eloflex_F_Pre_2022','f'],
+          ['Eloflex_H','h'],['Eloflex_H2','h2'],['Eloflex_K','k'],['Eloflex_L','l'],['Eloflex_L_Pre_2022','l'],['Eloflex_P','p'],['Eloflex_P_Pre_2022','p'],
+          ['Eloflex_R','r'],['Eloflex_S1','s1'],['Eloflex_X','x']]) {
+        await client.query(`UPDATE eclates_modeles SET lien_web=$1 WHERE slug=$2 AND lien_web IS NULL`, ['https://eloflex.fr/produits/eloflex-' + code + '/', slug]);
+      }
       await client.query(`CREATE TABLE IF NOT EXISTS eclates_vues (
         id SERIAL PRIMARY KEY,
         modele_id INTEGER NOT NULL REFERENCES eclates_modeles(id) ON DELETE CASCADE,

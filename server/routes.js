@@ -1076,7 +1076,7 @@ const _ECL_CAT_JOIN = `LEFT JOIN LATERAL (
 
 router.get('/eclates', async (req, res) => {
   try {
-    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at, (m.photo IS NOT NULL) AS photo_perso,
+    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at, m.lien_web, (m.photo IS NOT NULL) AS photo_perso,
         (SELECT COUNT(*) FROM eclates_vues v WHERE v.modele_id = m.id)::int AS nb_vues,
         (SELECT COUNT(*) FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id WHERE v.modele_id = m.id)::int AS nb_lignes
       FROM eclates_modeles m ORDER BY m.ordre, m.nom`));
@@ -1097,7 +1097,7 @@ router.get('/eclates/par-ref/:ref', async (req, res) => {
 
 router.get('/eclates/:id', async (req, res) => {
   try {
-    const m = await db.get('SELECT id, slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, updated_at FROM eclates_modeles WHERE id=$1', [req.params.id]);
+    const m = await db.get('SELECT id, slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, updated_at, lien_web FROM eclates_modeles WHERE id=$1', [req.params.id]);
     if (!m) return res.status(404).json({ error: 'Éclaté introuvable' });
     const vues = await db.all(`SELECT v.id, v.code, v.page, v.ordre, v.nom_en, v.nom_fr, v.assembly_ref, v.clip, v.reperes, v.ocr,
         (SELECT c.designation FROM catalogue c WHERE COALESCE(v.assembly_ref,'') <> ''
@@ -1127,6 +1127,15 @@ router.get('/eclates/:id/photo', async (req, res) => {
     if (fs.existsSync(f)) return res.sendFile(f);
     res.status(404).send('Pas de photo');
   } catch (e) { res.status(500).send(e.message); }
+});
+router.put('/eclates/:id/lien', async (req, res) => {
+  try {
+    let u = String((req.body && req.body.lien_web) || '').trim();
+    if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+    const r = await db.run('UPDATE eclates_modeles SET lien_web=$1, updated_at=NOW() WHERE id=$2 RETURNING id, lien_web', [u, req.params.id]);
+    if (!r) return res.status(404).json({ error: 'Modèle introuvable' });
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.put('/eclates/:id/photo', async (req, res) => {
   try {
@@ -1158,16 +1167,19 @@ router.post('/eclates/import', adminOnly, async (req, res) => {
   }
   const pg = await db.pool.connect();
   try {
-    const ex = await pg.query('SELECT id FROM eclates_modeles WHERE slug=$1', [meta.slug]);
+    const ex = await pg.query('SELECT id, photo, lien_web FROM eclates_modeles WHERE slug=$1', [meta.slug]);
     if (ex.rows.length && b.remplacer !== true) {
       return res.status(409).json({ error: 'existe', message: `L'éclaté « ${meta.modele} » existe déjà.` });
     }
     await pg.query('BEGIN');
     if (ex.rows.length) await pg.query('DELETE FROM eclates_modeles WHERE id=$1', [ex.rows[0].id]);
-    const m = (await pg.query(`INSERT INTO eclates_modeles (slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, ordre)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+    // en cas de remplacement, on conserve la photo et le lien site web déjà saisis
+    const prev = ex.rows[0] || {};
+    const m = (await pg.query(`INSERT INTO eclates_modeles (slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, ordre, photo, lien_web)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
       [meta.slug, meta.modele || meta.slug, meta.ref_modele || null, meta.fichier || null, meta.date_doc || null,
-       meta.W || 842, meta.H || 596, meta.ordre || 0])).rows[0];
+       meta.W || 842, meta.H || 596, meta.ordre || 0, prev.photo || null,
+       (prev.lien_web != null ? prev.lien_web : null) || meta.lien_web || null])).rows[0];
     for (const [page, svg] of Object.entries(b.pages)) {
       await pg.query('INSERT INTO eclates_pages (modele_id, page, svg) VALUES ($1,$2,$3)', [m.id, parseInt(page), svg]);
     }

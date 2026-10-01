@@ -169,6 +169,14 @@ async function renderEclates(ttl, c, a){
 }
 window.renderEclates = renderEclates;
 
+// Lien vers la page du fauteuil sur le site web (vide = aucun lien)
+async function modifierLien(id, actuel){
+  const u = prompt(TR('Adresse de la page du fauteuil sur le site web (laisser vide pour retirer le lien) :'), actuel || 'https://eloflex.fr/produits/');
+  if (u === null) return false;
+  try { await API.put(`/eclates/${id}/lien`, { lien_web: u.trim() }); if (typeof toast === 'function') toast(TR('Lien enregistré'), 'ti-check', 'var(--success)'); return true; }
+  catch (err) { if (typeof toast === 'function') toast('Erreur : ' + err.message, 'ti-alert-circle', 'var(--danger)'); return false; }
+}
+
 // Redimensionne une photo (côté max) et la renvoie en JPEG data-URL
 function photoReduite(file, max){
   return new Promise((ok, ko) => {
@@ -200,17 +208,25 @@ async function renderListe(ttl, c, a){
       <b><i class="ti ti-schema" style="color:var(--accent)"></i> ${e_(m.nom)}</b>
       <small>${m.ref_modele ? 'Réf. ' + e_(m.ref_modele) + ' · ' : ''}${e_(m.date_doc || '')}</small>
       <small>${m.nb_vues} ${TR('vues')} · ${m.nb_lignes} ${TR('lignes')}</small>
+      ${(m.lien_web || edit) ? `<small style="margin-top:6px;display:flex;gap:10px;align-items:center">
+        ${m.lien_web ? `<a href="${e_(m.lien_web)}" target="_blank" rel="noopener" class="ecl-web" style="color:var(--accent);text-decoration:none"><i class="ti ti-world"></i> ${TR('Voir sur le site')}</a>` : ''}
+        ${edit ? `<span class="ecl-mini" data-lien="${m.id}" data-url="${e_(m.lien_web || '')}" title="${TR('Lien vers la page du site web')}"><i class="ti ti-link"></i> ${m.lien_web ? TR('Modifier le lien') : TR('Ajouter un lien')}</span>` : ''}
+      </small>` : ''}
       ${admin ? `<small style="margin-top:8px"><span class="ecl-mini" data-del="${m.id}" data-nom="${e_(m.nom)}"><i class="ti ti-trash"></i> ${TR('Supprimer')}</span></small>` : ''}
     </div>`).join('')}</div>`
     : `<div class="empty"><i class="ti ti-schema"></i>${TR('Aucun éclaté importé pour le moment.')}${admin ? '<br>' + TR('Utilisez « Importer des éclatés » avec les fichiers .json fournis.') : ''}</div>`;
   c.querySelectorAll('.ecl-card').forEach(el => el.addEventListener('click', ev => {
-    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]')) return;
+    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-lien]') || ev.target.closest('.ecl-web')) return;
     E.modeleId = +el.dataset.id; E.vueId = null; E.data = null; back = null; render();
   }));
   c.querySelectorAll('[data-del]').forEach(el => el.addEventListener('click', async ev => {
     ev.stopPropagation();
     if (!confirm(TR('Supprimer l’éclaté') + ' « ' + el.dataset.nom + ' » ?')) return;
     await API.delete(`/eclates/${el.dataset.del}`); render();
+  }));
+  c.querySelectorAll('[data-lien]').forEach(el => el.addEventListener('click', async ev => {
+    ev.stopPropagation();
+    if (await modifierLien(+el.dataset.lien, el.dataset.url)) render();
   }));
   c.querySelectorAll('[data-photo]').forEach(lb => {
     lb.addEventListener('click', ev => ev.stopPropagation());
@@ -270,6 +286,9 @@ function renderViewer(ttl, c, a){
     <button class="btn" id="ecl-back"><i class="ti ti-arrow-left"></i> ${T('back')}</button>
     <div style="position:relative"><input id="ecl-q" class="search-bar" placeholder="${T('search')}" autocomplete="off" style="width:260px"><div class="ecl-res" id="ecl-res"></div></div>
     <div class="ecl-seg"><button data-lg="fr" class="${L()==='fr'?'on':''}">FR</button><button data-lg="en" class="${L()==='en'?'on':''}">EN</button></div>
+    ${d.lien_web ? `<a class="btn" href="${e_(d.lien_web)}" target="_blank" rel="noopener" title="${e_(d.lien_web)}"><i class="ti ti-world"></i> ${L()==='fr' ? 'Site web' : 'Website'}</a>` : ''}
+    ${E.edit ? `<button class="btn" id="ecl-lien"><i class="ti ti-link"></i> ${TR('Lien site web')}</button>` : ''}
+    <button class="btn" id="ecl-pdf"><i class="ti ti-file-type-pdf"></i> PDF</button>
     ${peutModifier() ? `<button class="btn ${E.edit ? 'primary' : ''}" id="ecl-edit"><i class="ti ti-pencil"></i> ${T('editOn')}</button>` : ''}
   </div>`;
   c.innerHTML = `<div class="ecl-wrap ${E.edit ? 'ecl-edit-on' : ''}">
@@ -296,6 +315,8 @@ function renderViewer(ttl, c, a){
   a.querySelectorAll('[data-lg]').forEach(b => b.onclick = () => { E.lang = b.dataset.lg; renderViewer(ttl, c, a); });
   if ($('ecl-edit')) $('ecl-edit').onclick = () => { E.edit = !E.edit; addMode = null; renderViewer(ttl, c, a); };
   if ($('ecl-vedit')) $('ecl-vedit').onclick = editerVue;
+  if ($('ecl-lien')) $('ecl-lien').onclick = async () => { if (await modifierLien(d.id, d.lien_web)) { const r = await API.get(`/eclates/${d.id}`); d.lien_web = r.lien_web; renderViewer(ttl, c, a); } };
+  $('ecl-pdf').onclick = choisirPDF;
   if ($('ecl-addb')) $('ecl-addb').onclick = () => { addMode = { step: 1 }; hint(TR('Cliquez à l’endroit de la nouvelle bulle (Échap pour annuler)')); $('ecl-paper').classList.add('adding'); };
   bindZoom(); bindSearch();
   const pend = E._pendingSel; E._pendingSel = null;
@@ -621,5 +642,144 @@ async function creerArticle(id){
   const set = (k, val) => { const el = $(k); if (el) el.value = val; };
   set('f-ref', it.ref || ''); set('f-reffou', it.ref || ''); set('f-des', it.desc_fr || it.desc_fr_auto || it.desc_en || '');
   E.data = null;   // l'article créé sera relié au prochain affichage
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ── Export PDF de l'éclaté (FR ou EN) : dessin + nomenclature à jour ──
+// ══════════════════════════════════════════════════════════════════
+function choisirPDF(){
+  const lg = L();
+  showModal(`<div class="modal-header"><i class="ti ti-file-type-pdf" style="color:var(--accent)"></i><h2>${TR('Télécharger l’éclaté en PDF')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">${TR('Langue')}</label>
+        <div style="display:flex;gap:16px;font-size:14px">
+          <label><input type="radio" name="ecl-pl" value="fr" ${lg==='fr'?'checked':''}> Français</label>
+          <label><input type="radio" name="ecl-pl" value="en" ${lg==='en'?'checked':''}> English</label></div></div>
+      <div class="form-group"><label class="form-label">${TR('Contenu')}</label>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:14px">
+          <label><input type="radio" name="ecl-ps" value="all" checked> ${TR('Toutes les vues du modèle')} (${E.data.vues.length})</label>
+          <label><input type="radio" name="ecl-ps" value="cur"> ${TR('Vue affichée uniquement')} — ${e_(vname(cur()))}</label></div></div>
+      <div id="ecl-pmsg" style="font-size:13px;color:var(--text2)"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Annuler')}</button>
+      <button class="btn primary" id="ecl-pgo"><i class="ti ti-download"></i> ${TR('Télécharger')}</button></div>`);
+  $('ecl-pgo').onclick = async () => {
+    const lang = document.querySelector('input[name=ecl-pl]:checked').value;
+    const all = document.querySelector('input[name=ecl-ps]:checked').value === 'all';
+    const b = $('ecl-pgo'); b.disabled = true;
+    try { await exporterPDF(lang, all ? E.data.vues : [cur()], (k, n) => { $('ecl-pmsg').textContent = TR('Préparation') + ` ${k}/${n}…`; }); closeModal(); }
+    catch (err) { b.disabled = false; $('ecl-pmsg').innerHTML = '<span style="color:var(--danger)">Erreur : ' + e_(err.message) + '</span>'; }
+  };
+}
+window.choisirPDF = choisirPDF;
+
+// Rend le dessin d'une vue (avec bulles corrigées) en image JPEG
+async function imageVue(v){
+  const W = +E.data.largeur || 842, H = +E.data.hauteur || 596;
+  const [x0, y0, x1, y1] = v.clip || [0, 0, W, H];
+  const doc = new DOMParser().parseFromString(await pageSvg(v.page), 'image/svg+xml');
+  const sv = doc.documentElement;
+  sv.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  sv.setAttribute('viewBox', `${x0} ${y0} ${x1 - x0} ${y1 - y0}`);
+  const sc = Math.min(4, 2600 / (x1 - x0));
+  const cw = Math.round((x1 - x0) * sc), ch = Math.round((y1 - y0) * sc);
+  sv.setAttribute('width', cw); sv.setAttribute('height', ch);
+  let fh = '';
+  v.reperes.forEach(b => {
+    if (b.deleted){ fh += `<circle cx="${b.cx}" cy="${b.cy}" r="${b.r + 1}" fill="#fff"/>`; return; }
+    if (!b.draw) return;
+    if (b.newlead && b.px != null){ const dx = b.px - b.cx, dy = b.py - b.cy, Ln = Math.hypot(dx, dy) || 1;
+      fh += `<line x1="${b.cx + dx / Ln * b.r}" y1="${b.cy + dy / Ln * b.r}" x2="${b.px}" y2="${b.py}" stroke="#000" stroke-width=".5"/><circle cx="${b.px}" cy="${b.py}" r=".9" fill="#000"/>`; }
+    fh += `<circle cx="${b.cx}" cy="${b.cy}" r="${b.r + .6}" fill="#fff" stroke="#000" stroke-width=".5"/><text x="${b.cx}" y="${b.cy}" text-anchor="middle" dominant-baseline="central" font-family="Arial,sans-serif" font-size="${Math.max(7, b.r * 1.05)}" fill="#000">${e_(b.num)}</text>`;
+  });
+  const g = doc.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.innerHTML = fh; sv.appendChild(g);
+  const src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(sv));
+  const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error(TR('Dessin illisible') + ' (' + vname(v) + ')')); i.src = src; });
+  const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+  const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cw, ch); ctx.drawImage(img, 0, 0, cw, ch);
+  return { data: cv.toDataURL('image/jpeg', 0.9), w: cw, h: ch };
+}
+
+async function exporterPDF(lang, vues, prog){
+  if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF indisponible');
+  const fr = lang === 'fr', d = E.data;
+  const t = fr ? { pos: 'Repère', ref: 'Référence', des: 'Désignation', qty: 'Qté', parts: 'Nomenclature', cables: 'Câbles (sans repère)',
+                   ed: 'Édité le', p: 'Page', web: 'Site web', sub: 'Sous-ensemble réf. ', title: 'Vue éclatée', sold: 'vendu séparément' }
+               : { pos: 'Item', ref: 'Part number', des: 'Description', qty: 'Qty', parts: 'Parts list', cables: 'Cables (no item number)',
+                   ed: 'Printed on', p: 'Page', web: 'Website', sub: 'Sub-assembly ref. ', title: 'Exploded view', sold: 'sold separately' };
+  const nomVue = v => fr ? v.label_fr : v.label_en;
+  const desig = it => fr ? (it.fr || it.desc_en || '') : (it.desc_en || it.fr || '');
+  const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const PW = 297, PH = 210, M = 10, BLEU = [31, 92, 140];
+  const today = new Date().toLocaleDateString(fr ? 'fr-FR' : 'en-GB');
+  const entete = (titre, sous) => {
+    pdf.setFillColor(...BLEU); pdf.rect(0, 0, PW, 15, 'F');
+    pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13);
+    pdf.text(`${d.nom} — ${titre}`, M, 9.5);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
+    pdf.text([d.ref_modele ? (fr ? 'Réf. ' : 'Ref. ') + d.ref_modele : '', sous || ''].filter(Boolean).join('   ·   '), PW - M, 9.5, { align: 'right' });
+    pdf.setTextColor(0, 0, 0);
+  };
+  const pied = () => {
+    pdf.setFontSize(7.5); pdf.setTextColor(120, 120, 120);
+    pdf.text(`Eloflex — ${t.title} ${d.nom}${d.date_doc ? ' (' + d.date_doc + ')' : ''} — ${t.ed} ${today}`, M, PH - 5);
+    if (d.lien_web){ pdf.setTextColor(...BLEU); pdf.textWithLink(`${t.web} : ${d.lien_web}`, PW / 2 + 10, PH - 5, { url: d.lien_web }); }
+    pdf.setTextColor(0, 0, 0);
+  };
+  let first = true;
+  for (let k = 0; k < vues.length; k++){
+    const v = vues[k]; prog && prog(k + 1, vues.length);
+    const im = await imageVue(v);
+    if (!first) pdf.addPage(); first = false;
+    const sous = v.assembly_ref ? t.sub + v.assembly_ref : '';
+    entete(nomVue(v), sous);
+    // dessin (gauche) + nomenclature (droite) si elle tient, sinon pages suivantes
+    const rows = v.items.map(it => [it.pos || '', it.ref || '', desig(it) + (it.note && /separat|séparé/i.test(it.note) ? ' (' + t.sold + ')' : ''), it.qty != null ? String(it.qty) : '']);
+    const cab = v.extras.map(it => ['', it.ref || '', desig(it), it.qty != null ? String(it.qty) : '']);
+    const tableW = 112, top = 20, bas = PH - 10;
+    const dw = PW - 2 * M - tableW - 6, dh = bas - top;
+    const k2 = Math.min(dw / im.w, dh / im.h);
+    pdf.addImage(im.data, 'JPEG', M + (dw - im.w * k2) / 2, top + (dh - im.h * k2) / 2, im.w * k2, im.h * k2);
+    // tableau
+    const cols = [{ w: 13, a: 'center' }, { w: 30 }, { w: 58 }, { w: 11, a: 'center' }];
+    let x0 = PW - M - tableW, y = top;
+    const ligneH = 4.6;
+    const head = () => {
+      pdf.setFillColor(...BLEU); pdf.rect(x0, y, tableW, 6, 'F');
+      pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8);
+      let cx = x0; [t.pos, t.ref, t.des, t.qty].forEach((h, i) => { pdf.text(h, cols[i].a === 'center' ? cx + cols[i].w / 2 : cx + 1.5, y + 4.1, { align: cols[i].a === 'center' ? 'center' : 'left' }); cx += cols[i].w; });
+      pdf.setTextColor(0, 0, 0); pdf.setFont('helvetica', 'normal'); y += 6;
+    };
+    const nouvellePage = () => { pied(); pdf.addPage(); entete(nomVue(v) + ' — ' + t.parts, sous); x0 = M; y = top; head(); };
+    head();
+    const all = rows.concat(cab.length ? [['§', t.cables, '', '']] : [], cab);
+    all.forEach((r, i) => {
+      if (r[0] === '§'){
+        if (y + 6 > bas) nouvellePage();
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); pdf.text(r[1], x0 + 1.5, y + 4); pdf.setFont('helvetica', 'normal'); y += 6; return;
+      }
+      pdf.setFontSize(7.6);
+      const lines = pdf.splitTextToSize(r[2], cols[2].w - 3);
+      const h = Math.max(ligneH, lines.length * 3.3 + 1.4);
+      if (y + h > bas) nouvellePage();
+      if (i % 2) { pdf.setFillColor(242, 245, 248); pdf.rect(x0, y, tableW, h, 'F'); }
+      let cx = x0;
+      [r[0], r[1], lines, r[3]].forEach((val, j) => {
+        if (cols[j].a === 'center') pdf.text(String(val), cx + cols[j].w / 2, y + 3.3, { align: 'center' });
+        else pdf.text(val, cx + 1.5, y + 3.3);
+        cx += cols[j].w;
+      });
+      pdf.setDrawColor(220, 225, 230); pdf.line(x0, y + h, x0 + tableW, y + h);
+      y += h;
+    });
+    pied();
+  }
+  // numéros de page
+  const n = pdf.getNumberOfPages();
+  for (let i = 1; i <= n; i++){ pdf.setPage(i); pdf.setFontSize(7.5); pdf.setTextColor(120, 120, 120); pdf.text(`${t.p} ${i}/${n}`, PW - M, PH - 5, { align: 'right' }); }
+  const propre = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
+  const nomFic = (fr ? 'Eclate_' : 'Exploded_view_') + propre(d.nom) + (vues.length === 1 && E.data.vues.length > 1 ? '_' + propre(nomVue(vues[0])).slice(0, 40) : '') + '_' + lang.toUpperCase() + '.pdf';
+  pdf.save(nomFic);
 }
 })();
