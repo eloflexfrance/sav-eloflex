@@ -1076,7 +1076,7 @@ const _ECL_CAT_JOIN = `LEFT JOIN LATERAL (
 
 router.get('/eclates', async (req, res) => {
   try {
-    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at,
+    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at, (m.photo IS NOT NULL) AS photo_perso,
         (SELECT COUNT(*) FROM eclates_vues v WHERE v.modele_id = m.id)::int AS nb_vues,
         (SELECT COUNT(*) FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id WHERE v.modele_id = m.id)::int AS nb_lignes
       FROM eclates_modeles m ORDER BY m.ordre, m.nom`));
@@ -1114,6 +1114,31 @@ router.get('/eclates/:id', async (req, res) => {
 });
 
 // SVG d'une page (mis en cache par le navigateur : le contenu ne change qu'à la réimportation)
+// Photo du modèle : photo enregistrée dans l'appli, sinon photo par défaut livrée avec l'appli (public/img/eclates/<slug>.jpg)
+router.get('/eclates/:id/photo', async (req, res) => {
+  try {
+    const m = await db.get('SELECT slug, photo FROM eclates_modeles WHERE id=$1', [req.params.id]);
+    if (!m) return res.status(404).send('Modèle introuvable');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    const mt = m.photo && /^data:(image\/[a-z+]+);base64,(.+)$/s.exec(m.photo);
+    if (mt) { res.setHeader('Content-Type', mt[1]); return res.send(Buffer.from(mt[2], 'base64')); }
+    const path = require('path'), fs = require('fs');
+    const f = path.join(__dirname, '..', 'public', 'img', 'eclates', String(m.slug).replace(/[^\w-]/g, '') + '.jpg');
+    if (fs.existsSync(f)) return res.sendFile(f);
+    res.status(404).send('Pas de photo');
+  } catch (e) { res.status(500).send(e.message); }
+});
+router.put('/eclates/:id/photo', async (req, res) => {
+  try {
+    const ph = req.body && req.body.photo;
+    if (ph && !/^data:image\/(jpeg|png|webp);base64,/.test(ph)) return res.status(400).json({ error: 'Image JPG, PNG ou WEBP attendue' });
+    if (ph && ph.length > 1500000) return res.status(400).json({ error: 'Image trop lourde' });
+    const r = await db.run('UPDATE eclates_modeles SET photo=$1, updated_at=NOW() WHERE id=$2 RETURNING id, updated_at', [ph || null, req.params.id]);
+    if (!r) return res.status(404).json({ error: 'Modèle introuvable' });
+    res.json({ ok: true, updated_at: r.updated_at });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/eclates/:id/pages/:page', async (req, res) => {
   try {
     const p = await db.get('SELECT svg FROM eclates_pages WHERE modele_id=$1 AND page=$2', [req.params.id, req.params.page]);

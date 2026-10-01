@@ -146,6 +146,11 @@ function css(){
 .ecl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
 .ecl-card{border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;background:var(--surface,#fff)}
 .ecl-card:hover{border-color:var(--accent)}
+.ecl-card .ecl-photo{height:170px;margin:-14px -14px 10px;border-radius:12px 12px 0 0;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:1px solid var(--border);position:relative}
+.ecl-card .ecl-photo img{max-width:100%;max-height:100%;object-fit:contain}
+.ecl-card .ecl-photo.vide{color:var(--text3);font-size:40px}
+.ecl-card .ecl-photo .ecl-phbtn{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:3px 7px;font-size:12px;opacity:0;transition:opacity .15s}
+.ecl-card:hover .ecl-photo .ecl-phbtn{opacity:1}
 .ecl-card b{font-size:15px}.ecl-card small{display:block;color:var(--text3);margin-top:3px}
 @media (max-width:900px){.ecl-main{flex-direction:column}.ecl-viewer{height:55vh;flex:none}.ecl-aside{width:auto;border-left:none;border-top:1px solid var(--border);flex:1}.ecl-wrap{height:auto}}
 `;
@@ -164,6 +169,21 @@ async function renderEclates(ttl, c, a){
 }
 window.renderEclates = renderEclates;
 
+// Redimensionne une photo (côté max) et la renvoie en JPEG data-URL
+function photoReduite(file, max){
+  return new Promise((ok, ko) => {
+    const fr = new FileReader();
+    fr.onerror = () => ko(new Error(TR('Lecture du fichier impossible')));
+    fr.onload = () => { const img = new Image(); img.onerror = () => ko(new Error(TR('Image illisible')));
+      img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas'); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+        const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
+        ok(cv.toDataURL('image/jpeg', 0.85)); };
+      img.src = fr.result; };
+    fr.readAsDataURL(file);
+  });
+}
+
 // ── Liste des modèles ──────────────────────────────────────────────
 async function renderListe(ttl, c, a){
   ttl.textContent = TR('Éclatés');
@@ -173,7 +193,10 @@ async function renderListe(ttl, c, a){
     ${admin ? `<label class="btn primary" style="cursor:pointer"><i class="ti ti-upload"></i> ${TR('Importer des éclatés')}<input type="file" id="ecl-import" accept=".json,application/json" multiple style="display:none"></label>` : ''}
   </div>`;
   const list = await API.get('/eclates');
+  const edit = peutModifier();
   c.innerHTML = list.length ? `<div class="ecl-grid">${list.map(m => `<div class="ecl-card" data-id="${m.id}">
+      <div class="ecl-photo"><img src="/api/eclates/${m.id}/photo?v=${encodeURIComponent(m.updated_at || '')}" alt="${e_(m.nom)}" loading="lazy" onerror="this.parentNode.classList.add('vide');this.replaceWith(Object.assign(document.createElement('i'),{className:'ti ti-wheelchair'}))">
+        ${edit ? `<label class="ecl-phbtn" data-photo="${m.id}" title="${TR('Changer la photo')}"><i class="ti ti-camera"></i> ${TR('Photo')}<input type="file" accept="image/jpeg,image/png,image/webp" style="display:none"></label>` : ''}</div>
       <b><i class="ti ti-schema" style="color:var(--accent)"></i> ${e_(m.nom)}</b>
       <small>${m.ref_modele ? 'Réf. ' + e_(m.ref_modele) + ' · ' : ''}${e_(m.date_doc || '')}</small>
       <small>${m.nb_vues} ${TR('vues')} · ${m.nb_lignes} ${TR('lignes')}</small>
@@ -181,7 +204,7 @@ async function renderListe(ttl, c, a){
     </div>`).join('')}</div>`
     : `<div class="empty"><i class="ti ti-schema"></i>${TR('Aucun éclaté importé pour le moment.')}${admin ? '<br>' + TR('Utilisez « Importer des éclatés » avec les fichiers .json fournis.') : ''}</div>`;
   c.querySelectorAll('.ecl-card').forEach(el => el.addEventListener('click', ev => {
-    if (ev.target.closest('[data-del]')) return;
+    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]')) return;
     E.modeleId = +el.dataset.id; E.vueId = null; E.data = null; back = null; render();
   }));
   c.querySelectorAll('[data-del]').forEach(el => el.addEventListener('click', async ev => {
@@ -189,6 +212,18 @@ async function renderListe(ttl, c, a){
     if (!confirm(TR('Supprimer l’éclaté') + ' « ' + el.dataset.nom + ' » ?')) return;
     await API.delete(`/eclates/${el.dataset.del}`); render();
   }));
+  c.querySelectorAll('[data-photo]').forEach(lb => {
+    lb.addEventListener('click', ev => ev.stopPropagation());
+    lb.querySelector('input').addEventListener('change', async ev => {
+      const f = ev.target.files && ev.target.files[0]; if (!f) return;
+      try {
+        const data = await photoReduite(f, 900);
+        await API.put(`/eclates/${lb.dataset.photo}/photo`, { photo: data });
+        if (typeof toast === 'function') toast(TR('Photo enregistrée'), 'ti-check', 'var(--success)');
+        render();
+      } catch (err) { if (typeof toast === 'function') toast('Erreur : ' + err.message, 'ti-alert-circle', 'var(--danger)'); }
+    });
+  });
   const inp = $('ecl-import'); if (inp) inp.addEventListener('change', () => importer(inp));
   const gs = $('ecl-gsearch');
   gs.addEventListener('input', () => { clearTimeout(window._eclGS); window._eclGS = setTimeout(async () => {

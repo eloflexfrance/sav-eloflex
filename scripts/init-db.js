@@ -484,6 +484,7 @@ async function initDB() {
         svg TEXT NOT NULL,
         UNIQUE (modele_id, page)
       )`);
+      await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS photo TEXT`);
       await client.query(`CREATE TABLE IF NOT EXISTS eclates_vues (
         id SERIAL PRIMARY KEY,
         modele_id INTEGER NOT NULL REFERENCES eclates_modeles(id) ON DELETE CASCADE,
