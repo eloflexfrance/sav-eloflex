@@ -662,7 +662,15 @@ router.post('/clients/:id/regenerer-token', async (req, res) => {
 });
 
 router.delete('/clients/:id', async (req, res) => {
-  try { await db.run('DELETE FROM clients WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
+  try {
+    // Sécurité : ne pas effacer (en cascade) un contrat-cadre signé ni des bons de prêt
+    const cc = await db.get("SELECT statut FROM contrats_cadre WHERE client_id=$1", [req.params.id]);
+    const np = await db.get('SELECT COUNT(*)::int AS n FROM prets WHERE client_id=$1 OR livraison_client_id=$1', [req.params.id]);
+    if ((cc && cc.statut === 'signe') || (np && np.n > 0)) {
+      return res.status(409).json({ error: 'Ce distributeur a ' + (cc && cc.statut === 'signe' ? 'un contrat-cadre signé' : '') + (cc && cc.statut === 'signe' && np.n ? ' et ' : '') + (np.n ? np.n + ' bon(s) de prêt' : '') + ' : utilise plutôt « Fusionner » vers la bonne fiche pour ne rien perdre.' });
+    }
+    await db.run('DELETE FROM clients WHERE id=$1', [req.params.id]); res.json({ ok: true });
+  }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2285,6 +2293,44 @@ router.post('/clients/adresses-completer', adminOnly, async (req, res) => {
 
 
 
+// Rattache à la fiche cible TOUT ce qui référence la fiche source (avant sa suppression),
+// pour ne rien perdre : bons de prêt, contrat-cadre, devis, demandes, etc.
+// Le contrat-cadre est unique par distributeur : on garde le plus avancé (signé > envoyé > brouillon).
+async function _reattacherClient(pg, cibleId, sourceId) {
+  const bilan = {};
+  const rang = st => ({ signe: 3, envoye: 2, brouillon: 1 }[st] || 0);
+  try {
+    await pg.query('SAVEPOINT cc_fusion');
+    const cs = (await pg.query('SELECT id, statut FROM contrats_cadre WHERE client_id=$1', [sourceId])).rows[0];
+    if (cs) {
+      const ct = (await pg.query('SELECT id, statut FROM contrats_cadre WHERE client_id=$1', [cibleId])).rows[0];
+      if (ct && rang(cs.statut) > rang(ct.statut)) await pg.query('DELETE FROM contrats_cadre WHERE id=$1', [ct.id]);
+      if (!ct || rang(cs.statut) > rang(ct.statut)) {
+        await pg.query('UPDATE contrats_cadre SET client_id=$1, updated_at=NOW() WHERE id=$2', [cibleId, cs.id]);
+        bilan.contrat_cadre = 'transféré';
+      } else bilan.contrat_cadre = 'conservé celui de la fiche cible';
+    }
+    await pg.query('RELEASE SAVEPOINT cc_fusion');
+  } catch (e) { await pg.query('ROLLBACK TO SAVEPOINT cc_fusion'); bilan.contrat_cadre_erreur = e.message; }
+  // Toutes les clés étrangères vers clients(id)
+  const fks = (await pg.query(`SELECT c.conrelid::regclass::text AS tbl, a.attname AS col
+      FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+     WHERE c.contype = 'f' AND c.confrelid = 'clients'::regclass`)).rows;
+  const cols = fks.map(f => [f.tbl, f.col]).concat([['prets', 'livraison_client_id'], ['clients', 'entite_facturation_id']]);
+  const vus = new Set();
+  for (const [tbl, col] of cols) {
+    const k = tbl + '.' + col; if (vus.has(k) || tbl === 'contrats_cadre') continue; vus.add(k);
+    if (!/^[\w."]+$/.test(tbl) || !/^\w+$/.test(col)) continue;
+    try {
+      await pg.query('SAVEPOINT fk_fusion');
+      const r = await pg.query(`UPDATE ${tbl} SET ${col}=$1 WHERE ${col}=$2`, [cibleId, sourceId]);
+      await pg.query('RELEASE SAVEPOINT fk_fusion');
+      if (r.rowCount) bilan[k] = r.rowCount;
+    } catch (e) { await pg.query('ROLLBACK TO SAVEPOINT fk_fusion'); bilan[k + '_erreur'] = e.message; }
+  }
+  return bilan;
+}
+
 // ── FUSION DE CLIENTS ─────────────────────────────────────────────
 // Fusionner client_source dans client_cible (rattacher fauteuils + interventions)
 router.post('/clients/:id/fusionner', async (req, res) => {
@@ -2336,12 +2382,15 @@ router.post('/clients/:id/fusionner', async (req, res) => {
       );
     }
 
+    // Contrat-cadre, bons de prêt, devis… : tout ce qui pointe encore vers le doublon est rattaché à la cible
+    const rattaches = await _reattacherClient(pgClient, clientCibleId, clientSourceId);
+
     // Supprimer le client source (maintenant vide)
     await pgClient.query('DELETE FROM clients WHERE id=$1', [clientSourceId]);
 
     await pgClient.query('COMMIT');
     res.json({ ok: true, fauteuils_transferes: fauteuils, interventions_transferees: interventions,
-      commandes_transferees: commandes, points_carte_transferes: pointsCarte });
+      commandes_transferees: commandes, points_carte_transferes: pointsCarte, autres_rattachements: rattaches });
   } catch(e) {
     await pgClient.query('ROLLBACK');
     res.status(500).json({ error: e.message });
@@ -7935,9 +7984,30 @@ router.get('/prets/:id', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Retrouve la fiche distributeur d'un bon de prêt saisi sans fiche liée (nom Pennylane différent…) :
+// 1) e-mail identique, 2) nom identique (sans accents / ponctuation), 3) nom contenu l'un dans l'autre, unique.
+async function _trouverClientPret(d) {
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  const cls = await db.all("SELECT id, nom, email FROM clients WHERE COALESCE(type,'Distributeur') <> 'Particulier'");
+  const em = String(d.email || '').trim().toLowerCase();
+  if (em) {
+    const parEmail = cls.filter(c => String(c.email || '').toLowerCase().split(/[,;\s]+/).includes(em));
+    if (parEmail.length === 1) return parEmail[0].id;
+  }
+  const n = norm(d.distributeur_nom); if (!n) return null;
+  const exact = cls.filter(c => norm(c.nom) === n);
+  if (exact.length === 1) return exact[0].id;
+  const mots = n.split(' ').filter(w => w.length > 2);
+  const proches = cls.filter(c => { const cn = norm(c.nom); if (!cn) return false;
+    const cm = cn.split(' ').filter(w => w.length > 2);
+    return cm.length && cm.every(w => mots.includes(w)); });
+  return proches.length === 1 ? proches[0].id : null;
+}
+
 router.post('/prets', requireAuth, async (req, res) => {
   try {
     const d = req.body || {};
+    if (!d.client_id) { try { d.client_id = await _trouverClientPret(d); } catch (_) {} }
     const token = crypto.randomBytes(20).toString('hex');
     const row = await db.run(
       `INSERT INTO prets (client_id, distributeur_nom, contact, email, tel, adresse, formule,
@@ -7958,6 +8028,37 @@ router.post('/prets', requireAuth, async (req, res) => {
       if (cc) row.contrat_cadre = { id: cc.id, statut: cc.statut, manquants: _contratManquants(cc) };
     } catch (e) { console.error('[PRET] contrat auto:', e.message); }
     res.json(row);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Réparation : relier un bon de prêt à sa fiche distributeur (lien perdu lors d'une fusion / nom non reconnu).
+// restaurer_contrat_signe : recrée le contrat-cadre signé à partir de la signature unique du bon (cas « 2 documents, 1 signature »).
+router.post('/prets/:id/lier-client', adminOnly, async (req, res) => {
+  try {
+    const cid = parseInt(req.body && req.body.client_id);
+    const p = await db.get('SELECT * FROM prets WHERE id=$1', [req.params.id]);
+    if (!p) return res.status(404).json({ error: 'Prêt introuvable' });
+    const cl = cid && await db.get('SELECT * FROM clients WHERE id=$1', [cid]);
+    if (!cl) return res.status(400).json({ error: 'Fiche distributeur introuvable' });
+    await db.run('UPDATE prets SET client_id=$1, updated_at=NOW() WHERE id=$2', [cid, p.id]);
+    let contrat = await db.get('SELECT id, statut FROM contrats_cadre WHERE client_id=$1', [cid]);
+    if (req.body.restaurer_contrat_signe && p.signed_at && p.signature_data && !(contrat && contrat.statut === 'signe')) {
+      const token = crypto.randomBytes(20).toString('hex');
+      if (contrat) await db.run('DELETE FROM contrats_cadre WHERE id=$1', [contrat.id]);
+      let rep = null; if (p.cree_par) { try { rep = (await db.get('SELECT nom FROM users WHERE id=$1', [p.cree_par]) || {}).nom || null; } catch (_) {} }
+      contrat = await db.run(
+        `INSERT INTO contrats_cadre (client_id, distributeur_nom, lieu, representant_eloflex, representant_distrib, siret_distrib, siege_distrib,
+           statut, token_signature, signataire_nom, signature_data, signed_at, sign_ip, sign_ua, cree_par, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'signe',$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id, statut`,
+        [cid, cl.nom, cl.ville || null, rep, p.signataire_nom, cl.siret || cl.siren || null,
+         cl.adresse ? [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(' ') : null,
+         token, p.signataire_nom, p.signature_data, p.signed_at, p.sign_ip, p.sign_ua, p.cree_par, p.created_at]);
+      try { await addAlerte('contrat_signe', contrat.id, `🔧 Contrat-cadre de ${cl.nom} restauré (signé le ${new Date(p.signed_at).toLocaleDateString('fr-FR')} avec le bon de prêt).`); } catch (_) {}
+    } else if (!contrat || contrat.statut !== 'signe') {
+      const cc = await _contratPourPret(Object.assign({}, p, { client_id: cid }), (req.session.user && req.session.user.id) || null);
+      contrat = cc ? { id: cc.id, statut: cc.statut } : contrat;
+    }
+    res.json({ ok: true, pret: p.id, client: cl.nom, contrat });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -4032,7 +4032,7 @@ function clientForm(d={}){return `<div class="grid-2">
 // Cache léger des fiches clients (listes déroulantes, recherches). Rechargé si force=true ou après
 // création / modification / suppression d'une fiche (sinon un nouveau distributeur restait introuvable
 // dans les recherches — ex. contrat-cadre — jusqu'au rechargement de la page).
-async function ensureClientsCache(force){ if(force || !window._clientsCache){ try{ const cs = await API.clients(); window._clientsCache = (cs||[]).map(c=>({id:c.id,nom:c.nom,ville:c.ville,type:c.type})); }catch(e){ if(!window._clientsCache) window._clientsCache=[]; } } }
+async function ensureClientsCache(force){ if(force || !window._clientsCache){ try{ const cs = await API.clients(); window._clientsCache = (cs||[]).map(c=>({id:c.id,nom:c.nom,ville:c.ville,type:c.type,email:c.email})); }catch(e){ if(!window._clientsCache) window._clientsCache=[]; } } }
 window.ensureClientsCache = ensureClientsCache;
 // N° de TVA intracommunautaire français déduit du SIREN : FR + clé ((12 + 3 × (SIREN mod 97)) mod 97) + SIREN
 function tvaFrDepuisSiren(siren){ siren=String(siren||'').replace(/\D/g,''); if(siren.length!==9) return ''; const cle=(12+3*(Number(siren)%97))%97; return 'FR'+String(cle).padStart(2,'0')+siren; }
@@ -4097,7 +4097,7 @@ async function saveClient(id){
     closeModal(); render();
   }catch(e){ alert(e.message); }
 }
-async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;await API.deleteClient(id);window._clientsCache=null;toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
+async function deleteClient(id){if(!confirm(t('confirm_suppr_client')))return;try{await API.deleteClient(id);}catch(e){alert(e.message);return;}window._clientsCache=null;toast(t('msg_supprime'),'ti-trash');closeModal();setView('clients');}
 
 async function modalPortail(id,token){
   const base=window.location.origin;
@@ -8719,9 +8719,22 @@ function pretDistribSelect(prefix, id, nom){
 }
 window.pretDistribSelect = pretDistribSelect;
 // Renseigne le champ distributeur depuis un nom (import BDC) : lie la fiche si le nom correspond
-function pretSetDistrib(prefix, nom){
+// Rapprochement nom Pennylane ↔ fiche distributeur (ex. « BASTIDE LE CONFORT MEDICAL - Agence de DOUAI » → « BASTIDE DOUAI »)
+function trouverFicheDistrib(nom, email){
+  const norm = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+  const src = (window._clientsCache||[]).filter(c=>c.type!=='Particulier');
+  const em = String(email||'').trim().toLowerCase();
+  if(em){ const r = src.filter(c=>String(c.email||'').toLowerCase().split(/[,;\s]+/).includes(em)); if(r.length===1) return r[0]; }
+  const n = norm(nom); if(!n) return null;
+  const ex = src.filter(c=>norm(c.nom)===n); if(ex.length===1) return ex[0];
+  const mots = n.split(' ').filter(w=>w.length>2);
+  const pr = src.filter(c=>{ const cm = norm(c.nom).split(' ').filter(w=>w.length>2); return cm.length && cm.every(w=>mots.includes(w)); });
+  return pr.length===1 ? pr[0] : null;
+}
+window.trouverFicheDistrib = trouverFicheDistrib;
+function pretSetDistrib(prefix, nom, email){
   const inp=$(prefix+'-search'); if(inp) inp.value = nom||'';
-  const m = (window._clientsCache||[]).find(c=> (c.nom||'').toLowerCase() === (nom||'').toLowerCase());
+  const m = trouverFicheDistrib(nom, email);
   if(m){ pretDistribSelect(prefix, m.id, m.nom); } else { const hid=$(prefix+'-id'); if(hid) hid.value=''; }
 }
 window.pretSetDistrib = pretSetDistrib;
@@ -8770,7 +8783,7 @@ async function importerPretVF(){
     if(!r || !r.found){ if(msg) msg.innerHTML='<span style="color:var(--warning)">'+TR('Bon de commande introuvable (Pennylane / VosFactures)')+'</span>'; return; }
     if(r.vf_id!=null) $('pret-bdc-vfid').value = String(r.vf_id);
     if(r.numero) $('pret-bdc-vf').value = r.numero;
-    if(r.distributeur){ pretSetDistrib('pret-client', r.distributeur); }
+    if(r.distributeur){ if(typeof ensureClientsCache==='function'){ try{ await ensureClientsCache(); }catch(_){} } pretSetDistrib('pret-client', r.distributeur, r.email); }
     // Formule déduite du sujet du document (essai court / long terme)
     if(r.formule){ const fs=$('pret-formule'); if(fs){ fs.value=r.formule; } }
     // remplace les lignes articles par celles du BDC
@@ -8831,6 +8844,7 @@ async function savePret(){
     if(STATE.view==='prets') render();
     // Nouveau prêt : contrat-cadre généré automatiquement s'il n'est pas signé → envoi groupé (une seule signature)
     if(cree && cree.id && cree.contrat_cadre) setTimeout(()=>assistantContratApresPret(cree.id, true), 350);
+    else if(cree && cree.id && !cree.client_id) setTimeout(()=>alert(TR('Attention : aucune fiche distributeur n’est liée à ce bon de prêt')+' (« '+(data.distributeur_nom||'')+' »).\n'+TR('Sans fiche, le contrat-cadre ne peut pas être généré ni joint. Rouvre le bon de prêt et choisis le distributeur dans la liste, puis enregistre.')), 350);
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.savePret = savePret;
