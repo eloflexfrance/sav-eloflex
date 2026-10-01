@@ -45,6 +45,20 @@ async function runDailyChecks() {
       await db.run('UPDATE interventions SET relance_envoyee=true,updated_at=NOW() WHERE id=$1', [i.id]);
     }
 
+    // 1b. Bons de prêt sans fiche distributeur liée (pas de contrat-cadre possible)
+    try {
+      const sansFiche = await db.all(
+        `SELECT id, distributeur_nom, bdc_vf, statut FROM prets
+          WHERE client_id IS NULL AND COALESCE(statut,'') NOT IN ('cloture','rachete')`);
+      for (const p of sansFiche) {
+        await addAlerte('pret_sans_fiche', p.id,
+          `⚠️ Bon de prêt ${p.bdc_vf || '#' + p.id} (${p.distributeur_nom || 'distributeur ?'}) non relié à une fiche distributeur : le contrat-cadre ne peut pas être généré ni joint. Ouvre le bon et choisis le distributeur dans la liste.`);
+      }
+      // alertes devenues sans objet (bon relié depuis) → marquées comme lues
+      await db.run(`UPDATE alertes SET lue=true WHERE type='pret_sans_fiche' AND lue=false
+                      AND reference_id IN (SELECT id FROM prets WHERE client_id IS NOT NULL)`);
+    } catch (e) { console.error('[CRON] prêts sans fiche:', e.message); }
+
     // 2. Expéditions sans retour depuis 14+ jours
     const expSansRetour = await db.all(
       `SELECT i.*,c.nom AS client_nom,f.modele FROM interventions i

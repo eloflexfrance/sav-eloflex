@@ -8004,6 +8004,20 @@ async function _trouverClientPret(d) {
   return proches.length === 1 ? proches[0].id : null;
 }
 
+// Alerte immédiate si un bon de prêt n'est relié à aucune fiche ; retirée dès qu'il l'est
+async function _alerteSansFiche(p) {
+  if (!p) return;
+  try {
+    if (p.client_id) {
+      await db.run(`UPDATE alertes SET lue=true WHERE type='pret_sans_fiche' AND reference_id=$1 AND lue=false`, [p.id]);
+    } else if (!['cloture', 'rachete'].includes(p.statut)) {
+      const ex = await db.get(`SELECT id FROM alertes WHERE type='pret_sans_fiche' AND reference_id=$1 AND lue=false`, [p.id]);
+      if (!ex) await addAlerte('pret_sans_fiche', p.id,
+        `⚠️ Bon de prêt ${p.bdc_vf || '#' + p.id} (${p.distributeur_nom || 'distributeur ?'}) non relié à une fiche distributeur : le contrat-cadre ne peut pas être généré ni joint. Ouvre le bon et choisis le distributeur dans la liste.`);
+    }
+  } catch (_) {}
+}
+
 router.post('/prets', requireAuth, async (req, res) => {
   try {
     const d = req.body || {};
@@ -8027,6 +8041,7 @@ router.post('/prets', requireAuth, async (req, res) => {
       const cc = await _contratPourPret(row, (req.session.user && req.session.user.id) || null);
       if (cc) row.contrat_cadre = { id: cc.id, statut: cc.statut, manquants: _contratManquants(cc) };
     } catch (e) { console.error('[PRET] contrat auto:', e.message); }
+    await _alerteSansFiche(row);
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -8058,6 +8073,7 @@ router.post('/prets/:id/lier-client', adminOnly, async (req, res) => {
       const cc = await _contratPourPret(Object.assign({}, p, { client_id: cid }), (req.session.user && req.session.user.id) || null);
       contrat = cc ? { id: cc.id, statut: cc.statut } : contrat;
     }
+    await _alerteSansFiche({ id: p.id, client_id: cid });
     res.json({ ok: true, pret: p.id, client: cl.nom, contrat });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -8081,6 +8097,7 @@ router.get('/prets/:id/contrat-joint', requireAuth, async (req, res) => {
 router.put('/prets/:id', requireAuth, async (req, res) => {
   try {
     const d = req.body || {};
+    if (!d.client_id) { try { d.client_id = await _trouverClientPret(d); } catch (_) {} }
     const row = await db.run(
       `UPDATE prets SET client_id=$1, distributeur_nom=$2, contact=$3, email=$4, tel=$5, adresse=$6,
         formule=$7, designation=$8, num_serie=$9, valeur_ht=$10, bdc_vf=$11, bdc_vf_id=$12, articles=$13,
@@ -8094,6 +8111,7 @@ router.put('/prets/:id', requireAuth, async (req, res) => {
        d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
        d.observations || null, d.statut || 'brouillon', req.params.id]);
     if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
+    await _alerteSansFiche(row);
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
