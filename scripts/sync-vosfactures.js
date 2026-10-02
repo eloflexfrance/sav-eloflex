@@ -278,23 +278,26 @@ function estLigneExclue(nom) {
 }
 
 function devinerModele(nom, texte) {
-  const MAP = {
-    'Eloflex L': /\bL\+?\b|\beloflex l\b/i,
-    'Eloflex F': /\bF\b|\beloflex f\b/i,
-    'Eloflex D2': /\bD2\b|\beloflex d2\b/i,
-    'Eloflex X': /\bX\b|\beloflex x\b/i,
-    'Eloflex P': /\bP\b|\beloflex p\b/i,
-    'Eloflex H': /\bH\b|\beloflex h\b/i,
-    'Eloflex C': /\bmodèle C\b|\beloflex c\b/i,
-    'Eloflex C3': /\bC3\b|\beloflex c3\b/i,
-    'Eloflex K': /\bK\b|\beloflex k\b/i,
-    'Eloflex R': /\bR\b|\beloflex r\b/i,
-    'Eloflex S1': /\bS1\b|\beloflex s1\b/i,
-    'Eloflex M+': /\bM\+|\beloflex m\+/i,
-  };
-  const cible = `${nom} ${texte}`;
-  for (const [modele, re] of Object.entries(MAP)) {
-    if (re.test(cible)) return modele;
+  // Ordre important : modèles à 2 caractères (H2, C3, D2, S1, M+) AVANT les lettres seules,
+  // sinon « H2 » serait lu « H », et un « L » isolé ailleurs dans la facture donnerait « Eloflex L ».
+  const MAP = [
+    ['Eloflex H2', /\bH2\b|\beloflex h2\b/i],
+    ['Eloflex C3', /\bC3\b|\beloflex c3\b/i],
+    ['Eloflex D2', /\bD2\b|\beloflex d2\b/i],
+    ['Eloflex S1', /\bS1\b|\beloflex s1\b/i],
+    ['Eloflex M+', /\bM\+|\beloflex m\+/i],
+    ['Eloflex L', /\bmod[eè]le\s+L\+?(?![\w])|\beloflex\s+L\+?(?![\w])/i],
+    ['Eloflex F', /\bmod[eè]le\s+F\b|\beloflex\s+F\b/i],
+    ['Eloflex X', /\bmod[eè]le\s+X\b|\beloflex\s+X\b/i],
+    ['Eloflex P', /\bmod[eè]le\s+P\b|\beloflex\s+P\b/i],
+    ['Eloflex H', /\bmod[eè]le\s+H\b|\beloflex\s+H\b/i],
+    ['Eloflex C', /\bmod[eè]le\s+C\b|\beloflex\s+C\b/i],
+    ['Eloflex K', /\bmod[eè]le\s+K\b|\beloflex\s+K\b/i],
+    ['Eloflex R', /\bmod[eè]le\s+R\b|\beloflex\s+R\b/i],
+  ];
+  // 1) d'abord la ligne produit qui porte le n° de série, 2) ensuite seulement le texte complet
+  for (const cible of [String(nom || ''), `${nom || ''} ${texte || ''}`]) {
+    for (const [modele, re] of MAP) if (re.test(cible)) return modele;
   }
   return 'Eloflex';
 }
@@ -473,4 +476,4 @@ async function syncCommandesHistorique() {
   return syncCommandesVF(true);
 }
 
-module.exports = { syncClients, syncProducts, syncInvoices, syncInvoicesHistorique, syncCommandesVF, syncCommandesHistorique };
+module.exports = { devinerModele, syncClients, syncProducts, syncInvoices, syncInvoicesHistorique, syncCommandesVF, syncCommandesHistorique };

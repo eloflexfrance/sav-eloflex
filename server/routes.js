@@ -4649,6 +4649,31 @@ router.put('/commandes/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Correction des modèles de fauteuils mal déduits des factures (ex. H2 lu « L ») ──
+// Compare le modèle du fauteuil avec celui de la commande portant le même n° de série. ?dry=1 = aperçu.
+router.post('/admin/fauteuils/corriger-modeles', adminOnly, async (req, res) => {
+  try {
+    const { devinerModele } = require('../scripts/sync-vosfactures');
+    const dry = req.query.dry === '1';
+    const rows = await db.all(`
+      SELECT f.id, f.serie, f.modele, c.nom AS client_nom,
+             (SELECT cmd.modele FROM commandes cmd
+               WHERE regexp_replace(UPPER(cmd.num_serie),'[^A-Z0-9]','','g') = regexp_replace(UPPER(f.serie),'[^A-Z0-9]','','g')
+                 AND COALESCE(cmd.modele,'') <> ''
+               ORDER BY cmd.date_commande DESC NULLS LAST, cmd.id DESC LIMIT 1) AS modele_commande
+        FROM fauteuils f LEFT JOIN clients c ON c.id = f.client_id`);
+    const corrections = [];
+    for (const r of rows) {
+      if (!r.modele_commande) continue;
+      const attendu = devinerModele(r.modele_commande, '');
+      if (attendu === 'Eloflex' || attendu === r.modele) continue;
+      corrections.push({ id: r.id, serie: r.serie, client: r.client_nom, avant: r.modele, apres: attendu, commande: r.modele_commande });
+      if (!dry) await db.run('UPDATE fauteuils SET modele=$1, updated_at=NOW() WHERE id=$2', [attendu, r.id]);
+    }
+    res.json({ ok: true, dry, nb: corrections.length, corrections });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Backfill "Origine démo" : remplit demo_origine_nom sur les reventes déjà en base ──
 // Pour chaque vente (série connue) dont le fauteuil a été en démo dans un autre magasin,
 // renseigne le magasin d'origine. N'écrase jamais une valeur existante. ?dry=1 = aperçu.
