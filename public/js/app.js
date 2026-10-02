@@ -2504,6 +2504,7 @@ async function renderCatalogue(ttl,c,a){
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>
     ${isAdmin()?'<button class="btn" onclick="importerVFIds()" title="Lier IDs VosFactures"><i class="ti ti-plug-connected"></i> Lier VF</button>':''}
     <button class="btn" onclick="syncCataloguePennylane(this)" title="${TR('Rapprocher les articles avec les produits Pennylane (référence → TVA, prix TTC)')}"><i class="ti ti-refresh"></i> ${TR('Sync Pennylane')}</button>
+    <button class="btn" onclick="modalBLPennylaneStock()" title="${TR('Bons de livraison Pennylane → sortie de stock (VosFactures + appli), fauteuils exclus')}"><i class="ti ti-truck-delivery"></i> ${TR('BL Pennylane → stock')}</button>
     ${isAdmin()?`<button class="btn" onclick="syncTarifsVF(this)" title="${TR("Récupérer depuis VosFactures : prix d'achat Suède, prix distributeur HT et TVA")}"><i class="ti ti-currency-euro"></i> ${TR('Tarifs VosFactures')}</button>`:''}
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-left:8px;color:var(--text2)" title="Afficher le prix d'achat fournisseur (Eloflex AB)">
       <input type="checkbox" id="cat-show-price" ${localStorage.getItem('sav_show_prix_achat')==='1'?'checked':''} onchange="localStorage.setItem('sav_show_prix_achat',this.checked?'1':'0');document.getElementById('cat-table')?.classList.toggle('show-prix',this.checked)">
@@ -2553,6 +2554,50 @@ async function chargerListeCatalogue(){
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
+
+// ── Bons de livraison Pennylane → sortie de stock ──
+async function modalBLPennylaneStock(){
+  let d; try{ d = await API.blPennylaneStock(); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const st = s => s==='sortie' ? '<span style="color:#16a34a;font-weight:600">'+TR('Sorti du stock')+'</span>' : s==='ignore' ? '<span style="color:var(--text3)">'+TR('Rien à sortir')+'</span>' : '<span style="color:var(--danger);font-weight:600">'+TR('Erreur')+'</span>';
+  const det = l => { let x=l.lignes; if(typeof x==='string'){ try{x=JSON.parse(x);}catch(_){x={};} } x=x||{};
+    return (x.mouvements||[]).map(m=>esc(m.quantite+' × '+m.designation)).join('<br>') + ((x.fauteuils_exclus||[]).length?'<div style="color:var(--text3)">'+TR('Fauteuil(s) exclu(s)')+' : '+esc(x.fauteuils_exclus.join(', '))+'</div>':'') + ((x.hors_catalogue||[]).length?'<div style="color:#d97706">'+TR('Hors catalogue')+' : '+esc(x.hors_catalogue.join(', '))+'</div>':''); };
+  showModal(`<div class="modal-header"><i class="ti ti-truck-delivery" style="color:var(--accent)"></i><h2>${TR('BL Pennylane → stock')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin-top:0;line-height:1.5">${TR('Chaque bon de livraison émis dans Pennylane sort automatiquement les pièces du stock : un bon de sortie « PL-n° » est créé dans VosFactures (stock de référence) et le stock principal de l’appli est mis à jour. Vérification toutes les heures de 7h à 20h. Les fauteuils roulants et scooters ne sont jamais déstockés. Le stock SAV n’est jamais touché.')}</p>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+        <div class="form-group" style="margin:0"><label class="form-label">${TR('Prendre en compte les BL à partir du')}</label><input class="form-input" type="date" id="blpl-depuis" value="${esc(d.depuis||'')}" style="max-width:180px"></div>
+        ${isAdmin()?`<button class="btn" onclick="enregistrerDepuisBLPL()">${TR('Enregistrer la date')}</button>`:''}
+        <button class="btn" onclick="lancerBLPL(true)"><i class="ti ti-eye"></i> ${TR('Simuler')}</button>
+        <button class="btn primary" onclick="lancerBLPL(false)"><i class="ti ti-player-play"></i> ${TR('Traiter maintenant')}</button>
+      </div>
+      <div id="blpl-res"></div>
+      <div style="font-weight:600;margin:10px 0 6px">${TR('BL déjà traités')} (${(d.bl||[]).length})</div>
+      ${(d.bl||[]).length ? `<div class="table-wrap" style="max-height:45vh;overflow:auto"><table class="t"><thead><tr><th>${TR('BL')}</th><th>${TR('Date')}</th><th>${TR('Client')}</th><th>${TR('Résultat')}</th><th>${TR('Pièces')}</th></tr></thead><tbody>
+        ${d.bl.map(l=>`<tr><td class="mono">${esc(l.numero||'')}</td><td style="white-space:nowrap">${esc(l.date_doc||'')}</td><td>${esc(l.client||'')}</td><td>${st(l.statut)}${l.message?'<div style="font-size:11px;color:var(--text3)">'+esc(l.message)+'</div>':''}</td><td style="font-size:12px">${det(l)}</td></tr>`).join('')}
+      </tbody></table></div>` : `<p style="color:var(--text3);font-size:13px">${TR('Aucun BL traité pour le moment.')}</p>`}
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Fermer')}</button></div>`);
+}
+window.modalBLPennylaneStock = modalBLPennylaneStock;
+async function enregistrerDepuisBLPL(){
+  try{ await API.setBLPennylaneDepuis(gv('blpl-depuis')); toast(TR('Date enregistrée'),'ti-check','var(--success)'); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.enregistrerDepuisBLPL = enregistrerDepuisBLPL;
+async function lancerBLPL(simulation){
+  const el = document.getElementById('blpl-res'); if(el) el.innerHTML = '<i class="ti ti-loader-2"></i> '+TR('Lecture des BL Pennylane…');
+  try{
+    const r = await API.syncBLPennylaneStock({ simulation, depuis: gv('blpl-depuis')||null });
+    const lignes = (r.details||[]).map(x=> x.erreur ? '<div style="color:var(--danger)">'+esc(x.numero)+' : '+esc(x.erreur)+'</div>'
+      : '<div><b>'+esc(x.numero)+'</b> '+esc(x.client||'')+' — '+((x.mouvements||[]).map(m=>esc(m.quantite+' × '+m.designation)).join(', ')||TR('rien à sortir'))+((x.fauteuils_exclus||[]).length?' <span style="color:var(--text3)">('+TR('fauteuil exclu')+')</span>':'')+((x.hors_catalogue||[]).length?' <span style="color:#d97706">('+x.hors_catalogue.length+' '+TR('hors catalogue')+')</span>':'')+'</div>').join('');
+    if(el) el.innerHTML = '<div style="background:var(--bg);border:1px solid var(--border-s);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6">'
+      + (simulation ? '<b>'+TR('Simulation')+'</b> — ' : '') + r.bl_trouves+' '+TR('BL depuis le')+' '+esc(r.depuis)
+      + (simulation ? '' : ' · '+r.sorties+' '+TR('sortie(s) de stock')+' · '+r.ignores+' '+TR('sans pièce')+(r.erreurs?' · <span style="color:var(--danger)">'+r.erreurs+' '+TR('erreur(s)')+'</span>':''))
+      + (lignes ? '<div style="margin-top:6px">'+lignes+'</div>' : '<div style="color:var(--text3)">'+TR('Aucun nouveau BL à traiter.')+'</div>') + '</div>';
+    if(!simulation){ CACHE.catalogue=[]; setTimeout(()=>modalBLPennylaneStock(), 1500); }
+  }catch(e){ if(el) el.innerHTML = '<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>'; }
+}
+window.lancerBLPL = lancerBLPL;
 
 // Stock SAV (jamais synchronisé avec VosFactures) : +1 / −1 ou saisie directe depuis la liste
 async function majStockSav(id, delta, btn){

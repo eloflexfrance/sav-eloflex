@@ -232,6 +232,12 @@ function startCron() {
 
   // Ping anti-veille toutes les 10 minutes
   cron.schedule('*/10 * * * *', pingKeepAlive);
+  // Bons de livraison Pennylane → sortie de stock (toutes les heures, de 7h à 20h)
+  cron.schedule('5 7-20 * * *', async () => {
+    if (!process.env.PENNYLANE_API_KEY && !process.env.PENNYLANE_TOKEN) return;
+    try { const r = await require('../scripts/stock-bl-pennylane').syncStockBLPennylane(); if (r.traites) console.log('[CRON] BL Pennylane → stock :', r.traites, 'traité(s)'); }
+    catch (e) { console.error('[CRON] BL Pennylane → stock :', e.message); }
+  }, { timezone: 'Europe/Paris' });
 
   console.log('⏰ Tâches automatiques activées (8h checks, 6h VF sync, ping /10min)');
 }

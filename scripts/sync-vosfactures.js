@@ -80,6 +80,8 @@ async function syncClients() {
   finally { client.release(); }
 }
 
+const { estFauteuil } = require('./stock-bl-pennylane');
+
 // ── Sync produits ─────────────────────────────────────────────────
 async function syncProducts() {
   const vfApi = getVfApi();
@@ -101,9 +103,10 @@ async function syncProducts() {
             ref         = CASE WHEN catalogue.ref LIKE 'VF-%' THEN EXCLUDED.ref ELSE catalogue.ref END,
             designation = EXCLUDED.designation,
             pxht        = EXCLUDED.pxht,
-            stock       = EXCLUDED.stock,
+            stock       = CASE WHEN $7::boolean THEN catalogue.stock ELSE EXCLUDED.stock END,
             updated_at  = NOW()
-        `, [ref, p.name||'—', p.supplier_code||null, pxht, Math.max(0, Math.round(stock)), p.id]);
+        `, [ref, p.name||'—', p.supplier_code||null, pxht, Math.max(0, Math.round(stock)), p.id, estFauteuil(ref, p.name)]);
+        // Fauteuils roulants / scooters : pas de synchro de stock (ni VosFactures, ni Pennylane).
         // Stock : VosFactures reste la référence (inventaire régularisé le 02/10/2026).
         count++;
         // Tarifs : prix d'achat Suède (TVA 0 %) et TVA distributeur (5,5 % ou 20 %), si renseignés dans VosFactures
@@ -119,8 +122,9 @@ async function syncProducts() {
             INSERT INTO catalogue (ref, designation, fournisseur, ref_fournisseur, pxht, stock, vf_product_id)
             VALUES ($1, $2, 'Eloflex AB', $3, $4, $5, $6)
             ON CONFLICT (vf_product_id) DO UPDATE SET
-              designation=EXCLUDED.designation, pxht=EXCLUDED.pxht, stock=EXCLUDED.stock, updated_at=NOW()
-          `, [`VF-${p.id}`, p.name||'—', p.supplier_code||null, pxht, Math.max(0, Math.round(stock)), p.id]);
+              designation=EXCLUDED.designation, pxht=EXCLUDED.pxht,
+              stock=CASE WHEN $7::boolean THEN catalogue.stock ELSE EXCLUDED.stock END, updated_at=NOW()
+          `, [`VF-${p.id}`, p.name||'—', p.supplier_code||null, pxht, Math.max(0, Math.round(stock)), p.id, estFauteuil(ref, p.name)]);
           count++;
         } catch(e2) { console.warn(`  ⚠️ Produit ignoré : ${p.name} (${e2.message})`); skipped++; }
       }

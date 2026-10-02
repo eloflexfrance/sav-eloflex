@@ -3176,6 +3176,31 @@ router.get('/pennylane/status', async (req, res) => {
   } catch(e) { res.json({ configured: false, error: e.message }); }
 });
 
+// ── Bons de livraison Pennylane → sortie de stock (VosFactures + appli), fauteuils exclus ──
+router.post('/stock/sync-bl-pennylane', adminOrOp, async (req, res) => {
+  try {
+    const { syncStockBLPennylane } = require('../scripts/stock-bl-pennylane');
+    const b = req.body || {};
+    res.json(await syncStockBLPennylane({ simulation: !!b.simulation, depuis: b.depuis || null }));
+  } catch (e) { res.status(500).json({ error: e.response ? JSON.stringify(e.response.data).slice(0, 300) : e.message }); }
+});
+router.get('/stock/bl-pennylane', async (req, res) => {
+  try {
+    await require('../scripts/stock-bl-pennylane').ensureTable();
+    const p = await db.get("SELECT valeur FROM parametres WHERE cle='pl_bl_stock_depuis'");
+    res.json({ depuis: p ? p.valeur : null,
+      bl: await db.all('SELECT id, pl_doc_id, numero, date_doc, client, statut, lignes, vf_doc_id, message, created_at FROM pl_bl_stock ORDER BY created_at DESC LIMIT 200') });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.put('/stock/bl-pennylane/depuis', adminOnly, async (req, res) => {
+  try {
+    const d = String((req.body && req.body.depuis) || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return res.status(400).json({ error: 'Date AAAA-MM-JJ attendue' });
+    await db.run(`INSERT INTO parametres (cle, valeur) VALUES ('pl_bl_stock_depuis',$1) ON CONFLICT (cle) DO UPDATE SET valeur=EXCLUDED.valeur`, [d]);
+    res.json({ ok: true, depuis: d });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/pennylane/sync-commandes', adminOnly, async (req, res) => {
   try {
     const { syncCommandesPennylane } = require('../scripts/sync-pennylane');
