@@ -2498,7 +2498,7 @@ async function syncCommandesVF(){
 
 async function renderCatalogue(ttl,c,a){
   ttl.textContent=t('cat_title');
-  a.innerHTML=`<div style="display:flex;gap:8px;align-items:center">
+  a.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;row-gap:6px">
     <input id="cat-search" class="search-bar" placeholder="${t('cat_search')}" value="${esc(STATE.q)}" style="max-width:280px">
     <button class="btn" onclick="API.exportExcel('catalogue')"><i class="ti ti-file-spreadsheet"></i>${t('btn_excel')}</button>
     <button class="btn primary" onclick="modalPiece()"><i class="ti ti-plus"></i>${t('piece_add')}</button>
@@ -2514,6 +2514,11 @@ async function renderCatalogue(ttl,c,a){
       <input type="checkbox" id="cat-only-sav" ${localStorage.getItem('sav_only_stock_sav')==='1'?'checked':''} onchange="localStorage.setItem('sav_only_stock_sav',this.checked?'1':'0');chargerListeCatalogue()">
       ${TR('Stock SAV uniquement')}
     </label>
+    <select id="cat-sommeil" title="${TR('Pièces en sommeil : retirées du catalogue mais conservées')}" onchange="localStorage.setItem('sav_cat_sommeil',this.value);chargerListeCatalogue()" style="font-size:13px;padding:4px 6px;border:0.5px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text2)">
+      <option value="" ${!localStorage.getItem('sav_cat_sommeil')?'selected':''}>${TR('Masquer les pièces en sommeil')}</option>
+      <option value="1" ${localStorage.getItem('sav_cat_sommeil')==='1'?'selected':''}>${TR('Afficher aussi les pièces en sommeil')}</option>
+      <option value="seul" ${localStorage.getItem('sav_cat_sommeil')==='seul'?'selected':''}>${TR('Uniquement les pièces en sommeil')}</option>
+    </select>
   </div>`;
   document.getElementById('cat-search')?.addEventListener('input', e => {
     STATE.q = e.target.value;
@@ -2527,7 +2532,7 @@ let _catalogueReqId = 0;
 async function chargerListeCatalogue(){
   const el = document.getElementById('catalogue-list-body'); if(!el) return;
   const reqId = ++_catalogueReqId;
-  let list = await API.catalogue(STATE.q);
+  let list = await API.catalogue(STATE.q, false, localStorage.getItem('sav_cat_sommeil')||'');
   if(reqId !== _catalogueReqId) return;
   CACHE.catalogue = list;
   if(localStorage.getItem('sav_only_stock_sav')==='1') list = list.filter(p=>(p.stock_sav||0)>0);
@@ -2535,9 +2540,10 @@ async function chargerListeCatalogue(){
   const _ttc = v => (v!=null && v!=='') ? parseFloat(v).toFixed(2) + ' €' : '—';
   el.innerHTML=`<div class="table-wrap"><table id="cat-table" class="t ${localStorage.getItem('sav_show_prix_achat')==='1'?'show-prix':''}">
     <thead><tr><th style="width:46px"></th><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${TR('Achat Suède HT')}</th><th style="width:110px">${TR('Distributeur HT')}</th><th style="width:66px">${TR('TVA distrib.')}</th><th style="width:118px">${TR('Public TTC conseillé')}</th><th title="${TR('Stock VosFactures (synchronisé chaque nuit)')}">${TR('Stock principal')}</th><th style="width:118px" title="${TR('Stock SAV : saisi à la main, jamais synchronisé avec VosFactures')}">${TR('Stock SAV')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
-    <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
+    <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})" style="${p.en_sommeil?'opacity:.55':''}">
       <td>${p.has_image?`<img src="/api/catalogue/${p.id}/image" class="cat-mini" onmouseenter="catZoom(event,${p.id})" onmousemove="catZoomMove(event)" onmouseleave="catZoomHide()">`:`<span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:5px;background:var(--bg);border:1px solid var(--border-s);color:var(--text3)"><i class="ti ti-photo" style="font-size:14px"></i></span>`}</td>
-      <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
+      <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}${p.en_sommeil?` <span style="font-size:11px;font-weight:600;color:#6b7280;background:#e5e7eb;border-radius:99px;padding:1px 7px;white-space:nowrap"><i class="ti ti-moon"></i> ${TR('En sommeil')}</span>`:''}
+        <button class="btn sm" style="padding:1px 6px;margin-left:4px;opacity:.6" title="${p.en_sommeil?TR('Réveiller (remettre dans le catalogue)'):TR('Mettre en sommeil (retirer du catalogue)')}" onclick="event.stopPropagation();basculerSommeil(${p.id},${p.en_sommeil?'false':'true'})"><i class="ti ${p.en_sommeil?'ti-sun':'ti-moon'}"></i></button></td>
       <td>${esc(p.ref_fournisseur||'')}</td>
       <td class="col-prix" style="font-weight:700">${_ttc(p.prix_achat_suede)}</td>
       <td style="font-weight:600">${parseFloat(p.pxht||0).toFixed(2)} €</td>
@@ -2598,6 +2604,12 @@ async function lancerBLPL(simulation){
   }catch(e){ if(el) el.innerHTML = '<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>'; }
 }
 window.lancerBLPL = lancerBLPL;
+
+async function basculerSommeil(id, v){
+  try{ await API.sommeilPiece(id, v); toast(v?TR('Pièce mise en sommeil'):TR('Pièce remise dans le catalogue'),'ti-moon','var(--success)'); CACHE.catalogue=[]; chargerListeCatalogue(); if(typeof refreshBadges==='function') refreshBadges(); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.basculerSommeil = basculerSommeil;
 
 // Stock SAV (jamais synchronisé avec VosFactures) : +1 / −1 ou saisie directe depuis la liste
 async function majStockSav(id, delta, btn){
@@ -4454,7 +4466,7 @@ async function saveIntervention(id){
 // ── MODALES CATALOGUE ─────────────────────────────────────────────
 
 async function modalPiece(id){
-  const p=id?CACHE.catalogue.find(x=>x.id===id)||await API.catalogue().then(l=>l.find(x=>x.id===id)):null;
+  const p=id?CACHE.catalogue.find(x=>x.id===id)||await API.catalogue('',false,'1').then(l=>l.find(x=>x.id===id)):null;
   _PIECE_IMG=undefined;   // état image : inchangée par défaut
   showModal(`<div class="modal-header"><i class="ti ti-box" style="font-size:19px;color:var(--accent)"></i><h2>${id?'Modifier pièce':'Nouvelle pièce'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
@@ -4483,6 +4495,7 @@ async function modalPiece(id){
       <div id="f-tarifs-recap" style="grid-column:1/-1;font-size:12.5px;color:var(--text2);background:var(--bg);border:1px solid var(--border-s);border-radius:8px;padding:8px 10px;line-height:1.7"></div>
       <div class="form-group"><label class="form-label">${TR('Poids (kg)')}</label><input class="form-input" id="f-poids" type="number" step="0.01" value="${p?.poids??''}"></div>
       <div class="form-group"><label class="form-label">${TR('Stock principal (VosFactures)')}</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}" title="${TR('Recopié chaque nuit depuis VosFactures')}"></div>
+      <div class="form-group" style="grid-column:1/-1"><label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="f-sommeil" ${p?.en_sommeil?'checked':''}> <i class="ti ti-moon"></i> ${TR('Pièce en sommeil (retirée du catalogue, conservée et réaffichable)')}</label></div>
       <div class="form-group"><label class="form-label">${TR('Stock SAV (non synchronisé)')}</label><input class="form-input" id="f-stocksav" type="number" min="0" value="${p?.stock_sav||0}" style="border-color:#c4b5fd"></div>
       <div class="form-group"><label class="form-label">Seuil alerte stock</label><input class="form-input" id="f-stalerte" type="number" value="${p?.stock_alerte||2}"></div>
     </div>
@@ -4509,7 +4522,7 @@ function majTarifsPiece(){
     `${TR('Marge distributeur')} : <b>${pubHT!=null&&dist!=null?f(pubHT-dist):'—'}</b> HT · ${TR('Marge Éloflex')} : <b>${dist!=null&&achat!=null?f(dist-achat):'—'}</b> HT`;
 }
 window.majTarifsPiece = majTarifsPiece;
-async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:parseFloat(gv('f-tvadist'))||5.5,tva_distributeur:parseFloat(gv('f-tvadist'))||5.5,prix_ttc_public:Math.round((parseFloat(gv('f-px'))||0)*(1+(parseFloat(gv('f-tvadist'))||5.5)/100)*100)/100,prix_achat_suede:gv('f-achat')===''?null:parseFloat(gv('f-achat')),prix_public_ttc:gv('f-pub')===''?null:parseFloat(gv('f-pub')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_sav:Math.max(0,parseInt(gv('f-stocksav'))||0),stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:parseFloat(gv('f-tvadist'))||5.5,tva_distributeur:parseFloat(gv('f-tvadist'))||5.5,prix_ttc_public:Math.round((parseFloat(gv('f-px'))||0)*(1+(parseFloat(gv('f-tvadist'))||5.5)/100)*100)/100,prix_achat_suede:gv('f-achat')===''?null:parseFloat(gv('f-achat')),prix_public_ttc:gv('f-pub')===''?null:parseFloat(gv('f-pub')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_sav:Math.max(0,parseInt(gv('f-stocksav'))||0),en_sommeil:!!(document.getElementById('f-sommeil')&&document.getElementById('f-sommeil').checked),stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
 async function deletePiece(id){if(!confirm(TR('Supprimer ?')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 async function syncCataloguePennylane(btn){
   const old = btn?btn.innerHTML:null;

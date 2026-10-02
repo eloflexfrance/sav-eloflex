@@ -89,7 +89,7 @@ async function runDailyChecks() {
     }
 
     // 4. Stocks
-    const stockFaible = await db.all('SELECT * FROM catalogue WHERE stock<=stock_alerte AND stock>0 AND stock_actif=true');
+    const stockFaible = await db.all('SELECT * FROM catalogue WHERE stock<=stock_alerte AND stock>0 AND stock_actif=true AND COALESCE(en_sommeil,false)=false');
     for (const p of stockFaible)
       await addAlerte('stock_faible', p.id, `⚠️ Stock faible : ${p.designation} (${p.stock} restant${p.stock!==1?'s':''} / seuil ${p.stock_alerte})`);
     const stockZero = await db.all('SELECT * FROM catalogue WHERE stock=0 AND stock_actif=true AND ref NOT LIKE \'VF-%\'');

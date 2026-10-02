@@ -108,6 +108,8 @@ async function initDB() {
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_achat_suede NUMERIC`);
       // Stock SAV : stock propre à l'atelier, saisi à la main, JAMAIS synchronisé avec VosFactures
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_sav INTEGER DEFAULT 0`);
+      // Pièces « en sommeil » : retirées du catalogue (masquées par défaut), réaffichables à la demande
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS en_sommeil BOOLEAN DEFAULT FALSE`);
       // Fauteuils roulants / scooters : stock non suivi (ni VosFactures, ni Pennylane) → 0 et hors alertes
       await client.query(`UPDATE catalogue SET stock=0, stock_actif=false
          WHERE (designation ~* '^\\s*(fauteuils?|scooters?)\\M'

@@ -1273,12 +1273,14 @@ router.get('/catalogue', async (req, res) => {
   try {
     const q = `%${req.query.q || ''}%`;
     // On exclut image_data (volumineux) de la liste ; un drapeau has_image suffit pour l'affichage.
-    let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, COALESCE(stock_sav,0) AS stock_sav, stock_alerte, stock_actif,
+    let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, COALESCE(stock_sav,0) AS stock_sav, COALESCE(en_sommeil,false) AS en_sommeil, stock_alerte, stock_actif,
                  vf_product_id, pl_product_id, taux_tva, prix_ttc_public, poids, prix_achat_suede, prix_public_ttc, tva_distributeur,
                  (image_data IS NOT NULL) AS has_image, created_at, updated_at
                FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1)`;
     if (req.query.alerte === '1') sql += ' AND stock<=stock_alerte AND stock_actif IS NOT FALSE';
     if (req.query.sav === '1') sql += ' AND COALESCE(stock_sav,0) <> 0';
+    if (req.query.sommeil === 'seul') sql += ' AND en_sommeil = true';
+    else if (req.query.sommeil !== '1') sql += ' AND COALESCE(en_sommeil,false) = false';
     sql += ' ORDER BY ref';
     res.json(await db.all(sql, [q]));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1289,6 +1291,9 @@ async function _majTarifsDistributeur(id, b) {
   const sets = [], vals = [];
   for (const k of ['prix_achat_suede', 'prix_public_ttc']) {
     if (Object.prototype.hasOwnProperty.call(b, k)) { vals.push(_num(b[k])); sets.push(`${k}=$${vals.length}`); }
+  }
+  if (Object.prototype.hasOwnProperty.call(b, 'en_sommeil')) {
+    vals.push(!!b.en_sommeil); sets.push(`en_sommeil=$${vals.length}`);
   }
   if (Object.prototype.hasOwnProperty.call(b, 'stock_sav')) {
     vals.push(Math.max(0, parseInt(b.stock_sav) || 0)); sets.push(`stock_sav=$${vals.length}`);
@@ -1331,6 +1336,14 @@ router.put('/catalogue/:id', async (req, res) => {
       await db.run('UPDATE catalogue SET image_data=$1 WHERE id=$2', [b.image_data || null, req.params.id]);
     }
     res.json(await db.get('SELECT id, ref FROM catalogue WHERE id=$1', [req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Mise en sommeil / réveil d'une pièce (retirée du catalogue sans être supprimée)
+router.post('/catalogue/:id/sommeil', async (req, res) => {
+  try {
+    const r = await db.run('UPDATE catalogue SET en_sommeil=$1, updated_at=NOW() WHERE id=$2 RETURNING id, en_sommeil', [!!(req.body && req.body.en_sommeil), req.params.id]);
+    if (!r) return res.status(404).json({ error: 'Article introuvable' });
+    res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Stock SAV : ajustement rapide (+1 / -1) ou valeur exacte — jamais touché par la synchro VosFactures
@@ -1812,7 +1825,7 @@ router.get('/stats', async (req, res) => {
         (SELECT COUNT(*)::int FROM interventions WHERE garantie=true) AS garantie,
         (SELECT COUNT(*)::int FROM interventions WHERE garantie=false) AS hors_garantie,
         (SELECT COUNT(*)::int FROM alertes WHERE lue=false) AS alertes_non_lues,
-        (SELECT COUNT(*)::int FROM catalogue WHERE stock<=stock_alerte AND stock_actif=true) AS pieces_alerte,
+        (SELECT COUNT(*)::int FROM catalogue WHERE stock<=stock_alerte AND stock_actif=true AND COALESCE(en_sommeil,false)=false) AS pieces_alerte,
         (SELECT COUNT(*)::int FROM interventions WHERE envoi_numero IS NOT NULL AND envoi_numero!='' AND (retour_numero IS NULL OR retour_numero='') AND statut!='Fermé') AS expeditions_cours
     `);
     const recentes = await db.all(
@@ -1878,7 +1891,7 @@ router.get('/export/excel', adminOnly, async (req, res) => {
         'Prix public conseillé TTC': p.prix_public_ttc != null ? parseFloat(p.prix_public_ttc) : '',
         'Prix public HT': p.prix_public_ttc != null ? Math.round(parseFloat(p.prix_public_ttc) / 1.2 * 100) / 100 : '',
         'TVA 20 % (public)': p.prix_public_ttc != null ? Math.round((parseFloat(p.prix_public_ttc) - parseFloat(p.prix_public_ttc) / 1.2) * 100) / 100 : '',
-        'Stock principal (VosFactures)': p.stock, 'Stock SAV': p.stock_sav || 0, 'Seuil alerte': p.stock_alerte
+        'Stock principal (VosFactures)': p.stock, 'Stock SAV': p.stock_sav || 0, 'Seuil alerte': p.stock_alerte, 'En sommeil': p.en_sommeil ? 'oui' : ''
       }))), 'Catalogue');
     }
     if (type === 'expeditions' || type === 'complet') {
