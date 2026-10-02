@@ -108,7 +108,11 @@ async function syncStockBLPennylane(opt = {}) {
       for (const l of lignes) {
         if (!(l.quantite > 0)) continue;
         const c = (l.pl_product_id && parPl[l.pl_product_id]) || (l.ref && parRef[_norm(l.ref)]) || null;
-        if (!c) { if (!estFauteuil(l.ref, l.label)) horsCat.push(l.label || l.ref); else fauteuils.push(l.label); continue; }
+        if (!c) {
+          if (estFauteuil(l.ref, l.label)) fauteuils.push(l.label);
+          else if (!/\b(frais|port|transport|livraison|exp[ée]dition|envoi|emballage|remise|forfait|main[- ]d.?(oe|œ)uvre|intervention)\b/i.test(l.label || '')) horsCat.push(l.label || l.ref);
+          continue;
+        }
         if (estFauteuil(c.ref, c.designation) || estFauteuil(l.ref, l.label)) { fauteuils.push(c.designation); continue; }
         const m = mouvements[c.id] || (mouvements[c.id] = { id: c.id, ref: c.ref, designation: c.designation, vf_product_id: c.vf_product_id, quantite: 0 });
         m.quantite += Math.round(l.quantite);

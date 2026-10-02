@@ -2589,7 +2589,7 @@ async function lancerBLPL(simulation){
   try{
     const r = await API.syncBLPennylaneStock({ simulation, depuis: gv('blpl-depuis')||null });
     const lignes = (r.details||[]).map(x=> x.erreur ? '<div style="color:var(--danger)">'+esc(x.numero)+' : '+esc(x.erreur)+'</div>'
-      : '<div><b>'+esc(x.numero)+'</b> '+esc(x.client||'')+' — '+((x.mouvements||[]).map(m=>esc(m.quantite+' × '+m.designation)).join(', ')||TR('rien à sortir'))+((x.fauteuils_exclus||[]).length?' <span style="color:var(--text3)">('+TR('fauteuil exclu')+')</span>':'')+((x.hors_catalogue||[]).length?' <span style="color:#d97706">('+x.hors_catalogue.length+' '+TR('hors catalogue')+')</span>':'')+'</div>').join('');
+      : '<div><b>'+esc(x.numero)+'</b> '+esc(x.client||'')+' — '+((x.mouvements||[]).map(m=>esc(m.quantite+' × '+m.designation)).join(', ')||TR('rien à sortir'))+((x.fauteuils_exclus||[]).length?' <span style="color:var(--text3)">('+TR('fauteuil exclu')+')</span>':'')+((x.hors_catalogue||[]).length?' <span style="color:#d97706">('+TR('hors catalogue')+' : '+esc(x.hors_catalogue.join(', '))+')</span>':'')+'</div>').join('');
     if(el) el.innerHTML = '<div style="background:var(--bg);border:1px solid var(--border-s);border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6">'
       + (simulation ? '<b>'+TR('Simulation')+'</b> — ' : '') + r.bl_trouves+' '+TR('BL depuis le')+' '+esc(r.depuis)
       + (simulation ? '' : ' · '+r.sorties+' '+TR('sortie(s) de stock')+' · '+r.ignores+' '+TR('sans pièce')+(r.erreurs?' · <span style="color:var(--danger)">'+r.erreurs+' '+TR('erreur(s)')+'</span>':''))
