@@ -4655,18 +4655,25 @@ router.post('/admin/fauteuils/corriger-modeles', adminOnly, async (req, res) => 
   try {
     const { devinerModele } = require('../scripts/sync-vosfactures');
     const dry = req.query.dry === '1';
+    // Normalisation calculée UNE fois par table (jointure par hachage), au lieu d'une sous-requête par fauteuil
     const rows = await db.all(`
-      SELECT f.id, f.serie, f.modele, c.nom AS client_nom,
-             (SELECT cmd.modele FROM commandes cmd
-               WHERE regexp_replace(UPPER(cmd.num_serie),'[^A-Z0-9]','','g') = regexp_replace(UPPER(f.serie),'[^A-Z0-9]','','g')
-                 AND COALESCE(cmd.modele,'') <> ''
-               ORDER BY cmd.date_commande DESC NULLS LAST, cmd.id DESC LIMIT 1) AS modele_commande
-        FROM fauteuils f LEFT JOIN clients c ON c.id = f.client_id`);
+      WITH cm AS (
+        SELECT DISTINCT ON (sn) sn, modele FROM (
+          SELECT regexp_replace(UPPER(num_serie),'[^A-Z0-9]','','g') AS sn, modele, date_commande, id
+            FROM commandes WHERE COALESCE(num_serie,'') <> '' AND COALESCE(modele,'') <> ''
+              -- seulement les lignes « fauteuil » (pas une pièce comme « Batterie modèles L/F/P/D2/C3… »)
+              AND (modele ~* '\\m(fauteuil|scooter)' OR modele ~* '^\\s*(eloflex\\s+)?(mod[eè]le\\s+)?[A-Z][0-9]?\\+?\\s*$')) t
+        ORDER BY sn, date_commande DESC NULLS LAST, id DESC)
+      SELECT f.id, f.serie, f.modele, c.nom AS client_nom, cm.modele AS modele_commande
+        FROM fauteuils f
+        JOIN cm ON cm.sn = regexp_replace(UPPER(f.serie),'[^A-Z0-9]','','g')
+        LEFT JOIN clients c ON c.id = f.client_id`);
     const corrections = [];
     for (const r of rows) {
       if (!r.modele_commande) continue;
       const attendu = devinerModele(r.modele_commande, '');
       if (attendu === 'Eloflex' || attendu === r.modele) continue;
+      if (/L\+/.test(r.modele || '') && attendu === 'Eloflex L') continue;   // L+ reste L+
       corrections.push({ id: r.id, serie: r.serie, client: r.client_nom, avant: r.modele, apres: attendu, commande: r.modele_commande });
       if (!dry) await db.run('UPDATE fauteuils SET modele=$1, updated_at=NOW() WHERE id=$2', [attendu, r.id]);
     }
