@@ -18,7 +18,7 @@ const REFS_FAUTEUILS = ['7350006080067', '7350006080531', '7350006080616', '7350
 function estFauteuil(ref, designation) {
   const r = String(ref || '').trim();
   if (REFS_FAUTEUILS.some(x => r === x || r.startsWith(x + '-'))) return true;
-  return /^\s*(fauteuil|scooter)\b/i.test(String(designation || ''));
+  return /^\s*(fauteuils?|scooters?)\b/i.test(String(designation || ''));
 }
 
 function _estBL(x) {
@@ -110,7 +110,7 @@ async function syncStockBLPennylane(opt = {}) {
         const c = (l.pl_product_id && parPl[l.pl_product_id]) || (l.ref && parRef[_norm(l.ref)]) || null;
         if (!c) {
           if (estFauteuil(l.ref, l.label)) fauteuils.push(l.label);
-          else if (!/\b(frais|port|transport|livraison|exp[ée]dition|envoi|emballage|remise|forfait|main[- ]d.?(oe|œ)uvre|intervention)\b/i.test(l.label || '')) horsCat.push(l.label || l.ref);
+          else if (!/\b(offre|essai gratuit|non valable|commentaire|frais|port|transport|livraison|exp[ée]dition|envoi|emballage|remise|forfait|main[- ]d.?(oe|œ)uvre|intervention)\b/i.test(l.label || '')) horsCat.push(l.label || l.ref);
           continue;
         }
         if (estFauteuil(c.ref, c.designation) || estFauteuil(l.ref, l.label)) { fauteuils.push(c.designation); continue; }
