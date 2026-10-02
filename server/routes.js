@@ -1273,11 +1273,12 @@ router.get('/catalogue', async (req, res) => {
   try {
     const q = `%${req.query.q || ''}%`;
     // On exclut image_data (volumineux) de la liste ; un drapeau has_image suffit pour l'affichage.
-    let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif,
+    let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, COALESCE(stock_sav,0) AS stock_sav, stock_alerte, stock_actif,
                  vf_product_id, pl_product_id, taux_tva, prix_ttc_public, poids, prix_achat_suede, prix_public_ttc, tva_distributeur,
                  (image_data IS NOT NULL) AS has_image, created_at, updated_at
                FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1)`;
     if (req.query.alerte === '1') sql += ' AND stock<=stock_alerte';
+    if (req.query.sav === '1') sql += ' AND COALESCE(stock_sav,0) <> 0';
     sql += ' ORDER BY ref';
     res.json(await db.all(sql, [q]));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1288,6 +1289,9 @@ async function _majTarifsDistributeur(id, b) {
   const sets = [], vals = [];
   for (const k of ['prix_achat_suede', 'prix_public_ttc']) {
     if (Object.prototype.hasOwnProperty.call(b, k)) { vals.push(_num(b[k])); sets.push(`${k}=$${vals.length}`); }
+  }
+  if (Object.prototype.hasOwnProperty.call(b, 'stock_sav')) {
+    vals.push(Math.max(0, parseInt(b.stock_sav) || 0)); sets.push(`stock_sav=$${vals.length}`);
   }
   if (Object.prototype.hasOwnProperty.call(b, 'tva_distributeur')) {
     const t = parseFloat(b.tva_distributeur);
@@ -1327,6 +1331,17 @@ router.put('/catalogue/:id', async (req, res) => {
       await db.run('UPDATE catalogue SET image_data=$1 WHERE id=$2', [b.image_data || null, req.params.id]);
     }
     res.json(await db.get('SELECT id, ref FROM catalogue WHERE id=$1', [req.params.id]));
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Stock SAV : ajustement rapide (+1 / -1) ou valeur exacte — jamais touché par la synchro VosFactures
+router.post('/catalogue/:id/stock-sav', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = (b.valeur != null && b.valeur !== '')
+      ? await db.run('UPDATE catalogue SET stock_sav=GREATEST(0,$1::int), updated_at=NOW() WHERE id=$2 RETURNING id, stock_sav', [parseInt(b.valeur) || 0, req.params.id])
+      : await db.run('UPDATE catalogue SET stock_sav=GREATEST(0,COALESCE(stock_sav,0)+$1::int), updated_at=NOW() WHERE id=$2 RETURNING id, stock_sav', [parseInt(b.delta) || 0, req.params.id]);
+    if (!r) return res.status(404).json({ error: 'Article introuvable' });
+    res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Sert la vignette d'un article (data URL stockée → octets image).
@@ -1863,7 +1878,7 @@ router.get('/export/excel', adminOnly, async (req, res) => {
         'Prix public conseillé TTC': p.prix_public_ttc != null ? parseFloat(p.prix_public_ttc) : '',
         'Prix public HT': p.prix_public_ttc != null ? Math.round(parseFloat(p.prix_public_ttc) / 1.2 * 100) / 100 : '',
         'TVA 20 % (public)': p.prix_public_ttc != null ? Math.round((parseFloat(p.prix_public_ttc) - parseFloat(p.prix_public_ttc) / 1.2) * 100) / 100 : '',
-        'Stock': p.stock, 'Seuil alerte': p.stock_alerte
+        'Stock principal (VosFactures)': p.stock, 'Stock SAV': p.stock_sav || 0, 'Seuil alerte': p.stock_alerte
       }))), 'Catalogue');
     }
     if (type === 'expeditions' || type === 'complet') {
@@ -6566,6 +6581,23 @@ function _vfTaux(t) {
   const n = parseFloat(String(t ?? '').replace(',', '.'));
   return (n === 20 || n === 5.5) ? n : null;
 }
+// Inventaire : fixe le stock compté de plusieurs articles (le stock est géré dans l'appli, plus par VosFactures)
+router.post('/catalogue/inventaire', adminOnly, async (req, res) => {
+  try {
+    const lignes = Array.isArray(req.body && req.body.lignes) ? req.body.lignes : [];
+    const libelle = String((req.body && req.body.libelle) || 'Inventaire').slice(0, 120);
+    let maj = 0; const absents = [];
+    for (const l of lignes) {
+      const q = parseInt(l.stock); if (!(q >= 0)) continue;
+      const r = l.id ? await db.run('UPDATE catalogue SET stock=$1, updated_at=NOW() WHERE id=$2 RETURNING id', [q, l.id])
+                     : await db.run('UPDATE catalogue SET stock=$1, updated_at=NOW() WHERE ref=$2 RETURNING id', [q, l.ref]);
+      if (r) maj++; else absents.push(l.ref || l.id);
+    }
+    try { await addAlerte('inventaire', null, `📦 ${libelle} : stock mis à jour pour ${maj} article(s).`); } catch (_) {}
+    res.json({ ok: true, maj, absents });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/catalogue/sync-tarifs-vf', adminOnly, async (req, res) => {
   try {
     if (!process.env.VOSFACTURES_API_TOKEN) return res.json({ ok: false, reason: 'VosFactures non configuré' });

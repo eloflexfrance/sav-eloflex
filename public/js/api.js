@@ -117,6 +117,7 @@ const API = {
   updatePhotoLegende:(id,pid,legende)=>API.patch(`/interventions/${id}/photos/${pid}`,{legende}),
   deletePhoto:(id,pid)=>API.del(`/interventions/${id}/photos/${pid}`),
   expeditions:()=>API.get('/expeditions'),
+  stockSav:(id,d)=>API.post(`/catalogue/${id}/stock-sav`,d),
   catalogue:(q,alerte)=>API.get('/catalogue'+(q?`?q=${encodeURIComponent(q)}`:'')+(alerte?`${q?'&':'?'}alerte=1`:'')),
   createPiece:(d)=>API.post('/catalogue',d),
   updatePiece:(id,d)=>API.put(`/catalogue/${id}`,d),

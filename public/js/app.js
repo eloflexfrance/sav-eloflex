@@ -2509,6 +2509,10 @@ async function renderCatalogue(ttl,c,a){
       <input type="checkbox" id="cat-show-price" ${localStorage.getItem('sav_show_prix_achat')==='1'?'checked':''} onchange="localStorage.setItem('sav_show_prix_achat',this.checked?'1':'0');document.getElementById('cat-table')?.classList.toggle('show-prix',this.checked)">
       Prix achat 🇸🇪
     </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--text2)" title="${TR('Afficher uniquement les articles présents dans le stock SAV')}">
+      <input type="checkbox" id="cat-only-sav" ${localStorage.getItem('sav_only_stock_sav')==='1'?'checked':''} onchange="localStorage.setItem('sav_only_stock_sav',this.checked?'1':'0');chargerListeCatalogue()">
+      ${TR('Stock SAV uniquement')}
+    </label>
   </div>`;
   document.getElementById('cat-search')?.addEventListener('input', e => {
     STATE.q = e.target.value;
@@ -2522,13 +2526,14 @@ let _catalogueReqId = 0;
 async function chargerListeCatalogue(){
   const el = document.getElementById('catalogue-list-body'); if(!el) return;
   const reqId = ++_catalogueReqId;
-  const list = await API.catalogue(STATE.q);
+  let list = await API.catalogue(STATE.q);
   if(reqId !== _catalogueReqId) return;
   CACHE.catalogue = list;
+  if(localStorage.getItem('sav_only_stock_sav')==='1') list = list.filter(p=>(p.stock_sav||0)>0);
   const _tva = v => (v!=null && v!=='') ? (parseFloat(v)%1===0 ? parseFloat(v).toFixed(0) : parseFloat(v).toFixed(1)) + ' %' : '—';
   const _ttc = v => (v!=null && v!=='') ? parseFloat(v).toFixed(2) + ' €' : '—';
   el.innerHTML=`<div class="table-wrap"><table id="cat-table" class="t ${localStorage.getItem('sav_show_prix_achat')==='1'?'show-prix':''}">
-    <thead><tr><th style="width:46px"></th><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${TR('Achat Suède HT')}</th><th style="width:110px">${TR('Distributeur HT')}</th><th style="width:66px">${TR('TVA distrib.')}</th><th style="width:118px">${TR('Public TTC conseillé')}</th><th>${t('col_stock')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
+    <thead><tr><th style="width:46px"></th><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${TR('Achat Suède HT')}</th><th style="width:110px">${TR('Distributeur HT')}</th><th style="width:66px">${TR('TVA distrib.')}</th><th style="width:118px">${TR('Public TTC conseillé')}</th><th title="${TR('Stock VosFactures (synchronisé chaque nuit)')}">${TR('Stock principal')}</th><th style="width:118px" title="${TR('Stock SAV : saisi à la main, jamais synchronisé avec VosFactures')}">${TR('Stock SAV')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})">
       <td>${p.has_image?`<img src="/api/catalogue/${p.id}/image" class="cat-mini" onmouseenter="catZoom(event,${p.id})" onmousemove="catZoomMove(event)" onmouseleave="catZoomHide()">`:`<span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:5px;background:var(--bg);border:1px solid var(--border-s);color:var(--text3)"><i class="ti ti-photo" style="font-size:14px"></i></span>`}</td>
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}</td>
@@ -2538,12 +2543,37 @@ async function chargerListeCatalogue(){
       <td style="color:var(--text2)">${_tva(p.tva_distributeur!=null?p.tva_distributeur:5.5)}</td>
       <td style="font-weight:600">${_ttc(p.prix_public_ttc)}</td>
       <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap"><span class="stock-sav-ctl" style="display:inline-flex;align-items:center;gap:4px">
+        <button class="btn sm" style="padding:1px 7px" title="−1" onclick="majStockSav(${p.id},-1,this)">−</button>
+        <span id="ssav-${p.id}" style="min-width:22px;text-align:center;font-weight:700;color:${(p.stock_sav||0)>0?'#7c3aed':'var(--text3)'};cursor:pointer" title="${TR('Cliquer pour saisir une quantité')}" onclick="saisirStockSav(${p.id})">${p.stock_sav||0}</span>
+        <button class="btn sm" style="padding:1px 7px" title="+1" onclick="majStockSav(${p.id},1,this)">+</button></span></td>
       <td style="font-size:12px;color:var(--text3)">${p.stock_alerte}</td>
       <td style="text-align:center">${p.pl_product_id?`<a href="https://app.pennylane.com/companies/${PL_COMPANY_ID}/products?id=${p.pl_product_id}" target="_blank" onclick="event.stopPropagation()" title="${TR('Voir dans Pennylane')}" style="color:var(--accent);font-size:14px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
       <td style="text-align:center">${p.vf_product_id?`<a href="https://eloflex.vosfactures.fr/products/${p.vf_product_id}" target="_blank" onclick="event.stopPropagation()" title="${TR("Voir sur VosFactures")}" style="color:var(--accent);font-size:14px"><i class="ti ti-external-link"></i></a>`:'—'}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
 }
+
+// Stock SAV (jamais synchronisé avec VosFactures) : +1 / −1 ou saisie directe depuis la liste
+async function majStockSav(id, delta, btn){
+  if(btn) btn.disabled = true;
+  try{ const r = await API.stockSav(id, {delta}); const el = document.getElementById('ssav-'+id);
+    if(el){ el.textContent = r.stock_sav; el.style.color = r.stock_sav>0 ? '#7c3aed' : 'var(--text3)'; }
+    const it = (CACHE.catalogue||[]).find(x=>x.id===id); if(it) it.stock_sav = r.stock_sav;
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+  finally{ if(btn) btn.disabled = false; }
+}
+window.majStockSav = majStockSav;
+async function saisirStockSav(id){
+  const it = (CACHE.catalogue||[]).find(x=>x.id===id);
+  const v = prompt(TR('Stock SAV de')+' « '+((it&&it.designation)||'')+' » :', it ? (it.stock_sav||0) : 0);
+  if(v===null) return; const n = parseInt(v); if(isNaN(n) || n<0){ alert(TR('Quantité invalide')); return; }
+  try{ const r = await API.stockSav(id, {valeur:n}); const el = document.getElementById('ssav-'+id);
+    if(el){ el.textContent = r.stock_sav; el.style.color = r.stock_sav>0 ? '#7c3aed' : 'var(--text3)'; }
+    if(it) it.stock_sav = r.stock_sav;
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.saisirStockSav = saisirStockSav;
 
 // ── RAPPORTS ──────────────────────────────────────────────────────
 
@@ -4407,7 +4437,8 @@ async function modalPiece(id){
       <div class="form-group"><label class="form-label">${TR('TVA 20 % (sur le prix public)')}</label><input class="form-input" id="f-tva20" disabled></div>
       <div id="f-tarifs-recap" style="grid-column:1/-1;font-size:12.5px;color:var(--text2);background:var(--bg);border:1px solid var(--border-s);border-radius:8px;padding:8px 10px;line-height:1.7"></div>
       <div class="form-group"><label class="form-label">${TR('Poids (kg)')}</label><input class="form-input" id="f-poids" type="number" step="0.01" value="${p?.poids??''}"></div>
-      <div class="form-group"><label class="form-label">Stock</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}"></div>
+      <div class="form-group"><label class="form-label">${TR('Stock principal (VosFactures)')}</label><input class="form-input" id="f-stock" type="number" value="${p?.stock||0}" title="${TR('Recopié chaque nuit depuis VosFactures')}"></div>
+      <div class="form-group"><label class="form-label">${TR('Stock SAV (non synchronisé)')}</label><input class="form-input" id="f-stocksav" type="number" min="0" value="${p?.stock_sav||0}" style="border-color:#c4b5fd"></div>
       <div class="form-group"><label class="form-label">Seuil alerte stock</label><input class="form-input" id="f-stalerte" type="number" value="${p?.stock_alerte||2}"></div>
     </div>
     ${p?.pl_product_id?`<div style="margin-top:10px"><a href="https://app.pennylane.com/companies/${PL_COMPANY_ID}/products?id=${p.pl_product_id}" target="_blank" style="color:var(--accent);font-size:13px;text-decoration:none"><i class="ti ti-external-link"></i> ${TR('Voir dans Pennylane')}</a></div>`:''}</div>
@@ -4433,7 +4464,7 @@ function majTarifsPiece(){
     `${TR('Marge distributeur')} : <b>${pubHT!=null&&dist!=null?f(pubHT-dist):'—'}</b> HT · ${TR('Marge Éloflex')} : <b>${dist!=null&&achat!=null?f(dist-achat):'—'}</b> HT`;
 }
 window.majTarifsPiece = majTarifsPiece;
-async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:parseFloat(gv('f-tvadist'))||5.5,tva_distributeur:parseFloat(gv('f-tvadist'))||5.5,prix_ttc_public:Math.round((parseFloat(gv('f-px'))||0)*(1+(parseFloat(gv('f-tvadist'))||5.5)/100)*100)/100,prix_achat_suede:gv('f-achat')===''?null:parseFloat(gv('f-achat')),prix_public_ttc:gv('f-pub')===''?null:parseFloat(gv('f-pub')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:parseFloat(gv('f-tvadist'))||5.5,tva_distributeur:parseFloat(gv('f-tvadist'))||5.5,prix_ttc_public:Math.round((parseFloat(gv('f-px'))||0)*(1+(parseFloat(gv('f-tvadist'))||5.5)/100)*100)/100,prix_achat_suede:gv('f-achat')===''?null:parseFloat(gv('f-achat')),prix_public_ttc:gv('f-pub')===''?null:parseFloat(gv('f-pub')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_sav:Math.max(0,parseInt(gv('f-stocksav'))||0),stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
 async function deletePiece(id){if(!confirm(TR('Supprimer ?')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 async function syncCataloguePennylane(btn){
   const old = btn?btn.innerHTML:null;
@@ -7215,7 +7246,7 @@ function renderCarte(ttl, c, a) {
           '<input id="carte-geo" class="form-input" placeholder="'+TR("Ville, code postal ou n° de département (ex : 83)")+'" onkeydown="if(event.key===\'Enter\')rechercheGeo()" style="flex:1;padding:6px 9px;font-size:14px">' +
           '<button onclick="rechercheGeo()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer"><i class="ti ti-search"></i></button>' +
         '</div>' +
-        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:13px;background:var(--surface);color:var(--text)"><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
+        '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer"><input type="checkbox" id="carte-rayon-actif" onchange="rechercheGeo()"> ' + (t('carte_afficher_rayon')||'Afficher rayon') + ' <select id="carte-rayon" onchange="if(document.getElementById(\'carte-rayon-actif\').checked)rechercheGeo()" style="border:0.5px solid var(--border);border-radius:4px;padding:1px 4px;font-size:13px;background:var(--surface);color:var(--text)"><option value="5">5 km</option><option value="10">10 km</option><option value="25">25 km</option><option value="50" selected>50 km</option><option value="100">100 km</option><option value="150">150 km</option></select></label></div>' +
         '<div id="carte-geo-result" style="margin-top:10px;font-size:13px;color:var(--text2)"></div>' +
         '<div style="margin-top:10px;font-size:12px;color:var(--text3);line-height:1.5">' + (t('carte_aide')||'Recherchez une ville pour voir les distributeurs alentour. Cliquez un point pour le détail.') + '</div>' +
       '</div>';

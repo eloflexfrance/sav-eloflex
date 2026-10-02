@@ -106,6 +106,8 @@ async function initDB() {
       // prix_public_ttc = prix de vente public conseillé TTC (saisi à la main ; TVA 20 % calculée dessus).
       // prix_ttc_public reste l'ancien champ rempli par Pennylane (= TTC distributeur), conservé tel quel.
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_achat_suede NUMERIC`);
+      // Stock SAV : stock propre à l'atelier, saisi à la main, JAMAIS synchronisé avec VosFactures
+      await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_sav INTEGER DEFAULT 0`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_public_ttc NUMERIC`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS tva_distributeur NUMERIC`);
       await client.query(`UPDATE catalogue SET tva_distributeur = CASE WHEN taux_tva = 20 THEN 20 ELSE 5.5 END WHERE tva_distributeur IS NULL`);

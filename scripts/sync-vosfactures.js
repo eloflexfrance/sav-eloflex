@@ -104,6 +104,7 @@ async function syncProducts() {
             stock       = EXCLUDED.stock,
             updated_at  = NOW()
         `, [ref, p.name||'—', p.supplier_code||null, pxht, Math.max(0, Math.round(stock)), p.id]);
+        // Stock : VosFactures reste la référence (inventaire régularisé le 02/10/2026).
         count++;
         // Tarifs : prix d'achat Suède (TVA 0 %) et TVA distributeur (5,5 % ou 20 %), si renseignés dans VosFactures
         const pa = parseFloat(p.purchase_price_net || 0);
