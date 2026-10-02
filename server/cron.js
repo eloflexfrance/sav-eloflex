@@ -189,23 +189,21 @@ async function envoyerEmailDemos(demos) {
   try {
     const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
     if (p.email_notifications !== '1') return;
-    if (!p.email_smtp_host || !p.email_smtp_user || !p.email_smtp_pass) return;
-    const dest = p.email_cc_relance || p.email_from || p.email_smtp_user;
-    if (!dest) return;
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: p.email_smtp_host, port: parseInt(p.email_smtp_port) || 587, secure: false,
-      auth: { user: p.email_smtp_user, pass: p.email_smtp_pass }
-    });
+    // Envoi via l'API Brevo (le SMTP est bloqué / refusé depuis Render : « 535 Authentication failed »)
+    const key = process.env.BREVO_API_KEY;
+    if (!key) { console.warn('[CRON] BREVO_API_KEY manquante — email démos non envoyé'); return; }
+    const dest = p.email_cc_relance || p.email_cc_sav || p.email_from || 'sav@eloflex.fr';
     const lignes = demos.map(d => `<li>${d.client_nom || d.distributeur_nom} — ${d.modele || ''} ${d.num_serie || ''} (rappel du ${d.demo_rappel_date})</li>`).join('');
     const url = process.env.APP_URL || '';
-    await transporter.sendMail({
-      from: p.email_from || p.email_smtp_user, to: dest,
+    const axios = require('axios');
+    await axios.post('https://api.brevo.com/v3/smtp/email', {
+      sender: { name: 'Eloflex France', email: p.email_from || 'sav@eloflex.fr' },
+      to: [{ email: dest }],
       subject: `🔄 ${demos.length} fauteuil(s) de démo à suivre`,
-      html: `<p>${demos.length} fauteuil(s) de démonstration arrivent à échéance de rappel (J+30) :</p><ul>${lignes}</ul>
+      htmlContent: `<p>${demos.length} fauteuil(s) de démonstration arrivent à échéance de rappel (J+30) :</p><ul>${lignes}</ul>
              <p>Pour chacun : <b>organiser le retour</b>, <b>prolonger</b> le rappel, ou <b>facturer</b>.</p>
              ${url ? `<p><a href="${url}">Ouvrir l'application → Alertes</a></p>` : ''}`
-    });
+    }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
     console.log(`[CRON] Email démos envoyé (${demos.length})`);
   } catch (e) { console.error('[CRON] Email démos err:', e.message); }
 }

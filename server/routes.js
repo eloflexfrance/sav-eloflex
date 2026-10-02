@@ -2881,7 +2881,7 @@ router.post('/email/notification-intervention', async (req, res) => {
     const rows = await db.all('SELECT cle, valeur FROM parametres');
     rows.forEach(r => params[r.cle] = r.valeur);
     if (params.email_notifications !== '1') return res.json({ ok: false, reason: 'Notifications désactivées' });
-    if (!params.email_smtp_host || !params.email_smtp_user) return res.json({ ok: false, reason: 'SMTP non configuré' });
+    if (!process.env.BREVO_API_KEY) return res.json({ ok: false, reason: 'Clé API Brevo manquante (BREVO_API_KEY)' });
 
     const i = await db.get(`
       SELECT iv.*, c.nom AS client_nom, c.email AS client_email, f.modele, f.serie
@@ -2891,14 +2891,9 @@ router.post('/email/notification-intervention', async (req, res) => {
       WHERE iv.id=$1`, [intervention_id]);
     if (!i || !i.client_email) return res.json({ ok: false, reason: "Pas d'email client" });
 
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: params.email_smtp_host, port: parseInt(params.email_smtp_port)||587,
-      secure: parseInt(params.email_smtp_port)===465, auth: { user: params.email_smtp_user, pass: params.email_smtp_pass }
-    });
-
-    await transporter.sendMail({
-      from: params.email_from || params.email_smtp_user,
+    // Envoi via l'API Brevo (le SMTP est refusé depuis Render)
+    await sendBrevoMail({
+      from: params.email_from || 'sav@eloflex.fr', fromName: 'Eloflex France',
       to: i.client_email,
       subject: `[Eloflex] ${i.num_sav||'Intervention #'+i.id} — ${i.statut}`,
       html: `<div style="font-family:sans-serif;max-width:520px">
@@ -3953,7 +3948,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
   try {
     const params = {}; const prows = await db.all('SELECT cle, valeur FROM parametres');
     prows.forEach(p => params[p.cle] = p.valeur);
-    if (!params.email_smtp_host) return res.json({ ok: false, reason: 'SMTP non configuré' });
+    if (!process.env.BREVO_API_KEY && !params.brevo_api_key) return res.json({ ok: false, reason: 'Clé API Brevo manquante (BREVO_API_KEY)' });
     const devis = await db.get('SELECT * FROM devis WHERE id=$1', [req.params.id]);
     if (!devis) return res.status(404).json({ error: 'Devis introuvable' });
     const email = req.body.email || devis.client_email;
@@ -5453,7 +5448,7 @@ router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
     const prows = await db.all('SELECT cle, valeur FROM parametres');
     prows.forEach(r => params[r.cle] = r.valeur);
     if (params.email_notifications !== '1') return res.json({ ok: false, reason: 'Notifications email désactivées dans Paramètres' });
-    if (!params.email_smtp_host || !params.email_smtp_user) return res.json({ ok: false, reason: 'SMTP non configuré dans Paramètres' });
+    if (!process.env.BREVO_API_KEY) return res.json({ ok: false, reason: 'Clé API Brevo manquante (BREVO_API_KEY)' });
     const cmd = await db.get(`SELECT cmd.*, c.nom AS client_nom, c.email AS client_email
       FROM commandes cmd JOIN clients c ON c.id=cmd.client_id WHERE cmd.id=$1`, [req.params.id]);
     if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
@@ -5467,11 +5462,9 @@ router.post('/commandes/:id/email-expedition', adminOrOp, async (req, res) => {
     const articlesList = cmd.modele||(cmd.accessoire||'').split('\n').slice(0,3).join(', ');
     const types = [cmd.type_fauteuil_neuf && '🆕 Fauteuil Neuf', cmd.type_fauteuil_demo && '🔄 Fauteuil Démo', cmd.type_pieces && '📦 Pièces détachées'].filter(Boolean).join(', ');
 
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({ host:params.email_smtp_host, port:parseInt(params.email_smtp_port)||587,
-      secure:parseInt(params.email_smtp_port)===465, auth:{user:params.email_smtp_user, pass:params.email_smtp_pass} });
-    await transporter.sendMail({
-      from: params.email_from||params.email_smtp_user, to: cmd.client_email,
+    // Envoi via l'API Brevo (le SMTP est refusé depuis Render)
+    await sendBrevoMail({
+      from: params.email_from || 'sav@eloflex.fr', fromName: 'Eloflex France', to: cmd.client_email,
       subject: `[Eloflex] Expédition de votre commande ${cmd.bdc||'#'+cmd.id}`,
       cc: 'sav@eloflex.fr',
       html: `<div style="font-family:sans-serif;max-width:580px;color:#222;margin:0 auto">
