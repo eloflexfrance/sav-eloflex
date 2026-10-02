@@ -1509,7 +1509,7 @@ async function modalCommande(id, prefill){
   if(!window._ALL_CLIENTS){ try{ window._ALL_CLIENTS = await API.clients(); }catch(e){ window._ALL_CLIENTS = []; } }
   let cm = id ? await API.commande(id) : Object.assign({statut:'Auto', quantite:1}, prefill||{});
 
-  const hasExp  = !!(cm.num_suivi || cm.date_livraison || cm.num_bordereau || cm.num_serie);
+  const hasExp  = !!(cm.num_suivi || cm.date_depart || cm.date_livraison || cm.num_bordereau || cm.num_serie);
   const hasFact = !!(cm.num_facture || cm.num_facture_pennylane || (cm.statut && cm.statut!=='Auto' && cm.statut!=='En préparation' && cm.statut!=='En attente confirmation'));
   const initTab = id && (cm.statut_calc==='Expédié'||cm.statut_calc==='Livré') && !hasFact ? 'expedition' : 'commande';
   const type = cm.commande_type || (/eloflex/i.test(cm.modele||'') ? 'fauteuil' : cm.modele ? 'pieces' : '');
@@ -1745,8 +1745,8 @@ async function modalCommande(id, prefill){
             </select>
           </div>
           <div id="cmd-lien-suivi-wrap" style="grid-column:1/-1;margin-top:-8px"></div>
-          <div class="form-group"><label class="form-label">${TR("Date livraison")}</label>
-            <input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison();majStatutBadge()">
+          <div class="form-group"><label class="form-label">${TR("Date départ")}</label>
+            <input class="form-input" id="cmd-depart" type="date" value="${cm.date_depart||''}">
           </div>
           <div class="form-group"><label class="form-label">${TR("N° Bordereau de livraison")}</label>
             <div style="display:flex;gap:5px">
@@ -1757,6 +1757,9 @@ async function modalCommande(id, prefill){
           <div class="form-group"><label class="form-label">${TR('N° série')}</label>
             <input class="form-input mono" id="cmd-serie" value="${esc(cm.num_serie||'')}" placeholder="${t('cmd_num_serie_placeholder')||'Numéro de série'}" oninput="majSerieDemoHint()">
             <div id="cmd-serie-demo-hint" style="display:none;font-size:12.5px;color:var(--warning);margin-top:4px"><i class="ti ti-info-circle" style="font-size:13px;margin-right:2px"></i>${TR('Fauteuil démo : renseignez le n° de série pour le suivre dans le Parc démo et le rattacher aux prêts / transferts.')}</div>
+          </div>
+          <div class="form-group"><label class="form-label">${TR("Date livraison")}</label>
+            <input class="form-input" id="cmd-livraison" type="date" value="${cm.date_livraison||''}" onchange="majZonePreuveLivraison();majStatutBadge()">
           </div>
         </div>
         <div id="cmd-preuve-zone"></div>
@@ -2428,7 +2431,7 @@ async function enregistrerCommande(id){
     cf_tel: gv('cmd-clientfinal-type') ? (gv('cf-tel')||null) : null,
     cf_email: gv('cmd-clientfinal-type') ? (gv('cf-email')||null) : null,
     num_suivi: gv('cmd-suivi'), transporteur: gv('cmd-transporteur')||null,
-    date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
+    date_depart: gv('cmd-depart')||null, date_livraison: gv('cmd-livraison')||null, num_bordereau: gv('cmd-bordereau')||null,
     num_serie: gv('cmd-serie'), num_facture: gv('cmd-facture'), statut: gv('cmd-statut'),
     facture_vf_id: gv('cmd-facture-vfid')||null,
     informations: gv('cmd-infos'),

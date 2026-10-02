@@ -627,6 +627,7 @@ async function initDB() {
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_url TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_mime TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_taille INTEGER`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS date_depart TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_storage TEXT`);
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS preuve_livraison_uploaded_at TIMESTAMPTZ`);
     } catch(e) { /* déjà présentes */ }

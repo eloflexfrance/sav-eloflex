@@ -1915,7 +1915,7 @@ router.get('/export/excel', adminOnly, async (req, res) => {
         'Année': cm.annee_onglet, 'Groupe': cm.groupe || '', 'Distributeur': cm.distributeur_nom,
         'Modèle': cm.modele || '', 'Quantité': cm.quantite || 1, 'Accessoire': cm.accessoire || '', 'Bdc': cm.bdc || '',
         'Date commande': cm.date_commande || '', 'Client final': cm.client_final || '',
-        'N° suivi': cm.num_suivi || '', 'Date livraison': cm.date_livraison || '',
+        'N° suivi': cm.num_suivi || '', 'Date départ': cm.date_depart || '', 'Date livraison': cm.date_livraison || '',
         'N° série': cm.num_serie || '', 'Facture': cm.num_facture || '', 'Informations': cm.informations || ''
       }))), 'Commandes');
     }
@@ -4608,6 +4608,7 @@ router.post('/commandes', async (req, res) => {
        d.proforma_payee ? 'paye' : null,
        d.type_fauteuil_neuf ? true : false, d.type_fauteuil_demo ? true : false, d.type_pieces ? true : false, d.confirmation_mode || null]
     );
+    if (d.date_depart) { const r2 = await db.run('UPDATE commandes SET date_depart=$1 WHERE id=$2 RETURNING *', [d.date_depart, row.id]); if (r2) Object.assign(row, r2); }
     await majFauteuilVente(row);
     await majRappelDemo(row);
     await majOrigineDemo(row);
@@ -4619,7 +4620,7 @@ router.put('/commandes/:id', async (req, res) => {
   try {
     const d = req.body;
     const champs = ['client_id', 'fauteuil_id', 'annee_onglet', 'groupe', 'distributeur_nom', 'modele', 'quantite', 'accessoire',
-      'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_livraison', 'num_serie',
+      'bdc', 'date_commande', 'vf_order_id', 'client_final', 'num_suivi', 'transporteur', 'date_depart', 'date_livraison', 'num_serie',
       'client_final_type', 'cf_nom', 'cf_prenom', 'cf_adresse', 'cf_cp', 'cf_ville', 'cf_tel', 'cf_email',
       'demo_origine_nom', 'demo_localisation_actuelle',
       'num_facture', 'invoice_se', 'informations', 'statut', 'num_bordereau', 'reliquat', 'reliquat_description',
