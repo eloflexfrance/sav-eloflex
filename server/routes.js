@@ -1277,7 +1277,7 @@ router.get('/catalogue', async (req, res) => {
                  vf_product_id, pl_product_id, taux_tva, prix_ttc_public, poids, prix_achat_suede, prix_public_ttc, tva_distributeur,
                  (image_data IS NOT NULL) AS has_image, created_at, updated_at
                FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1)`;
-    if (req.query.alerte === '1') sql += ' AND stock<=stock_alerte';
+    if (req.query.alerte === '1') sql += ' AND stock<=stock_alerte AND stock_actif IS NOT FALSE';
     if (req.query.sav === '1') sql += ' AND COALESCE(stock_sav,0) <> 0';
     sql += ' ORDER BY ref';
     res.json(await db.all(sql, [q]));

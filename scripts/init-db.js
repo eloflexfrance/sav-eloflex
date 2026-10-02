@@ -108,6 +108,11 @@ async function initDB() {
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_achat_suede NUMERIC`);
       // Stock SAV : stock propre à l'atelier, saisi à la main, JAMAIS synchronisé avec VosFactures
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS stock_sav INTEGER DEFAULT 0`);
+      // Fauteuils roulants / scooters : stock non suivi (ni VosFactures, ni Pennylane) → 0 et hors alertes
+      await client.query(`UPDATE catalogue SET stock=0, stock_actif=false
+         WHERE (designation ~* '^\\s*(fauteuils?|scooters?)\\M'
+            OR ref ~ '^(7350006080067|7350006080531|7350006080616|7350006080623|7350006080685|7350006080852|7350006084737|7350006085994|7350006086007|7350006088162|7350006082009)(-|$)')
+           AND (stock <> 0 OR stock_actif IS DISTINCT FROM false)`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS prix_public_ttc NUMERIC`);
       await client.query(`ALTER TABLE catalogue ADD COLUMN IF NOT EXISTS tva_distributeur NUMERIC`);
       await client.query(`UPDATE catalogue SET tva_distributeur = CASE WHEN taux_tva = 20 THEN 20 ELSE 5.5 END WHERE tva_distributeur IS NULL`);

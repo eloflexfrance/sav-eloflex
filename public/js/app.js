@@ -282,7 +282,7 @@ async function refreshBadges(){
     const[alertes,cat]=await Promise.all([API.alertes(),API.catalogue()]);
     const nb=alertes.length;
     const bdot=$('badge-alertes'); if(bdot){bdot.style.display=nb>0?'block':'none';}
-    const bstock=$('badge-stock'); const nbs=cat.filter(p=>p.stock<=p.stock_alerte).length;
+    const bstock=$('badge-stock'); const nbs=cat.filter(p=>p.stock_actif!==false && p.stock<=p.stock_alerte).length;
     if(bstock){bstock.style.display=nbs>0?'inline-flex':'none';bstock.textContent=nbs;}
   }catch(e){}
 }
@@ -2543,7 +2543,7 @@ async function chargerListeCatalogue(){
       <td style="font-weight:600">${parseFloat(p.pxht||0).toFixed(2)} €</td>
       <td style="color:var(--text2)">${_tva(p.tva_distributeur!=null?p.tva_distributeur:5.5)}</td>
       <td style="font-weight:600">${_ttc(p.prix_public_ttc)}</td>
-      <td><span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span></td>
+      <td>${p.stock_actif===false?`<span style="color:var(--text3);font-size:12px" title="${TR('Stock non suivi (fauteuil roulant / scooter)')}">${TR('non suivi')}</span>`:`<span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span>`}</td>
       <td onclick="event.stopPropagation()" style="white-space:nowrap"><span class="stock-sav-ctl" style="display:inline-flex;align-items:center;gap:4px">
         <button class="btn sm" style="padding:1px 7px" title="−1" onclick="majStockSav(${p.id},-1,this)">−</button>
         <span id="ssav-${p.id}" style="min-width:22px;text-align:center;font-weight:700;color:${(p.stock_sav||0)>0?'#7c3aed':'var(--text3)'};cursor:pointer" title="${TR('Cliquer pour saisir une quantité')}" onclick="saisirStockSav(${p.id})">${p.stock_sav||0}</span>
