@@ -2688,11 +2688,13 @@ function exportExcelFiltre(){
 async function renderAlertes(ttl,c,a){
   ttl.textContent=t('alertes_title');
   a.innerHTML=`<button class="btn" onclick="API.marquerToutesLues().then(()=>{refreshBadges();render();})"><i class="ti ti-checks"></i>${t('alertes_tout_lire')}</button>`;
-  const [list, demos] = await Promise.all([API.alertes(), API.demosSuivi().catch(()=>[])]);
+  const [list, demos, prm] = await Promise.all([API.alertes(), API.demosSuivi().catch(()=>[]), API.parametres().catch(()=>null)]);
+  const relDemosOff = prm && prm.email_relance_demos==='0';
   const icons={relance:'ti-clock',retour_manquant:'ti-truck-return',garantie_expire:'ti-shield-x',stock_faible:'ti-alert-triangle',stock_zero:'ti-circle-x',intervention_fermee:'ti-circle-check',demo_rappel:'ti-wheelchair'};
   const colors={relance:'var(--warning)',retour_manquant:'var(--accent)',garantie_expire:'var(--danger)',stock_faible:'var(--warning)',stock_zero:'var(--danger)',intervention_fermee:'var(--success)',demo_rappel:'var(--warning)'};
   const demosHtml = (demos&&demos.length) ? `<div class="card" style="margin-bottom:14px">
-      <div class="section-title" style="margin-bottom:10px"><i class="ti ti-wheelchair"></i> Démos à suivre (${demos.length})</div>
+      <div class="section-title" style="margin-bottom:10px"><i class="ti ti-wheelchair"></i> Démos à suivre (${demos.length})
+        ${prm?`<button class="btn sm" style="margin-left:auto" onclick="basculerRelanceDemos(${relDemosOff?1:0})" title="${TR('Activer / désactiver les relances e-mail des démos à rapatrier')}"><i class="ti ${relDemosOff?'ti-mail-off':'ti-mail'}"></i> ${relDemosOff?TR('Relances e-mail désactivées'):TR('Relances e-mail activées')}</button>`:''}</div>
       <div class="table-wrap"><table class="t">
         <thead><tr><th>${TR('Distributeur')}</th><th>${TR('Modèle / Série')}</th><th>${TR('Livraison')}</th><th>Rappel</th><th>${TR('Retour / Prolonger / Facturer')}</th></tr></thead>
         <tbody>${demos.map(d=>`<tr>
@@ -2721,6 +2723,13 @@ async function renderAlertes(ttl,c,a){
         <button class="btn sm" onclick="API.marquerAlerteLue(${al.id}).then(()=>{refreshBadges();render();})"><i class="ti ti-x"></i></button>
       </div>`).join('')}</div>`);
 }
+
+async function basculerRelanceDemos(activer){
+  const msg = activer ? TR('Réactiver les relances e-mail des démos à rapatrier ?') : TR('Désactiver les relances e-mail des démos à rapatrier ?\n(Les alertes dans l\'appli restent affichées.)');
+  if(!confirm(msg)) return;
+  try{ await API.saveParametres({email_relance_demos: activer?'1':'0'}); toast(activer?TR('Relances e-mail démos activées'):TR('Relances e-mail démos désactivées'), activer?'ti-mail':'ti-mail-off'); render(); }catch(e){ alert(e.message); }
+}
+window.basculerRelanceDemos = basculerRelanceDemos;
 
 async function demoProlonger(id, cur){
   const d = prompt(TR('Nouvelle date de rappel (AAAA-MM-JJ) :'), cur||'');
@@ -2804,6 +2813,12 @@ async function renderParametres(ttl,c,a){
         <select class="form-input" id="p-email-notif">
           <option value="0" ${p.email_notifications!=='1'?'selected':''}>${t('param_email_off')}</option>
           <option value="1" ${p.email_notifications==='1'?'selected':''}>${t('param_email_on')}</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">${TR('Relances e-mail des démos à rapatrier')}</label>
+        <select class="form-input" id="p-relance-demos">
+          <option value="1" ${p.email_relance_demos!=='0'?'selected':''}>${TR('Activées')}</option>
+          <option value="0" ${p.email_relance_demos==='0'?'selected':''}>${TR('Désactivées (alertes dans l\'appli uniquement)')}</option>
         </select>
       </div>
       <div class="grid-2">
@@ -3851,6 +3866,7 @@ async function saveParametres(){
     sync_vf_auto:gv('p-vf-auto')||'1',
     app_url:gv('p-appurl')||'',
     email_notifications:gv('p-email-notif')||'0',
+    email_relance_demos:gv('p-relance-demos')||'1',
     email_smtp_host:gv('p-smtp-host')||'',
     email_smtp_port:gv('p-smtp-port')||'587',
     email_smtp_user:gv('p-smtp-user')||'',

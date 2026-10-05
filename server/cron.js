@@ -189,6 +189,8 @@ async function envoyerEmailDemos(demos) {
   try {
     const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
     if (p.email_notifications !== '1') return;
+    // Option Paramètres : relances e-mail des démos à rapatrier désactivables (les alertes dans l'appli restent)
+    if (p.email_relance_demos === '0') { console.log('[CRON] Relances e-mail démos désactivées (Paramètres)'); return; }
     // Envoi via l'API Brevo (le SMTP est bloqué / refusé depuis Render : « 535 Authentication failed »)
     const key = process.env.BREVO_API_KEY;
     if (!key) { console.warn('[CRON] BREVO_API_KEY manquante — email démos non envoyé'); return; }
