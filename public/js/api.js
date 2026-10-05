@@ -50,6 +50,8 @@ const API = {
   clients:(q)=>API.get('/clients'+(q?`?q=${encodeURIComponent(q)}`:'')),
   client:(id)=>API.get(`/clients/${id}`),
   createClient:(d)=>API.post('/clients',d),
+  verifierAdresse:(o)=>API.get('/adresse/verifier?'+new URLSearchParams({adresse:o.adresse||'',cp:o.cp||'',ville:o.ville||'',pays:o.pays||''}).toString()),
+  suggestionsAdresse:(q)=>API.get('/adresse/suggestions?q='+encodeURIComponent(q)),
   updateClient:(id,d)=>API.put(`/clients/${id}`,d),
   setClientType:(id,type)=>API.post(`/clients/${id}/type`,{type}),
   deleteClient:(id)=>API.del(`/clients/${id}`),

@@ -437,6 +437,12 @@ async function initDB() {
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS siret TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS tva TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS entite_facturation_id INTEGER`);
+      // Contrôle des fiches : lien client Pennylane, vérification d'adresse, alerte « absent de la carte »
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS pl_customer_id TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse_verif TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse_verif_msg TEXT`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS adresse_verif_at TIMESTAMPTZ`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS carte_controle_at TIMESTAMPTZ`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_dc_client ON distributeurs_carte(client_id)`);
       await client.query(`ALTER TABLE distributeurs_carte ADD COLUMN IF NOT EXISTS pays TEXT`);
       await client.query(`UPDATE distributeurs_carte SET pays='France' WHERE pays IS NULL`);

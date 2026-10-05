@@ -1435,6 +1435,7 @@ async function importerNouvelleCommande(){
       var prefill={
         statut:'Auto',
         distributeur_nom: r.distributeur||'',
+        pl_customer_id: (src==='pennylane' && r.pl_customer_id) ? r.pl_customer_id : '',
         bdc: r.numero||numero,
         quantite: r.quantite||1,
         modele: r.modele||'',
@@ -1571,6 +1572,7 @@ async function modalCommande(id, prefill){
                 onchange="prefillGroupeDepuisDistrib()"
                 onblur="setTimeout(()=>{const d=document.getElementById('cmd-distrib-drop');if(d)d.style.display='none'},150)">
               <input type="hidden" id="cmd-client-id" value="${cm.client_id||''}">
+              <input type="hidden" id="cmd-pl-customer" value="${esc(cm.pl_customer_id||'')}">
               <div id="cmd-distrib-drop" class="piece-dropdown" style="display:none"></div>
             </div>
           </div>
@@ -2143,6 +2145,7 @@ async function lookupBdcVF(){
     // Mémorise la source + l'identifiant de pièce pour le bouton « Ouvrir »
     if($('cmd-bdc-source')) $('cmd-bdc-source').value = src;
     if($('cmd-bdc-docid') && r.vf_id!=null) $('cmd-bdc-docid').value = String(r.vf_id);
+    if($('cmd-pl-customer')) $('cmd-pl-customer').value = (src==='pennylane' && r.pl_customer_id) ? r.pl_customer_id : '';
     let remplis = [];
     if(r.distributeur && $('cmd-distrib') && !gv('cmd-distrib')){ $('cmd-distrib').value=r.distributeur; remplis.push('distributeur'); prefillGroupeDepuisDistrib(); }
     if(r.modele     && $('cmd-modele')  && !gv('cmd-modele'))  { $('cmd-modele').value=r.modele;       remplis.push('modèle'); }
@@ -2466,11 +2469,13 @@ async function enregistrerCommande(id){
   };
   // Si une proposition a été sélectionnée dans l'autocomplétion, on rattache à la fiche exacte
   const _cid = parseInt(gv('cmd-client-id'))||null; if(_cid) d.client_id = _cid;
+  if(!id && gv('cmd-pl-customer')) d.pl_customer_id = gv('cmd-pl-customer');
   if(!d.distributeur_nom){ toast(t('cmd_err_distrib')||'Le distributeur est requis','ti-alert-circle','var(--danger)'); return; }
   try{
     let cmdId = id;
     if(id) await API.updateCommande(id, d);
-    else { const r = await API.createCommande(d); cmdId = r.id; }
+    else { const r = await API.createCommande(d); cmdId = r.id;
+      if(r.fiche_creee) setTimeout(function(){ toast(TR('Nouvelle fiche distributeur créée')+(d.pl_customer_id?TR(' avec les infos Pennylane'):'')+' — '+TR('e-mail de contrôle envoyé'),'ti-user-plus'); }, 900); }
     // Sauvegarder les lignes si une commande existe
     if(cmdId){
       const lignesValides = TMP_CMD_LIGNES.filter(l=>l.designation?.trim());
@@ -2829,6 +2834,7 @@ async function renderParametres(ttl,c,a){
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${t('param_email_from')}</label><input class="form-input" id="p-email-from" placeholder="SAV Eloflex <sav@eloflex.fr>" value="${esc(p.email_from||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('CC — Emails SAV (confirmations, expéditions)')}</label><input class="form-input" id="p-email-cc-sav" placeholder="sav@eloflex.fr" value="${esc(p.email_cc_sav||'sav@eloflex.fr')}"></div>
         <div class="form-group"><label class="form-label">${TR("CC — Emails relances devis & BDC")}</label><input class="form-input" id="p-email-cc-relance" placeholder="info@eloflex.fr" value="${esc(p.email_cc_relance||'info@eloflex.fr')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Contrôle des fiches distributeurs (nouvelle fiche, absente de la carte, adresse en anomalie)')}</label><input class="form-input" id="p-email-controle" placeholder="${TR('vide = pas d\'e-mail')}" value="${esc(p.email_controle_fiches===undefined?'sav@eloflex.fr':(p.email_controle_fiches||''))}"></div>
       </div>
     </div>
     <div class="param-section">
@@ -3867,6 +3873,7 @@ async function saveParametres(){
     app_url:gv('p-appurl')||'',
     email_notifications:gv('p-email-notif')||'0',
     email_relance_demos:gv('p-relance-demos')||'1',
+    email_controle_fiches:(document.getElementById('p-email-controle')?gv('p-email-controle').trim():'sav@eloflex.fr'),
     email_smtp_host:gv('p-smtp-host')||'',
     email_smtp_port:gv('p-smtp-port')||'587',
     email_smtp_user:gv('p-smtp-user')||'',
@@ -4073,6 +4080,51 @@ function lbKey(e){if(e.key==='ArrowRight')lbNav(1);if(e.key==='ArrowLeft')lbNav(
 
 // ── MODALES CLIENTS ───────────────────────────────────────────────
 
+// ── Contrôle d'adresse (Base Adresse Nationale) dans la fiche distributeur ──
+function adrVerifHtml(v){
+  if(!v||!v.statut) return '';
+  if(v.statut==='ok') return '<span style="color:var(--success)"><i class="ti ti-circle-check"></i> '+esc(v.message||TR('Adresse vérifiée'))+'</span>';
+  if(v.statut==='non_verifiee') return '<span style="color:var(--text3)"><i class="ti ti-help-circle"></i> '+esc(v.message||TR('Adresse non vérifiée'))+'</span>';
+  var col = v.statut==='approx' ? 'var(--warning)' : 'var(--danger)';
+  var sug = v.suggestion && v.suggestion.label ? ' <button type="button" class="btn sm" style="margin-left:6px" onclick="adrAppliquer(window._ADR_SUG)"><i class="ti ti-wand"></i> '+TR('Remplacer par')+' « '+esc(v.suggestion.label)+' »</button>' : '';
+  if(v.suggestion) window._ADR_SUG = v.suggestion;
+  return '<span style="color:'+col+'"><i class="ti ti-alert-triangle"></i> '+esc(v.message||'')+'</span>'+sug
+    +(v.statut==='anomalie'?'<div style="color:var(--text3);font-size:12px;margin-top:2px">'+TR('La fiche peut être enregistrée quand même : un e-mail de contrôle sera envoyé.')+'</div>':'');
+}
+var _adrT=null, _adrS=null;
+function adrVerifierPlusTard(){ clearTimeout(_adrT); _adrT=setTimeout(adrVerifier, 500); }
+async function adrVerifier(){
+  var el=document.getElementById('f-adr-verif'); if(!el) return null;
+  var o={adresse:gv('f-adresse'),cp:gv('f-cp'),ville:gv('f-ville'),pays:gv('f-pays')};
+  if(!o.adresse && !o.cp && !o.ville){ el.innerHTML=''; return null; }
+  el.innerHTML='<span style="color:var(--text3)"><i class="ti ti-loader-2"></i> '+TR('Vérification de l\'adresse…')+'</span>';
+  try{ var v=await API.verifierAdresse(o); el.innerHTML=adrVerifHtml(v); return v; }catch(e){ el.innerHTML=''; return null; }
+}
+function adrSuggerer(q){
+  clearTimeout(_adrS);
+  var drop=document.getElementById('f-adr-drop'); if(!drop) return;
+  var pays=gv('f-pays'); if(pays && pays!=='France'){ drop.style.display='none'; return; }
+  if(!q || q.trim().length<4){ drop.style.display='none'; return; }
+  _adrS=setTimeout(async function(){
+    try{
+      var cp=gv('f-cp'); var r=await API.suggestionsAdresse(q+(cp&&q.indexOf(cp)<0?' '+cp:''));
+      window._ADR_LIST=r||[];
+      if(!r||!r.length){ drop.style.display='none'; return; }
+      drop.innerHTML=r.map(function(a,i){ return '<div class="piece-option" onmousedown="event.preventDefault();adrAppliquer(window._ADR_LIST['+i+'])"><i class="ti ti-map-pin" style="color:var(--text3)"></i> '+esc(a.label)+'</div>'; }).join('');
+      drop.style.display='block';
+    }catch(_){ drop.style.display='none'; }
+  }, 300);
+}
+function adrAppliquer(a){
+  if(!a) return;
+  if(a.adresse && document.getElementById('f-adresse')) document.getElementById('f-adresse').value=a.adresse;
+  if(a.cp && document.getElementById('f-cp')) document.getElementById('f-cp').value=a.cp;
+  if(a.ville && document.getElementById('f-ville')) document.getElementById('f-ville').value=a.ville;
+  var drop=document.getElementById('f-adr-drop'); if(drop) drop.style.display='none';
+  adrVerifier();
+}
+window.adrVerifierPlusTard=adrVerifierPlusTard; window.adrSuggerer=adrSuggerer; window.adrAppliquer=adrAppliquer;
+
 function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Nom *</label><input class="form-input" id="f-nom" value="${esc(d.nom||'')}"></div>
   <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="f-type">${['Distributeur','Revendeur','Particulier'].map(t=>`<option ${d.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
@@ -4080,11 +4132,13 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="f-email" value="${esc(d.email||'')}"></div>
   <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="f-tel" value="${esc(fmtTel(d.tel||''))}"></div>
   <div class="form-group"><label class="form-label">Portable</label><input class="form-input" id="f-portable" value="${esc(fmtTel(d.portable||''))}"></div>
-  <div class="form-group" style="grid-column:1/-1"><label class="form-label">Adresse</label><input class="form-input" id="f-adresse" placeholder="12 rue des Lilas" value="${esc(d.adresse||'')}"></div>
+  <div class="form-group" style="grid-column:1/-1;position:relative"><label class="form-label">Adresse</label><input class="form-input" id="f-adresse" autocomplete="off" placeholder="12 rue des Lilas" value="${esc(d.adresse||'')}" oninput="adrSuggerer(this.value)" onblur="setTimeout(function(){var x=document.getElementById('f-adr-drop');if(x)x.style.display='none';},180);adrVerifierPlusTard()">
+    <div id="f-adr-drop" class="piece-dropdown" style="display:none"></div></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR("Complément d'adresse")}</label><input class="form-input" id="f-adresse2" placeholder="${TR("Bâtiment B, ZI de la Plaine…")}" value="${esc(d.adresse2||'')}"></div>
-  <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}"></div>
-  <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}"></div>
-  <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays">${optionsPays(d.pays||'France')}</select></div>
+  <div class="form-group"><label class="form-label">Code postal</label><input class="form-input" id="f-cp" placeholder="17000" value="${esc(d.cp||'')}" onchange="adrVerifierPlusTard()"></div>
+  <div class="form-group"><label class="form-label">Ville</label><input class="form-input" id="f-ville" value="${esc(d.ville||'')}" onchange="adrVerifierPlusTard()"></div>
+  <div class="form-group"><label class="form-label">Pays</label><select class="form-input" id="f-pays" onchange="adrVerifierPlusTard()">${optionsPays(d.pays||'France')}</select></div>
+  <div id="f-adr-verif" style="grid-column:1/-1;font-size:13px;margin-top:-4px">${adrVerifHtml(d.adresse_verif?{statut:d.adresse_verif,message:d.adresse_verif_msg}:null)}</div>
   <div class="form-group"><label class="form-label">${TR('SIREN')} <span style="font-weight:400;color:var(--text3)">(9 ${TR('chiffres')})</span></label><input class="form-input mono" id="f-siren" value="${esc(d.siren||'')}" placeholder="123456789" oninput="majTvaDepuisSiren()"></div>
   <div class="form-group"><label class="form-label">${TR('SIRET')} <span style="font-weight:400;color:var(--text3)">(14 ${TR('chiffres')})</span></label><input class="form-input mono" id="f-siret" value="${esc(d.siret||'')}" placeholder="12345678900012" oninput="majTvaDepuisSiren()"></div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('N° TVA intracommunautaire')}</label><div style="display:flex;gap:8px"><input class="form-input mono" id="f-tva-intra" value="${esc(d.tva||'')}" placeholder="FR12123456789" style="flex:1"><button type="button" class="btn sm" onclick="majTvaDepuisSiren(true)" title="${TR('Calculer le numéro de TVA français à partir du SIREN')}"><i class="ti ti-calculator"></i> ${TR('Calculer')}</button></div></div>
@@ -4193,6 +4247,9 @@ async function saveClient(id){
   try{
     const r = id ? await API.updateClient(id, data) : await API.createClient(data);
     toast(id ? 'Client mis à jour' : 'Client créé');
+    if (r && r.adresse_verif && r.adresse_verif.statut==='anomalie') {
+      setTimeout(function(){ alert(TR('Fiche enregistrée, mais l\'adresse semble incorrecte :\n') + (r.adresse_verif.message||'') + (r.adresse_verif.suggestion&&r.adresse_verif.suggestion.label ? '\n\n'+TR('Suggestion : ')+r.adresse_verif.suggestion.label : '') + '\n\n'+TR('Un e-mail de contrôle a été envoyé.')); }, 300);
+    }
     // Retour du positionnement sur la carte
     if (surCarte && r && r.carte && !r.carte.ok) {
       setTimeout(function(){ alert(TR('Client enregistré, mais non placé sur la carte :\n') + (r.carte.reason || 'raison inconnue') + '\n\nVous pouvez le positionner manuellement depuis la carte.'); }, 400);

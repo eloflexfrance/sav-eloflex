@@ -410,12 +410,15 @@ async function lookupDocumentPennylane(numero) {
         }
 
         const estPret = /essai|demo|d[ée]mo|pr[eê]t|gratuit|loan/i.test(texte + ' ' + titreDoc);
+        const plCustomerId = (detail.customer && (detail.customer.id || detail.customer.source_id)) || detail.customer_id
+                           || (detail.client && detail.client.id) || null;
         return {
           configured: true, found: true, source: 'pennylane',
           vf_id: doc.id,
           numero: detail.invoice_number || detail.number || detail.label || numero,
           date_commande: dateCmd ? String(dateCmd).slice(0, 10) : null,
           distributeur: distrib || null,
+          pl_customer_id: plCustomerId ? String(plCustomerId) : null,
           modele, quantite, lignes,
           num_serie: mSerie ? mSerie[0] : (lignes.find(l => l.num_serie) ? lignes.find(l => l.num_serie).num_serie : null),
           total_ht: lignes.reduce((s, l) => s + (l.prix || 0) * (l.quantite || 1), 0) || null,

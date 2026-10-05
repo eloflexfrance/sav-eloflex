@@ -567,6 +567,16 @@ async function _majIdentifiantsClient(id, b) {
   vals.push(id);
   await db.run(`UPDATE clients SET ${sets.join(', ')} WHERE id=$${vals.length}`, vals);
 }
+// ── Vérification / autocomplétion d'adresse (Base Adresse Nationale) ──
+router.get('/adresse/verifier', requireAuth, async (req, res) => {
+  try { res.json(await require('../scripts/controle-fiches').verifierAdresse(req.query || {})); }
+  catch (e) { res.json({ statut: 'non_verifiee', message: e.message }); }
+});
+router.get('/adresse/suggestions', requireAuth, async (req, res) => {
+  try { res.json(await require('../scripts/controle-fiches').suggestionsAdresse(req.query.q)); }
+  catch (e) { res.json([]); }
+});
+
 router.post('/clients', async (req, res) => {
   try {
     const { nom, contact, email, tel, portable, ville, type, edi, sur_carte, reseau_carte,
@@ -584,7 +594,10 @@ router.post('/clients', async (req, res) => {
     let carte = null;
     if (sur_carte) carte = await syncClientCarte(cl.id);
     await _majIdentifiantsClient(cl.id, req.body);
-    res.status(201).json({ ...cl, carte });
+    // Vérification de l'adresse (fiche créée quand même ; e-mail de contrôle si anomalie)
+    let adresse_verif = null;
+    try { adresse_verif = await require('../scripts/controle-fiches').apresSaisieFiche(cl.id, { creee: true }); } catch (_) {}
+    res.status(201).json({ ...cl, carte, adresse_verif });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -611,7 +624,13 @@ router.put('/clients/:id', async (req, res) => {
     }
     await _majIdentifiantsClient(req.params.id, req.body);
     const carte = await syncClientCarte(req.params.id);
-    res.json({ ...cl, carte });
+    // Adresse modifiée → nouvelle vérification (e-mail de contrôle si anomalie)
+    let adresse_verif = null;
+    const adrChangee = avant && (avant.ville !== ville || (avant.adresse || null) !== (adresse || null) || (avant.cp || null) !== (cp || null));
+    if (adrChangee || (cl && !cl.adresse_verif)) {
+      try { adresse_verif = await require('../scripts/controle-fiches').apresSaisieFiche(req.params.id, { creee: false, silencieux: !adrChangee }); } catch (_) {}
+    }
+    res.json({ ...cl, carte, adresse_verif });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -4573,15 +4592,26 @@ router.post('/commandes', async (req, res) => {
     const d = req.body;
     if (!d.distributeur_nom) return res.status(400).json({ error: 'distributeur_nom requis' });
     let clientId = d.client_id || null;
+    let ficheCreee = false;
+    const plCust = d.pl_customer_id ? String(d.pl_customer_id) : null;
+    if (!clientId && plCust) {
+      // Fiche déjà reliée à ce client Pennylane
+      const parPl = await db.get('SELECT id FROM clients WHERE pl_customer_id=$1 ORDER BY id LIMIT 1', [plCust]);
+      if (parPl) clientId = parPl.id;
+    }
     if (!clientId) {
-      const existing = await db.get('SELECT id FROM clients WHERE LOWER(TRIM(nom))=LOWER($1)', [d.distributeur_nom]);
+      const existing = await db.get('SELECT id FROM clients WHERE LOWER(TRIM(nom))=LOWER(TRIM($1))', [d.distributeur_nom]);
       if (existing) clientId = existing.id;
       else {
+        // Rapprochement souple (e-mail, nom sans accents, « BASTIDE DOUAI » ⊂ « BASTIDE … Agence de DOUAI »)
+        try { clientId = await _trouverClientPret(d); } catch (_) {}
+      }
+      if (!clientId) {
         const c = await db.run(
-          `INSERT INTO clients (nom, email, tel, type, token_portail) VALUES ($1,$2,$3,'Distributeur',md5(random()::text)) RETURNING id`,
-          [d.distributeur_nom, d.email || null, d.tel || null]
+          `INSERT INTO clients (nom, email, tel, type, token_portail, pl_customer_id) VALUES ($1,$2,$3,'Distributeur',md5(random()::text),$4) RETURNING id`,
+          [d.distributeur_nom.trim(), d.email || null, d.tel || null, plCust]
         );
-        clientId = c.id;
+        clientId = c.id; ficheCreee = true;
       }
     }
     const row = await db.run(
@@ -4612,7 +4642,10 @@ router.post('/commandes', async (req, res) => {
     await majFauteuilVente(row);
     await majRappelDemo(row);
     await majOrigineDemo(row);
-    res.status(201).json(row);
+    // Contrôle de la fiche distributeur (Pennylane, adresse, carte) + e-mail — en arrière-plan
+    require('../scripts/controle-fiches').apresCommande({ clientId, creee: ficheCreee, plCustomerId: plCust, commande: row })
+      .catch(e => console.error('[CONTROLE FICHES]', e.message));
+    res.status(201).json({ ...row, fiche_creee: ficheCreee });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
