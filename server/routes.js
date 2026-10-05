@@ -1103,7 +1103,7 @@ const _ECL_CAT_JOIN = `LEFT JOIN LATERAL (
 
 router.get('/eclates', async (req, res) => {
   try {
-    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at, m.lien_web, (m.photo IS NOT NULL) AS photo_perso,
+    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at, m.lien_web, m.lien_notice, m.lien_fiche, (m.photo IS NOT NULL) AS photo_perso,
         (SELECT COUNT(*) FROM eclates_vues v WHERE v.modele_id = m.id)::int AS nb_vues,
         (SELECT COUNT(*) FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id WHERE v.modele_id = m.id)::int AS nb_lignes
       FROM eclates_modeles m ORDER BY m.ordre, m.nom`));
@@ -1124,7 +1124,7 @@ router.get('/eclates/par-ref/:ref', async (req, res) => {
 
 router.get('/eclates/:id', async (req, res) => {
   try {
-    const m = await db.get('SELECT id, slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, updated_at, lien_web FROM eclates_modeles WHERE id=$1', [req.params.id]);
+    const m = await db.get('SELECT id, slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, updated_at, lien_web, lien_notice, lien_fiche FROM eclates_modeles WHERE id=$1', [req.params.id]);
     if (!m) return res.status(404).json({ error: 'Éclaté introuvable' });
     const vues = await db.all(`SELECT v.id, v.code, v.page, v.ordre, v.nom_en, v.nom_fr, v.assembly_ref, v.clip, v.reperes, v.ocr,
         (SELECT c.designation FROM catalogue c WHERE COALESCE(v.assembly_ref,'') <> ''
@@ -1157,9 +1157,17 @@ router.get('/eclates/:id/photo', async (req, res) => {
 });
 router.put('/eclates/:id/lien', async (req, res) => {
   try {
-    let u = String((req.body && req.body.lien_web) || '').trim();
-    if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
-    const r = await db.run('UPDATE eclates_modeles SET lien_web=$1, updated_at=NOW() WHERE id=$2 RETURNING id, lien_web', [u, req.params.id]);
+    // Liens : page du site, notice d'utilisation, fiche technique ('' = aucun lien). Seuls les champs envoyés changent.
+    const b = req.body || {}, sets = [], vals = [];
+    for (const k of ['lien_web', 'lien_notice', 'lien_fiche']) {
+      if (b[k] === undefined) continue;
+      let u = String(b[k] || '').trim();
+      if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+      vals.push(u); sets.push(`${k}=$${vals.length}`);
+    }
+    if (!sets.length) return res.status(400).json({ error: 'Aucun lien fourni' });
+    vals.push(req.params.id);
+    const r = await db.run(`UPDATE eclates_modeles SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${vals.length} RETURNING id, lien_web, lien_notice, lien_fiche`, vals);
     if (!r) return res.status(404).json({ error: 'Modèle introuvable' });
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1194,7 +1202,7 @@ router.post('/eclates/import', adminOnly, async (req, res) => {
   }
   const pg = await db.pool.connect();
   try {
-    const ex = await pg.query('SELECT id, photo, lien_web FROM eclates_modeles WHERE slug=$1', [meta.slug]);
+    const ex = await pg.query('SELECT id, photo, lien_web, lien_notice, lien_fiche FROM eclates_modeles WHERE slug=$1', [meta.slug]);
     if (ex.rows.length && b.remplacer !== true) {
       return res.status(409).json({ error: 'existe', message: `L'éclaté « ${meta.modele} » existe déjà.` });
     }
@@ -1207,6 +1215,9 @@ router.post('/eclates/import', adminOnly, async (req, res) => {
       [meta.slug, meta.modele || meta.slug, meta.ref_modele || null, meta.fichier || null, meta.date_doc || null,
        meta.W || 842, meta.H || 596, meta.ordre || 0, prev.photo || null,
        (prev.lien_web != null ? prev.lien_web : null) || meta.lien_web || null])).rows[0];
+    if (prev.lien_notice != null || prev.lien_fiche != null || meta.lien_notice || meta.lien_fiche)
+      await pg.query('UPDATE eclates_modeles SET lien_notice=$1, lien_fiche=$2 WHERE id=$3',
+        [prev.lien_notice != null ? prev.lien_notice : (meta.lien_notice || null), prev.lien_fiche != null ? prev.lien_fiche : (meta.lien_fiche || null), m.id]);
     for (const [page, svg] of Object.entries(b.pages)) {
       await pg.query('INSERT INTO eclates_pages (modele_id, page, svg) VALUES ($1,$2,$3)', [m.id, parseInt(page), svg]);
     }

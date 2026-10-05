@@ -151,6 +151,10 @@ function css(){
 .ecl-card .ecl-photo.vide{color:var(--text3);font-size:40px}
 .ecl-card .ecl-photo .ecl-phbtn{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:3px 7px;font-size:12px;opacity:0;transition:opacity .15s}
 .ecl-card:hover .ecl-photo .ecl-phbtn{opacity:1}
+.ecl-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ecl-act{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border);background:var(--surface,#fff);color:var(--accent);border-radius:7px;font-size:12px;padding:3px 8px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.ecl-act:hover{background:rgba(46,124,246,.10)}
+.ecl-act.pdf{color:#b42318}
 .ecl-card b{font-size:15px}.ecl-card small{display:block;color:var(--text3);margin-top:3px}
 @media (max-width:900px){.ecl-main{flex-direction:column}.ecl-viewer{height:55vh;flex:none}.ecl-aside{width:auto;border-left:none;border-top:1px solid var(--border);flex:1}.ecl-wrap{height:auto}}
 `;
@@ -175,6 +179,26 @@ async function modifierLien(id, actuel){
   if (u === null) return false;
   try { await API.put(`/eclates/${id}/lien`, { lien_web: u.trim() }); if (typeof toast === 'function') toast(TR('Lien enregistré'), 'ti-check', 'var(--success)'); return true; }
   catch (err) { if (typeof toast === 'function') toast('Erreur : ' + err.message, 'ti-alert-circle', 'var(--danger)'); return false; }
+}
+
+// Liens d'un modèle : page du site, notice d'utilisation, fiche technique
+function modifierLiens(m, apres){
+  showModal(`<div class="modal-header"><i class="ti ti-link" style="color:var(--accent)"></i><h2>${TR('Liens')} — ${e_(m.nom)}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label"><i class="ti ti-world"></i> ${TR('Page du fauteuil sur le site')}</label><input class="form-input" id="ecl-l-web" placeholder="https://eloflex.fr/produits/…" value="${e_(m.lien_web || '')}"></div>
+      <div class="form-group"><label class="form-label"><i class="ti ti-book"></i> ${TR('Notice d’utilisation (PDF)')}</label><input class="form-input" id="ecl-l-notice" placeholder="https://eloflex.fr/media/…pdf" value="${e_(m.lien_notice || '')}"></div>
+      <div class="form-group"><label class="form-label"><i class="ti ti-file-description"></i> ${TR('Fiche technique (PDF)')}</label><input class="form-input" id="ecl-l-fiche" placeholder="https://eloflex.fr/media/…pdf" value="${e_(m.lien_fiche || '')}"></div>
+      <div style="font-size:12px;color:var(--text3)">${TR('Laisser un champ vide pour retirer le lien. Les documents sont sur')} <a href="https://eloflex.fr/info/ressources/" target="_blank" rel="noopener">eloflex.fr/info/ressources</a>.</div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Annuler')}</button><button class="btn primary" id="ecl-l-ok"><i class="ti ti-check"></i> ${TR('Enregistrer')}</button></div>`);
+  $('ecl-l-ok').onclick = async () => {
+    try {
+      const r = await API.put(`/eclates/${m.id}/lien`, { lien_web: $('ecl-l-web').value.trim(), lien_notice: $('ecl-l-notice').value.trim(), lien_fiche: $('ecl-l-fiche').value.trim() });
+      Object.assign(m, r); closeModal();
+      if (typeof toast === 'function') toast(TR('Liens enregistrés'), 'ti-check', 'var(--success)');
+      apres && apres(r);
+    } catch (err) { if (typeof toast === 'function') toast('Erreur : ' + err.message, 'ti-alert-circle', 'var(--danger)'); }
+  };
 }
 
 // Redimensionne une photo (côté max) et la renvoie en JPEG data-URL
@@ -208,15 +232,18 @@ async function renderListe(ttl, c, a){
       <b><i class="ti ti-schema" style="color:var(--accent)"></i> ${e_(m.nom)}</b>
       <small>${m.ref_modele ? 'Réf. ' + e_(m.ref_modele) + ' · ' : ''}${e_(m.date_doc || '')}</small>
       <small>${m.nb_vues} ${TR('vues')} · ${m.nb_lignes} ${TR('lignes')}</small>
-      ${(m.lien_web || edit) ? `<small style="margin-top:6px;display:flex;gap:10px;align-items:center">
-        ${m.lien_web ? `<a href="${e_(m.lien_web)}" target="_blank" rel="noopener" class="ecl-web" style="color:var(--accent);text-decoration:none"><i class="ti ti-world"></i> ${TR('Voir sur le site')}</a>` : ''}
-        ${edit ? `<span class="ecl-mini" data-lien="${m.id}" data-url="${e_(m.lien_web || '')}" title="${TR('Lien vers la page du site web')}"><i class="ti ti-link"></i> ${m.lien_web ? TR('Modifier le lien') : TR('Ajouter un lien')}</span>` : ''}
-      </small>` : ''}
+      <div class="ecl-acts">
+        <span class="ecl-act pdf" data-pdf="${m.id}" title="${TR('Télécharger la fiche éclaté (PDF français ou anglais)')}"><i class="ti ti-file-type-pdf"></i> ${TR('PDF éclaté')}</span>
+        ${m.lien_web ? `<a href="${e_(m.lien_web)}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(m.lien_web)}"><i class="ti ti-world"></i> ${TR('Site web')}</a>` : ''}
+        ${m.lien_notice ? `<a href="${e_(m.lien_notice)}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(m.lien_notice)}"><i class="ti ti-book"></i> ${TR('Notice')}</a>` : ''}
+        ${m.lien_fiche ? `<a href="${e_(m.lien_fiche)}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(m.lien_fiche)}"><i class="ti ti-file-description"></i> ${TR('Fiche technique')}</a>` : ''}
+        ${edit ? `<span class="ecl-act" data-liens="${m.id}" style="color:var(--text2)" title="${TR('Modifier les liens (site, notice, fiche technique)')}"><i class="ti ti-link"></i> ${TR('Liens')}</span>` : ''}
+      </div>
       ${admin ? `<small style="margin-top:8px"><span class="ecl-mini" data-del="${m.id}" data-nom="${e_(m.nom)}"><i class="ti ti-trash"></i> ${TR('Supprimer')}</span></small>` : ''}
     </div>`).join('')}</div>`
     : `<div class="empty"><i class="ti ti-schema"></i>${TR('Aucun éclaté importé pour le moment.')}${admin ? '<br>' + TR('Utilisez « Importer des éclatés » avec les fichiers .json fournis.') : ''}</div>`;
   c.querySelectorAll('.ecl-card').forEach(el => el.addEventListener('click', ev => {
-    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-lien]') || ev.target.closest('.ecl-web')) return;
+    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-liens]') || ev.target.closest('[data-pdf]') || ev.target.closest('.ecl-web')) return;
     E.modeleId = +el.dataset.id; E.vueId = null; E.data = null; back = null; render();
   }));
   c.querySelectorAll('[data-del]').forEach(el => el.addEventListener('click', async ev => {
@@ -224,9 +251,19 @@ async function renderListe(ttl, c, a){
     if (!confirm(TR('Supprimer l’éclaté') + ' « ' + el.dataset.nom + ' » ?')) return;
     await API.delete(`/eclates/${el.dataset.del}`); render();
   }));
-  c.querySelectorAll('[data-lien]').forEach(el => el.addEventListener('click', async ev => {
+  c.querySelectorAll('[data-liens]').forEach(el => el.addEventListener('click', ev => {
     ev.stopPropagation();
-    if (await modifierLien(+el.dataset.lien, el.dataset.url)) render();
+    const m = list.find(x => x.id === +el.dataset.liens); if (m) modifierLiens(m, () => render());
+  }));
+  c.querySelectorAll('[data-pdf]').forEach(el => el.addEventListener('click', async ev => {
+    ev.stopPropagation();
+    const old = el.innerHTML; el.innerHTML = '<i class="ti ti-loader-2"></i> ' + TR('Chargement…');
+    try {
+      E.data = prepare(await API.get(`/eclates/${el.dataset.pdf}`));
+      E.vueId = E.data.vues[0] && E.data.vues[0].id;
+      choisirPDF();
+    } catch (err) { if (typeof toast === 'function') toast('Erreur : ' + err.message, 'ti-alert-circle', 'var(--danger)'); }
+    el.innerHTML = old;
   }));
   c.querySelectorAll('[data-photo]').forEach(lb => {
     lb.addEventListener('click', ev => ev.stopPropagation());
@@ -286,9 +323,11 @@ function renderViewer(ttl, c, a){
     <button class="btn" id="ecl-back"><i class="ti ti-arrow-left"></i> ${T('back')}</button>
     <div style="position:relative"><input id="ecl-q" class="search-bar" placeholder="${T('search')}" autocomplete="off" style="width:260px"><div class="ecl-res" id="ecl-res"></div></div>
     <div class="ecl-seg"><button data-lg="fr" class="${L()==='fr'?'on':''}">FR</button><button data-lg="en" class="${L()==='en'?'on':''}">EN</button></div>
-    ${d.lien_web ? `<a class="btn" href="${e_(d.lien_web)}" target="_blank" rel="noopener" title="${e_(d.lien_web)}"><i class="ti ti-world"></i> ${L()==='fr' ? 'Site web' : 'Website'}</a>` : ''}
-    ${E.edit ? `<button class="btn" id="ecl-lien"><i class="ti ti-link"></i> ${TR('Lien site web')}</button>` : ''}
-    <button class="btn" id="ecl-pdf"><i class="ti ti-file-type-pdf"></i> PDF</button>
+    <button class="btn primary" id="ecl-pdf"><i class="ti ti-file-type-pdf"></i> ${L()==='fr' ? 'Télécharger PDF' : 'Download PDF'}</button>
+    ${d.lien_web ? `<a class="btn" style="text-decoration:none" href="${e_(d.lien_web)}" target="_blank" rel="noopener" title="${e_(d.lien_web)}"><i class="ti ti-world"></i> ${L()==='fr' ? 'Site web' : 'Website'}</a>` : ''}
+    ${d.lien_notice ? `<a class="btn" style="text-decoration:none" href="${e_(d.lien_notice)}" target="_blank" rel="noopener" title="${e_(d.lien_notice)}"><i class="ti ti-book"></i> ${L()==='fr' ? 'Notice' : 'User manual'}</a>` : ''}
+    ${d.lien_fiche ? `<a class="btn" style="text-decoration:none" href="${e_(d.lien_fiche)}" target="_blank" rel="noopener" title="${e_(d.lien_fiche)}"><i class="ti ti-file-description"></i> ${L()==='fr' ? 'Fiche technique' : 'Data sheet'}</a>` : ''}
+    ${E.edit ? `<button class="btn" id="ecl-lien"><i class="ti ti-link"></i> ${TR('Liens')}</button>` : ''}
     ${peutModifier() ? `<button class="btn ${E.edit ? 'primary' : ''}" id="ecl-edit"><i class="ti ti-pencil"></i> ${T('editOn')}</button>` : ''}
   </div>`;
   c.innerHTML = `<div class="ecl-wrap ${E.edit ? 'ecl-edit-on' : ''}">
@@ -315,7 +354,7 @@ function renderViewer(ttl, c, a){
   a.querySelectorAll('[data-lg]').forEach(b => b.onclick = () => { E.lang = b.dataset.lg; renderViewer(ttl, c, a); });
   if ($('ecl-edit')) $('ecl-edit').onclick = () => { E.edit = !E.edit; addMode = null; renderViewer(ttl, c, a); };
   if ($('ecl-vedit')) $('ecl-vedit').onclick = editerVue;
-  if ($('ecl-lien')) $('ecl-lien').onclick = async () => { if (await modifierLien(d.id, d.lien_web)) { const r = await API.get(`/eclates/${d.id}`); d.lien_web = r.lien_web; renderViewer(ttl, c, a); } };
+  if ($('ecl-lien')) $('ecl-lien').onclick = () => modifierLiens(d, r => { d.lien_web = r.lien_web; d.lien_notice = r.lien_notice; d.lien_fiche = r.lien_fiche; renderViewer(ttl, c, a); });
   $('ecl-pdf').onclick = choisirPDF;
   if ($('ecl-addb')) $('ecl-addb').onclick = () => { addMode = { step: 1 }; hint(TR('Cliquez à l’endroit de la nouvelle bulle (Échap pour annuler)')); $('ecl-paper').classList.add('adding'); };
   bindZoom(); bindSearch();

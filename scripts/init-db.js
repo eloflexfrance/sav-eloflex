@@ -517,6 +517,26 @@ async function initDB() {
           ['Eloflex_R','r'],['Eloflex_S1','s1'],['Eloflex_X','x']]) {
         await client.query(`UPDATE eclates_modeles SET lien_web=$1 WHERE slug=$2 AND lien_web IS NULL`, ['https://eloflex.fr/produits/eloflex-' + code + '/', slug]);
       }
+      // Notices d'utilisation et fiches techniques (page Ressources du site eloflex.fr) — uniquement si jamais renseignées
+      await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS lien_notice TEXT`);
+      await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS lien_fiche TEXT`);
+      {
+        const S = 'https://eloflex.fr/media/';
+        const NOTICES = { c: 'nzdhohb1/notice-c.pdf', c3: 'xbnjcnmi/eloflexusermanual_c3_fr_2026.pdf', d2: '3c4prrxj/eloflexusermanual_d2_fr_2026.pdf',
+          f: '0sijlr1w/eloflexusermanual_f_fr_2026.pdf', h: '0ivgu04r/eloflexusermanual_h_fr_2026.pdf', h2: 'whkajl0o/eloflex_instruction-manual_h2_fr-low.pdf',
+          k: 'rrqndwdi/eloflexusermanual_k_fr_2026.pdf', l: 'hw1pb1lf/eloflexusermanual_l_fr_2026.pdf', p: 'tl5hafus/eloflexusermanual_p_fr_2026.pdf',
+          r: '1r4hsphr/eloflexusermanual_r_fr_2026.pdf', z: 'putmfn43/eloflexusermanual_z_en_2023.pdf', s1: 'tctc0ult/usermanual_s1_all-fr.pdf', x: '3bvbz2zv/eloflexusermanual_x_fr_2026.pdf' };
+        const FICHES = { c3: 'jqsmwuks/fdm_eloflex_c3_092029.pdf', d2: '1vrh3vjk/fdm_eloflex_d2_092029.pdf', f: 'uewldc3t/fdm_eloflex_f_092029.pdf',
+          h: 'a3rloajo/fdm_eloflex_h_mai2026.pdf', k: '1zbdf2ng/fdm_eloflex_k_092029.pdf', l: '45oi1k2t/fdm_eloflex_l_092029.pdf',
+          p: 'x5ahvw2a/fdm_eloflex_p_092029.pdf', r: 'szndkklv/fdm_eloflex_r_092029.pdf', x: '0ysik25z/fdm_eloflex_x_092029.pdf' };
+        const SLUGS = [['Eloflex_C','c'],['Eloflex_C3','c3'],['Eloflex_D2','d2'],['Eloflex_D2_Pre_2022','d2'],['Eloflex_F','f'],['Eloflex_F_Pre_2022','f'],
+          ['Eloflex_H','h'],['Eloflex_H2','h2'],['Eloflex_K','k'],['Eloflex_L','l'],['Eloflex_L_Pre_2022','l'],['Eloflex_P','p'],['Eloflex_P_Pre_2022','p'],
+          ['Eloflex_R','r'],['Eloflex_S1','s1'],['Eloflex_X','x'],['Eloflex_Z','z']];
+        for (const [slug, code] of SLUGS) {
+          if (NOTICES[code]) await client.query(`UPDATE eclates_modeles SET lien_notice=$1 WHERE slug=$2 AND lien_notice IS NULL`, [S + NOTICES[code], slug]);
+          if (FICHES[code]) await client.query(`UPDATE eclates_modeles SET lien_fiche=$1 WHERE slug=$2 AND lien_fiche IS NULL`, [S + FICHES[code], slug]);
+        }
+      }
       await client.query(`CREATE TABLE IF NOT EXISTS eclates_vues (
         id SERIAL PRIMARY KEY,
         modele_id INTEGER NOT NULL REFERENCES eclates_modeles(id) ON DELETE CASCADE,
