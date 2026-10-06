@@ -978,11 +978,11 @@ async function renderExpeditions(ttl,c,a){
 }
 
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
-const cmdStatutClass = s => s==='Payé'?'g':s==='Livré'?'g':s==='Facturé'?'facture':s==='Impayé'?'urgent':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='Avoir'?'hg':s==='En attente confirmation'?'ouvert':'ouvert';
+const cmdStatutClass = s => s==='Payé'?'g':s==='Livré'?'g':s==='Facturé'?'facture':s==='Impayé'?'urgent':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='Avoir'?'hg':s==='En attente confirmation'?'ouvert':s==='À préparer'?'urgent':'ouvert';
 // Commande contenant un fauteuil roulant (vs pièces détachées uniquement)
 const estCmdFauteuil = cm => !!(cm.type_fauteuil_neuf || cm.type_fauteuil_demo || cm.commande_type==='fauteuil' || /eloflex/i.test(cm.modele||''));
 
-const STATUTS_CMD = ['Auto','En attente confirmation','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
+const STATUTS_CMD = ['Auto','En attente confirmation','À préparer','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
 
 function isRealTracking(s){
   if(!s) return false;
@@ -994,6 +994,7 @@ function isRealTracking(s){
 function tStatut(s){
   const map = {
     'En attente confirmation': 'En attente confirmation',
+    'À préparer':     TR('À préparer'),
     'En préparation': t('cmd_en_prep')||'En préparation',
     'Expédié':        t('cmd_expedie')||'Expédié',
     'Livré':          t('cmd_livre')||'Livré',
@@ -1144,6 +1145,7 @@ async function renderCommandes(ttl,c,a){
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:14px">
       <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${stats.total}</div></div>
       <div class="stat-card"><div class="stat-label">⏳ Attente</div><div class="stat-value">${stats.en_attente||0}</div></div>
+      <div class="stat-card" style="cursor:pointer" onclick="CMD_FILTERS.statut='À préparer';render()"><div class="stat-label">${TR('À préparer')}</div><div class="stat-value" style="color:var(--danger)">${stats.a_preparer||0}</div></div>
       <div class="stat-card"><div class="stat-label">${TR('En prép.')}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
       <div class="stat-card"><div class="stat-label">${TR('Expédié')}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
       <div class="stat-card"><div class="stat-label">${TR('Livré')}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
@@ -1176,6 +1178,7 @@ async function renderCommandes(ttl,c,a){
       <select class="form-input" style="width:auto;padding:10px 12px;font-size:15px" id="cmd-f-statut" onchange="CMD_FILTERS.statut=this.value;renderCommandesTable(1)">
         <option value="">${t('cmd_tous_statuts')||'Tous statuts'}</option>
         <option value="En attente confirmation" ${CMD_FILTERS.statut==='En attente confirmation'?'selected':''}>⏳ ${t('cmd_en_attente')||'En attente'}</option>
+        <option value="À préparer" ${CMD_FILTERS.statut==='À préparer'?'selected':''}>${TR('À préparer')}</option>
         <option value="En préparation" ${CMD_FILTERS.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
         <option value="Expédié" ${CMD_FILTERS.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
         <option value="Livré" ${CMD_FILTERS.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
@@ -1511,7 +1514,7 @@ async function modalCommande(id, prefill){
   let cm = id ? await API.commande(id) : Object.assign({statut:'Auto', quantite:1}, prefill||{});
 
   const hasExp  = !!(cm.num_suivi || cm.date_depart || cm.date_livraison || cm.num_bordereau || cm.num_serie);
-  const hasFact = !!(cm.num_facture || cm.num_facture_pennylane || (cm.statut && cm.statut!=='Auto' && cm.statut!=='En préparation' && cm.statut!=='En attente confirmation'));
+  const hasFact = !!(cm.num_facture || cm.num_facture_pennylane || (cm.statut && cm.statut!=='Auto' && cm.statut!=='À préparer' && cm.statut!=='En préparation' && cm.statut!=='En attente confirmation'));
   const initTab = id && (cm.statut_calc==='Expédié'||cm.statut_calc==='Livré') && !hasFact ? 'expedition' : 'commande';
   const type = cm.commande_type || (/eloflex/i.test(cm.modele||'') ? 'fauteuil' : cm.modele ? 'pieces' : '');
   const isFauteuil = type==='fauteuil', isPieces=type==='pieces';
@@ -1547,6 +1550,7 @@ async function modalCommande(id, prefill){
       <select id="cmd-statut" onchange="majZonePreuveLivraison();majStatutBadge()" style="font-size:13px;padding:4px 8px;border:0.5px solid var(--border-s);border-radius:var(--radius);background:var(--surface);cursor:pointer">
         <option value="Auto" ${(cm.statut||'Auto')==='Auto'?'selected':''}>${t('cmd_auto_option')||t('cmd_auto_option')||'Auto (calculé)'}</option>
         <option value="En attente confirmation" ${cm.statut==='En attente confirmation'?'selected':''}>⏳ En attente confirmation</option>
+        <option value="À préparer" ${cm.statut==='À préparer'?'selected':''}>${TR('À préparer')}</option>
         <option value="En préparation" ${cm.statut==='En préparation'?'selected':''}>${t('cmd_en_prep')||'En préparation'}</option>
         <option value="Expédié" ${cm.statut==='Expédié'?'selected':''}>${t('cmd_expedie')||'Expédié'}</option>
         <option value="Livré" ${cm.statut==='Livré'?'selected':''}>${t('cmd_livre')||'Livré'}</option>
@@ -1557,7 +1561,7 @@ async function modalCommande(id, prefill){
         <option value="Problème" ${cm.statut==='Problème'?'selected':''}>${t('cmd_probleme')||'Problème'}</option>
         <option value="Annulé" ${cm.statut==='Annulé'?'selected':''}>${t('cmd_annule')||'Annulé'}</option>
       </select>
-      <span id="cmd-statut-badge" class="badge ${cmdStatutClass(cm.statut_calc||'En préparation')}" style="font-size:12px">${tStatut(cm.statut_calc||'En préparation')}</span>
+      <span id="cmd-statut-badge" class="badge ${cmdStatutClass(cm.statut_calc||'À préparer')}" style="font-size:12px">${tStatut(cm.statut_calc||'À préparer')}</span>
       <span style="font-size:12px;color:var(--text3)" id="cmd-statut-auto-hint">${(cm.statut||'Auto')==='Auto'?t('cmd_auto_hint')||'← calculé automatiquement':''}</span>
     </div>
     <div class="modal-body" style="padding-top:16px">
@@ -1752,8 +1756,9 @@ async function modalCommande(id, prefill){
           </div>
           <div class="form-group"><label class="form-label">${TR("N° Bordereau de livraison")}</label>
             <div style="display:flex;gap:5px">
-              <input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="BL-2026-..." style="flex:1">
-              ${cm.num_bordereau?`<button class="btn sm" type="button" title="${TR("Ouvrir dans VosFactures")}" onclick="ouvrirDansVF(null,'${esc(cm.num_bordereau)}')"><i class="ti ti-external-link"></i></button>`:''}
+              <input class="form-input mono" id="cmd-bordereau" value="${esc(cm.num_bordereau||'')}" placeholder="BL-2026-..." style="flex:1" oninput="majStatutBadge()">
+              <button class="btn sm" type="button" title="${TR("Ouvrir dans VosFactures")}" onclick="ouvrirBordereau('vf')"><i class="ti ti-external-link"></i> VF</button>
+              <button class="btn sm" type="button" title="${TR("Ouvrir dans Pennylane")}" onclick="ouvrirBordereau('pennylane')"><i class="ti ti-external-link"></i> PL</button>
             </div>
           </div>
           <div class="form-group"><label class="form-label">${TR('N° série')}</label>
@@ -2153,7 +2158,7 @@ async function lookupBdcVF(){
     if(r.date_commande && $('cmd-date') && !gv('cmd-date'))    { $('cmd-date').value=r.date_commande;   remplis.push('date'); }
     if(r.num_serie  && $('cmd-serie')   && !gv('cmd-serie'))   { $('cmd-serie').value=r.num_serie;      remplis.push('n° série'); }
     // Démo détectée automatiquement dans le document VosFactures
-    if(r.kind==='receipt' && $('cmd-bordereau') && !gv('cmd-bordereau')){ $('cmd-bordereau').value=r.numero||''; remplis.push('bordereau de livraison'); }
+    if(r.kind==='receipt' && $('cmd-bordereau') && !gv('cmd-bordereau')){ $('cmd-bordereau').value=r.numero||''; remplis.push('bordereau de livraison'); majStatutBadge(); }
     if(r.modele_demo && document.getElementById('cmd-demo')){
       document.getElementById('cmd-demo').checked = true;
       majDemoStyle(document.getElementById('cmd-demo'));
@@ -2209,6 +2214,23 @@ function renderRetourLignes(){
 function addRetourLigne(){ TMP_RETOUR_LIGNES.push({designation:'',reference:'',quantite:1}); renderRetourLignes();
   setTimeout(()=>{ const r=document.querySelectorAll('#cmd-retour-lignes-list input'); r[r.length-3]?.focus(); },50); }
 
+// Ouvre le bordereau de livraison saisi dans VosFactures ou dans Pennylane
+async function ouvrirBordereau(sys){
+  const numero = (gv('cmd-bordereau')||'').trim();
+  if(!numero){ toast(TR('Renseigne d\'abord le n° de bordereau'),'ti-alert-circle','var(--warning)'); return; }
+  if(sys!=='pennylane'){ ouvrirDansVF(null, numero); return; }
+  const win = window.open('about:blank','_blank');
+  const go = u => { if(win && !win.closed) win.location.href = u; else window.open(u,'_blank','noopener'); };
+  try{
+    const r = await API.pennylane_bdc_lookup(numero);
+    if(r && r.configured===false){ if(win) win.close(); toast(TR('Pennylane non configuré'),'ti-alert-circle','var(--warning)'); return; }
+    if(r && r.found && r.url_doc) go(r.url_doc);
+    else if(r && r.found && r.vf_id) go('https://app.pennylane.com/companies/documents/'+r.vf_id);
+    else { go('https://app.pennylane.com/companies/clients_invoices'); toast(TR('Bordereau non trouvé dans Pennylane — liste ouverte'),'ti-alert-circle','var(--warning)'); }
+  }catch(_){ go('https://app.pennylane.com/companies/clients_invoices'); }
+}
+window.ouvrirBordereau = ouvrirBordereau;
+
 async function lookupBordereauVF(){
   const numero = gv('cmd-bordereau').trim();
   if(!numero){ toast('Indique d\u2019abord un N° de bordereau','ti-alert-circle','var(--danger)'); return; }
@@ -2253,7 +2275,8 @@ function majStatutBadge(){
   const livraison = (gv('cmd-livraison')||'').trim();
   const facture  = (gv('cmd-facture')||'').trim() || (gv('cmd-facture-pl')||'').trim();
   const proformaPayee = !!$('cmd-proforma-payee')?.checked;
-  let calc = 'En préparation';
+  const bordereau = (gv('cmd-bordereau')||'').trim();
+  let calc = bordereau ? 'En préparation' : 'À préparer';
   if(proformaPayee)              calc = 'Payé';
   else if(facture)               calc = 'Facturé';
   else if(livraison)             calc = 'Livré';
@@ -2385,7 +2408,7 @@ function clientFinalBadge(cm) {
   return '<span title="'+esc(cm.client_final)+'" style="display:inline-flex;align-items:center;gap:3px;background:'+bg+';color:'+col+';border-radius:99px;padding:1px 6px;font-size:11px;font-weight:600">'+icon+' '+esc(cm.client_final)+'</span>';
 }
 
-const STATUTS_LISTE = ['Auto','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Avoir','Problème','Annulé'];
+const STATUTS_LISTE = ['Auto','À préparer','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Avoir','Problème','Annulé'];
 
 function toggleStatutMenu(e, id, statutActuel){
   // Fermer tout menu ouvert
@@ -3325,12 +3348,12 @@ async function renderCommandesKanban(){
   const reqId = ++_cmdReqId;
   const res = await API.commandes({ annee: CMD_FILTERS.annee, mois: CMD_FILTERS.mois, statut: CMD_FILTERS.statut, distributeur: CMD_FILTERS.distributeur, q: CMD_FILTERS.q, per_page: 500, ...((_PAYS_FILTRE||CURRENT_USER.pays)?{pays:_PAYS_FILTRE||CURRENT_USER.pays}:{}) });
   const list = res.rows||[];
-  const COLS = ['En attente confirmation','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Problème','Annulé'];
+  const COLS = ['En attente confirmation','À préparer','En préparation','Expédié','Livré','Facturé','Payé','Impayé','Problème','Annulé'];
   const grouped = {};
   COLS.forEach(s => grouped[s] = []);
   list.forEach(cm => {
-    const s = cm.statut_calc || 'En préparation';
-    if(grouped[s]) grouped[s].push(cm); else grouped['En préparation'].push(cm);
+    const s = cm.statut_calc || 'À préparer';
+    if(grouped[s]) grouped[s].push(cm); else grouped['À préparer'].push(cm);
   });
   wrap.innerHTML=`<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:8px">
     ${COLS.map(col=>`

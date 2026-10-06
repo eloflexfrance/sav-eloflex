@@ -3036,8 +3036,9 @@ function statutCommande(cmd) {
   if (cmd.num_facture || cmd.num_facture_pennylane) return 'Facturé';
   if (cmd.date_livraison) return 'Livré';
   if (isRealTracking(cmd.num_suivi)) return 'Expédié';
-  // Dès qu'un BDC est renseigné → En préparation (commande reçue)
-  return 'En préparation';
+  // Bordereau de livraison renseigné → En préparation ; sinon la commande est « À préparer »
+  if (cmd.num_bordereau && String(cmd.num_bordereau).trim()) return 'En préparation';
+  return 'À préparer';
 }
 
 router.get('/commandes', async (req, res) => {
@@ -3046,7 +3047,7 @@ router.get('/commandes', async (req, res) => {
     const slim = req.query.slim === '1';
     const fields = slim
       ? `cmd.id, cmd.client_id, cmd.origine, cmd.intervention_id, cmd.bdc, cmd.distributeur_nom, cmd.modele, cmd.quantite, cmd.date_commande,
-         cmd.statut, cmd.num_suivi, cmd.transporteur, cmd.date_livraison, cmd.num_serie,
+         cmd.statut, cmd.num_suivi, cmd.num_bordereau, cmd.transporteur, cmd.date_livraison, cmd.num_serie,
          cmd.num_facture, cmd.num_facture_pennylane, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
          cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.annee_onglet, cmd.groupe,
@@ -3089,7 +3090,8 @@ router.get('/commandes', async (req, res) => {
         WHEN (cmd.num_facture IS NOT NULL AND cmd.num_facture != '') OR (cmd.num_facture_pennylane IS NOT NULL AND cmd.num_facture_pennylane != '') THEN 'Facturé'
         WHEN cmd.date_livraison IS NOT NULL THEN 'Livré'
         WHEN cmd.num_suivi IS NOT NULL AND LENGTH(TRIM(cmd.num_suivi)) >= 8 THEN 'Expédié'
-        ELSE 'En préparation'
+        WHEN cmd.num_bordereau IS NOT NULL AND TRIM(cmd.num_bordereau) != '' THEN 'En préparation'
+        ELSE 'À préparer'
       END`;
       conds.push(`(${statutExpr}) = $${++idx}`);
       p.push(statut);
@@ -3144,13 +3146,15 @@ router.get('/commandes/stats', async (req, res) => {
           AND REGEXP_REPLACE(num_suivi, '\\s+', '', 'g') ~ '^[A-Z0-9\\-]+$'
           AND REGEXP_REPLACE(num_suivi, '\\s+', '', 'g') ~ '[0-9]'
           THEN 'Expédié'
-        ELSE 'En préparation'
+        WHEN num_bordereau IS NOT NULL AND TRIM(num_bordereau) != '' THEN 'En préparation'
+        ELSE 'À préparer'
       END`;
 
     // Compteurs filtrés par année
     const counts = await db.get(`
       SELECT
         COUNT(*) AS total,
+        SUM(CASE WHEN (${statutExpr}) = 'À préparer'              THEN 1 ELSE 0 END) AS a_preparer,
         SUM(CASE WHEN (${statutExpr}) = 'En préparation'          THEN 1 ELSE 0 END) AS en_preparation,
         SUM(CASE WHEN (${statutExpr}) = 'En attente confirmation' THEN 1 ELSE 0 END) AS en_attente,
         SUM(CASE WHEN (${statutExpr}) = 'Expédié'                 THEN 1 ELSE 0 END) AS expedie,
@@ -3177,6 +3181,7 @@ router.get('/commandes/stats', async (req, res) => {
 
     res.json({
       total:          parseInt(counts.total)          || 0,
+      a_preparer:     parseInt(counts.a_preparer)     || 0,
       en_preparation: parseInt(counts.en_preparation) || 0,
       en_attente:     parseInt(counts.en_attente)     || 0,
       expedie:        parseInt(counts.expedie)        || 0,
@@ -3872,7 +3877,7 @@ async function _ajouterCommandeDepuisDevis(d) {
   const row = await db.get(
     `INSERT INTO commandes (client_id, annee_onglet, distributeur_nom, modele, quantite, bdc, date_commande, statut, informations, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW()) RETURNING id`,
-    [clientId, annee, distrib || null, modele, qte, numero, today, 'En préparation',
+    [clientId, annee, distrib || null, modele, qte, numero, today, 'Auto',
      `${m.Doc} signé en ligne le ${today} par ${d.signataire_nom || ''} (${d.source || 'devis'}).`]);
   return row.id;
 }
@@ -4499,7 +4504,7 @@ router.get('/commandes/alertes-blocage', async (req, res) => {
              ROUND(DATE_PART('day', NOW() - cmd.date_commande::timestamp))::int AS jours_attente
       FROM commandes cmd
       WHERE cmd.date_commande IS NOT NULL
-        AND (cmd.statut IS NULL OR cmd.statut IN ('Auto','En préparation','En attente confirmation'))
+        AND (cmd.statut IS NULL OR cmd.statut IN ('Auto','À préparer','En préparation','En attente confirmation'))
         AND cmd.date_livraison IS NULL
         AND (cmd.num_suivi IS NULL OR LENGTH(TRIM(cmd.num_suivi)) < 8)
         AND cmd.statut NOT IN ('Annulé','Problème')
@@ -5434,7 +5439,7 @@ router.get('/confirmer-commande/:id/:token', async (req, res) => {
     const cmd = await db.get('SELECT id, bdc, distributeur_nom, confirmation_recue FROM commandes WHERE id=$1', [req.params.id]);
     if (!cmd) return res.status(404).send('<h2>Commande introuvable.</h2>');
     if (!cmd.confirmation_recue) {
-      await db.run(`UPDATE commandes SET confirmation_recue=TRUE, confirmation_mode='mail', date_confirmation=$1, statut='En préparation', updated_at=NOW() WHERE id=$2`,
+      await db.run(`UPDATE commandes SET confirmation_recue=TRUE, confirmation_mode='mail', date_confirmation=$1, statut=CASE WHEN statut IN ('En attente confirmation','En préparation') THEN 'Auto' ELSE statut END, updated_at=NOW() WHERE id=$2`,
         [new Date().toISOString().slice(0,10), req.params.id]);
     }
     res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Commande confirmée</title>
@@ -8086,7 +8091,7 @@ async function creerCommandeDepuisPret(p) {
         bdc, date_commande, num_serie, modele_demo, statut, informations, vf_commande_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,TRUE,$9,$10,$11) RETURNING id`,
     [p.client_id || null, annee, p.distributeur_nom || null, modele, 1,
-     p.bdc_vf || null, dateCmd, numSerie, 'En préparation',
+     p.bdc_vf || null, dateCmd, numSerie, 'Auto',
      'Créée automatiquement depuis le bon de prêt signé (contrat-cadre + prêt signés).', vfId]);
   await db.run('UPDATE prets SET commande_id=$1, updated_at=NOW() WHERE id=$2', [row.id, p.id]);
   try { await addAlerte('pret_commande', p.id,
