@@ -29,7 +29,22 @@ async function renderDevis(ttl, c, a){
   // relance une synchro lente qui bloque le rafraîchissement de la liste (bug « à retardement »).
   syncDevisVF(false);
   syncDevisPL(false);
+  majStatutsDevisPL();
 }
+// Statut Pennylane des devis en attente (accepté / refusé) — à chaque ouverture, au plus toutes les 2 min
+let _devisPlStatutsAt = 0;
+async function majStatutsDevisPL(){
+  if(Date.now() - _devisPlStatutsAt < 2*60*1000) return;
+  _devisPlStatutsAt = Date.now();
+  try{
+    const r = await API.devisMajStatutsPL();
+    if(r && r.ok && (r.converti || r.ignore)){
+      toast(`Pennylane : ${r.converti||0} ${TR('devis accepté(s)')}, ${r.ignore||0} ${TR('refusé(s) / expiré(s)')} — ${TR('retirés des devis en attente')}`,'ti-check');
+      chargerDevis(); if(typeof refreshBadges==='function') refreshBadges();
+    }
+  }catch(_){}
+}
+window.majStatutsDevisPL = majStatutsDevisPL;
 function setDevisFiltre(s){ DEVIS_FILTRE = s; render(); }
 window.setDevisFiltre = setDevisFiltre;
 
@@ -41,7 +56,7 @@ async function syncDevisPL(manuel=false){
     const r = await API.devisSyncPennylane();
     if(r && r.ok){
       _devisPlLastSync = Date.now(); localStorage.setItem('sav_devis_pl_last_sync', _devisPlLastSync);
-      if(manuel) toast(`Pennylane — ${r.total||0} ${TR('document(s)')} (${r.created||0} ${TR('nouveaux')}, ${r.updated||0} ${TR('maj')})${r.converti_bl?` · ${r.converti_bl} ${TR('devis passé(s) en converti (bon de livraison)')}`:''}`,'ti-check');
+      if(manuel) toast(`Pennylane — ${r.total||0} ${TR('document(s)')} (${r.created||0} ${TR('nouveaux')}, ${r.updated||0} ${TR('maj')})${r.converti_bl?` · ${r.converti_bl} ${TR('devis passé(s) en converti (bon de livraison)')}`:''}${(r.acceptes||r.refuses)?` · ${r.acceptes||0} ${TR('accepté(s)')}, ${r.refuses||0} ${TR('refusé(s)')}`:''}`,'ti-check');
       if(r.nb_bl===0) console.info('[Devis PL] Aucun bon de livraison détecté. Types de documents commerciaux :', r.types_cd);
       chargerDevis();
     } else if(manuel) toast(`Erreur : ${(r&&(r.reason||r.error))||'Pennylane'}`,'ti-alert-circle','var(--warning)');

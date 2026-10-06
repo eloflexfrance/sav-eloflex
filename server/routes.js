@@ -176,7 +176,29 @@ function requireRole(...roles) {
 }
 const requireAuth = requireRole();
 const adminOnly = requireRole('admin');
-const adminOrOp  = requireRole('admin', 'operateur');
+// Admin, opérateur, OU utilisateur ayant le droit « écriture » sur le module concerné
+// (les comptes « utilisateur » à droits complets n'étaient pas reconnus : relances devis, signature, e-mails… refusés).
+const _MODULE_ECRITURE = [
+  ['/devis', 'devis', 'commandes'], ['/pennylane', 'commandes'], ['/commandes-suede', 'commande-suede', 'commandes'],
+  ['/commandes', 'commandes'], ['/notes', 'commandes', 'discussions'], ['/catalogue', 'catalogue'], ['/stock', 'catalogue'],
+];
+function _droitEcriture(user, chemin) {
+  const perms = (user && user.permissions) || {};
+  const e = _MODULE_ECRITURE.find(x => chemin.startsWith(x[0]));
+  const mods = e ? e.slice(1) : [moduleFromPath(chemin)].filter(Boolean);
+  for (const m of mods) {
+    const v = perms[m] !== undefined ? perms[m] : perms[m.replace(/-/g, '_')];
+    if (v !== undefined) return v === 'write';
+  }
+  return false;
+}
+const adminOrOp = (req, res, next) => {
+  const user = res.locals.user;
+  if (!user) return res.status(403).json({ error: 'Non authentifié' });
+  if (user.role === 'admin' || user.role === 'operateur') return next();
+  if (_droitEcriture(user, req.path)) return next();
+  return res.status(403).json({ error: 'Accès refusé : droit « écriture » requis sur ce module' });
+};
 
 // Écriture sur la carte : admin, ou permission 'carte'=write (repli 'clients').
 // Permet aux utilisateurs "droits complets" d'utiliser les outils carte sous /admin.
@@ -3260,10 +3282,21 @@ router.get('/pennylane/debug-devis', adminOnly, async (req, res) => {
 router.post('/pennylane/sync-devis', adminOnly, async (req, res) => {
   try {
     if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ ok: false, reason: 'Pennylane non configuré' });
-    const { syncDevisPennylane } = require('../scripts/sync-pennylane');
+    const { syncDevisPennylane, majStatutsDevisPennylane } = require('../scripts/sync-pennylane');
     const r = await syncDevisPennylane(req.query.historique === '1');
+    // + statut à jour des devis encore « en attente » (y compris ceux de plus de 120 jours)
+    try { const m = await majStatutsDevisPennylane(); r.acceptes = m.converti; r.refuses = m.ignore; } catch (_) {}
     res.json(r);
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Statut Pennylane des devis en attente (accepté → converti, refusé/expiré → ignoré)
+router.post('/devis/maj-statuts-pennylane', adminOrOp, async (req, res) => {
+  try {
+    if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.json({ ok: false, reason: 'Pennylane non configuré' });
+    const r = await require('../scripts/sync-pennylane').majStatutsDevisPennylane();
+    res.json({ ok: true, ...r });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/pennylane/bdc-lookup', async (req, res) => {
@@ -4011,25 +4044,21 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     if (!brevoKey) {
       return res.json({ ok: false, reason: 'Clé API Brevo manquante — ajoutez BREVO_API_KEY dans Render' });
     }
-    // Récupérer le PDF du devis depuis VosFactures
+    // PDF original du devis (Pennylane ou VosFactures) en pièce jointe
     let pdfAttachment = null;
-    if (process.env.VOSFACTURES_API_TOKEN && process.env.VOSFACTURES_ACCOUNT && devis.vf_id) {
-      try {
-        const pdfResp = await axios.get(
-          `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${devis.vf_id}.pdf`,
-          { params: { api_token: process.env.VOSFACTURES_API_TOKEN }, responseType: 'arraybuffer', timeout: 10000 }
-        );
-        pdfAttachment = {
-          name: `Devis-${devis.numero}.pdf`,
-          content: Buffer.from(pdfResp.data).toString('base64')
-        };
-        console.log('[PDF] Devis PDF récupéré:', pdfAttachment.name);
-      } catch(pdfErr) {
-        console.warn('[PDF] Impossible de récupérer le PDF:', pdfErr.message);
-      }
-    }
+    try {
+      const buf = await _fetchDevisOriginalPdf(devis);
+      if (buf) pdfAttachment = { name: `Devis-${devis.numero || devis.id}.pdf`.replace(/[^\w.\-]+/g, '_'), content: buf.toString('base64') };
+    } catch (pdfErr) { console.warn('[PDF] Impossible de récupérer le PDF:', pdfErr.message); }
 
-    const vfUrl = `https://${process.env.VOSFACTURES_ACCOUNT}.vosfactures.fr/invoices/${devis.vf_id}`;
+    // Bouton « Signer » → page de signature en ligne de l'appli (même lien que l'envoi pour signature)
+    let token = devis.token_signature;
+    if (!token) {
+      token = require('crypto').randomBytes(24).toString('hex');
+      await db.run('UPDATE devis SET token_signature=$1 WHERE id=$2', [token, devis.id]);
+    }
+    const base = (process.env.APP_URL || params.app_url || (req.protocol + '://' + req.get('host'))).replace(/\/$/, '');
+    const vfUrl = `${base}/devis-sign/${token}`;
 
     await axios.post('https://api.brevo.com/v3/smtp/email', {
       sender: { name: 'Eloflex France', email: fromAddr },
@@ -4075,6 +4104,7 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
       <tr><td align="center">
         <a href="${vfUrl}" style="display:inline-block;background:#2B7DC7;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:6px;font-size:15px;font-weight:bold;">✍️ Signer le document</a>
       </td></tr>
+      <tr><td align="center" style="padding-top:8px;font-size:11px;color:#888;">Si le bouton ne fonctionne pas : <a href="${vfUrl}" style="color:#2B7DC7;">${vfUrl}</a></td></tr>
     </table>
 
     <p style="margin:0 0 28px;font-size:14px;color:#555;line-height:1.6;">N'hésitez pas à nous contacter pour toute question au <strong style="color:#1F3A5F;">09 67 66 51 29</strong> ou par mail à <a href="mailto:info@eloflex.fr" style="color:#2B7DC7;text-decoration:none;">info@eloflex.fr</a></p>

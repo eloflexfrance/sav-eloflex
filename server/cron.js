@@ -239,6 +239,13 @@ function startCron() {
     catch (e) { console.error('[CRON] BL Pennylane → stock :', e.message); }
   }, { timezone: 'Europe/Paris' });
 
+  // Devis Pennylane : accepté / refusé → sortent de « Devis en attente » (toutes les heures, de 7h à 20h)
+  cron.schedule('25 7-20 * * *', async () => {
+    if (!process.env.PENNYLANE_API_KEY && !process.env.PENNYLANE_TOKEN) return;
+    try { const r = await require('../scripts/sync-pennylane').majStatutsDevisPennylane(); if (r.converti || r.ignore) console.log('[CRON] Devis Pennylane :', r.converti, 'accepté(s),', r.ignore, 'refusé(s)/expiré(s)'); }
+    catch (e) { console.error('[CRON] Statuts devis Pennylane :', e.message); }
+  }, { timezone: 'Europe/Paris' });
+
   console.log('⏰ Tâches automatiques activées (8h checks, 6h VF sync, ping /10min)');
 }
 

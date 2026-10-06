@@ -643,6 +643,46 @@ function _texteBL(b) {
     .join(' | ').toUpperCase().replace(/\s+/g, ' ') + ' ';
 }
 
+// Statut Pennylane d'un devis → statut dans l'appli
+//   pending / draft            → ouvert  (reste dans « Devis en attente »)
+//   accepted / invoiced / …    → converti
+//   denied / refused / expired → ignoré  (refusé / expiré : sort de la liste)
+function _statutDevisPL(st) {
+  st = String(st || '').toLowerCase();
+  if (/accept|validat|signed|paid|complet|convert|invoic|factur|deliver|livr|transform/.test(st)) return 'converti';
+  if (/den(y|ied)|refus|reject|declin|cancel|annul|expir|lost|perdu/.test(st)) return 'ignoré';
+  return 'ouvert';
+}
+
+// Rafraîchit le statut des devis Pennylane encore « en attente » dans l'appli (léger : 1 appel par devis).
+// Accepté / facturé → converti ; refusé / expiré → ignoré. Les devis signés dans l'appli ne bougent pas.
+async function majStatutsDevisPennylane() {
+  const api = plApi();
+  const rows = await db.all(`SELECT id, numero, pennylane_id, doc_type FROM devis
+    WHERE statut='ouvert' AND source='pennylane' AND pennylane_id IS NOT NULL AND signed_at IS NULL`);
+  const bilan = { verifies: 0, converti: 0, ignore: 0, erreurs: 0, details: [] };
+  for (const d of rows) {
+    const eps = d.doc_type === 'bdc' ? ['/commercial_documents/'] : ['/quotes/', '/commercial_documents/'];
+    let st = null, trouve = false;
+    for (const ep of eps) {
+      try {
+        const { data } = await api.get(ep + d.pennylane_id, { validateStatus: s => s < 500 });
+        if (!data || data.error || data.message === 'Not Found') continue;
+        const o = data.quote || data.commercial_document || data;
+        if (o && (o.id || o.status)) { st = String(o.status || o.state || '').toLowerCase(); trouve = true; break; }
+      } catch (_) {}
+    }
+    if (!trouve) { bilan.erreurs++; continue; }
+    bilan.verifies++;
+    const statut = _statutDevisPL(st);
+    if (statut === 'ouvert') { await db.run('UPDATE devis SET vf_statut=$1 WHERE id=$2 AND vf_statut IS DISTINCT FROM $1', [st || null, d.id]); continue; }
+    await db.run(`UPDATE devis SET statut=$1, vf_statut=$2, updated_at=NOW() WHERE id=$3 AND statut='ouvert' AND signed_at IS NULL`, [statut, st || null, d.id]);
+    if (statut === 'converti') bilan.converti++; else bilan.ignore++;
+    bilan.details.push({ numero: d.numero, statut_pennylane: st, statut });
+  }
+  return bilan;
+}
+
 async function upsertDevisPennylane(api, doc, opts = {}) {
   const ep = doc._ep || '/quotes';
   let detail = doc;
@@ -675,8 +715,7 @@ async function upsertDevisPennylane(api, doc, opts = {}) {
     return { nom: l.label || l.description || l.product_name || '', qte, prix, total: tot };
   }).filter(l => l.nom);
   const st = String(detail.status || detail.state || '').toLowerCase();
-  let statut = /accept|validat|signed|paid|complet|convert|invoic|factur|deliver|livr|transform/.test(st) ? 'converti'
-               : /refus|reject|cancel|expir/.test(st) ? 'ignoré' : 'ouvert';
+  let statut = _statutDevisPL(st);
   const docType = doc._doc === 'bdc' ? 'bdc' : 'devis';
   // Devis déjà transformé en Bon de livraison dans Pennylane → converti (sort de la liste)
   if (statut === 'ouvert' && docType === 'devis') {
@@ -692,7 +731,7 @@ async function upsertDevisPennylane(api, doc, opts = {}) {
   const ex = await db.get('SELECT id FROM devis WHERE pennylane_id=$1', [plid]);
   if (ex) {
     await db.run(
-      `UPDATE devis SET statut=CASE WHEN statut='ignoré' THEN 'ignoré' WHEN $1='converti' THEN 'converti' ELSE statut END,
+      `UPDATE devis SET statut=CASE WHEN signed_at IS NOT NULL THEN statut WHEN $1 IN ('converti','ignoré') THEN $1 ELSE statut END,
         numero=$2, distributeur_nom=$3, client_email=$4, date_devis=$5, date_expiration=$6, montant=$7, devise=$8,
         lignes=$9, doc_type=$10, vf_statut=$11, doc_url=COALESCE($12, doc_url), updated_at=NOW() WHERE id=$13`,
       [statut, numero, nom, email, date, dateExp, montant, detail.currency || 'EUR', JSON.stringify(lignes), docType, st, docUrl, ex.id]);
@@ -883,6 +922,7 @@ module.exports = {
   syncDevisPennylane,
   debugDevisPennylane,
   lookupDocumentPennylane,
+  majStatutsDevisPennylane,
   genererFacturePennylane,
   suggestFacturesPennylane,
   syncProduitsPennylane,
