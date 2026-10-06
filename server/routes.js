@@ -3362,7 +3362,7 @@ router.post('/pennylane/generer-facture/:cmdId', adminOrOp, async (req, res) => 
     const inv = await genererFacturePennylane(cmd, lignes);
     const numero = inv.invoice_number || String(inv.id);
     await db.run('UPDATE commandes SET num_facture=$1, updated_at=NOW() WHERE id=$2', [numero, req.params.cmdId]);
-    const url = `https://app.pennylane.com/companies/invoices/${inv.id}`;
+    const url = `https://app.pennylane.com/companies/${process.env.PENNYLANE_COMPANY_ID || '22996810'}/clients/customer_invoices?invoice_id=${inv.id}`;
     res.json({ ok: true, invoice_id: inv.id, numero, url });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

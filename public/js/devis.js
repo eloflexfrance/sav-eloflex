@@ -97,7 +97,7 @@ async function chargerDevis(){
           <td style="text-align:center">${d.nb_relances||0}</td>
           <td style="white-space:nowrap">
             ${estPL
-              ? (d.pennylane_id?`<button class="btn sm" onclick="window.open('https://app.pennylane.com/companies/documents/${d.pennylane_id}','_blank')" title="${TR('Ouvrir dans Pennylane')}"><i class="ti ti-external-link"></i></button>`:'')
+              ? (d.pennylane_id?`<button class="btn sm" onclick="window.open(urlPennylane('${d.doc_type==='bdc'?'commercial_documents':'quotes'}','${d.pennylane_id}'),'_blank','noopener')" title="${TR('Ouvrir dans Pennylane')}"><i class="ti ti-external-link"></i></button>`:'')
               : (window._VF_ACCOUNT&&d.vf_id?`<button class="btn sm" onclick="window.open('https://${window._VF_ACCOUNT}.vosfactures.fr/invoices/${d.vf_id}','_blank')" title="${t('devis_btn_ouvrir')||'Ouvrir dans VosFactures'}"><i class="ti ti-external-link"></i></button>`:'')}
             ${!d.signed_at?`<button class="btn sm" onclick="envoyerDevisSignature(${d.id},'${esc(d.client_email||'')}','${esc((d.distributeur_nom||'').replace(/'/g,'&#39;'))}',${estBdc?1:0})" title="${TR('Envoyer pour signature en ligne')}"><i class="ti ti-signature"></i></button>`:''}
             <button class="btn sm" onclick="modalRelanceDevis(${d.id},'${esc(d.client_email||'')}','${esc(d.distributeur_nom)}')" title="${t('devis_btn_relancer')||'Envoyer une relance'}"><i class="ti ti-mail"></i></button>

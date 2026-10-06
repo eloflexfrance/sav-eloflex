@@ -1467,14 +1467,37 @@ async function importerNouvelleCommande(){
     }
   }catch(e){ if(msg) msg.innerHTML='<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>'; }
 }
+// Lien direct vers une pièce dans l'interface Pennylane
+//   devis → Devis (estimate_id) · BDC / BL / proforma → Documents commerciaux (document_id) · facture → Factures clients (invoice_id)
+function urlPennylane(kind, id){
+  const base = 'https://app.pennylane.com/companies/' + (typeof PL_COMPANY_ID!=='undefined' && PL_COMPANY_ID ? PL_COMPANY_ID : '22996810') + '/clients/';
+  const k = String(kind||'');
+  if(!id) return base + (/invoice/.test(k) ? 'customer_invoices' : /commercial|bdc|bl/.test(k) ? 'customer_invoicing_documents' : 'customer_estimates');
+  if(/customer_invoice|facture/.test(k)) return base + 'customer_invoices?invoice_id=' + encodeURIComponent(id);
+  if(/commercial|bdc|bl/.test(k))        return base + 'customer_invoicing_documents?document_id=' + encodeURIComponent(id);
+  return base + 'customer_estimates?estimate_id=' + encodeURIComponent(id);
+}
+window.urlPennylane = urlPennylane;
+// Retrouve une pièce Pennylane par son numéro puis l'ouvre dans l'interface Pennylane
+async function ouvrirPennylaneParNumero(numero, defautKind){
+  const win = window.open('about:blank','_blank');
+  const go = u => { if(win && !win.closed) win.location.href = u; else window.open(u,'_blank','noopener'); };
+  try{
+    const r = await API.pennylane_bdc_lookup(numero);
+    if(r && r.configured===false){ if(win) win.close(); toast(TR('Pennylane non configuré'),'ti-alert-circle','var(--warning)'); return; }
+    if(r && r.found && r.vf_id) go(urlPennylane(r.kind, r.vf_id));
+    else { go(urlPennylane(defautKind)); toast(TR('Pièce non trouvée dans Pennylane — liste ouverte'),'ti-alert-circle','var(--warning)'); }
+  }catch(_){ go(urlPennylane(defautKind)); }
+}
+window.ouvrirPennylaneParNumero = ouvrirPennylaneParNumero;
 // Ouvre le bon de commande dans le bon système (VosFactures ou Pennylane)
 function ouvrirBdcSource(){
   var src=(document.getElementById('cmd-bdc-source')||{}).value||'';
   var docid=(document.getElementById('cmd-bdc-docid')||{}).value||'';
   var bdc=(document.getElementById('cmd-bdc').value||'').trim();
   if(src==='pennylane'){
-    if(docid){ window.open('https://app.pennylane.com/companies/invoices/'+docid, '_blank', 'noopener'); }
-    else { toast(TR('Pièce Pennylane non identifiée — ouvre Pennylane manuellement'),'ti-alert-circle','var(--warning)'); window.open('https://app.pennylane.com/companies/invoices', '_blank', 'noopener'); }
+    if(bdc){ ouvrirPennylaneParNumero(bdc, 'quotes'); return; }
+    window.open(urlPennylane('quotes', docid||null), '_blank', 'noopener');
     return;
   }
   ouvrirDansVF(docid||null, bdc);
@@ -1493,8 +1516,9 @@ async function ouvrirBdcDans(sys){
       var r=await API.pennylane_bdc_lookup(bdc);
       if(r && r.configured===false){ if(win)win.close(); toast(TR('Pennylane non configuré'),'ti-alert-circle','var(--warning)'); return; }
       if(r && r.found && r.url_doc){ go(r.url_doc); }
-      else { go('https://app.pennylane.com/companies/clients_invoices'); toast(TR('Pièce non trouvée dans Pennylane — liste ouverte'),'ti-alert-circle','var(--warning)'); }
-    }catch(e){ go('https://app.pennylane.com/companies/clients_invoices'); }
+      else if(r && r.found && r.vf_id){ go(urlPennylane(r.kind, r.vf_id)); }
+      else { go(urlPennylane('quotes')); toast(TR('Pièce non trouvée dans Pennylane — liste ouverte'),'ti-alert-circle','var(--warning)'); }
+    }catch(e){ go(urlPennylane('quotes')); }
     return;
   }
   // VosFactures : ID direct seulement si la pièce vient bien de VosFactures, sinon recherche par n°
@@ -2219,15 +2243,7 @@ async function ouvrirBordereau(sys){
   const numero = (gv('cmd-bordereau')||'').trim();
   if(!numero){ toast(TR('Renseigne d\'abord le n° de bordereau'),'ti-alert-circle','var(--warning)'); return; }
   if(sys!=='pennylane'){ ouvrirDansVF(null, numero); return; }
-  const win = window.open('about:blank','_blank');
-  const go = u => { if(win && !win.closed) win.location.href = u; else window.open(u,'_blank','noopener'); };
-  try{
-    const r = await API.pennylane_bdc_lookup(numero);
-    if(r && r.configured===false){ if(win) win.close(); toast(TR('Pennylane non configuré'),'ti-alert-circle','var(--warning)'); return; }
-    if(r && r.found && r.url_doc) go(r.url_doc);
-    else if(r && r.found && r.vf_id) go('https://app.pennylane.com/companies/documents/'+r.vf_id);
-    else { go('https://app.pennylane.com/companies/clients_invoices'); toast(TR('Bordereau non trouvé dans Pennylane — liste ouverte'),'ti-alert-circle','var(--warning)'); }
-  }catch(_){ go('https://app.pennylane.com/companies/clients_invoices'); }
+  ouvrirPennylaneParNumero(numero, 'commercial_documents');
 }
 window.ouvrirBordereau = ouvrirBordereau;
 
