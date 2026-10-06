@@ -222,6 +222,7 @@ async function renderListe(ttl, c, a){
   const admin = typeof isAdmin === 'function' && isAdmin();
   a.innerHTML = `<div style="display:flex;gap:8px;align-items:center">
     <div style="position:relative"><input id="ecl-gsearch" class="search-bar" placeholder="${TR('Référence (tous modèles)…')}" style="max-width:260px"><div class="ecl-res" id="ecl-gres"></div></div>
+    <button class="btn" id="ecl-mail-tous" title="${TR('Envoyer par e-mail tous les éclatés en PDF')}"><i class="ti ti-mail-forward"></i> ${TR('Envoyer tous les éclatés')}</button>
     ${admin ? `<label class="btn primary" style="cursor:pointer"><i class="ti ti-upload"></i> ${TR('Importer des éclatés')}<input type="file" id="ecl-import" accept=".json,application/json" multiple style="display:none"></label>` : ''}
   </div>`;
   const list = await API.get('/eclates');
@@ -278,6 +279,7 @@ async function renderListe(ttl, c, a){
     });
   });
   const inp = $('ecl-import'); if (inp) inp.addEventListener('change', () => importer(inp));
+  $('ecl-mail-tous').onclick = () => envoyerTousEclates(list);
   const gs = $('ecl-gsearch');
   gs.addEventListener('input', () => { clearTimeout(window._eclGS); window._eclGS = setTimeout(async () => {
     const q = gs.value.trim(), r = $('ecl-gres');
@@ -712,15 +714,61 @@ function choisirPDF(){
 }
 window.choisirPDF = choisirPDF;
 
+// ── Envoi par e-mail de tous les éclatés (PDF français) ──
+function envoyerTousEclates(list){
+  const today = new Date().toLocaleDateString('fr-FR');
+  showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="color:var(--accent)"></i><h2>${TR('Envoyer tous les éclatés par e-mail')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">${TR('Adresse e-mail du destinataire')} *</label>
+        <input class="form-input" id="ecl-m-to" type="email" placeholder="contact@distributeur.fr" autocomplete="email"></div>
+      <div style="font-size:13px;color:var(--text2);background:var(--bg);border-radius:8px;padding:10px 12px;line-height:1.55">
+        Bonjour,<br>Suite à votre demande le ${today}, veuillez trouver ci-joint l'ensemble de nos fiches « éclatées » de nos différents modèles Eloflex.<br><br>Restant à votre disposition.<br>Bien cordialement<br><i style="color:var(--text3)">+ signature SAV</i></div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px"><i class="ti ti-paperclip"></i> ${list.length} ${TR('PDF en français')} (${list.map(m => e_(m.nom)).join(', ')}) · ${TR('copie à')} sav@eloflex.fr</div>
+      <div id="ecl-m-msg" style="font-size:13px;margin-top:10px;min-height:18px"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Annuler')}</button>
+      <button class="btn primary" id="ecl-m-go"><i class="ti ti-send"></i> ${TR('Envoyer')}</button></div>`);
+  setTimeout(() => { const i = $('ecl-m-to'); if (i) i.focus(); }, 50);
+  $('ecl-m-go').onclick = async () => {
+    const to = $('ecl-m-to').value.trim(), msg = $('ecl-m-msg'), b = $('ecl-m-go');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { msg.innerHTML = '<span style="color:var(--danger)">' + TR('Adresse e-mail invalide') + '</span>'; return; }
+    b.disabled = true;
+    const sauve = E.data, pdfs = [];
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const m = list[i];
+        msg.innerHTML = `<i class="ti ti-loader-2"></i> ${TR('Préparation des PDF')} ${i + 1}/${list.length} — ${e_(m.nom)}…`;
+        E.data = prepare(await API.get(`/eclates/${m.id}`));
+        if (!E.data.vues.length) continue;
+        // Images allégées pour l'e-mail (taille des pièces jointes)
+        pdfs.push(await exporterPDF('fr', E.data.vues, null, { base64: true, maxPx: 1700, q: 0.72 }));
+      }
+      // Plusieurs e-mails si les pièces jointes dépassent ~14 Mo (limite de l'envoi)
+      const lots = [], MAX = 14 * 1024 * 1024 * 4 / 3; let cur = [], tot = 0;
+      pdfs.forEach(p => { if (cur.length && tot + p.data.length > MAX) { lots.push(cur); cur = []; tot = 0; } cur.push(p); tot += p.data.length; });
+      if (cur.length) lots.push(cur);
+      for (let k = 0; k < lots.length; k++) {
+        msg.innerHTML = `<i class="ti ti-loader-2"></i> ${TR('Envoi de l’e-mail')}${lots.length > 1 ? ` ${k + 1}/${lots.length}` : ''}…`;
+        await API.post('/eclates/envoyer-mail', { email: to, pdfs: lots[k], partie: k + 1, parties: lots.length });
+      }
+      closeModal();
+      if (typeof toast === 'function') toast(`${TR('Éclatés envoyés à')} ${to}${lots.length > 1 ? ` (${lots.length} ${TR('e-mails')})` : ''}`, 'ti-check', 'var(--success)');
+    } catch (err) {
+      b.disabled = false; msg.innerHTML = '<span style="color:var(--danger)">Erreur : ' + e_(err.message) + '</span>';
+    } finally { E.data = sauve; }
+  };
+}
+
 // Rend le dessin d'une vue (avec bulles corrigées) en image JPEG
-async function imageVue(v){
+async function imageVue(v, o){
+  o = o || {};
   const W = +E.data.largeur || 842, H = +E.data.hauteur || 596;
   const [x0, y0, x1, y1] = v.clip || [0, 0, W, H];
   const doc = new DOMParser().parseFromString(await pageSvg(v.page), 'image/svg+xml');
   const sv = doc.documentElement;
   sv.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   sv.setAttribute('viewBox', `${x0} ${y0} ${x1 - x0} ${y1 - y0}`);
-  const sc = Math.min(4, 2600 / (x1 - x0));
+  const sc = Math.min(4, (o.maxPx || 2600) / (x1 - x0));
   const cw = Math.round((x1 - x0) * sc), ch = Math.round((y1 - y0) * sc);
   sv.setAttribute('width', cw); sv.setAttribute('height', ch);
   let fh = '';
@@ -737,10 +785,11 @@ async function imageVue(v){
   const img = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error(TR('Dessin illisible') + ' (' + vname(v) + ')')); i.src = src; });
   const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
   const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cw, ch); ctx.drawImage(img, 0, 0, cw, ch);
-  return { data: cv.toDataURL('image/jpeg', 0.9), w: cw, h: ch };
+  return { data: cv.toDataURL('image/jpeg', o.q || 0.9), w: cw, h: ch };
 }
 
-async function exporterPDF(lang, vues, prog){
+async function exporterPDF(lang, vues, prog, opts){
+  opts = opts || {};
   if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF indisponible');
   const fr = lang === 'fr', d = E.data;
   const t = fr ? { pos: 'Repère', ref: 'Référence', des: 'Désignation', qty: 'Qté', parts: 'Nomenclature', cables: 'Câbles (sans repère)',
@@ -769,7 +818,7 @@ async function exporterPDF(lang, vues, prog){
   let first = true;
   for (let k = 0; k < vues.length; k++){
     const v = vues[k]; prog && prog(k + 1, vues.length);
-    const im = await imageVue(v);
+    const im = await imageVue(v, opts);
     if (!first) pdf.addPage(); first = false;
     const sous = v.assembly_ref ? t.sub + v.assembly_ref : '';
     entete(nomVue(v), sous);
@@ -819,6 +868,7 @@ async function exporterPDF(lang, vues, prog){
   for (let i = 1; i <= n; i++){ pdf.setPage(i); pdf.setFontSize(7.5); pdf.setTextColor(120, 120, 120); pdf.text(`${t.p} ${i}/${n}`, PW - M, PH - 5, { align: 'right' }); }
   const propre = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
   const nomFic = (fr ? 'Eclate_' : 'Exploded_view_') + propre(d.nom) + (vues.length === 1 && E.data.vues.length > 1 ? '_' + propre(nomVue(vues[0])).slice(0, 40) : '') + '_' + lang.toUpperCase() + '.pdf';
+  if (opts.base64) return { nom: nomFic, data: pdf.output('datauristring').split(',')[1] };
   pdf.save(nomFic);
 }
 })();

@@ -128,6 +128,8 @@ router.use((req, res, next) => {
   // Éclatés : hérite du catalogue pièces tant que la permission n'est pas réglée
   if (perm === undefined && module === 'eclates') perm = perms['catalogue'];
   perm = perm || 'none';
+  // Envoi des éclatés par e-mail : la lecture suffit (rien n'est modifié)
+  if (req.method === 'POST' && req.path === '/eclates/envoyer-mail' && perm === 'read') return next();
   // Méthodes en écriture : exiger 'write'
   if (['POST','PUT','DELETE','PATCH'].includes(req.method) && perm !== 'write') {
     return res.status(403).json({ error: `Accès en écriture refusé sur le module "${module}".` });
@@ -1164,6 +1166,35 @@ router.get('/eclates/:id', async (req, res) => {
 
 // SVG d'une page (mis en cache par le navigateur : le contenu ne change qu'à la réimportation)
 // Photo du modèle : photo enregistrée dans l'appli, sinon photo par défaut livrée avec l'appli (public/img/eclates/<slug>.jpg)
+// Envoi par e-mail des éclatés (PDF générés dans le navigateur), copie au SAV
+router.post('/eclates/envoyer-mail', requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const to = String(b.email || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'Adresse e-mail invalide' });
+    const pdfs = (Array.isArray(b.pdfs) ? b.pdfs : []).filter(p => p && p.data && p.nom);
+    if (!pdfs.length) return res.status(400).json({ error: 'Aucun PDF à envoyer' });
+    const date = new Date().toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
+    const partie = parseInt(b.partie) || 1, parties = parseInt(b.parties) || 1;
+    const SIG_SAV = SIGNATURE_EMAIL_HTML.replace('Service Commercial', 'Service Après-Vente')
+      .replace(/info@eloflex\.fr/g, 'sav@eloflex.fr').replace('06&nbsp;87&nbsp;04&nbsp;69&nbsp;19', '07&nbsp;54&nbsp;37&nbsp;47&nbsp;40');
+    await sendBrevoMail({
+      from: 'sav@eloflex.fr', fromName: 'Eloflex France — SAV', to, cc: to.toLowerCase() === 'sav@eloflex.fr' ? null : 'sav@eloflex.fr',
+      subject: `Eloflex — Fiches éclatées de nos modèles${parties > 1 ? ` (${partie}/${parties})` : ''}`,
+      attachments: pdfs.map(p => ({ name: String(p.nom).replace(/[^\w.\-]+/g, '_'), content: String(p.data) })),
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.6">
+        <p>Bonjour,</p>
+        <p>Suite à votre demande le ${date}, veuillez trouver ci-joint l'ensemble de nos fiches « éclatées » de nos différents modèles Eloflex.${parties > 1 ? `<br><i>(Envoi ${partie}/${parties} — les fiches sont réparties sur ${parties} e-mails en raison de leur taille.)</i>` : ''}</p>
+        <p>Restant à votre disposition.<br>Bien cordialement</p>
+        <div style="margin-top:20px">${SIG_SAV}</div></div>`
+    });
+    res.json({ ok: true, to, nb: pdfs.length });
+  } catch (e) {
+    const msg = e.response && e.response.data ? JSON.stringify(e.response.data).slice(0, 300) : e.message;
+    res.status(500).json({ error: msg });
+  }
+});
+
 router.get('/eclates/:id/photo', async (req, res) => {
   try {
     const m = await db.get('SELECT slug, photo FROM eclates_modeles WHERE id=$1', [req.params.id]);
