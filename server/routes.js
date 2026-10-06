@@ -1176,15 +1176,20 @@ router.post('/eclates/envoyer-mail', requireAuth, async (req, res) => {
     if (!pdfs.length) return res.status(400).json({ error: 'Aucun PDF à envoyer' });
     const date = new Date().toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
     const partie = parseInt(b.partie) || 1, parties = parseInt(b.parties) || 1;
+    const escH = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const mods = (Array.isArray(b.modeles) ? b.modeles : []).map(escH).filter(Boolean);
+    const quoi = (b.tous === false && mods.length)
+      ? (mods.length > 1 ? `les fiches « éclatées » de nos modèles ${mods.join(', ')}` : `la fiche « éclatée » de notre modèle ${mods[0]}`)
+      : "l'ensemble de nos fiches « éclatées » de nos différents modèles Eloflex";
     const SIG_SAV = SIGNATURE_EMAIL_HTML.replace('Service Commercial', 'Service Après-Vente')
       .replace(/info@eloflex\.fr/g, 'sav@eloflex.fr').replace('06&nbsp;87&nbsp;04&nbsp;69&nbsp;19', '07&nbsp;54&nbsp;37&nbsp;47&nbsp;40');
     await sendBrevoMail({
       from: 'sav@eloflex.fr', fromName: 'Eloflex France — SAV', to, cc: to.toLowerCase() === 'sav@eloflex.fr' ? null : 'sav@eloflex.fr',
-      subject: `Eloflex — Fiches éclatées de nos modèles${parties > 1 ? ` (${partie}/${parties})` : ''}`,
+      subject: `Eloflex — ${b.tous === false && mods.length === 1 ? 'Fiche éclatée ' + mods[0].replace(/&amp;/g, '&') : 'Fiches éclatées de nos modèles'}${parties > 1 ? ` (${partie}/${parties})` : ''}`,
       attachments: pdfs.map(p => ({ name: String(p.nom).replace(/[^\w.\-]+/g, '_'), content: String(p.data) })),
       html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;line-height:1.6">
         <p>Bonjour,</p>
-        <p>Suite à votre demande le ${date}, veuillez trouver ci-joint l'ensemble de nos fiches « éclatées » de nos différents modèles Eloflex.${parties > 1 ? `<br><i>(Envoi ${partie}/${parties} — les fiches sont réparties sur ${parties} e-mails en raison de leur taille.)</i>` : ''}</p>
+        <p>Suite à votre demande le ${date}, veuillez trouver ci-joint ${quoi}.${parties > 1 ? `<br><i>(Envoi ${partie}/${parties} — les fiches sont réparties sur ${parties} e-mails en raison de leur taille.)</i>` : ''}</p>
         <p>Restant à votre disposition.<br>Bien cordialement</p>
         <div style="margin-top:20px">${SIG_SAV}</div></div>`
     });

@@ -222,7 +222,7 @@ async function renderListe(ttl, c, a){
   const admin = typeof isAdmin === 'function' && isAdmin();
   a.innerHTML = `<div style="display:flex;gap:8px;align-items:center">
     <div style="position:relative"><input id="ecl-gsearch" class="search-bar" placeholder="${TR('Référence (tous modèles)…')}" style="max-width:260px"><div class="ecl-res" id="ecl-gres"></div></div>
-    <button class="btn" id="ecl-mail-tous" title="${TR('Envoyer par e-mail tous les éclatés en PDF')}"><i class="ti ti-mail-forward"></i> ${TR('Envoyer tous les éclatés')}</button>
+    <button class="btn" id="ecl-mail-tous" title="${TR('Envoyer par e-mail tous les éclatés en PDF')}"><i class="ti ti-mail-forward"></i> ${TR('Envoyer des éclatés par e-mail')}</button>
     ${admin ? `<label class="btn primary" style="cursor:pointer"><i class="ti ti-upload"></i> ${TR('Importer des éclatés')}<input type="file" id="ecl-import" accept=".json,application/json" multiple style="display:none"></label>` : ''}
   </div>`;
   const list = await API.get('/eclates');
@@ -717,27 +717,48 @@ window.choisirPDF = choisirPDF;
 // ── Envoi par e-mail de tous les éclatés (PDF français) ──
 function envoyerTousEclates(list){
   const today = new Date().toLocaleDateString('fr-FR');
-  showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="color:var(--accent)"></i><h2>${TR('Envoyer tous les éclatés par e-mail')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="color:var(--accent)"></i><h2>${TR('Envoyer des éclatés par e-mail')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">${TR('Adresse e-mail du destinataire')} *</label>
         <input class="form-input" id="ecl-m-to" type="email" placeholder="contact@distributeur.fr" autocomplete="email"></div>
-      <div style="font-size:13px;color:var(--text2);background:var(--bg);border-radius:8px;padding:10px 12px;line-height:1.55">
-        Bonjour,<br>Suite à votre demande le ${today}, veuillez trouver ci-joint l'ensemble de nos fiches « éclatées » de nos différents modèles Eloflex.<br><br>Restant à votre disposition.<br>Bien cordialement<br><i style="color:var(--text3)">+ signature SAV</i></div>
-      <div style="font-size:12px;color:var(--text3);margin-top:8px"><i class="ti ti-paperclip"></i> ${list.length} ${TR('PDF en français')} (${list.map(m => e_(m.nom)).join(', ')}) · ${TR('copie à')} sav@eloflex.fr</div>
+      <div class="form-group"><label class="form-label" style="display:flex;align-items:center;gap:10px">${TR('Fiches à joindre (PDF en français)')}
+          <span style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0">
+            <a href="#" id="ecl-m-all" style="color:var(--accent)">${TR('Tout cocher')}</a> · <a href="#" id="ecl-m-none" style="color:var(--accent)">${TR('Tout décocher')}</a></span></label>
+        <div id="ecl-m-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px;max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+          ${list.map(m => `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" value="${m.id}" checked> ${e_(m.nom)} <span style="color:var(--text3);font-size:11px">(${m.nb_vues} ${TR('vues')})</span></label>`).join('')}
+        </div></div>
+      <div id="ecl-m-apercu" style="font-size:13px;color:var(--text2);background:var(--bg);border-radius:8px;padding:10px 12px;line-height:1.55"></div>
+      <div style="font-size:12px;color:var(--text3);margin-top:8px"><i class="ti ti-paperclip"></i> <span id="ecl-m-nb"></span> · ${TR('copie à')} sav@eloflex.fr</div>
       <div id="ecl-m-msg" style="font-size:13px;margin-top:10px;min-height:18px"></div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Annuler')}</button>
       <button class="btn primary" id="ecl-m-go"><i class="ti ti-send"></i> ${TR('Envoyer')}</button></div>`);
   setTimeout(() => { const i = $('ecl-m-to'); if (i) i.focus(); }, 50);
+  const coches = () => [...document.querySelectorAll('#ecl-m-list input:checked')].map(i => list.find(m => m.id === +i.value)).filter(Boolean);
+  const majApercu = () => {
+    const sel = coches(), tous = sel.length === list.length;
+    const nb = sel.reduce((n, m) => n + (+m.nb_vues || 0), 0);
+    $('ecl-m-nb').textContent = `${sel.length} ${TR('PDF sélectionné(s)')} — ${nb} ${TR('vues')}`;
+    $('ecl-m-apercu').innerHTML = `Bonjour,<br>Suite à votre demande le ${today}, veuillez trouver ci-joint ${tous ? "l'ensemble de nos fiches « éclatées » de nos différents modèles Eloflex"
+      : `${sel.length > 1 ? 'les fiches « éclatées » de nos modèles' : 'la fiche « éclatée » de notre modèle'} ${sel.map(m => e_(m.nom)).join(', ') || '…'}`}.<br><br>Restant à votre disposition.<br>Bien cordialement<br><i style="color:var(--text3)">+ signature SAV</i>`;
+  };
+  $('ecl-m-list').addEventListener('change', majApercu);
+  $('ecl-m-to').addEventListener('input', () => { $('ecl-m-msg').innerHTML = ''; });
+  $('ecl-m-all').onclick = ev => { ev.preventDefault(); document.querySelectorAll('#ecl-m-list input').forEach(i => i.checked = true); majApercu(); };
+  $('ecl-m-none').onclick = ev => { ev.preventDefault(); document.querySelectorAll('#ecl-m-list input').forEach(i => i.checked = false); majApercu(); };
+  majApercu();
   $('ecl-m-go').onclick = async () => {
     const to = $('ecl-m-to').value.trim(), msg = $('ecl-m-msg'), b = $('ecl-m-go');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { msg.innerHTML = '<span style="color:var(--danger)">' + TR('Adresse e-mail invalide') + '</span>'; return; }
+    const sel = coches();
+    if (!sel.length) { msg.innerHTML = '<span style="color:var(--danger)">' + TR('Cochez au moins une fiche') + '</span>'; return; }
+    const tous = sel.length === list.length;
     b.disabled = true;
     const sauve = E.data, pdfs = [];
     try {
-      for (let i = 0; i < list.length; i++) {
-        const m = list[i];
-        msg.innerHTML = `<i class="ti ti-loader-2"></i> ${TR('Préparation des PDF')} ${i + 1}/${list.length} — ${e_(m.nom)}…`;
+      for (let i = 0; i < sel.length; i++) {
+        const m = sel[i];
+        msg.innerHTML = `<i class="ti ti-loader-2"></i> ${TR('Préparation des PDF')} ${i + 1}/${sel.length} — ${e_(m.nom)}…`;
         E.data = prepare(await API.get(`/eclates/${m.id}`));
         if (!E.data.vues.length) continue;
         // Images allégées pour l'e-mail (taille des pièces jointes)
@@ -749,7 +770,7 @@ function envoyerTousEclates(list){
       if (cur.length) lots.push(cur);
       for (let k = 0; k < lots.length; k++) {
         msg.innerHTML = `<i class="ti ti-loader-2"></i> ${TR('Envoi de l’e-mail')}${lots.length > 1 ? ` ${k + 1}/${lots.length}` : ''}…`;
-        await API.post('/eclates/envoyer-mail', { email: to, pdfs: lots[k], partie: k + 1, parties: lots.length });
+        await API.post('/eclates/envoyer-mail', { email: to, pdfs: lots[k], partie: k + 1, parties: lots.length, tous, modeles: sel.map(m => m.nom) });
       }
       closeModal();
       if (typeof toast === 'function') toast(`${TR('Éclatés envoyés à')} ${to}${lots.length > 1 ? ` (${lots.length} ${TR('e-mails')})` : ''}`, 'ti-check', 'var(--success)');
