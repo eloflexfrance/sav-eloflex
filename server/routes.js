@@ -9173,7 +9173,9 @@ router.get('/demandes-info/:id/emails-apercu', requireAuth, async (req, res) => 
   try {
     const d = await _diContexte(req.params.id);
     if (!d) return res.status(404).json({ error: 'Demande introuvable' });
-    res.json({ contact_email: d.email || '', contact_nom: d.nom || '', distrib_email: d.c_email || '',
+    let hist = []; try { hist = Array.isArray(d.historique) ? d.historique : JSON.parse(d.historique || '[]'); } catch (_) { hist = []; }
+    res.json({ envois: hist.filter(h => h && h.statut === 'emails').map(h => ({ date: h.date, par: h.par, detail: h.detail })),
+      contact_email: d.email || '', contact_nom: d.nom || '', distrib_email: d.c_email || '',
       distrib_nom: d.c_nom || d.distributeur_nom || '', distrib_lie: !!d.cid, position: d.c_lat != null && d.c_lng != null });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9252,7 +9254,7 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
       const u = (req.session && req.session.user) || {};
       let hist = []; try { hist = Array.isArray(d.historique) ? d.historique : JSON.parse(d.historique || '[]'); } catch (_) { hist = []; }
       hist.push({ statut: 'emails', date: new Date().toISOString().slice(0, 10), par: u.nom || u.email || null,
-        detail: envoyes.map(x => (x.type === 'contact' ? 'contact' : 'distributeur') + ' → ' + x.email).join(', ') });
+        detail: (hist.some(h => h && h.statut === 'emails') ? 'Renvoi — ' : '') + envoyes.map(x => (x.type === 'contact' ? 'contact' : 'distributeur') + ' → ' + x.email).join(', ') });
       await db.run('UPDATE demandes_info SET historique=$2::jsonb, updated_at=NOW() WHERE id=$1', [d.id, JSON.stringify(hist)]);
     }
     res.json({ ok: !erreurs.length, envoyes, erreurs, carte: !!carteHtml });

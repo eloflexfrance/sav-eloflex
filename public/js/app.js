@@ -9644,7 +9644,7 @@ function diStatutIcons(d){
 // Icône historique (placée en dernière colonne)
 function diHistCell(d){
   const nb = Array.isArray(d.historique)?d.historique.length:0;
-  if(nb<2) return '';
+  if(nb<2 && !(Array.isArray(d.historique)&&d.historique.some(h=>h&&h.statut==='emails'))) return '';
   return `<i class="ti ti-history" title="${TR('Historique des statuts')}" onclick="event.stopPropagation();historiqueDemande(${d.id})" style="cursor:pointer;color:var(--text3);font-size:18px"></i>`;
 }
 async function setDemandeStatutInline(id, statut){
@@ -9659,6 +9659,9 @@ function diActionsCluster(d){
   const relTitle = TR('Relancer par mail')+(d.relance_mail_date?(' — '+TR('dernière : ')+_dfd(d.relance_mail_date)):'');
   return `<span style="display:inline-flex;gap:1px;flex:none">
     <button class="btn sm" title="${relTitle}" onclick="event.stopPropagation();if(confirm('${TR('Envoyer le mail de relance à ce distributeur ?')}'))relancerMailContact(${d.id})" style="color:${d.relance_mail_date?'#d97706':'var(--accent)'}"><i class="ti ti-mail${blink}"></i></button>
+    ${(()=>{ const env=(Array.isArray(d.historique)?d.historique:[]).filter(h=>h&&h.statut==='emails'); const der=env[env.length-1];
+      const tt = der ? TR('Renvoyer les e-mails contact / distributeur')+' — '+TR('dernier envoi : ')+_dfd(der.date)+(der.detail?' ('+der.detail+')':'') : TR('Envoyer les e-mails contact / distributeur');
+      return `<button class="btn sm" title="${esc(tt)}" onclick="event.stopPropagation();modalEmailsDemande(${d.id})" style="color:${der?'var(--success)':'var(--text3)'}"><i class="ti ti-mail-forward"></i></button>`; })()}
     <button class="btn sm" title="${TR('Modifier / changer de distributeur')}" onclick="event.stopPropagation();modalDemande(${d.client_id||'null'},'',${d.id})"><i class="ti ti-pencil"></i></button>
     <button class="btn sm danger" title="${TR('Supprimer ce contact')}" onclick="event.stopPropagation();supprDemande(${d.id})"><i class="ti ti-trash"></i></button>
   </span>`;
@@ -9775,7 +9778,7 @@ function demandesTableHTML(rows, withDistrib){
     </tr>`).join('');
   return `<div class="card" style="padding:0;overflow:hidden"><div class="table-wrap"><table class="table di-table" style="width:100%;table-layout:fixed">
     <colgroup>
-      <col style="width:322px"><col style="width:96px">${withDistrib?'<col style="width:160px">':''}<col style="width:160px"><col style="width:128px">
+      <col style="width:358px"><col style="width:96px">${withDistrib?'<col style="width:160px">':''}<col style="width:160px"><col style="width:128px">
       <col style="width:220px"><col style="width:128px"><col style="width:300px"><col style="width:280px"><col style="width:44px">
     </colgroup>
     <thead><tr>
@@ -9949,7 +9952,7 @@ async function chargerDemandesParDistrib(){
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
         <div class="table-wrap"><table class="table di-table" style="width:100%;table-layout:fixed">
           <colgroup>
-            <col style="width:322px"><col style="width:96px"><col style="width:160px"><col style="width:128px">
+            <col style="width:358px"><col style="width:96px"><col style="width:160px"><col style="width:128px">
             <col style="width:220px"><col style="width:128px"><col style="width:300px"><col style="width:280px"><col style="width:44px">
           </colgroup>
           <thead><tr>
@@ -10145,8 +10148,12 @@ async function modalEmailsDemande(id){
       <div style="font-size:12px;color:var(--text3);margin:2px 0 6px 24px">${sousTitre}</div>
       <input class="form-input" id="dim-${k}-email" style="margin-left:24px;width:calc(100% - 24px)" value="${esc(email||'')}" placeholder="adresse@exemple.fr" oninput="dimMaj()">
     </div>`;
-  showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="color:var(--accent)"></i><h2>${TR('Envoyer les e-mails de la demande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  const env = a.envois||[]; window._DIM_RENVOI = env.length>0;
+  showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="color:var(--accent)"></i><h2>${env.length?TR('Renvoyer les e-mails de la demande'):TR('Envoyer les e-mails de la demande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
+      ${env.length?`<div style="font-size:12.5px;background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">
+        <b><i class="ti ti-history"></i> ${TR('Déjà envoyés')} :</b><br>${env.slice(-5).reverse().map(x=>_dfd(x.date)+(x.par?' · '+esc(x.par):'')+(x.detail?' — '+esc(x.detail):'')).join('<br>')}
+        <div style="color:var(--text3);margin-top:4px">${TR('Vous pouvez renvoyer les e-mails (problème de réception, e-mail supprimé…) en corrigeant l’adresse si besoin.')}</div></div>`:''}
       ${ligne('contact', '👤 '+TR('Au contact')+(a.contact_nom?' — '+esc(a.contact_nom):''), TR('Coordonnées du distributeur le plus proche (téléphone, adresse, plan)')+(a.position?'':' — <span style="color:var(--warning)">'+TR('position inconnue : pas de plan, lien Google Maps seul')+'</span>'), a.contact_email, true)}
       ${ligne('distrib', '🏪 '+TR('Au distributeur')+(a.distrib_nom?' — '+esc(a.distrib_nom):''), a.distrib_lie?TR('Coordonnées complètes du contact et sa demande'):'<span style="color:var(--warning)">'+TR('Distributeur non relié à une fiche : saisissez son adresse e-mail')+'</span>', a.distrib_email, true)}
       <div style="border:1px dashed var(--border);border-radius:10px;padding:10px 12px">
@@ -10172,7 +10179,8 @@ function _dimEnvois(){
 }
 function dimMaj(){
   const e=_dimEnvois(); const l=document.getElementById('dim-go-lbl'); if(!l) return;
-  l.textContent = e.length ? TR('Envoyer')+' ('+e.length+' e-mail'+(e.length>1?'s':'')+')' : TR('Envoyer');
+  const verbe = window._DIM_RENVOI ? TR('Renvoyer') : TR('Envoyer');
+  l.textContent = e.length ? verbe+' ('+e.length+' e-mail'+(e.length>1?'s':'')+')' : verbe;
   const b=document.getElementById('dim-go'); if(b) b.disabled=!e.length;
 }
 window.dimMaj = dimMaj;
