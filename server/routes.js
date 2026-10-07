@@ -4479,8 +4479,8 @@ async function sendBrevoMail({ from, fromName, to, cc, bcc, subject, html, attac
   if (!key) throw new Error('BREVO_API_KEY manquante');
   await axios.post('https://api.brevo.com/v3/smtp/email', {
     sender: { name: fromName||'Eloflex France', email: from||'sav@eloflex.fr' },
-    to: [{ email: to }],
-    ...(cc ? { cc: [{ email: cc }] } : {}),
+    to: String(to).split(/[,;\s]+/).filter(Boolean).map(email => ({ email })),
+    ...(cc ? { cc: String(cc).split(/[,;\s]+/).filter(Boolean).map(email => ({ email })) } : {}),
     ...(bcc ? { bcc: [{ email: bcc }] } : {}),
     ...(attachments && attachments.length ? { attachment: attachments } : {}),
     subject, htmlContent: html
@@ -9149,6 +9149,116 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
 });
 
 // Relance TÉLÉPHONIQUE : enregistre la date (bouton téléphone sur la ligne)
+// ── E-mails automatiques à la création d'une demande d'info : au contact + au distributeur ──
+async function _diContexte(id) {
+  const d = await db.get(`SELECT di.*, c.id AS cid, c.nom AS c_nom, c.email AS c_email, c.tel AS c_tel, c.portable AS c_portable,
+      c.adresse AS c_adresse, c.adresse2 AS c_adresse2, c.cp AS c_cp, c.ville AS c_ville, c.pays AS c_pays, c.lat AS c_lat, c.lng AS c_lng
+    FROM demandes_info di LEFT JOIN clients c ON c.id = di.client_id WHERE di.id=$1`, [id]);
+  if (d && d.cid && (d.c_lat == null || d.c_lng == null)) {
+    // Position de la carte : celle déjà connue sur la carte des distributeurs, sinon géocodage
+    try {
+      const dc = await db.get('SELECT lat, lng FROM distributeurs_carte WHERE client_id=$1 AND lat IS NOT NULL LIMIT 1', [d.cid]);
+      let co = dc ? { lat: dc.lat, lng: dc.lng } : null;
+      if (!co) {
+        co = d.c_adresse ? await geocoderLibre([d.c_adresse, d.c_cp, d.c_ville].filter(Boolean).join(', '), d.c_pays) : null;
+        if (!co) co = await geocoderClient({ adresse: d.c_adresse, cp: d.c_cp, ville: d.c_ville });
+        if (co) await db.run('UPDATE clients SET lat=$1, lng=$2, geocoded_at=NOW() WHERE id=$3 AND lat IS NULL', [co.lat, co.lng, d.cid]);
+      }
+      if (co) { d.c_lat = co.lat; d.c_lng = co.lng; }
+    } catch (_) {}
+  }
+  return d;
+}
+router.get('/demandes-info/:id/emails-apercu', requireAuth, async (req, res) => {
+  try {
+    const d = await _diContexte(req.params.id);
+    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    res.json({ contact_email: d.email || '', contact_nom: d.nom || '', distrib_email: d.c_email || '',
+      distrib_nom: d.c_nom || d.distributeur_nom || '', distrib_lie: !!d.cid, position: d.c_lat != null && d.c_lng != null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
+  try {
+    const d = await _diContexte(req.params.id);
+    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    const envois = (Array.isArray((req.body || {}).envois) ? req.body.envois : [])
+      .filter(e => e && /^(contact|distributeur)$/.test(e.type) && /@/.test(String(e.email || '')));
+    if (!envois.length) return res.json({ ok: true, envoyes: [] });
+    const p = {}; (await db.all('SELECT cle, valeur FROM parametres')).forEach(r => p[r.cle] = r.valeur);
+    const from = (p.email_from_relance || 'info@eloflex.fr').replace(/^.*<|>.*$/g, '').trim() || 'info@eloflex.fr';
+    const esc = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const st = 'font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222;font-size:14px;line-height:1.55';
+
+    // ── Bloc distributeur (sans e-mail) + mini-carte cliquable vers Google Maps ──
+    const nomD = d.c_nom || d.distributeur_nom || '';
+    const adr = [d.c_adresse, d.c_adresse2].filter(Boolean);
+    const cpv = [d.c_cp, d.c_ville].filter(Boolean).join(' ');
+    const tels = [d.c_tel, d.c_portable].filter(Boolean).map(t => fmtTel(t)).filter((t, i, a) => a.indexOf(t) === i);
+    const gmaps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([nomD, adr.join(' '), cpv].filter(Boolean).join(', '));
+    let carteHtml = '';
+    if (d.cid && d.c_lat != null && d.c_lng != null) {
+      try {
+        const cm = require('../scripts/carte-mini');
+        const png = await cm.pngClient(d.cid, d.c_lat, d.c_lng);
+        const base = (process.env.APP_URL || p.app_url || (req.protocol + '://' + req.get('host'))).replace(/\/$/, '');
+        if (png) carteHtml = `<a href="${gmaps}" target="_blank" style="display:block;margin-top:12px;text-decoration:none">
+          <img src="${base}/carte-mini/${d.cid}/${cm.signature(d.cid)}.png" width="560" alt="Plan d'accès — ${esc(nomD)}" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:8px"></a>`;
+      } catch (e) { console.warn('[DEMANDES] mini-carte :', e.message); }
+    }
+    const blocDistrib = `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="width:100%;max-width:580px;border-collapse:collapse;margin:14px 0 18px;background:#F5F8FC;border-left:4px solid #2B7DC7;border-radius:6px">
+      <tr><td style="padding:16px 20px">
+        <div style="font-size:17px;font-weight:bold;color:#1F3A5F;margin-bottom:8px">${esc(nomD)}</div>
+        ${adr.length || cpv ? `<div style="font-size:14px;color:#333;margin-bottom:6px">📍 ${adr.map(esc).join('<br>&nbsp;&nbsp;&nbsp;&nbsp;')}${adr.length && cpv ? '<br>&nbsp;&nbsp;&nbsp;&nbsp;' : ''}${esc(cpv)}</div>` : ''}
+        ${tels.length ? `<div style="font-size:15px;color:#333;margin-bottom:2px">📞 ${tels.map(t => `<a href="tel:${t.replace(/\s/g, '')}" style="color:#2B7DC7;text-decoration:none;font-weight:bold">${esc(t)}</a>`).join(' &nbsp;·&nbsp; ')}</div>` : ''}
+        ${carteHtml}
+        <div style="margin-top:10px"><a href="${gmaps}" target="_blank" style="color:#2B7DC7;font-size:13px;text-decoration:none">🗺️ Voir sur Google Maps (itinéraire, horaires…)</a></div>
+      </td></tr></table>`;
+    const mailContact = () => `<div style="${st}">
+      <p>Bonjour,</p>
+      <p>Suite à votre demande, veuillez trouver ci-dessous les coordonnées de notre distributeur le plus proche de chez vous :</p>
+      ${blocDistrib}
+      <p>En espérant avoir répondu à votre demande, toute l'équipe Eloflex reste à votre disposition.</p>
+      <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
+
+    // ── Bloc contact (coordonnées complètes + demande) pour le distributeur ──
+    const lignes = [['Nom', d.nom], ['Téléphone', d.telephone ? fmtTel(d.telephone) : ''], ['E-mail', d.email],
+      ['Ville', [d.cp, d.ville].filter(Boolean).join(' ')], ['Demande', d.demande_client]].filter(x => x[1]);
+    const blocContact = `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="width:100%;max-width:580px;border-collapse:collapse;margin:14px 0 18px;background:#F5F8FC;border-left:4px solid #2B7DC7">
+      ${lignes.map(([k, v]) => `<tr><td style="padding:7px 14px;font-size:13px;color:#666;width:110px;vertical-align:top">${k}</td><td style="padding:7px 14px;font-size:14px;color:#1F3A5F;font-weight:bold">${k === 'E-mail' ? `<a href="mailto:${esc(v)}" style="color:#2B7DC7">${esc(v)}</a>` : k === 'Téléphone' ? `<a href="tel:${esc(String(v).replace(/\s/g, ''))}" style="color:#2B7DC7;text-decoration:none">${esc(v)}</a>` : esc(v).replace(/\n/g, '<br>')}</td></tr>`).join('')}
+    </table>`;
+    const mailDistrib = () => `<div style="${st}">
+      <p>Bonjour,</p>
+      <p>Nous avons été contactés par cette personne qui souhaite avoir des informations sur notre gamme de fauteuils roulants électriques Eloflex.<br>
+      Merci de la contacter afin de lui fournir les informations nécessaires.</p>
+      ${blocContact}
+      <p>Nous restons bien entendu à votre disposition si vous avez besoin de plus d'informations sur ce client et sur notre gamme de produits.</p>
+      <p>Nous nous permettrons de vous contacter par mail et par téléphone sur le suivi de ce contact afin de voir ensemble la meilleure façon de vous aider.</p>
+      <p>Bien cordialement</p>
+      <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
+
+    const envoyes = [], erreurs = [];
+    for (const e of envois) {
+      const to = String(e.email).trim();
+      try {
+        await sendBrevoMail({ from, fromName: 'Eloflex France', to,
+          cc: /(^|[,;\s])info@eloflex\.fr($|[,;\s])/i.test(to) ? null : 'info@eloflex.fr',
+          subject: e.type === 'contact' ? 'Eloflex — Les coordonnées de votre distributeur le plus proche'
+                                        : `Eloflex — Nouveau contact à rappeler : ${d.nom || ''}${d.ville ? ' (' + d.ville + ')' : ''}`,
+          html: e.type === 'contact' ? mailContact() : mailDistrib() });
+        envoyes.push({ type: e.type, email: to });
+      } catch (err) { erreurs.push({ type: e.type, email: to, error: err.response && err.response.data ? JSON.stringify(err.response.data).slice(0, 200) : err.message }); }
+    }
+    if (envoyes.length) {
+      const u = (req.session && req.session.user) || {};
+      let hist = []; try { hist = Array.isArray(d.historique) ? d.historique : JSON.parse(d.historique || '[]'); } catch (_) { hist = []; }
+      hist.push({ statut: 'emails', date: new Date().toISOString().slice(0, 10), par: u.nom || u.email || null,
+        detail: envoyes.map(x => (x.type === 'contact' ? 'contact' : 'distributeur') + ' → ' + x.email).join(', ') });
+      await db.run('UPDATE demandes_info SET historique=$2::jsonb, updated_at=NOW() WHERE id=$1', [d.id, JSON.stringify(hist)]);
+    }
+    res.json({ ok: !erreurs.length, envoyes, erreurs, carte: !!carteHtml });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/demandes-info/:id/relance-tel', requireAuth, async (req, res) => {
   try {
     const date = (req.body && req.body.date) ? String(req.body.date).slice(0,10) : new Date().toISOString().slice(0,10);

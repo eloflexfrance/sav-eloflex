@@ -9717,8 +9717,9 @@ function historiqueDemande(id){
   let hist = Array.isArray(d.historique)?d.historique.slice():[];
   hist.sort((a,b)=>(''+(b.date||'')).localeCompare(''+(a.date||'')));
   const items = hist.length ? hist.map((h,i)=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;${i?'border-top:0.5px solid var(--border)':''}">
-      <span style="width:11px;height:11px;border-radius:99px;background:${diCouleur(h.statut)};margin-top:3px;flex:none"></span>
-      <div style="flex:1"><div>${diBadge(h.statut)}</div>
+      <span style="width:11px;height:11px;border-radius:99px;background:${h.statut==='emails'?'#2B7DC7':diCouleur(h.statut)};margin-top:3px;flex:none"></span>
+      <div style="flex:1"><div>${h.statut==='emails'?`<span style="display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600;color:#fff;background:#2B7DC7">✉️ ${TR('E-mails envoyés')}</span>`:diBadge(h.statut)}</div>
+      ${h.detail?`<div style="font-size:12px;color:var(--text2);margin-top:2px">${esc(h.detail)}</div>`:''}
       <div style="font-size:12px;color:var(--text3);margin-top:2px">${_dfd(h.date)}${h.par?(' · '+esc(h.par)):''}</div></div>
     </div>`).join('') : `<div style="color:var(--text3);font-size:13px">${TR('Aucun changement de statut enregistré.')}</div>`;
   showModal(`<div class="modal-header"><i class="ti ti-history" style="color:var(--accent)"></i><h2>${TR('Historique du suivi')} — ${esc(d.nom||'')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
@@ -10078,7 +10079,7 @@ async function modalDemande(clientId, distribNom, id){
       <div class="form-group"><label class="form-label">${TR('Demande client')}</label><textarea class="form-input" id="di-demande" rows="2" placeholder="${TR('Ce que demande / recherche le client')}">${esc(d.demande_client||'')}</textarea></div>
       <div class="form-group"><label class="form-label">${TR('Annotation de suivi')}</label><textarea class="form-input" id="di-annot" rows="2">${esc(d.annotation||'')}</textarea></div>
     </div>
-    <div class="modal-footer"><button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="saveDemande()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
+    <div class="modal-footer">${id?`<button class="btn" style="margin-right:auto" onclick="closeModal();modalEmailsDemande(${id})" title="${TR('Envoyer les e-mails au contact et/ou au distributeur')}"><i class="ti ti-mail-forward"></i> ${TR('E-mails contact / distributeur')}</button>`:''}<button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="saveDemande()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
   setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); },0);
 }
 window.modalDemande = modalDemande;
@@ -10126,12 +10127,67 @@ async function saveDemande(){
     demande_client: gv('di-demande')||null,
     relance_mail_date: gv('di-rel-mail')||null, relance_tel_date: gv('di-rel-tel')||null
   };
-  try{ if(id){ await API.updateDemandeInfo(id,data); } else { await API.createDemandeInfo(data); }
+  const cidAvant = gv('di-client-id')||STATE.clientId;
+  try{ let cree=null; if(id){ await API.updateDemandeInfo(id,data); } else { cree = await API.createDemandeInfo(data); }
     closeModal(); toast(TR('Demande enregistrée'),'ti-check','var(--success)');
-    rafraichirDemandes(gv('di-client-id')||STATE.clientId);
+    rafraichirDemandes(cidAvant);
+    // Nouvelle demande → proposer l'envoi des e-mails automatiques (contact + distributeur)
+    if(cree && cree.id) setTimeout(()=>modalEmailsDemande(cree.id), 250);
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.saveDemande = saveDemande;
+// ── Choix des e-mails automatiques d'une demande d'info (contact / distributeur / autre adresse) ──
+async function modalEmailsDemande(id){
+  let a; try{ a = await API.diEmailsApercu(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  const ligne = (k, titre, sousTitre, email, coche) => `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" id="dim-${k}" ${coche?'checked':''} onchange="dimMaj()"> ${titre}</label>
+      <div style="font-size:12px;color:var(--text3);margin:2px 0 6px 24px">${sousTitre}</div>
+      <input class="form-input" id="dim-${k}-email" style="margin-left:24px;width:calc(100% - 24px)" value="${esc(email||'')}" placeholder="adresse@exemple.fr" oninput="dimMaj()">
+    </div>`;
+  showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="color:var(--accent)"></i><h2>${TR('Envoyer les e-mails de la demande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      ${ligne('contact', '👤 '+TR('Au contact')+(a.contact_nom?' — '+esc(a.contact_nom):''), TR('Coordonnées du distributeur le plus proche (téléphone, adresse, plan)')+(a.position?'':' — <span style="color:var(--warning)">'+TR('position inconnue : pas de plan, lien Google Maps seul')+'</span>'), a.contact_email, true)}
+      ${ligne('distrib', '🏪 '+TR('Au distributeur')+(a.distrib_nom?' — '+esc(a.distrib_nom):''), a.distrib_lie?TR('Coordonnées complètes du contact et sa demande'):'<span style="color:var(--warning)">'+TR('Distributeur non relié à une fiche : saisissez son adresse e-mail')+'</span>', a.distrib_email, true)}
+      <div style="border:1px dashed var(--border);border-radius:10px;padding:10px 12px">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" id="dim-autre" onchange="dimMaj()"> ✉️ ${TR('Une autre adresse')}</label>
+        <div style="display:flex;gap:8px;margin:6px 0 0 24px">
+          <input class="form-input" id="dim-autre-email" style="flex:1" placeholder="adresse@exemple.fr" oninput="document.getElementById('dim-autre').checked=!!this.value.trim();dimMaj()">
+          <select class="form-input" id="dim-autre-type" style="width:auto"><option value="contact">${TR('Message « contact »')}</option><option value="distributeur">${TR('Message « distributeur »')}</option></select>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:10px"><i class="ti ti-copy"></i> ${TR('Copie à')} info@eloflex.fr · ${TR('signature du service commercial')}</div>
+      <div id="dim-msg" style="font-size:13px;margin-top:8px;min-height:18px"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Ne rien envoyer')}</button>
+      <button class="btn primary" id="dim-go" onclick="dimEnvoyer(${id})"><i class="ti ti-send"></i> <span id="dim-go-lbl">${TR('Envoyer')}</span></button></div>`);
+  dimMaj();
+}
+window.modalEmailsDemande = modalEmailsDemande;
+function _dimEnvois(){
+  const out=[]; const ok=v=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  const add=(k,type)=>{ const c=document.getElementById('dim-'+k); const v=(gv('dim-'+k+'-email')||'').trim(); if(c&&c.checked) out.push({type, email:v, valide:ok(v)}); };
+  add('contact','contact'); add('distrib','distributeur'); add('autre', gv('dim-autre-type')||'contact');
+  return out;
+}
+function dimMaj(){
+  const e=_dimEnvois(); const l=document.getElementById('dim-go-lbl'); if(!l) return;
+  l.textContent = e.length ? TR('Envoyer')+' ('+e.length+' e-mail'+(e.length>1?'s':'')+')' : TR('Envoyer');
+  const b=document.getElementById('dim-go'); if(b) b.disabled=!e.length;
+}
+window.dimMaj = dimMaj;
+async function dimEnvoyer(id){
+  const e=_dimEnvois(), msg=document.getElementById('dim-msg');
+  const bad=e.filter(x=>!x.valide);
+  if(bad.length){ msg.innerHTML='<span style="color:var(--danger)">'+TR('Adresse e-mail invalide :')+' '+esc(bad.map(x=>x.email||'(vide)').join(', '))+'</span>'; return; }
+  const b=document.getElementById('dim-go'); b.disabled=true; msg.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Envoi en cours…');
+  try{
+    const r=await API.diEmailsEnvoyer(id, e.map(x=>({type:x.type,email:x.email})));
+    if(r.erreurs && r.erreurs.length){ b.disabled=false; msg.innerHTML='<span style="color:var(--danger)">'+TR('Échec :')+' '+esc(r.erreurs.map(x=>x.email+' ('+x.error+')').join(' · '))+'</span>'; return; }
+    closeModal(); toast(TR('E-mails envoyés :')+' '+r.envoyes.map(x=>x.email).join(', '),'ti-mail-check','var(--success)');
+  }catch(err){ b.disabled=false; msg.innerHTML='<span style="color:var(--danger)">Erreur : '+esc(err.message)+'</span>'; }
+}
+window.dimEnvoyer = dimEnvoyer;
 function rafraichirDemandes(clientId){
   window._DISTRIB_NOMS = null;   // recharger l'autocomplétion (nouveaux distributeurs)
   if(STATE.view==='demandes'){ if(DEMANDES_VUE==='distrib') chargerDemandesParDistrib(); else chargerDemandesGlobal(); }

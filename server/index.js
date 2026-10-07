@@ -84,6 +84,9 @@ app.get('/devis-sign/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'devis-sign.html'));
 });
 
+// ── Mini-carte publique des e-mails (distributeur le plus proche) ─────
+app.get('/carte-mini/:id/:sig.png', (req, res) => require('../scripts/carte-mini').routePublique(req, res));
+
 // ── Routes API ───────────────────────────────────────────────────────
 app.use('/api', require('./routes'));
 
