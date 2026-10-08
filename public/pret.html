@@ -112,7 +112,7 @@ function bonHTML(p){
       '<td style="border:1px solid #ccc;padding:7px;background:#F2F5F8;font-weight:bold;color:#1F5C8C;width:50%">FORMULE : '+esc(FORM[p.formule]||p.formule||'')+'</td>'+
       '<td style="border:1px solid #ccc;padding:7px;background:#F2F5F8;font-weight:bold;color:#1F5C8C">DURÉE</td></tr>'+
     '<tr><td style="border:1px solid #ccc;padding:7px;vertical-align:top">'+(p.formule==='long_terme'?bx+' Prêt Long Terme (≥ 3 mois, renouvelable)':bx+' Essai Court (15 à 30 j) — essai patient : 7 jours maximum')+'</td>'+
-      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top">Mise à disposition sous 15 j (21 j max)<br>Date de remise : '+fd(p.date_remise)+'<br>Retour prévu : '+fd(p.date_retour_prevue)+'</td></tr></table>'+
+      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top">'+(p.duree_essai?'<b>'+esc(pretDureeTxt(p))+'</b><br>':'')+'Mise à disposition sous 15 j (21 j max)<br>Date de remise : '+fd(p.date_remise)+'<br>Retour prévu : '+fd(p.date_retour_prevue)+'</td></tr></table>'+
     '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px"><tr>'+
       '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">Désignation / Modèle</td>'+
       '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">N° de série</td>'+
@@ -128,6 +128,10 @@ function bonHTML(p){
       '<td style="border:1px solid #ccc;padding:6px;font-weight:bold">'+esc(artsOf(p).reduce(function(s,a){return s+(parseFloat(a.prix)||0);},0).toFixed(2))+' € HT</td>'+
       '<td style="border:1px solid #ccc;padding:6px"></td><td style="border:1px solid #ccc;padding:6px"></td></tr></table>'+
     (p.observations?'<p style="font-style:italic;color:#555;font-size:12px">Observations : '+esc(p.observations)+'</p>':'')+
+    (pretConditionsLignes(p.conditions_essai).length?('<div style="border:1px solid #ccc;border-left:4px solid #1F5C8C;padding:8px 10px;margin:0 0 8px">'+
+      '<div style="color:#1F5C8C;font-weight:bold;font-size:13px;margin-bottom:4px">CONDITIONS PARTICULIÈRES DE L\'ESSAI</div>'+
+      pretConditionsLignes(p.conditions_essai).map(function(t){ return '<div style="font-size:12px;line-height:1.5;'+(/valeur\s+d['’]achat/i.test(t)?'font-weight:bold':'')+'"><span style="color:#1F5C8C">&#9679;</span> '+esc(t)+'</div>'; }).join('')+
+    '</div>'):'')+
     '<div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:13px;padding:5px 9px">ENGAGEMENTS DE L\'EMPRUNTEUR</div>'+
     '<p style="font-style:italic;color:#555;font-size:12px;margin:8px 0 6px">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions. Il confirme notamment :</p>'+
     '<table style="width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 8px"><tr>'+

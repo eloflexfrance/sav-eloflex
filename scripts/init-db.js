@@ -207,6 +207,9 @@ async function initDB() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_prets_token ON prets(token_signature)`);
     // Colonnes ajoutées après coup (numéro BDC VosFactures + lignes articles)
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS bdc_vf TEXT`);
+    // Offre d'essai Pennylane (références ESSAI-…) : conditions particulières + durée de l'essai en jours
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS conditions_essai TEXT`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS duree_essai INTEGER`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS bdc_vf_id TEXT`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS articles JSONB`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_autre BOOLEAN DEFAULT FALSE`);

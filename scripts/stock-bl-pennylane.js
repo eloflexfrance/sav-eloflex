@@ -18,6 +18,7 @@ const REFS_FAUTEUILS = ['7350006080067', '7350006080531', '7350006080616', '7350
 function estFauteuil(ref, designation) {
   const r = String(ref || '').trim();
   if (REFS_FAUTEUILS.some(x => r === x || r.startsWith(x + '-'))) return true;
+  if (/^ESSAI-/i.test(r)) return true;   // références d'essai / de prêt (ESSAI-F-45CM, ESSAI-15…) : jamais de mouvement de stock
   return /^\s*(fauteuils?|scooters?)\b/i.test(String(designation || ''));
 }
 

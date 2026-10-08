@@ -8828,6 +8828,8 @@ async function modalPret(id, prefillClientId){
             <option value="essai_court" ${p.formule!=='long_terme'?'selected':''}>${PRET_FORMULES.essai_court}</option>
             <option value="long_terme" ${p.formule==='long_terme'?'selected':''}>${PRET_FORMULES.long_terme}</option>
           </select></div>
+        <div class="form-group"><label class="form-label">${TR("Durée de l'essai (jours, 30 max)")}</label>
+          <input class="form-input" id="pret-duree" type="number" min="1" max="30" placeholder="30" value="${p.duree_essai||''}" oninput="if(+this.value>30)this.value=30;pretMajRetour(true)"></div>
       </div>
       <div class="form-group"><label class="form-label">${TR('Adresse du distributeur')}</label><input class="form-input" id="pret-adresse" value="${esc(p.adresse||'')}"></div>
       <div class="form-group" style="margin-bottom:6px">
@@ -8862,6 +8864,8 @@ async function modalPret(id, prefillClientId){
         <div class="form-group"><label class="form-label">${TR('Date de retour prévue')}</label><input class="form-input" id="pret-retour" type="date" value="${(p.date_retour_prevue||'').slice(0,10)}"></div>
       </div>
       <div class="form-group"><label class="form-label">${TR('Observations sur l\'état initial')}</label><textarea class="form-input" id="pret-obs" rows="2">${esc(p.observations||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">${TR("Conditions particulières de l'essai")} <span style="font-weight:400;color:var(--text3)">(${TR('reprises de la description Pennylane de la référence ESSAI-… — une condition par ligne')})</span></label>
+        <textarea class="form-input" id="pret-conditions" rows="5" style="font-size:13px">${esc(p.conditions_essai||'')}</textarea></div>
       <p style="font-size:12px;color:var(--text3);margin:0">${TR('Rappel automatique : Essai court → avant l\'échéance de retour (retour proposé à +30 j de la remise). Prêt long terme → rappel périodique (bilan trimestriel).')}</p>
     </div>
     <div class="modal-footer">
@@ -8906,7 +8910,8 @@ function pretMajRetour(force){
   const f = gv('pret-formule'); const remise = gv('pret-remise'); const ret = $('pret-retour');
   if(!ret) return;
   if(f==='essai_court' && remise && (force || !ret.value)){
-    const d = new Date(remise+'T00:00:00'); if(!isNaN(d)){ d.setDate(d.getDate()+30); ret.value = d.toISOString().slice(0,10); }
+    const jours = Math.min(30, parseInt(gv('pret-duree'),10) || 30);
+    const d = new Date(remise+'T00:00:00'); if(!isNaN(d)){ d.setDate(d.getDate()+jours); ret.value = d.toISOString().slice(0,10); }
   }
 }
 window.pretMajRetour = pretMajRetour;
@@ -9006,12 +9011,24 @@ async function importerPretVF(){
     if(r.formule){ const fs=$('pret-formule'); if(fs){ fs.value=r.formule; } }
     // remplace les lignes articles par celles du BDC
     const cont = $('pret-articles'); if(cont) cont.innerHTML='';
-    (r.lignes||[]).forEach(l=>addPretArticle({designation:l.designation||'', reference:l.reference||'', num_serie:(l.num_serie||''), prix:(l.prix!=null?l.prix:'')}));
-    if(!(r.lignes||[]).length) addPretArticle({});
+    const es = r.essai || null;
+    // Offre d'essai Pennylane : la ligne de durée (ESSAI-15…) n'est pas un article ; le fauteuil d'essai prend
+    // pour valeur la « Valeur d'achat en cas de vente » indiquée dans la description de la référence.
+    const lignesArt = (r.lignes||[]).filter(l=>!/^ESSAI-\d{1,3}$/i.test(String(l.reference||'').trim()));
+    lignesArt.forEach(l=>{
+      const estEssai = es && es.reference && String(l.reference||'').trim().toUpperCase()===es.reference;
+      const prix = (estEssai && es.valeur_achat!=null) ? es.valeur_achat : (l.prix!=null?l.prix:'');
+      addPretArticle({designation:l.designation||'', reference:l.reference||'', num_serie:(l.num_serie||''), prix});
+    });
+    if(!lignesArt.length) addPretArticle({});
+    if(es){
+      if(es.duree_jours){ const fs=$('pret-formule'); if(fs) fs.value='essai_court'; const du=$('pret-duree'); if(du) du.value=es.duree_jours; }
+      if(es.conditions && es.conditions.length){ const tc=$('pret-conditions'); if(tc) tc.value=es.conditions.join('\n'); }
+    }
     // n° de série global détecté → sur la première ligne fauteuil si vide
     if(r.num_serie){ const first=document.querySelector('#pret-articles .pa-ser'); if(first && !first.value) first.value=r.num_serie; }
     pretMajTotal();
-    pretMajRetour();
+    pretMajRetour(!!(es && es.duree_jours));
     // Contrat-cadre du distributeur : on crée le brouillon (idempotent) puis on affiche le statut
     const cidLie = gv('pret-client-id');
     if(cidLie){
@@ -9019,7 +9036,15 @@ async function importerPretVF(){
       majContratCadreHint(cidLie);
     }
     var note = (r.source==='pennylane' && r.est_pret===false) ? ' <span style="color:#d97706">— ⚠ ce document ne semble pas être un prêt</span>' : '';
-    if(msg) msg.innerHTML='<span style="color:#16a34a">'+((r.lignes||[]).length)+' '+TR('ligne(s) importée(s)')+(r.total_ht?(' — '+TR('total')+' '+Number(r.total_ht).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' € HT'):'')+'</span>'+note;
+    if(es){
+      const det=[];
+      if(es.valeur_achat!=null) det.push(TR("valeur d'achat")+' '+Number(es.valeur_achat).toLocaleString('fr-FR',{minimumFractionDigits:2})+' € HT');
+      if(es.duree_jours) det.push(TR('durée')+' '+es.duree_jours+' j'+(es.duree_demandee>30?' ('+TR('ramenée à 30 j max')+')':''));
+      if(es.conditions && es.conditions.length) det.push(es.conditions.length+' '+TR('condition(s)'));
+      if(es.reference && es.valeur_achat==null) det.push('⚠ '+TR("valeur d'achat non trouvée dans la description"));
+      note += ' <div style="color:#1F5C8C;margin-top:3px">🧪 '+TR("Offre d'essai")+(es.reference?' '+esc(es.reference):'')+' : '+esc(det.join(' · '))+'</div>';
+    }
+    if(msg) msg.innerHTML='<span style="color:#16a34a">'+(lignesArt.length)+' '+TR('ligne(s) importée(s)')+(r.total_ht?(' — '+TR('total')+' '+Number(r.total_ht).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' € HT'):'')+'</span>'+note;
   }catch(e){ if(msg) msg.innerHTML='<span style="color:var(--danger)">Erreur : '+esc(e.message)+'</span>'; }
 }
 window.importerPretVF = importerPretVF;
@@ -9052,7 +9077,9 @@ async function savePret(){
     livraison_adresse: livAutre ? (gv('pret-liv-adresse')||null) : null,
     designation: (articles[0]&&articles[0].designation)||null, num_serie: (articles[0]&&articles[0].num_serie)||null,
     date_remise: gv('pret-remise')||null, date_retour_prevue: gv('pret-retour')||null,
-    observations: gv('pret-obs')||null
+    observations: gv('pret-obs')||null,
+    conditions_essai: gv('pret-conditions')||null,
+    duree_essai: gv('pret-duree')||null
   };
   const id = gv('pret-id');
   try{
@@ -9339,7 +9366,7 @@ function pretBonHTML(p){
       <td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;color:#1F5C8C;font-weight:bold;width:50%">DURÉE</td>
     </tr><tr>
       <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.formule==='long_terme'?bx+' Prêt Long Terme (&ge; 3 mois, renouvelable)':bx+' Essai Court (15 à 30 j) — essai patient : 7 jours maximum'}</td>
-      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">Mise à disposition sous 15 j (21 j max)<br>Date de remise : ${fdi(p.date_remise)}<br>Date de retour prévue : ${fdi(p.date_retour_prevue)}<br>Prorogation jusqu'au : ${fdi(p.prorogation_date)}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.duree_essai?`<b>${esc(pretDureeTxt(p))}</b><br>`:''}Mise à disposition sous 15 j (21 j max)<br>Date de remise : ${fdi(p.date_remise)}<br>Date de retour prévue : ${fdi(p.date_retour_prevue)}<br>Prorogation jusqu'au : ${fdi(p.prorogation_date)}</td>
     </tr></table>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
       <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Désignation / Modèle</td>
@@ -9359,6 +9386,10 @@ function pretBonHTML(p){
       <td style="border:1px solid #CCC;padding:5px 7px;font-weight:bold">${esc(Number(pretArticlesOf(p).reduce((s,a)=>s+(parseFloat(a.prix)||0),0)).toFixed(2))} € HT</td>
       <td style="border:1px solid #CCC;padding:5px 7px"></td><td style="border:1px solid #CCC;padding:5px 7px"></td></tr></table>
     ${p.observations?`<p style="margin:0 0 8px;font-style:italic;color:#555;font-size:11px">Observations sur l'état initial : ${esc(p.observations)}</p>`:''}
+    ${pretConditionsLignes(p.conditions_essai).length?`<div style="border:1px solid #CCC;border-left:4px solid #1F5C8C;padding:7px 10px;margin:0 0 8px">
+      <div style="color:#1F5C8C;font-weight:bold;font-size:12px;margin-bottom:4px">CONDITIONS PARTICULIÈRES DE L'ESSAI</div>
+      ${pretConditionsLignes(p.conditions_essai).map(t=>`<div style="font-size:11px;line-height:1.5;${/valeur\s+d['’]achat/i.test(t)?'font-weight:bold':''}"><span style="color:#1F5C8C">&#9679;</span> ${esc(t)}</div>`).join('')}
+    </div>`:''}
     <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">ENGAGEMENTS DE L'EMPRUNTEUR</div>
     <p style="margin:6px 0 6px;font-style:italic;color:#555;font-size:11px">Le distributeur déclare avoir pris connaissance du Contrat-cadre de prêt ELOFLEX et en accepter sans réserve toutes les conditions. Il confirme notamment :</p>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px;table-layout:fixed"><tr>

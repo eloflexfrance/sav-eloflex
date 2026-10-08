@@ -297,6 +297,54 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
 }
 
 // ── Recherche d'un document par numéro (bdc-lookup) ─────────────────────────
+// ── Références d'essai / de prêt Pennylane ─────────────────────────────────
+//   ESSAI-<modèle>[-<taille>] (ex. ESSAI-F-45CM) : fauteuil prêté ; la description porte les conditions
+//     (dont « Valeur d'achat en cas de vente du fauteuil : 2502€ HT », LPPR, options de série)
+//   ESSAI-<n> (ex. ESSAI-15) : durée de l'essai en jours (30 jours maximum)
+function _conditionsEssai(desc) {
+  let t = String(desc || '').replace(/\r/g, '').replace(/[  ]/g, ' ');
+  t = t.replace(/^\s*conditions\s*:\s*/i, '');
+  // « options de série suivantes : - A - B - C » → « … : A, B, C » (avant le découpage en puces)
+  t = t.replace(/(options\s+de\s+s[ée]rie\s+suivantes\s*:)\s*-?\s*([^\n]*)/i,
+    (m, a, b) => a + ' ' + b.split(/\s+-\s+/).map(x => x.trim()).filter(Boolean).join(', '));
+  const out = [];
+  t.split(/\n+/).forEach(ligne => {
+    ligne.split(/\s+-\s+(?=[A-ZÀ-ÖØ-Ý])/).forEach(x => {
+      const b = x.replace(/^\s*[-•*]\s*/, '').replace(/\s{2,}/g, ' ').replace(/\s+:/g, ' :').trim();
+      if (b && !/^conditions\s*:?$/i.test(b)) out.push(b);
+    });
+  });
+  return out;
+}
+function _nombreFr(s) {
+  const n = parseFloat(String(s || '').replace(/\s/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'));
+  return isNaN(n) ? null : n;
+}
+function analyserEssai(lignes) {
+  const ref = l => String((l && l.reference) || '').trim().toUpperCase();
+  const lDuree = (lignes || []).find(l => /^ESSAI-\d{1,3}$/.test(ref(l)));
+  const lModele = (lignes || []).find(l => /^ESSAI-/.test(ref(l)) && !/^ESSAI-\d{1,3}$/.test(ref(l)));
+  if (!lDuree && !lModele) return null;
+  const res = { reference: lModele ? ref(lModele) : null, designation: lModele ? lModele.designation : null,
+    modele: null, taille: null, valeur_achat: null, lppr: null, conditions: [], duree_jours: null, duree_demandee: null };
+  if (lModele) {
+    const m = ref(lModele).match(/^ESSAI-([A-Z0-9+]+?)(?:-(\d{2})\s*CM)?$/);
+    if (m) { res.modele = 'Eloflex ' + m[1]; res.taille = m[2] ? m[2] + ' cm' : null; }
+    const desc = lModele.description || '';
+    res.conditions = _conditionsEssai(desc);
+    const v = desc.match(/valeur\s+d['’]achat[^:\n]*:\s*([\d\s\u00a0\u202f.,]+)\s*(?:€|eur)/i);
+    if (v) res.valeur_achat = _nombreFr(v[1]);
+    const lp = desc.match(/LPPR\s*:?\s*(\d{6,8})/i);
+    if (lp) res.lppr = lp[1];
+  }
+  if (lDuree) {
+    const n = parseInt(ref(lDuree).replace(/^ESSAI-/, ''), 10);
+    res.duree_demandee = n;
+    res.duree_jours = Math.max(1, Math.min(30, n));   // essai : 30 jours maximum
+  }
+  return res;
+}
+
 async function lookupDocumentPennylane(numero) {
   const api = plApi();
   const debug = [];
@@ -378,7 +426,13 @@ async function lookupDocumentPennylane(numero) {
           const prix = _plNum(l.raw_currency_unit_price != null ? l.raw_currency_unit_price
                        : (l.currency_unit_price != null ? l.currency_unit_price
                        : (l.unit_price != null ? l.unit_price : l.unit_amount)));
+          let descLigne = String(l.description || '').trim();
+          if (!descLigne && pid && /^ESSAI-/i.test(String(reference || ''))) {
+            const pr = await resolvePennylaneProduct(api, pid);
+            if (pr && pr.description) descLigne = String(pr.description).trim();
+          }
           lignes.push({
+            description:    descLigne,
             designation:    l.label || l.description || l.product_label || '',
             designation_en: reference || l.label || '',
             reference:      reference || null,
@@ -410,6 +464,7 @@ async function lookupDocumentPennylane(numero) {
         }
 
         const estPret = /essai|demo|d[ée]mo|pr[eê]t|gratuit|loan/i.test(texte + ' ' + titreDoc);
+        const essai = analyserEssai(lignes);
         const plCustomerId = (detail.customer && (detail.customer.id || detail.customer.source_id)) || detail.customer_id
                            || (detail.client && detail.client.id) || null;
         return {
@@ -419,7 +474,7 @@ async function lookupDocumentPennylane(numero) {
           date_commande: dateCmd ? String(dateCmd).slice(0, 10) : null,
           distributeur: distrib || null,
           pl_customer_id: plCustomerId ? String(plCustomerId) : null,
-          modele, quantite, lignes,
+          modele: (essai && essai.modele) || modele, quantite, lignes, essai,
           num_serie: mSerie ? mSerie[0] : (lignes.find(l => l.num_serie) ? lignes.find(l => l.num_serie).num_serie : null),
           total_ht: lignes.reduce((s, l) => s + (l.prix || 0) * (l.quantite || 1), 0) || null,
           kind: endpoint.replace('/', ''),
@@ -922,6 +977,7 @@ module.exports = {
   syncDevisPennylane,
   debugDevisPennylane,
   lookupDocumentPennylane,
+  analyserEssai,
   majStatutsDevisPennylane,
   genererFacturePennylane,
   suggestFacturesPennylane,

@@ -8078,7 +8078,9 @@ async function creerCommandeDepuisPret(p) {
   let arts = p.articles;
   if (typeof arts === 'string') { try { arts = JSON.parse(arts); } catch(_) { arts = null; } }
   const a0 = (Array.isArray(arts) && arts[0]) ? arts[0] : null;
-  const modele  = p.designation || (a0 && a0.designation) || '';
+  // Référence d'essai Pennylane « ESSAI-F-45CM » → modèle « Eloflex F »
+  const mEssai = a0 && String(a0.reference || '').trim().toUpperCase().match(/^ESSAI-([A-Z0-9+]+?)(?:-\d{2}\s*CM)?$/);
+  const modele  = (mEssai && !/^\d+$/.test(mEssai[1]) ? 'Eloflex ' + mEssai[1] : '') || p.designation || (a0 && a0.designation) || '';
   const numSerie = p.num_serie || (a0 && a0.num_serie) || null;
   // Formatage robuste en 'YYYY-MM-DD' (date_remise peut être un objet Date renvoyé par pg)
   const _iso = (v) => {
@@ -8240,6 +8242,18 @@ async function _alerteSansFiche(p) {
   } catch (_) {}
 }
 
+// Offre d'essai : conditions particulières (description Pennylane de la référence ESSAI-…) + durée (ESSAI-15 → 15 j, 30 j max)
+async function _majEssaiPret(row, d) {
+  if (!row || !d) return;
+  if (d.conditions_essai === undefined && d.duree_essai === undefined) return;
+  let duree = d.duree_essai === '' || d.duree_essai == null ? null : parseInt(d.duree_essai, 10);
+  if (duree != null && (isNaN(duree) || duree < 1)) duree = null;
+  if (duree != null) duree = Math.min(30, duree);
+  const r = await db.run('UPDATE prets SET conditions_essai=$1, duree_essai=$2 WHERE id=$3 RETURNING conditions_essai, duree_essai',
+    [String(d.conditions_essai || '').trim() || null, duree, row.id]);
+  if (r) Object.assign(row, r);
+}
+
 router.post('/prets', requireAuth, async (req, res) => {
   try {
     const d = req.body || {};
@@ -8258,6 +8272,7 @@ router.post('/prets', requireAuth, async (req, res) => {
        d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
        d.observations || null, d.statut || 'brouillon', token,
        (req.session.user && req.session.user.id) || null]);
+    await _majEssaiPret(row, d);
     // Contrat-cadre généré automatiquement s'il n'est pas encore signé (il sera joint au bon de prêt)
     try {
       const cc = await _contratPourPret(row, (req.session.user && req.session.user.id) || null);
@@ -8401,6 +8416,7 @@ router.put('/prets/:id', requireAuth, async (req, res) => {
        d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
        d.observations || null, d.statut || 'brouillon', req.params.id]);
     if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
+    await _majEssaiPret(row, d);
     await _alerteSansFiche(row);
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -8521,6 +8537,7 @@ router.get('/pret-public/:token', async (req, res) => {
       livraison_autre: p.livraison_autre, livraison_nom: p.livraison_nom, livraison_adresse: p.livraison_adresse,
       date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
       prorogation_date: p.prorogation_date, observations: p.observations, statut: p.statut,
+      conditions_essai: p.conditions_essai || null, duree_essai: p.duree_essai || null,
       signataire_nom: p.signataire_nom, signed_at: p.signed_at,
       signataire_eloflex: p.signataire_eloflex || null, eloflex_date: p.created_at || null,
       contrat: await (async () => {

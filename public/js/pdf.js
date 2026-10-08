@@ -173,6 +173,7 @@ const PDF = {
 
     band('2 · FORMULE & DURÉE');
     line2('Formule', FORM[p.formule] || p.formule || '—');
+    if (p.duree_essai) line2("Durée de l'essai", p.duree_essai + ' jours (30 jours maximum)');
     line2('Mise à disposition', 'sous 15 j (21 j max)');
     line2('Date de remise', this.fd((p.date_remise||'').slice(0,10)));
     line2('Retour prévu', this.fd((p.date_retour_prevue||'').slice(0,10)));
@@ -201,6 +202,22 @@ const PDF = {
     y += 2;
 
     const ensure = (h) => { if (y + h > 285) { doc.addPage(); y = 18; } };
+
+    // Conditions particulières de l'offre d'essai (description Pennylane de la référence ESSAI-…)
+    const conds = pretConditionsLignes(p.conditions_essai);
+    if (conds.length) {
+      ensure(14);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(31,92,140);
+      doc.text("CONDITIONS PARTICULIÈRES DE L'ESSAI", L, y); y += 4.5; doc.setTextColor(0,0,0);
+      doc.setFontSize(8);
+      conds.forEach((t) => {
+        const fort = /valeur\s+d['’]achat/i.test(t);
+        doc.setFont('helvetica', fort ? 'bold' : 'normal');
+        const lines = doc.splitTextToSize('•  ' + t, W - 2);
+        ensure(lines.length * 3.8 + 1); doc.text(lines, L + 1, y); y += lines.length * 3.8 + 0.6;
+      });
+      doc.setFont('helvetica','normal'); y += 3;
+    }
 
     ensure(60);
     band("4 · ENGAGEMENTS DE L'EMPRUNTEUR");
@@ -411,3 +428,8 @@ const PDF = {
   },
   contratCadre(c) { this.contratCadreDoc(c).save(`Contrat_cadre_pret_${(c.distributeur_nom||'distributeur').replace(/[^a-zA-Z0-9]/g,'_')}.pdf`); }
 };
+
+// Offre d'essai : conditions particulières (une par ligne) et durée de l'essai
+function pretConditionsLignes(t){ return String(t || '').split(/\n+/).map(function(x){ return x.replace(/^\s*[-•*]\s*/, '').trim(); }).filter(Boolean); }
+function pretDureeTxt(p){ return p && p.duree_essai ? ('Durée de l\'essai : ' + p.duree_essai + ' jours (30 jours maximum)') : ''; }
+if (typeof window !== 'undefined') { window.pretConditionsLignes = pretConditionsLignes; window.pretDureeTxt = pretDureeTxt; }
