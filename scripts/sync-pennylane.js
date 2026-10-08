@@ -488,6 +488,15 @@ async function lookupDocumentPennylane(numero) {
 
         const estPret = /essai|demo|d[ée]mo|pr[eê]t|gratuit|loan/i.test(texte + ' ' + titreDoc);
         const essai = analyserEssai(lignes);
+        // Coordonnées du client Pennylane (e-mail, téléphone, adresse, contact) pour pré-remplir bons de prêt / fiches
+        let clientPL = null;
+        try {
+          const cid = (detail.customer && (detail.customer.id || detail.customer.source_id)) || detail.customer_id || (detail.client && detail.client.id);
+          if (cid) {
+            const cf = require('./controle-fiches');
+            clientPL = cf.ficheDepuisCustomerPL(await cf.customerPennylane(cid));
+          }
+        } catch (_) {}
         const plCustomerId = (detail.customer && (detail.customer.id || detail.customer.source_id)) || detail.customer_id
                            || (detail.client && detail.client.id) || null;
         return {
@@ -497,7 +506,7 @@ async function lookupDocumentPennylane(numero) {
           date_commande: dateCmd ? String(dateCmd).slice(0, 10) : null,
           distributeur: distrib || null,
           pl_customer_id: plCustomerId ? String(plCustomerId) : null,
-          modele: (essai && essai.modele) || modele, quantite, lignes, essai,
+          modele: (essai && essai.modele) || modele, quantite, lignes, essai, client: clientPL,
           num_serie: mSerie ? mSerie[0] : (lignes.find(l => l.num_serie) ? lignes.find(l => l.num_serie).num_serie : null),
           total_ht: lignes.reduce((s, l) => s + (l.prix || 0) * (l.quantite || 1), 0) || null,
           kind: endpoint.replace('/', ''),

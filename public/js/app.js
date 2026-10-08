@@ -8792,6 +8792,7 @@ window.renderPrets = renderPrets;
 
 async function modalPret(id, prefillClientId){
   await ensureClientsCache();
+  window._PRET_PL_CLIENT = null;
   let p = { formule:'essai_court', statut:'brouillon' };
   if(id){ try{ p = await API.pret(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; } }
   else if(prefillClientId){
@@ -8970,9 +8971,20 @@ function pretRemplirClient(id){
     $('pret-email').value   = cl.email||'';
     $('pret-tel').value     = cl.tel||cl.portable||'';
     $('pret-adresse').value = [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(' ');
+    pretCompleterDepuisPL();   // champs vides sur la fiche → coordonnées du client Pennylane (import d'un devis)
   }).catch(()=>{});
 }
 window.pretRemplirClient = pretRemplirClient;
+function pretCompleterDepuisPL(){
+  const c = window._PRET_PL_CLIENT; if(!c) return;
+  const vide=id=>{ const el=$(id); return el && !String(el.value||'').trim(); };
+  const adr=[c.adresse, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join(' ');
+  if(vide('pret-contact') && c.contact) $('pret-contact').value=c.contact;
+  if(vide('pret-email') && c.email) $('pret-email').value=c.email;
+  if(vide('pret-tel') && c.tel) $('pret-tel').value=c.tel;
+  if(vide('pret-adresse') && adr) $('pret-adresse').value=adr;
+}
+window.pretCompleterDepuisPL = pretCompleterDepuisPL;
 function pretRemplirLivraison(id){
   if(!id) return;
   API.client(id).then(cl=>{ $('pret-liv-adresse').value = [cl.adresse, cl.cp, cl.ville].filter(Boolean).join(' '); }).catch(()=>{});
@@ -9006,7 +9018,10 @@ async function importerPretVF(){
     if(!r || !r.found){ if(msg) msg.innerHTML='<span style="color:var(--warning)">'+TR('Bon de commande introuvable (Pennylane / VosFactures)')+'</span>'; return; }
     if(r.vf_id!=null) $('pret-bdc-vfid').value = String(r.vf_id);
     if(r.numero) $('pret-bdc-vf').value = r.numero;
-    if(r.distributeur){ if(typeof ensureClientsCache==='function'){ try{ await ensureClientsCache(); }catch(_){} } pretSetDistrib('pret-client', r.distributeur, r.email); }
+    window._PRET_PL_CLIENT = r.client || null;
+    if(r.distributeur){ if(typeof ensureClientsCache==='function'){ try{ await ensureClientsCache(); }catch(_){} } pretSetDistrib('pret-client', r.distributeur, r.email || (r.client && r.client.email)); }
+    // Coordonnées du client Pennylane : complètent les champs restés vides (fiche non trouvée ou incomplète)
+    pretCompleterDepuisPL();
     // Formule déduite du sujet du document (essai court / long terme)
     if(r.formule){ const fs=$('pret-formule'); if(fs){ fs.value=r.formule; } }
     // remplace les lignes articles par celles du BDC
