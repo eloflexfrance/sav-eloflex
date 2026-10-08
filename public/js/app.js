@@ -9416,7 +9416,7 @@ function pretBonHTML(p){
       <tr><td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;font-weight:bold">Dommages partiels / reconditionnement</td>
         <td style="border:1px solid #CCC;padding:6px 9px">Frais réels de remise en état (pièces détachées + main-d'œuvre) sur devis ELOFLEX</td></tr>
       <tr><td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;font-weight:bold">Emballage / mousses manquants</td>
-        <td style="border:1px solid #CCC;padding:6px 9px">40 € HT supplémentaires, soit 90 € HT au total des frais de retour</td></tr>
+        <td style="border:1px solid #CCC;padding:6px 9px">90 € HT en complément des 50 € HT de frais de retour, soit 140 € HT au total</td></tr>
     </table>
     <p style="margin:0 0 8px;font-size:11px"><strong>Option d'achat :</strong> <span style="font-style:italic;color:#555">l'emprunteur peut proposer le rachat du matériel à tout moment. Prix fixé d'un commun accord, formalisé par une facture de vente distincte.</span></p>
     <div style="background:#1F5C8C;color:#fff;font-weight:bold;font-size:12px;padding:4px 9px">SIGNATURES</div>
@@ -9634,7 +9634,7 @@ function contratBonHTML(c){
         <td style="border:1px solid #CCC;padding:5px 8px;text-align:center">90 € HT*</td>
         <td style="border:1px solid #CCC;padding:5px 8px;text-align:center">90 € HT*</td></tr>
     </table>
-    <p>* Soit 90 € HT au total si l'emballage complet est absent. Ces frais sont facturés séparément à l'issue du prêt et ne constituent en aucun cas une contrepartie financière du prêt.</p>
+    <p>* En complément des 50 € HT de frais de retour, soit 140 € HT au total si l'emballage d'origine et/ou les mousses de protection sont absents. Ces frais sont facturés séparément à l'issue du prêt et ne constituent en aucun cas une contrepartie financière du prêt.</p>
     <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 7 – Cession du matériel</h3>
     <p>Offre de rachat possible à tout moment, sans engagement pour ELOFLEX ; prix librement fixé au jour de la vente, formalisé par un bon de commande distinct + facture de vente. Le transfert de propriété met fin au prêt pour ce matériel.</p>
     <h3 style="color:#1F5C8C;font-size:13px;margin:12px 0 4px">Article 8 – Durée et fin du prêt</h3>

@@ -52,7 +52,7 @@
           '<td style="border:1px solid #ccd3da;padding:5px 8px;text-align:center">90 € HT*</td>'+
           '<td style="border:1px solid #ccd3da;padding:5px 8px;text-align:center">90 € HT*</td></tr>'+
       '</table>'+
-      '<p class="a">* Soit 90 € HT au total si l\'emballage complet est absent. Ces frais sont facturés séparément à l\'issue du prêt et ne constituent en aucun cas une contrepartie financière du prêt.</p>'+
+      '<p class="a">* En complément des 50 € HT de frais de retour, soit 140 € HT au total si l\'emballage d\'origine et/ou les mousses de protection sont absents. Ces frais sont facturés séparément à l\'issue du prêt et ne constituent en aucun cas une contrepartie financière du prêt.</p>'+
       '<h3>Article 7 – Cession du matériel</h3>'+
       '<p class="a">L\'Emprunteur peut proposer à tout moment le rachat du matériel. Offre sans engagement pour ELOFLEX ; en cas d\'accord, prix librement fixé au jour de la vente, formalisé par un bon de commande distinct et une facture de vente. Le transfert de propriété met fin au prêt pour ce matériel.</p>'+
       '<h3>Article 8 – Durée et fin du prêt</h3>'+

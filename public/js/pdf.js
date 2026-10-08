@@ -246,7 +246,7 @@ const PDF = {
     const cf = [
       ['Perte / destruction totale', "Prix catalogue HT - décote vétusté (5 %/mois, plafonnée à 30 %)"],
       ['Dommages partiels / reconditionnement', "Frais réels de remise en état (pièces + main-d'œuvre) sur devis ELOFLEX"],
-      ['Emballage / mousses manquants', "40 € HT supplémentaires, soit 90 € HT au total des frais de retour"],
+      ['Emballage / mousses manquants', "90 € HT en complément des 50 € HT de frais de retour, soit 140 € HT au total"],
     ];
     cf.forEach((r) => { ensure(6); doc.setFont('helvetica','bold'); const lab = doc.splitTextToSize(r[0], 58); doc.text(lab, L, y); doc.setFont('helvetica','normal'); const val = doc.splitTextToSize(r[1], W - 62); doc.text(val, L + 62, y); y += Math.max(lab.length, val.length) * 3.8 + 1.5; });
     doc.setFont('helvetica','italic'); doc.setFontSize(7.5); doc.setTextColor(80,80,80);
@@ -384,7 +384,7 @@ const PDF = {
       });
       y += 2; doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
     })();
-    para("* Soit 90 € HT au total si l'emballage complet est absent. Ces frais sont facturés séparément à l'issue du prêt et ne constituent en aucun cas une contrepartie financière du prêt.");
+    para("* En complément des 50 € HT de frais de retour, soit 140 € HT au total si l'emballage d'origine et/ou les mousses de protection sont absents. Ces frais sont facturés séparément à l'issue du prêt et ne constituent en aucun cas une contrepartie financière du prêt.");
 
     art('Article 7 – Cession du matériel');
     para("L'Emprunteur peut, à tout moment, formuler une offre d'achat du matériel prêté. Cette offre n'engage pas ELOFLEX. En cas d'accord, le prix est librement déterminé par les Parties au jour de la vente et formalisé par un bon de commande distinct émis par ELOFLEX ainsi qu'une facture de vente. Le transfert de propriété met fin au prêt pour ce matériel. En Prêt Long Terme, une remise à neuf préalable pourra être organisée avec le service technique ELOFLEX.");
