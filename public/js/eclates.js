@@ -28,10 +28,36 @@ const TX = {
     ocr:'Raster drawing: callouts detected automatically, some may be missing', fiche:'Part record', creer:'Create part',
     foot:'Hover a callout or a line. Click = select. Wheel / pinch = zoom, drag = pan.',
     edit:'Edit', editOn:'Edit mode', addLine:'Add a line', addBulle:'Add a callout', editView:'Rename view',
-    editFoot:'Edit mode: click a callout to renumber or delete it; pencil on a line to edit it.' }
+    editFoot:'Edit mode: click a callout to renumber or delete it; pencil on a line to edit it.' },
+  sv: { list:'Sprängskisser', back:'Alla sprängskisser', search:'Sök en del eller ett artikelnummer…', copy:'Kopiera', copied:'Kopierat ✓', qty:'Antal',
+    detail:'Visa detalj →', posOn:(p,n)=>`Position ${p} på ”${n}” →`, notMarked:'Ingen position på denna ritning', dup:'Dubbel position i dokumentet',
+    sold:'Säljs separat', cables:'Kablar (utan position)', subasm:'Delenhet art.nr ', marks:'positioner', page:'sida',
+    noLine:'Ingen rad i reservdelslistan', none:'Inga resultat', posShort:'position', horscat:'Saknas i katalogen', stock:'Lager',
+    ocr:'Rasterritning: positioner identifierade automatiskt, vissa kan saknas', fiche:'Artikelkort', creer:'Skapa artikel',
+    foot:'För muspekaren över en position eller rad. Klick = välj. Hjul / nyp = zooma, dra = flytta.',
+    edit:'Redigera', editOn:'Redigeringsläge', addLine:'Lägg till rad', addBulle:'Lägg till position', editView:'Byt namn på vy',
+    editFoot:'Redigeringsläge: klicka på en position för att numrera om eller ta bort den.' }
 };
+// Libellés de l'interface éclatés en anglais (comptes en anglais)
+if (typeof EN_STR !== 'undefined') Object.assign(EN_STR, {
+  'Éclatés': 'Exploded views', 'Éclaté': 'Exploded view', 'Référence (tous modèles)…': 'Part number (all models)…',
+  'vues': 'views', 'lignes': 'lines', 'PDF éclaté': 'PDF', 'Site web': 'Website', 'Notice': 'User manual', 'Fiche technique': 'Technical data',
+  'Liens': 'Links', 'Télécharger la fiche éclaté (PDF français ou anglais)': 'Download the exploded view (PDF in English, Swedish or French)',
+  'Télécharger l’éclaté en PDF': 'Download the exploded view as PDF', 'Langue': 'Language', 'Contenu': 'Content',
+  'Toutes les vues du modèle': 'All views of the model', 'Vue affichée uniquement': 'Current view only', 'Télécharger': 'Download',
+  'Préparation': 'Preparing', 'Aucun éclaté importé pour le moment.': 'No exploded view yet.', 'Repère': 'Callout', 'Dessin illisible': 'Unreadable drawing',
+  'Modifier les liens (site, notice, fiche technique)': 'Edit links (website, user manual, technical data)', 'Page du fauteuil sur le site': 'Wheelchair page on the website',
+  'Notice d’utilisation (PDF)': 'User manual (PDF)', 'Fiche technique (PDF)': 'Technical data (PDF)', 'Liens enregistrés': 'Links saved',
+  'comptes en anglais / suédois': 'English / Swedish accounts', 'Changer la photo': 'Change photo', 'Photo': 'Photo', 'Photo enregistrée': 'Photo saved',
+  'Laisser un champ vide pour retirer le lien. Les documents sont sur': 'Leave a field empty to remove the link. Documents are on'
+});
+// Libellés suédois : traduction automatique depuis l'anglais (public/js/trad-sv.js)
+const SV = s => (typeof tradSV === 'function') ? tradSV(s) : s;
+// Liens du site : eloflex.fr pour l'interface en français, eloflex.se sinon (comptes suédois / anglais)
+const SITE_SE = () => typeof LANG !== 'undefined' && LANG !== 'fr';
+const lienM = (m, k) => SITE_SE() ? (m[k + '_se'] || '') : (m[k] || '');
 const L = () => E.lang || (typeof LANG !== 'undefined' && LANG === 'en' ? 'en' : 'fr');
-const T = k => TX[L()][k];
+const T = k => (TX[L()] || TX.en)[k];
 const peutModifier = () => (typeof canWrite === 'function') && canWrite('eclates');
 
 // ── Données dérivées ────────────────────────────────────────────────
@@ -70,8 +96,8 @@ function prepare(d){
   });
   return d;
 }
-const vname = v => L() === 'fr' ? v.label_fr : v.label_en;
-const label = it => L() === 'fr' ? it.fr : (it.desc_en || it.fr);
+const vname = v => L() === 'fr' ? v.label_fr : L() === 'sv' ? SV(v.label_en) : v.label_en;
+const label = it => L() === 'fr' ? it.fr : L() === 'sv' ? SV(it.desc_en || it.fr) : (it.desc_en || it.fr);
 const cur = () => E.data && E.data.vues.find(v => v.id === E.vueId);
 const assemblyView = ref => ref && E.data.vues.find(v => v.assembly_ref && normRef(v.assembly_ref) === normRef(ref));
 function elsewhere(ref, vid){
@@ -188,12 +214,17 @@ function modifierLiens(m, apres){
       <div class="form-group"><label class="form-label"><i class="ti ti-world"></i> ${TR('Page du fauteuil sur le site')}</label><input class="form-input" id="ecl-l-web" placeholder="https://eloflex.fr/produits/…" value="${e_(m.lien_web || '')}"></div>
       <div class="form-group"><label class="form-label"><i class="ti ti-book"></i> ${TR('Notice d’utilisation (PDF)')}</label><input class="form-input" id="ecl-l-notice" placeholder="https://eloflex.fr/media/…pdf" value="${e_(m.lien_notice || '')}"></div>
       <div class="form-group"><label class="form-label"><i class="ti ti-file-description"></i> ${TR('Fiche technique (PDF)')}</label><input class="form-input" id="ecl-l-fiche" placeholder="https://eloflex.fr/media/…pdf" value="${e_(m.lien_fiche || '')}"></div>
-      <div style="font-size:12px;color:var(--text3)">${TR('Laisser un champ vide pour retirer le lien. Les documents sont sur')} <a href="https://eloflex.fr/info/ressources/" target="_blank" rel="noopener">eloflex.fr/info/ressources</a>.</div>
+      <div style="font-weight:700;font-size:13px;margin:14px 0 6px;color:var(--text2)">🇸🇪 eloflex.se <span style="font-weight:400;color:var(--text3)">(${TR('comptes en anglais / suédois')})</span></div>
+      <div class="form-group"><label class="form-label"><i class="ti ti-world"></i> ${TR('Page du fauteuil sur le site')} (.se)</label><input class="form-input" id="ecl-l-web-se" placeholder="https://eloflex.se/produkter/…" value="${e_(m.lien_web_se || '')}"></div>
+      <div class="form-group"><label class="form-label"><i class="ti ti-book"></i> ${TR('Notice d’utilisation (PDF)')} (.se)</label><input class="form-input" id="ecl-l-notice-se" placeholder="https://eloflex.se/media/…pdf" value="${e_(m.lien_notice_se || '')}"></div>
+      <div class="form-group"><label class="form-label"><i class="ti ti-file-description"></i> ${TR('Fiche technique')} (.se)</label><input class="form-input" id="ecl-l-fiche-se" placeholder="https://eloflex.se/produkter/…/#tab1Panel1" value="${e_(m.lien_fiche_se || '')}"></div>
+      <div style="font-size:12px;color:var(--text3)">${TR('Laisser un champ vide pour retirer le lien. Les documents sont sur')} <a href="https://eloflex.fr/info/ressources/" target="_blank" rel="noopener">eloflex.fr/info/ressources</a> · <a href="https://eloflex.se/info/resurser/" target="_blank" rel="noopener">eloflex.se/info/resurser</a>.</div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Annuler')}</button><button class="btn primary" id="ecl-l-ok"><i class="ti ti-check"></i> ${TR('Enregistrer')}</button></div>`);
   $('ecl-l-ok').onclick = async () => {
     try {
-      const r = await API.put(`/eclates/${m.id}/lien`, { lien_web: $('ecl-l-web').value.trim(), lien_notice: $('ecl-l-notice').value.trim(), lien_fiche: $('ecl-l-fiche').value.trim() });
+      const r = await API.put(`/eclates/${m.id}/lien`, { lien_web: $('ecl-l-web').value.trim(), lien_notice: $('ecl-l-notice').value.trim(), lien_fiche: $('ecl-l-fiche').value.trim(),
+        lien_web_se: $('ecl-l-web-se').value.trim(), lien_notice_se: $('ecl-l-notice-se').value.trim(), lien_fiche_se: $('ecl-l-fiche-se').value.trim() });
       Object.assign(m, r); closeModal();
       if (typeof toast === 'function') toast(TR('Liens enregistrés'), 'ti-check', 'var(--success)');
       apres && apres(r);
@@ -222,7 +253,7 @@ async function renderListe(ttl, c, a){
   const admin = typeof isAdmin === 'function' && isAdmin();
   a.innerHTML = `<div style="display:flex;gap:8px;align-items:center">
     <div style="position:relative"><input id="ecl-gsearch" class="search-bar" placeholder="${TR('Référence (tous modèles)…')}" style="max-width:260px"><div class="ecl-res" id="ecl-gres"></div></div>
-    <button class="btn" id="ecl-mail-tous" title="${TR('Envoyer par e-mail tous les éclatés en PDF')}"><i class="ti ti-mail-forward"></i> ${TR('Envoyer des éclatés par e-mail')}</button>
+    ${SITE_SE() ? '' : `<button class="btn" id="ecl-mail-tous" title="${TR('Envoyer par e-mail tous les éclatés en PDF')}"><i class="ti ti-mail-forward"></i> ${TR('Envoyer des éclatés par e-mail')}</button>`}
     ${admin ? `<label class="btn primary" style="cursor:pointer"><i class="ti ti-upload"></i> ${TR('Importer des éclatés')}<input type="file" id="ecl-import" accept=".json,application/json" multiple style="display:none"></label>` : ''}
   </div>`;
   const list = await API.get('/eclates');
@@ -235,9 +266,9 @@ async function renderListe(ttl, c, a){
       <small>${m.nb_vues} ${TR('vues')} · ${m.nb_lignes} ${TR('lignes')}</small>
       <div class="ecl-acts">
         <span class="ecl-act pdf" data-pdf="${m.id}" title="${TR('Télécharger la fiche éclaté (PDF français ou anglais)')}"><i class="ti ti-file-type-pdf"></i> ${TR('PDF éclaté')}</span>
-        ${m.lien_web ? `<a href="${e_(m.lien_web)}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(m.lien_web)}"><i class="ti ti-world"></i> ${TR('Site web')}</a>` : ''}
-        ${m.lien_notice ? `<a href="${e_(m.lien_notice)}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(m.lien_notice)}"><i class="ti ti-book"></i> ${TR('Notice')}</a>` : ''}
-        ${m.lien_fiche ? `<a href="${e_(m.lien_fiche)}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(m.lien_fiche)}"><i class="ti ti-file-description"></i> ${TR('Fiche technique')}</a>` : ''}
+        ${lienM(m,'lien_web') ? `<a href="${e_(lienM(m,'lien_web'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_web'))}"><i class="ti ti-world"></i> ${TR('Site web')}</a>` : ''}
+        ${lienM(m,'lien_notice') ? `<a href="${e_(lienM(m,'lien_notice'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_notice'))}"><i class="ti ti-book"></i> ${TR('Notice')}</a>` : ''}
+        ${lienM(m,'lien_fiche') ? `<a href="${e_(lienM(m,'lien_fiche'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_fiche'))}"><i class="ti ti-file-description"></i> ${TR('Fiche technique')}</a>` : ''}
         ${edit ? `<span class="ecl-act" data-liens="${m.id}" style="color:var(--text2)" title="${TR('Modifier les liens (site, notice, fiche technique)')}"><i class="ti ti-link"></i> ${TR('Liens')}</span>` : ''}
       </div>
       ${admin ? `<small style="margin-top:8px"><span class="ecl-mini" data-del="${m.id}" data-nom="${e_(m.nom)}"><i class="ti ti-trash"></i> ${TR('Supprimer')}</span></small>` : ''}
@@ -279,7 +310,7 @@ async function renderListe(ttl, c, a){
     });
   });
   const inp = $('ecl-import'); if (inp) inp.addEventListener('change', () => importer(inp));
-  $('ecl-mail-tous').onclick = () => envoyerTousEclates(list);
+  if ($('ecl-mail-tous')) $('ecl-mail-tous').onclick = () => envoyerTousEclates(list);
   const gs = $('ecl-gsearch');
   gs.addEventListener('input', () => { clearTimeout(window._eclGS); window._eclGS = setTimeout(async () => {
     const q = gs.value.trim(), r = $('ecl-gres');
@@ -324,11 +355,11 @@ function renderViewer(ttl, c, a){
   a.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <button class="btn" id="ecl-back"><i class="ti ti-arrow-left"></i> ${T('back')}</button>
     <div style="position:relative"><input id="ecl-q" class="search-bar" placeholder="${T('search')}" autocomplete="off" style="width:260px"><div class="ecl-res" id="ecl-res"></div></div>
-    <div class="ecl-seg"><button data-lg="fr" class="${L()==='fr'?'on':''}">FR</button><button data-lg="en" class="${L()==='en'?'on':''}">EN</button></div>
-    <button class="btn primary" id="ecl-pdf"><i class="ti ti-file-type-pdf"></i> ${L()==='fr' ? 'Télécharger PDF' : 'Download PDF'}</button>
-    ${d.lien_web ? `<a class="btn" style="text-decoration:none" href="${e_(d.lien_web)}" target="_blank" rel="noopener" title="${e_(d.lien_web)}"><i class="ti ti-world"></i> ${L()==='fr' ? 'Site web' : 'Website'}</a>` : ''}
-    ${d.lien_notice ? `<a class="btn" style="text-decoration:none" href="${e_(d.lien_notice)}" target="_blank" rel="noopener" title="${e_(d.lien_notice)}"><i class="ti ti-book"></i> ${L()==='fr' ? 'Notice' : 'User manual'}</a>` : ''}
-    ${d.lien_fiche ? `<a class="btn" style="text-decoration:none" href="${e_(d.lien_fiche)}" target="_blank" rel="noopener" title="${e_(d.lien_fiche)}"><i class="ti ti-file-description"></i> ${L()==='fr' ? 'Fiche technique' : 'Data sheet'}</a>` : ''}
+    <div class="ecl-seg"><button data-lg="fr" class="${L()==='fr'?'on':''}">FR</button><button data-lg="en" class="${L()==='en'?'on':''}">EN</button><button data-lg="sv" class="${L()==='sv'?'on':''}">SV</button></div>
+    <button class="btn primary" id="ecl-pdf"><i class="ti ti-file-type-pdf"></i> ${({fr:'Télécharger PDF',en:'Download PDF',sv:'Ladda ner PDF'})[L()]}</button>
+    ${lienM(d,'lien_web') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_web'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_web'))}"><i class="ti ti-world"></i> ${({fr:'Site web',en:'Website',sv:'Webbplats'})[L()]}</a>` : ''}
+    ${lienM(d,'lien_notice') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_notice'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_notice'))}"><i class="ti ti-book"></i> ${({fr:'Notice',en:'User manual',sv:'Bruksanvisning'})[L()]}</a>` : ''}
+    ${lienM(d,'lien_fiche') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_fiche'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_fiche'))}"><i class="ti ti-file-description"></i> ${({fr:'Fiche technique',en:'Technical data',sv:'Tekniska specifikationer'})[L()]}</a>` : ''}
     ${E.edit ? `<button class="btn" id="ecl-lien"><i class="ti ti-link"></i> ${TR('Liens')}</button>` : ''}
     ${peutModifier() ? `<button class="btn ${E.edit ? 'primary' : ''}" id="ecl-edit"><i class="ti ti-pencil"></i> ${T('editOn')}</button>` : ''}
   </div>`;
@@ -356,7 +387,7 @@ function renderViewer(ttl, c, a){
   a.querySelectorAll('[data-lg]').forEach(b => b.onclick = () => { E.lang = b.dataset.lg; renderViewer(ttl, c, a); });
   if ($('ecl-edit')) $('ecl-edit').onclick = () => { E.edit = !E.edit; addMode = null; renderViewer(ttl, c, a); };
   if ($('ecl-vedit')) $('ecl-vedit').onclick = editerVue;
-  if ($('ecl-lien')) $('ecl-lien').onclick = () => modifierLiens(d, r => { d.lien_web = r.lien_web; d.lien_notice = r.lien_notice; d.lien_fiche = r.lien_fiche; renderViewer(ttl, c, a); });
+  if ($('ecl-lien')) $('ecl-lien').onclick = () => modifierLiens(d, r => { Object.assign(d, r); renderViewer(ttl, c, a); });
   $('ecl-pdf').onclick = choisirPDF;
   if ($('ecl-addb')) $('ecl-addb').onclick = () => { addMode = { step: 1 }; hint(TR('Cliquez à l’endroit de la nouvelle bulle (Échap pour annuler)')); $('ecl-paper').classList.add('adding'); };
   bindZoom(); bindSearch();
@@ -447,7 +478,7 @@ function items(num){ return cur().items.filter(i => i.nums.includes(num)); }
 function keyNums(key){ const its = cur().items.filter(i => i.pos === key); return its.length ? [...new Set(its.flatMap(i => i.nums))] : [key]; }
 
 function stockBadge(it){
-  if (!it.cat_id || L() !== 'fr') return '';
+  if (!it.cat_id || L() !== 'fr' || it.cat_masque) return '';
   const s = +it.cat_stock || 0, al = +it.cat_stock_alerte || 0;
   return `<span class="ecl-stock ${s <= 0 ? 'zero' : (s <= al ? 'bas' : '')}">${T('stock')} ${s}</span>`;
 }
@@ -462,18 +493,18 @@ function list(){
     const oth = (!isCable && !has) ? elsewhere(it.ref, v.id) : [];
     return `<div class="ecl-row" ${isCable ? '' : `data-num="${e_(it.pos)}" data-nums=" ${e_(it.nums.join(' '))} "`} data-id="${it.id}">
       <div class="ecl-pos ${isCable || !has ? 'none' : ''} ${String(it.pos || '').length > 3 ? 'multi' : ''}">${isCable ? '–' : e_(it.pos)}</div>
-      <div><div class="ecl-nm">${e_(label(it))}</div>${L() === 'fr' && it.fr !== it.desc_en && it.desc_en ? `<div class="ecl-en">${e_(it.desc_en)}</div>` : ''}
+      <div><div class="ecl-nm">${e_(label(it))}</div>${(L() === 'fr' || L() === 'sv') && label(it) !== it.desc_en && it.desc_en ? `<div class="ecl-en">${e_(it.desc_en)}</div>` : ''}
         <div class="ecl-ref">${e_(it.ref || '')}${it.ref ? ` <button data-copy="${e_(it.ref)}">${T('copy')}</button>` : ''}
-          ${it.cat_id ? `<button data-fiche="${it.cat_id}">${T('fiche')}</button>` : ''}
+          ${it.cat_id && !it.cat_masque ? `<button data-fiche="${it.cat_id}">${T('fiche')}</button>` : ''}
           <button class="ecl-pen" data-edit="${it.id}" title="${T('edit')}"><i class="ti ti-pencil"></i></button></div>
         ${sub && sub.id !== v.id ? `<span class="ecl-tag" data-go="${sub.id}">${T('detail')}</span>` : ''}
         ${oth.map(o => `<span class="ecl-tag" data-go="${o.v.id}" data-pos="${e_(o.pos)}">${e_(T('posOn')(o.pos, vname(o.v)))}</span>`).join('')}
         ${!isCable && !has && !oth.length ? `<span class="ecl-tag warn">${T('notMarked')}</span>` : ''}
         ${it.dup === 'dup' ? `<span class="ecl-tag warn">${T('dup')}</span>` : ''}
-        ${it.horscat && L() === 'fr' ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
+        ${it.horscat && L() === 'fr' && !it.cat_masque ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
         ${it.note ? `<span class="ecl-tag warn">${T('sold')}</span>` : ''}
       </div>
-      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}</div>
+      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}</div>
     </div>`;
   };
   v.items.forEach(it => h += row(it, false));
@@ -521,7 +552,7 @@ function select(key, scroll, zoom){
 function tipShow(num, ev){
   const its = items(num), t = $('ecl-tip');
   t.innerHTML = !its.length ? `<b>${TR('Repère')} ${e_(num)}</b><div class="ecl-en">${T('noLine')}</div>`
-    : its.map(it => `<div style="margin-bottom:4px"><b>${e_(num)} · ${e_(label(it))}</b>${L() === 'fr' && it.desc_en && it.fr !== it.desc_en ? `<div class="ecl-en">${e_(it.desc_en)}</div>` : ''}<div class="ecl-ref">${e_(it.ref || '')} · ${T('qty')} ${e_(it.qty || '—')} ${stockBadge(it)}</div></div>`).join('');
+    : its.map(it => `<div style="margin-bottom:4px"><b>${e_(num)} · ${e_(label(it))}</b>${(L() === 'fr' || L() === 'sv') && it.desc_en && label(it) !== it.desc_en ? `<div class="ecl-en">${e_(it.desc_en)}</div>` : ''}<div class="ecl-ref">${e_(it.ref || '')} · ${T('qty')} ${e_(it.qty || '—')} ${stockBadge(it)}</div></div>`).join('');
   t.style.display = 'block'; tipMove(ev);
 }
 function tipMove(ev){ const t = $('ecl-tip'); if (!t) return; t.style.left = Math.min(ev.clientX + 16, innerWidth - t.offsetWidth - 10) + 'px'; t.style.top = Math.min(ev.clientY + 16, innerHeight - t.offsetHeight - 10) + 'px'; }
@@ -695,7 +726,8 @@ function choisirPDF(){
       <div class="form-group"><label class="form-label">${TR('Langue')}</label>
         <div style="display:flex;gap:16px;font-size:14px">
           <label><input type="radio" name="ecl-pl" value="fr" ${lg==='fr'?'checked':''}> Français</label>
-          <label><input type="radio" name="ecl-pl" value="en" ${lg==='en'?'checked':''}> English</label></div></div>
+          <label><input type="radio" name="ecl-pl" value="en" ${lg==='en'?'checked':''}> English</label>
+          <label><input type="radio" name="ecl-pl" value="sv" ${lg==='sv'?'checked':''}> Svenska</label></div></div>
       <div class="form-group"><label class="form-label">${TR('Contenu')}</label>
         <div style="display:flex;flex-direction:column;gap:6px;font-size:14px">
           <label><input type="radio" name="ecl-ps" value="all" checked> ${TR('Toutes les vues du modèle')} (${E.data.vues.length})</label>
@@ -812,28 +844,31 @@ async function imageVue(v, o){
 async function exporterPDF(lang, vues, prog, opts){
   opts = opts || {};
   if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('jsPDF indisponible');
-  const fr = lang === 'fr', d = E.data;
-  const t = fr ? { pos: 'Repère', ref: 'Référence', des: 'Désignation', qty: 'Qté', parts: 'Nomenclature', cables: 'Câbles (sans repère)',
+  const fr = lang === 'fr', sv = lang === 'sv', d = E.data;
+  const t = sv ? { pos: 'Pos.', ref: 'Artikelnummer', des: 'Benämning', qty: 'Antal', parts: 'Reservdelslista', cables: 'Kablar (utan position)',
+                   ed: 'Utskriven', p: 'Sida', web: 'Webbplats', sub: 'Delenhet art.nr ', title: 'Sprängskiss', sold: 'säljs separat' }
+          : fr ? { pos: 'Repère', ref: 'Référence', des: 'Désignation', qty: 'Qté', parts: 'Nomenclature', cables: 'Câbles (sans repère)',
                    ed: 'Édité le', p: 'Page', web: 'Site web', sub: 'Sous-ensemble réf. ', title: 'Vue éclatée', sold: 'vendu séparément' }
                : { pos: 'Item', ref: 'Part number', des: 'Description', qty: 'Qty', parts: 'Parts list', cables: 'Cables (no item number)',
                    ed: 'Printed on', p: 'Page', web: 'Website', sub: 'Sub-assembly ref. ', title: 'Exploded view', sold: 'sold separately' };
-  const nomVue = v => fr ? v.label_fr : v.label_en;
-  const desig = it => fr ? (it.fr || it.desc_en || '') : (it.desc_en || it.fr || '');
+  const nomVue = v => fr ? v.label_fr : sv ? SV(v.label_en) : v.label_en;
+  const desig = it => fr ? (it.fr || it.desc_en || '') : sv ? SV(it.desc_en || it.fr || '') : (it.desc_en || it.fr || '');
+  const lienSite = fr ? d.lien_web : (d.lien_web_se || d.lien_web);
   const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const PW = 297, PH = 210, M = 10, BLEU = [31, 92, 140];
-  const today = new Date().toLocaleDateString(fr ? 'fr-FR' : 'en-GB');
+  const today = new Date().toLocaleDateString(fr ? 'fr-FR' : sv ? 'sv-SE' : 'en-GB');
   const entete = (titre, sous) => {
     pdf.setFillColor(...BLEU); pdf.rect(0, 0, PW, 15, 'F');
     pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13);
     pdf.text(`${d.nom} — ${titre}`, M, 9.5);
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
-    pdf.text([d.ref_modele ? (fr ? 'Réf. ' : 'Ref. ') + d.ref_modele : '', sous || ''].filter(Boolean).join('   ·   '), PW - M, 9.5, { align: 'right' });
+    pdf.text([d.ref_modele ? (fr ? 'Réf. ' : sv ? 'Art.nr ' : 'Ref. ') + d.ref_modele : '', sous || ''].filter(Boolean).join('   ·   '), PW - M, 9.5, { align: 'right' });
     pdf.setTextColor(0, 0, 0);
   };
   const pied = () => {
     pdf.setFontSize(7.5); pdf.setTextColor(120, 120, 120);
     pdf.text(`Eloflex — ${t.title} ${d.nom}${d.date_doc ? ' (' + d.date_doc + ')' : ''} — ${t.ed} ${today}`, M, PH - 5);
-    if (d.lien_web){ pdf.setTextColor(...BLEU); pdf.textWithLink(`${t.web} : ${d.lien_web}`, PW / 2 + 10, PH - 5, { url: d.lien_web }); }
+    if (lienSite){ pdf.setTextColor(...BLEU); pdf.textWithLink(`${t.web} : ${lienSite}`, PW / 2 + 10, PH - 5, { url: lienSite }); }
     pdf.setTextColor(0, 0, 0);
   };
   let first = true;
@@ -888,7 +923,7 @@ async function exporterPDF(lang, vues, prog, opts){
   const n = pdf.getNumberOfPages();
   for (let i = 1; i <= n; i++){ pdf.setPage(i); pdf.setFontSize(7.5); pdf.setTextColor(120, 120, 120); pdf.text(`${t.p} ${i}/${n}`, PW - M, PH - 5, { align: 'right' }); }
   const propre = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
-  const nomFic = (fr ? 'Eclate_' : 'Exploded_view_') + propre(d.nom) + (vues.length === 1 && E.data.vues.length > 1 ? '_' + propre(nomVue(vues[0])).slice(0, 40) : '') + '_' + lang.toUpperCase() + '.pdf';
+  const nomFic = (fr ? 'Eclate_' : sv ? 'Sprangskiss_' : 'Exploded_view_') + propre(d.nom) + (vues.length === 1 && E.data.vues.length > 1 ? '_' + propre(nomVue(vues[0])).slice(0, 40) : '') + '_' + lang.toUpperCase() + '.pdf';
   if (opts.base64) return { nom: nomFic, data: pdf.output('datauristring').split(',')[1] };
   pdf.save(nomFic);
 }

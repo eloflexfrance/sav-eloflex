@@ -537,6 +537,29 @@ async function initDB() {
           if (FICHES[code]) await client.query(`UPDATE eclates_modeles SET lien_fiche=$1 WHERE slug=$2 AND lien_fiche IS NULL`, [S + FICHES[code], slug]);
         }
       }
+      // Liens du site suédois eloflex.se (comptes en anglais / suédois) : page modèle, spécifications techniques, manuel SE
+      await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS lien_web_se TEXT`);
+      await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS lien_fiche_se TEXT`);
+      await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS lien_notice_se TEXT`);
+      {
+        const SE = 'https://eloflex.se/';
+        const PAGES = ['c3', 'd2', 'f', 'h', 'h2', 'k', 'l', 'p', 'r', 's1'];   // pages modèles existantes sur eloflex.se
+        const MAN = { c: 'slghehc4/eloflexusermanual_c_se_2023.pdf', c3: 'q2hnn1ys/eloflexusermanual_c3-se.pdf', d2: 'c5tdba2u/eloflexusermanual_d2_se_2023.pdf',
+          f: 'q3dbz0uo/eloflexusermanual_f_se_2023.pdf', h: 'y3zpar5t/eloflexusermanual_h_se_2023.pdf', h2: 'kjyemxlo/eloflex_instruction-manual_h2_se-low.pdf',
+          k: 'ts3d5w23/eloflexusermanual_k_se_2023.pdf', l: '4eadoxcn/eloflexusermanual_l_se_2023.pdf', p: 'emado3vk/eloflexusermanual_p_se_2023.pdf',
+          r: 'ozqjacgo/eloflexusermanual_r_se_2024.pdf', s1: 'xilco0oe/usermanual_s1_all-se.pdf', x: 'y3kbjznj/eloflexusermanual_x_se_2023.pdf',
+          z: 'm2bbddsv/eloflexusermanual_z_se_2023.pdf' };
+        const SLUGS = [['Eloflex_C','c'],['Eloflex_C3','c3'],['Eloflex_D2','d2'],['Eloflex_D2_Pre_2022','d2'],['Eloflex_F','f'],['Eloflex_F_Pre_2022','f'],
+          ['Eloflex_H','h'],['Eloflex_H2','h2'],['Eloflex_K','k'],['Eloflex_L','l'],['Eloflex_L_Pre_2022','l'],['Eloflex_P','p'],['Eloflex_P_Pre_2022','p'],
+          ['Eloflex_R','r'],['Eloflex_S1','s1'],['Eloflex_X','x'],['Eloflex_Z','z']];
+        for (const [slug, code] of SLUGS) {
+          if (PAGES.includes(code)) {
+            await client.query(`UPDATE eclates_modeles SET lien_web_se=$1 WHERE slug=$2 AND lien_web_se IS NULL`, [SE + 'produkter/eloflex-' + code + '/', slug]);
+            await client.query(`UPDATE eclates_modeles SET lien_fiche_se=$1 WHERE slug=$2 AND lien_fiche_se IS NULL`, [SE + 'produkter/eloflex-' + code + '/#tab1Panel1', slug]);
+          }
+          if (MAN[code]) await client.query(`UPDATE eclates_modeles SET lien_notice_se=$1 WHERE slug=$2 AND lien_notice_se IS NULL`, [SE + 'media/' + MAN[code], slug]);
+        }
+      }
       await client.query(`CREATE TABLE IF NOT EXISTS eclates_vues (
         id SERIAL PRIMARY KEY,
         modele_id INTEGER NOT NULL REFERENCES eclates_modeles(id) ON DELETE CASCADE,

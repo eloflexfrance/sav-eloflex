@@ -113,7 +113,7 @@ const PERM_FALLBACK = {
 };
 
 function hasAccess(module) {
-  if (module === 'logs') return true; // Journal d'activité : accessible à tous les utilisateurs
+  if (module === 'logs') return isAdmin() || hasAccess('dashboard'); // Journal d'activité : pas pour les accès restreints
   if (isAdmin()) return true;
   const perms = CURRENT_USER?.permissions || {};
   let p = perms[module];
@@ -182,6 +182,14 @@ function appliquerNavRole(){
   if(!CURRENT_USER) return;
   document.querySelectorAll('.nav-item[data-view]').forEach(n => {
     n.style.display = hasAccess(n.dataset.view) ? '' : 'none';
+  });
+  // Journal d'activité : réservé aux comptes ayant accès au suivi (pas aux accès « éclatés uniquement »)
+  const bl=document.getElementById('btn-logs'); if(bl) bl.style.display = (isAdmin() || hasAccess('dashboard')) ? '' : 'none';
+  // Titres de section sans aucun module visible : masqués
+  document.querySelectorAll('.nav-section .nav-label').forEach(lb => {
+    let el = lb.nextElementSibling, vis = false;
+    while (el && !el.classList.contains('nav-label')) { if (el.classList.contains('nav-item') && el.style.display !== 'none') { vis = true; break; } el = el.nextElementSibling; }
+    lb.style.display = vis ? '' : 'none';
   });
   const userZone = $('user-zone');
   if(userZone) userZone.innerHTML = `
@@ -6035,6 +6043,11 @@ applyNavTranslations();
     switchLang(CURRENT_USER.langue, false); // false = ne pas sauvegarder en DB (déjà en DB)
   }
   appliquerNavRole();
+  // Compte à accès restreint (ex. « éclatés uniquement ») : ouvrir le premier module autorisé
+  if(!hasAccess(STATE.view)){
+    const premier=[...document.querySelectorAll('.nav-item[data-view]')].find(n=>hasAccess(n.dataset.view));
+    if(premier){ STATE.view=premier.dataset.view; document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===STATE.view)); }
+  }
   loadVfStatus();
   refreshBadges();
   setInterval(refreshBadges, 60000);

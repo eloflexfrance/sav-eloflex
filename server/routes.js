@@ -224,6 +224,9 @@ router.get('/logs', requireAuth, async (req, res) => {
     if (req.query.action) { conds.push(`action=$${++i}`); p.push(req.query.action); }
     if (req.query.user)   { conds.push(`user_nom ILIKE $${++i}`); p.push('%' + req.query.user + '%'); }
     if (req.query.q)      { conds.push(`(user_nom ILIKE $${++i} OR module ILIKE $${i} OR chemin ILIKE $${i})`); p.push('%' + req.query.q + '%'); }
+    // Compte sans accès au suivi commandes (ex. « éclatés uniquement ») : uniquement ses propres actions
+    const u = res.locals.user || {}, pm = u.permissions || {};
+    if (u.role !== 'admin' && u.role !== 'operateur' && !['read', 'write'].includes(pm.commandes) && !['read', 'write'].includes(pm.dashboard)) { conds.push(`user_id=$${++i}`); p.push(u.id || 0); }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const rows = await db.all(`SELECT * FROM activity_logs ${where} ORDER BY created_at DESC LIMIT ${limit}`, p);
     res.json(rows);
@@ -1127,7 +1130,7 @@ const _ECL_CAT_JOIN = `LEFT JOIN LATERAL (
 
 router.get('/eclates', async (req, res) => {
   try {
-    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at, m.lien_web, m.lien_notice, m.lien_fiche, (m.photo IS NOT NULL) AS photo_perso,
+    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at, m.lien_web, m.lien_notice, m.lien_fiche, m.lien_web_se, m.lien_notice_se, m.lien_fiche_se, (m.photo IS NOT NULL) AS photo_perso,
         (SELECT COUNT(*) FROM eclates_vues v WHERE v.modele_id = m.id)::int AS nb_vues,
         (SELECT COUNT(*) FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id WHERE v.modele_id = m.id)::int AS nb_lignes
       FROM eclates_modeles m ORDER BY m.ordre, m.nom`));
@@ -1148,7 +1151,7 @@ router.get('/eclates/par-ref/:ref', async (req, res) => {
 
 router.get('/eclates/:id', async (req, res) => {
   try {
-    const m = await db.get('SELECT id, slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, updated_at, lien_web, lien_notice, lien_fiche FROM eclates_modeles WHERE id=$1', [req.params.id]);
+    const m = await db.get('SELECT id, slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, updated_at, lien_web, lien_notice, lien_fiche, lien_web_se, lien_notice_se, lien_fiche_se FROM eclates_modeles WHERE id=$1', [req.params.id]);
     if (!m) return res.status(404).json({ error: 'Éclaté introuvable' });
     const vues = await db.all(`SELECT v.id, v.code, v.page, v.ordre, v.nom_en, v.nom_fr, v.assembly_ref, v.clip, v.reperes, v.ocr,
         (SELECT c.designation FROM catalogue c WHERE COALESCE(v.assembly_ref,'') <> ''
@@ -1160,6 +1163,11 @@ router.get('/eclates/:id', async (req, res) => {
       FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id ${_ECL_CAT_JOIN}
       WHERE v.modele_id=$1 ORDER BY l.vue_id, l.cable, l.ordre, l.id`, [m.id]);
     const pages = (await db.all('SELECT page FROM eclates_pages WHERE modele_id=$1 ORDER BY page', [m.id])).map(p => p.page);
+    // Compte sans accès au catalogue (ex. accès « éclatés uniquement ») : ni stock ni prix
+    const u = res.locals.user || {};
+    if (u.role !== 'admin' && u.role !== 'operateur' && !(u.permissions && ['read', 'write'].includes(u.permissions.catalogue))) {
+      lignes.forEach(l => { l.cat_stock = null; l.cat_stock_alerte = null; l.cat_prix_distrib = null; l.cat_prix_public = null; l.cat_masque = true; });
+    }
     res.json({ ...m, pages, vues, lignes });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -1217,7 +1225,7 @@ router.put('/eclates/:id/lien', async (req, res) => {
   try {
     // Liens : page du site, notice d'utilisation, fiche technique ('' = aucun lien). Seuls les champs envoyés changent.
     const b = req.body || {}, sets = [], vals = [];
-    for (const k of ['lien_web', 'lien_notice', 'lien_fiche']) {
+    for (const k of ['lien_web', 'lien_notice', 'lien_fiche', 'lien_web_se', 'lien_notice_se', 'lien_fiche_se']) {
       if (b[k] === undefined) continue;
       let u = String(b[k] || '').trim();
       if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
@@ -1225,7 +1233,7 @@ router.put('/eclates/:id/lien', async (req, res) => {
     }
     if (!sets.length) return res.status(400).json({ error: 'Aucun lien fourni' });
     vals.push(req.params.id);
-    const r = await db.run(`UPDATE eclates_modeles SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${vals.length} RETURNING id, lien_web, lien_notice, lien_fiche`, vals);
+    const r = await db.run(`UPDATE eclates_modeles SET ${sets.join(', ')}, updated_at=NOW() WHERE id=$${vals.length} RETURNING id, lien_web, lien_notice, lien_fiche, lien_web_se, lien_notice_se, lien_fiche_se`, vals);
     if (!r) return res.status(404).json({ error: 'Modèle introuvable' });
     res.json(r);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1260,7 +1268,7 @@ router.post('/eclates/import', adminOnly, async (req, res) => {
   }
   const pg = await db.pool.connect();
   try {
-    const ex = await pg.query('SELECT id, photo, lien_web, lien_notice, lien_fiche FROM eclates_modeles WHERE slug=$1', [meta.slug]);
+    const ex = await pg.query('SELECT id, photo, lien_web, lien_notice, lien_fiche, lien_web_se, lien_notice_se, lien_fiche_se FROM eclates_modeles WHERE slug=$1', [meta.slug]);
     if (ex.rows.length && b.remplacer !== true) {
       return res.status(409).json({ error: 'existe', message: `L'éclaté « ${meta.modele} » existe déjà.` });
     }
@@ -1276,6 +1284,9 @@ router.post('/eclates/import', adminOnly, async (req, res) => {
     if (prev.lien_notice != null || prev.lien_fiche != null || meta.lien_notice || meta.lien_fiche)
       await pg.query('UPDATE eclates_modeles SET lien_notice=$1, lien_fiche=$2 WHERE id=$3',
         [prev.lien_notice != null ? prev.lien_notice : (meta.lien_notice || null), prev.lien_fiche != null ? prev.lien_fiche : (meta.lien_fiche || null), m.id]);
+    if (prev.lien_web_se != null || prev.lien_notice_se != null || prev.lien_fiche_se != null)
+      await pg.query('UPDATE eclates_modeles SET lien_web_se=$1, lien_notice_se=$2, lien_fiche_se=$3 WHERE id=$4',
+        [prev.lien_web_se, prev.lien_notice_se, prev.lien_fiche_se, m.id]);
     for (const [page, svg] of Object.entries(b.pages)) {
       await pg.query('INSERT INTO eclates_pages (modele_id, page, svg) VALUES ($1,$2,$3)', [m.id, parseInt(page), svg]);
     }
