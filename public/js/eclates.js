@@ -135,8 +135,8 @@ function css(){
 .ecl-edit-on .ecl-row .ecl-pen{display:inline-flex}
 .ecl-pen{display:none}
 #ecl-ov .hs{cursor:pointer}
-#ecl-ov .ring{fill:transparent;stroke:transparent;stroke-width:1.6}
-#ecl-ov .hs:hover .ring,#ecl-ov .hs.on .ring{fill:none;stroke:#e8590c;stroke-width:2.2}
+#ecl-ov .ring{fill:transparent;stroke:transparent;stroke-width:1.6;pointer-events:all}
+#ecl-ov .hs:hover .ring,#ecl-ov .hs.on .ring{fill:transparent;stroke:#e8590c;stroke-width:2.2}
 #ecl-ov .lead{stroke:#e8590c;stroke-width:1.4;opacity:0;pointer-events:none}
 #ecl-ov .dot{fill:#e8590c;opacity:0;pointer-events:none}
 #ecl-ov .halo{fill:none;stroke:#e8590c;stroke-width:1.2;opacity:0;pointer-events:none}
