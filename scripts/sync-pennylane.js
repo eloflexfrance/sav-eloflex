@@ -205,7 +205,7 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
   const annee = dateCommande ? parseInt(dateCommande.slice(0, 4)) : new Date().getFullYear();
 
   const lignes = _fraisEnDernier((detail.invoice_lines || detail.line_items || []).map(l => ({
-    designation: l.label || l.description || l.product_name || '',
+    designation: l.label || _texteRiche(l.description) || l.product_name || '',
     reference:   l.product?.reference || l.reference || null,
     quantite:    parseInt(l.quantity) || 1,
   })).filter(l => l.designation));
@@ -297,6 +297,29 @@ async function traiterDocumentPennylane(client, api, doc, counters) {
 }
 
 // ── Recherche d'un document par numéro (bdc-lookup) ─────────────────────────
+// Texte riche Pennylane (descriptions au format JSON « Slate » : [{type:'paragraph',children:[{text}]}…]) → texte brut
+function _texteRiche(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s || s[0] !== '[') return s;
+  let arr; try { arr = JSON.parse(s); } catch (_) { return s; }
+  if (!Array.isArray(arr)) return s;
+  const out = [];
+  const bloc = (n, prefixe) => {
+    if (n == null) return;
+    if (typeof n === 'string') { out.push(prefixe + n); return; }
+    if (typeof n.text === 'string' && !n.children) { out.push(prefixe + n.text); return; }
+    const kids = Array.isArray(n.children) ? n.children : [];
+    // nœud de texte : concatène les morceaux (gras, italique…) sur une même ligne
+    if (kids.length && kids.every(k => k && typeof k.text === 'string' && !k.children)) {
+      out.push(prefixe + kids.map(k => k.text).join('')); return;
+    }
+    const li = /list-item|list_item|li$/i.test(String(n.type || ''));
+    kids.forEach(k => bloc(k, li ? '- ' : prefixe));
+  };
+  arr.forEach(n => bloc(n, ''));
+  return out.map(x => x.replace(/\s+$/, '')).filter(x => x.trim()).join('\n');
+}
+
 // ── Références d'essai / de prêt Pennylane ─────────────────────────────────
 //   ESSAI-<modèle>[-<taille>] (ex. ESSAI-F-45CM) : fauteuil prêté ; la description porte les conditions
 //     (dont « Valeur d'achat en cas de vente du fauteuil : 2502€ HT », LPPR, options de série)
@@ -415,7 +438,7 @@ async function lookupDocumentPennylane(numero) {
         }
         const lignes = [];
         for (const l of rawLignes) {
-          if (!(l.label || l.description || l.product_label)) continue;
+          if (!(l.label || _texteRiche(l.description) || l.product_label)) continue;
           let reference = l.product_reference || l.reference
             || (l.product && (l.product.reference || l.product.external_reference || l.product.gtin)) || null;
           const pid = l.product_id || (l.product && l.product.id);
@@ -426,14 +449,14 @@ async function lookupDocumentPennylane(numero) {
           const prix = _plNum(l.raw_currency_unit_price != null ? l.raw_currency_unit_price
                        : (l.currency_unit_price != null ? l.currency_unit_price
                        : (l.unit_price != null ? l.unit_price : l.unit_amount)));
-          let descLigne = String(l.description || '').trim();
+          let descLigne = _texteRiche(l.description);
           if (!descLigne && pid && /^ESSAI-/i.test(String(reference || ''))) {
             const pr = await resolvePennylaneProduct(api, pid);
-            if (pr && pr.description) descLigne = String(pr.description).trim();
+            if (pr && pr.description) descLigne = _texteRiche(pr.description);
           }
           lignes.push({
             description:    descLigne,
-            designation:    l.label || l.description || l.product_label || '',
+            designation:    l.label || _texteRiche(l.description) || l.product_label || '',
             designation_en: reference || l.label || '',
             reference:      reference || null,
             num_serie:      l.serial_number || l.num_serie || '',
@@ -767,7 +790,7 @@ async function upsertDevisPennylane(api, doc, opts = {}) {
                  : (l.unit_price != null ? l.unit_price : l.unit_amount)));
     const tot = _plNum(l.currency_amount != null ? l.currency_amount
                 : (l.amount != null ? l.amount : (prix != null ? prix * qte : null)));
-    return { nom: l.label || l.description || l.product_name || '', qte, prix, total: tot };
+    return { nom: l.label || _texteRiche(l.description) || l.product_name || '', qte, prix, total: tot };
   }).filter(l => l.nom);
   const st = String(detail.status || detail.state || '').toLowerCase();
   let statut = _statutDevisPL(st);
