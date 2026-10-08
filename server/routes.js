@@ -9217,9 +9217,13 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
       </td></tr></table>`;
     const mailContact = () => `<div style="${st}">
       <p>Bonjour,</p>
-      <p>Suite à votre demande, veuillez trouver ci-dessous les coordonnées de notre distributeur le plus proche de chez vous :</p>
+      <p>Vous nous avez contactés pour connaître notre distributeur le plus proche de votre domicile.</p>
+      <p>Sachez qu'il peut se déplacer jusqu'à chez vous et vous renseigner sur nos tarifs et modèles.</p>
       ${blocDistrib}
-      <p>En espérant avoir répondu à votre demande, toute l'équipe Eloflex reste à votre disposition.</p>
+      <p>N'hésitez pas à demander au distributeur d'avoir un essai avec un de nos modèles. Nous ferons le maximum pour trouver une solution afin que cela se réalise.</p>
+      <p>Nous lui communiquons aussi vos coordonnées.</p>
+      <p>Nous restons à votre disposition si vous avez la moindre question.</p>
+      <p>Bien à vous,</p>
       <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
 
     // ── Bloc contact (coordonnées complètes + demande) pour le distributeur ──
@@ -9230,12 +9234,12 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
     </table>`;
     const mailDistrib = () => `<div style="${st}">
       <p>Bonjour,</p>
-      <p>Nous avons été contactés par cette personne qui souhaite avoir des informations sur notre gamme de fauteuils roulants électriques Eloflex.<br>
-      Merci de la contacter afin de lui fournir les informations nécessaires.</p>
+      <p>Merci de bien vouloir contacter un client potentiel Eloflex :</p>
       ${blocContact}
-      <p>Nous restons bien entendu à votre disposition si vous avez besoin de plus d'informations sur ce client et sur notre gamme de produits.</p>
-      <p>Nous nous permettrons de vous contacter par mail et par téléphone sur le suivi de ce contact afin de voir ensemble la meilleure façon de vous aider.</p>
-      <p>Bien cordialement</p>
+      <p>Si vous ne possédez pas ou souhaitez avoir un fauteuil de notre gamme pour faire des essais, n'hésitez pas à vous rapprocher de nous afin de trouver une solution.</p>
+      <p>Nous lui donnons vos coordonnées afin qu'il prenne contact avec vous pour informations.</p>
+      <p>Nous restons à votre disposition si vous avez la moindre question.</p>
+      <p>Bien à vous,</p>
       <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
 
     const envoyes = [], erreurs = [];
