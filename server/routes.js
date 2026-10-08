@@ -4085,7 +4085,6 @@ router.post('/devis/:id/relance', adminOrOp, async (req, res) => {
     const lignes = Array.isArray(devis.lignes) ? devis.lignes
                  : (typeof devis.lignes === 'string' ? JSON.parse(devis.lignes || '[]') : []);
     const jours = Math.round((Date.now() - new Date(devis.date_devis).getTime()) / 86400000);
-    const nodemailer = require('nodemailer');
     // Vérifier que tous les paramètres SMTP sont présents
     // Utiliser le compte relance dédié si configuré, sinon fallback sur le compte SAV
     // API Brevo HTTP (SMTP bloqué par Render)
