@@ -76,7 +76,7 @@ module.exports = function monterRetoursDemo(router, deps) {
     if ('fact_forfait_retour' in b) out.fact_forfait_retour = bool(b.fact_forfait_retour) !== false;
     if ('fact_forfait_carton' in b) out.fact_forfait_carton = bool(b.fact_forfait_carton) === true;
     for (const k of ['commande_id', 'pret_id', 'client_id']) if (k in b) out[k] = parseInt(b[k]) || null;
-    if ('statut' in b && ['brouillon', 'termine', 'envoye', 'facture'].includes(b.statut)) out.statut = b.statut;
+    if ('statut' in b && ['brouillon', 'termine', 'envoye', 'devis', 'facture'].includes(b.statut)) out.statut = b.statut;
     return out;
   }
 
@@ -163,7 +163,7 @@ module.exports = function monterRetoursDemo(router, deps) {
     try {
       const rows = await db.all(`SELECT rd.id, rd.commande_id, rd.pret_id, rd.client_id, rd.distributeur_nom, rd.distributeur_email, rd.modele, rd.num_serie,
           to_char(rd.date_reception,'YYYY-MM-DD') AS date_reception, rd.transporteur, rd.carton_origine, rd.mousses_presentes, rd.etat_general, rd.nettoyage, rd.statut,
-          rd.total_facture, rd.total_pieces_offertes, rd.pl_invoice_id, rd.pl_invoice_num, rd.envois, rd.receptionnaire, rd.created_at, rd.updated_at,
+          rd.total_facture, rd.total_pieces_offertes, rd.pl_invoice_id, rd.pl_invoice_num, rd.pl_quote_id, rd.pl_quote_num, rd.envois, rd.receptionnaire, rd.created_at, rd.updated_at,
           c.nom AS client_nom_actuel,
           (SELECT COUNT(*)::int FROM retours_demo_photos p WHERE p.retour_id=rd.id) AS nb_photos,
           (SELECT COUNT(*)::int FROM retours_demo_photos p WHERE p.retour_id=rd.id AND p.etape='anomalie') AS nb_anomalies,
@@ -334,37 +334,50 @@ module.exports = function monterRetoursDemo(router, deps) {
     }
   });
 
-  // ── Facture brouillon Pennylane (forfaits + nettoyage + pièces facturées) ──
-  router.post('/demo-retours/:id/facture-pennylane', async (req, res) => {
+  // ── Facture brouillon / devis Pennylane (forfaits + nettoyage + pièces facturées) ──
+  function lignesPennylane(r) {
+    const fauteuil = `Eloflex ${String(r.modele || '').replace(/^eloflex\s*/i, '')}${r.num_serie ? ' n° ' + r.num_serie : ''}`.trim();
+    const vat = t => t === 5.5 ? 'FR_55' : t === 10 ? 'FR_100' : 'FR_200';
+    const lignes = [];
+    if (n2(r.montant_forfait_retour) > 0) lignes.push({ label: `Forfait retour fauteuil de démonstration — ${fauteuil}`, quantity: 1, pu: n2(r.montant_forfait_retour), vat: 'FR_200' });
+    if (n2(r.montant_forfait_carton) > 0) lignes.push({ label: 'Forfait carton / mousses de protection', quantity: 1, pu: n2(r.montant_forfait_carton), vat: 'FR_200' });
+    if (n2(r.montant_nettoyage) > 0) lignes.push({ label: NETTOYAGES[r.nettoyage] || 'Nettoyage', quantity: 1, pu: n2(r.montant_nettoyage), vat: 'FR_200' });
+    (r.pieces || []).filter(p => p.facture !== false && n2(p.pu) > 0).forEach(p => lignes.push({
+      label: [p.ref, p.designation].filter(Boolean).join(' — ') + ' (remise en état)', quantity: parseInt(p.qte) || 1, pu: n2(p.pu), vat: vat(parseFloat(p.tva)),
+    }));
+    return lignes;
+  }
+
+  async function creerDocumentPL(req, res, type) {
+    const devis = type === 'devis';
     try {
       if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.status(400).json({ error: 'Pennylane non configuré' });
       const r = await charger(parseInt(req.params.id));
       if (!r) return res.status(404).json({ error: 'Retour introuvable' });
-      if (r.pl_invoice_id && !(req.body && req.body.force)) return res.status(409).json({ error: 'Une facture a déjà été créée pour ce retour (' + (r.pl_invoice_num || r.pl_invoice_id) + ').' });
-      const fauteuil = `Eloflex ${String(r.modele || '').replace(/^eloflex\s*/i, '')}${r.num_serie ? ' n° ' + r.num_serie : ''}`.trim();
-      const vat = t => t === 5.5 ? 'FR_55' : t === 10 ? 'FR_100' : 'FR_200';
-      const lignes = [];
-      if (n2(r.montant_forfait_retour) > 0) lignes.push({ label: `Forfait retour fauteuil de démonstration — ${fauteuil}`, quantity: 1, pu: n2(r.montant_forfait_retour), vat: 'FR_200' });
-      if (n2(r.montant_forfait_carton) > 0) lignes.push({ label: 'Forfait carton / mousses de protection', quantity: 1, pu: n2(r.montant_forfait_carton), vat: 'FR_200' });
-      if (n2(r.montant_nettoyage) > 0) lignes.push({ label: NETTOYAGES[r.nettoyage] || 'Nettoyage', quantity: 1, pu: n2(r.montant_nettoyage), vat: 'FR_200' });
-      (r.pieces || []).filter(p => p.facture !== false && n2(p.pu) > 0).forEach(p => lignes.push({
-        label: [p.ref, p.designation].filter(Boolean).join(' — ') + ' (remise en état)', quantity: parseInt(p.qte) || 1, pu: n2(p.pu), vat: vat(parseFloat(p.tva)),
-      }));
+      const dejaId = devis ? r.pl_quote_id : r.pl_invoice_id, dejaNum = devis ? r.pl_quote_num : r.pl_invoice_num;
+      if (dejaId && !(req.body && req.body.force)) return res.status(409).json({ error: `Un${devis ? ' devis' : 'e facture'} a déjà été créé${devis ? '' : 'e'} pour ce retour (${dejaNum || dejaId}).` });
+      const lignes = lignesPennylane(r);
       if (!lignes.length) return res.status(400).json({ error: 'Rien à facturer (montant nul).' });
       const { creerFactureRetourDemo } = require('../scripts/sync-pennylane');
-      const inv = await creerFactureRetourDemo({
-        customerId: r.pl_customer_id || null, nom: r.client_nom_actuel || r.distributeur_nom || '',
+      const doc = await creerFactureRetourDemo({
+        type, customerId: r.pl_customer_id || null, nom: r.client_nom_actuel || r.distributeur_nom || '',
         reference: `RD-${r.id}${r.num_serie ? ' ' + r.num_serie : ''}`, date: new Date().toISOString().slice(0, 10), lignes,
       });
-      const numero = inv.invoice_number || inv.label || String(inv.id);
-      await db.run(`UPDATE retours_demo SET pl_invoice_id=$1, pl_invoice_num=$2, statut='facture', updated_at=NOW() WHERE id=$3`, [String(inv.id), numero, r.id]);
-      const url = `https://app.pennylane.com/companies/${process.env.PENNYLANE_COMPANY_ID || '22996810'}/clients/customer_invoices?invoice_id=${inv.id}`;
-      res.json({ ok: true, invoice_id: inv.id, numero, url });
+      const numero = doc.quote_number || doc.invoice_number || doc.label || String(doc.id);
+      const base = `https://app.pennylane.com/companies/${process.env.PENNYLANE_COMPANY_ID || '22996810'}/clients/`;
+      if (devis) {
+        await db.run(`UPDATE retours_demo SET pl_quote_id=$1, pl_quote_num=$2, statut=CASE WHEN statut='facture' THEN statut ELSE 'devis' END, updated_at=NOW() WHERE id=$3`, [String(doc.id), numero, r.id]);
+        return res.json({ ok: true, quote_id: doc.id, numero, url: `${base}customer_estimates?estimate_id=${doc.id}` });
+      }
+      await db.run(`UPDATE retours_demo SET pl_invoice_id=$1, pl_invoice_num=$2, statut='facture', updated_at=NOW() WHERE id=$3`, [String(doc.id), numero, r.id]);
+      res.json({ ok: true, invoice_id: doc.id, numero, url: `${base}customer_invoices?invoice_id=${doc.id}` });
     } catch (e) {
       const d = e.response && e.response.data;
       res.status(500).json({ error: d ? (d.message || d.error || JSON.stringify(d)).toString().slice(0, 400) : e.message });
     }
-  });
+  }
+  router.post('/demo-retours/:id/facture-pennylane', (req, res) => creerDocumentPL(req, res, 'facture'));
+  router.post('/demo-retours/:id/devis-pennylane', (req, res) => creerDocumentPL(req, res, 'devis'));
 };
 
 module.exports.ETAPES = ETAPES;

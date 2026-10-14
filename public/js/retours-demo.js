@@ -21,6 +21,7 @@ const RD_STATUTS = {
   brouillon:{ l:'Brouillon', c:'#6b7280', ic:'ti-pencil' },
   termine:  { l:'Terminé',   c:'#2563eb', ic:'ti-check' },
   envoye:   { l:'Envoyé',    c:'#059669', ic:'ti-mail-check' },
+  devis:    { l:'Devis créé', c:'#d97706', ic:'ti-file-text' },
   facture:  { l:'Facturé',   c:'#7c3aed', ic:'ti-file-euro' },
 };
 let RD_CFG = null;          // tarifs + destinataires par défaut
@@ -67,7 +68,7 @@ async function renderRetoursDemo(ttl,c,a){
     ${RD_LISTE.length ? `<div class="table-wrap"><table class="t" id="rd-table">
       <thead><tr><th></th><th>${_T('Réception')}</th><th>${_T('Fauteuil')}</th><th>${_T('Distributeur')}</th><th>${_T('Carton / mousses')}</th><th>${_T('État')}</th><th>${_T('Photos')}</th><th style="text-align:right">${_T('À facturer HT')}</th><th>${_T('Statut')}</th><th></th></tr></thead>
       <tbody>${RD_LISTE.map(r=>{
-        const k = [r.modele,r.num_serie,r.client_nom_actuel,r.distributeur_nom,r.etat_general,r.pl_invoice_num].join(' ').toLowerCase();
+        const k = [r.modele,r.num_serie,r.client_nom_actuel,r.distributeur_nom,r.etat_general,r.pl_invoice_num,r.pl_quote_num].join(' ').toLowerCase();
         const cm = (r.carton_origine===false||r.mousses_presentes===false)
           ? `<span style="color:var(--warning)"><i class="ti ti-alert-triangle"></i> ${r.carton_origine===false?_T('carton non d’origine'):''}${r.carton_origine===false&&r.mousses_presentes===false?' · ':''}${r.mousses_presentes===false?_T('mousses absentes'):''}</span>`
           : (r.carton_origine===true ? `<span style="color:var(--success)"><i class="ti ti-check"></i> ${_T('OK')}</span>` : '—');
@@ -80,7 +81,7 @@ async function renderRetoursDemo(ttl,c,a){
           <td style="font-size:13px">${_e(r.etat_general||'—')}</td>
           <td style="white-space:nowrap;font-size:13px"><i class="ti ti-camera"></i> ${r.nb_photos||0}${r.nb_anomalies?` <span style="color:var(--danger)" title="${_T('Anomalies')}"><i class="ti ti-alert-triangle"></i>${r.nb_anomalies}</span>`:''}</td>
           <td style="text-align:right;font-weight:600;white-space:nowrap">${eur(r.total_facture)}${n2(r.total_pieces_offertes)>0?`<div style="font-size:11px;color:#059669;font-weight:400">${_T('offert')} ${eur(r.total_pieces_offertes)}</div>`:''}</td>
-          <td>${badgeStatut(r.statut)}${r.pl_invoice_num?`<div style="font-size:11px;color:var(--text3)">${_e(r.pl_invoice_num)}</div>`:''}</td>
+          <td>${badgeStatut(r.statut)}${r.pl_quote_num?`<div style="font-size:11px;color:var(--text3)">${_T('Devis')} ${_e(r.pl_quote_num)}</div>`:''}${r.pl_invoice_num?`<div style="font-size:11px;color:var(--text3)">${_T('Facture')} ${_e(r.pl_invoice_num)}</div>`:''}</td>
           <td style="white-space:nowrap" onclick="event.stopPropagation()">
             <button class="btn sm" title="${_T('Télécharger le PDF')}" onclick="rdPdfTelecharger(${r.id})"><i class="ti ti-file-type-pdf"></i></button>
             <button class="btn sm" title="${_T('Envoyer par e-mail')}" onclick="rdModalEmail(${r.id})"><i class="ti ti-send"></i></button>
@@ -140,11 +141,12 @@ async function rdAfficher(r){
     <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="${name}" value="0" ${val===false?'checked':''} onchange="rdCtrlChange()"> ${_T('Non')}</label>`;
   const sect = (ic, t, body, extra) => `<div style="border:1px solid var(--border-s,var(--border));border-radius:12px;padding:12px 14px;margin-bottom:12px${extra||''}">
       <div style="font-weight:700;font-size:14px;margin-bottom:10px;color:var(--text)"><i class="ti ${ic}" style="color:var(--accent);margin-right:6px"></i>${t}</div>${body}</div>`;
+  const devisBadge = RD.pl_quote_id ? `<a href="${_e(urlPennylane('devis', RD.pl_quote_id))}" target="_blank" rel="noopener" class="badge" style="background:#d9770618;color:#b45309;border:0.5px solid #d9770655;text-decoration:none"><i class="ti ti-external-link" style="font-size:12px"></i> ${_T('Devis')} ${_e(RD.pl_quote_num||RD.pl_quote_id)}</a>` : '';
   const fact = RD.pl_invoice_id ? `<a href="${_e(urlPennylane('customer_invoice', RD.pl_invoice_id))}" target="_blank" rel="noopener" class="badge" style="background:#7c3aed18;color:#7c3aed;border:0.5px solid #7c3aed55;text-decoration:none"><i class="ti ti-external-link" style="font-size:12px"></i> ${_T('Facture')} ${_e(RD.pl_invoice_num||RD.pl_invoice_id)}</a>` : '';
   const envois = (RD.envois||[]);
   showModal(`<div class="modal-header"><i class="ti ti-clipboard-check" style="color:var(--accent)"></i>
       <h2>${_T('Retour démo')} — ${_e(_modele(RD.modele))} ${RD.num_serie?`<span class="mono" style="font-weight:500;font-size:13px">${_e(RD.num_serie)}</span>`:''}</h2>
-      <span id="rd-statut-badge">${badgeStatut(RD.statut)}</span> ${fact}
+      <span id="rd-statut-badge">${badgeStatut(RD.statut)}</span> ${devisBadge} ${fact}
       <button class="btn sm" onclick="rdFermer()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" id="rd-body">
       ${sect('ti-wheelchair', _T('Fauteuil & réception'), `
@@ -188,6 +190,7 @@ async function rdAfficher(r){
       <button class="btn" onclick="rdEnregistrer(true)"><i class="ti ti-device-floppy"></i>${_T('Enregistrer')}</button>
       <button class="btn" onclick="rdPdfTelecharger()"><i class="ti ti-file-type-pdf"></i>PDF</button>
       <button class="btn" onclick="rdModalEmail()"><i class="ti ti-send"></i>${_T('Envoyer par e-mail')}</button>
+      <button class="btn" onclick="rdDevis()"><i class="ti ti-file-text"></i>${_T('Créer un devis')}</button>
       <button class="btn primary" onclick="rdFacture()"><i class="ti ti-file-euro"></i>${_T('Créer la facture')}</button>
     </div>`);
   const ov = document.querySelector('#modal-area .modal'); if(ov) ov.style.maxWidth='980px';
@@ -609,7 +612,8 @@ async function rdEmailEnvoyer(){
 // ══════════════════════════════════════════════════════════════════
 // Facture brouillon Pennylane
 // ══════════════════════════════════════════════════════════════════
-async function rdFacture(id){
+async function rdDocumentPL(type, id){
+  const devis = type==='devis';
   let r; try{ r = await _rdCourant(id); }catch(e){ toastErr(e); return; }
   if(n2(r.total_facture)<=0){ toast(_T('Rien à facturer (total à 0 €).'),'ti-alert-circle','var(--warning)'); return; }
   const lignes=[];
@@ -618,25 +622,31 @@ async function rdFacture(id){
   if(n2(r.montant_nettoyage)>0) lignes.push([RD_NETT[r.nettoyage]||'Nettoyage', r.montant_nettoyage]);
   (r.pieces||[]).filter(p=>p.facture!==false && n2(p.pu)>0).forEach(p=>lignes.push([(p.qte>1?p.qte+' × ':'')+(p.ref?p.ref+' — ':'')+p.designation, p.qte*n2(p.pu)]));
   let force=false;
-  if(r.pl_invoice_id){
-    if(!confirm(_T('Une facture a déjà été créée pour ce retour')+' ('+(r.pl_invoice_num||r.pl_invoice_id)+').\n'+_T('En créer une nouvelle quand même ?'))) return;
+  const deja = devis ? r.pl_quote_id : r.pl_invoice_id, dejaNum = devis ? r.pl_quote_num : r.pl_invoice_num;
+  if(deja){
+    if(!confirm((devis?_T('Un devis a déjà été créé pour ce retour'):_T('Une facture a déjà été créée pour ce retour'))+' ('+(dejaNum||deja)+').\n'+(devis?_T('En créer un nouveau quand même ?'):_T('En créer une nouvelle quand même ?')))) return;
     force=true;
   }
-  if(!confirm(_T('Créer une facture BROUILLON dans Pennylane pour')+' '+(r.client_nom_actuel||r.distributeur_nom||'?')+' :\n\n'+lignes.map(l=>'• '+l[0]+' : '+eur(l[1])+' HT').join('\n')+'\n\n'+_T('Total')+' : '+eur(r.total_facture)+' HT\n\n'+_T('Elle restera en brouillon : vous la vérifiez et la finalisez dans Pennylane.'))) return;
-  toast(_T('Création de la facture…'),'ti-loader-2');
+  const titre = devis ? _T('Créer un DEVIS dans Pennylane pour') : _T('Créer une facture BROUILLON dans Pennylane pour');
+  const fin = devis ? _T('Le devis apparaîtra ensuite dans « Devis en attente » (relances, signature).') : _T('Elle restera en brouillon : vous la vérifiez et la finalisez dans Pennylane.');
+  if(!confirm(titre+' '+(r.client_nom_actuel||r.distributeur_nom||'?')+' :\n\n'+lignes.map(l=>'• '+l[0]+' : '+eur(l[1])+' HT').join('\n')+'\n\n'+_T('Total')+' : '+eur(r.total_facture)+' HT\n\n'+fin)) return;
+  const win = window.open('about:blank','_blank');   // ouverte pendant le clic (sinon bloquée par le navigateur)
+  toast(devis?_T('Création du devis…'):_T('Création de la facture…'),'ti-loader-2');
   try{
-    const res = await API.post(`/demo-retours/${r.id}/facture-pennylane`,{force});
-    toast(_T('Facture brouillon créée')+' : '+(res.numero||''),'ti-file-euro','var(--success)');
-    if(res.url) window.open(res.url,'_blank','noopener');
+    const res = devis ? await API.post(`/demo-retours/${r.id}/devis-pennylane`,{force}) : await API.post(`/demo-retours/${r.id}/facture-pennylane`,{force});
+    toast((devis?_T('Devis créé'):_T('Facture brouillon créée'))+' : '+(res.numero||''),devis?'ti-file-text':'ti-file-euro','var(--success)');
+    if(res.url){ if(win && !win.closed) win.location.href=res.url; else window.open(res.url,'_blank','noopener'); } else if(win) win.close();
     if(RD && RD.id===r.id) rdAfficher(await API.get(`/demo-retours/${r.id}`)); else if(STATE.view==='retours-demo') render();
-  }catch(e){ toastErr(e); }
+  }catch(e){ if(win) win.close(); toastErr(e); }
 }
+const rdFacture = id => rdDocumentPL('facture', id);
+const rdDevis = id => rdDocumentPL('devis', id);
 
 Object.assign(window, {
   renderRetoursDemo, rdFiltrer, rdNouveau, rdOuvrir, rdFermer, rdDirty, rdDistribSaisie, rdChercherSerie,
   rdUpload, rdPhotoSuppr, rdPhotoLegende, rdCtrlChange, rdPieceRecherche, rdPieceChoisir, rdPieceAjouter,
   rdPiecesMaj, rdPieceRetirer, rdRecap, rdEnregistrer, rdSupprimer, rdPdfTelecharger, rdModalEmail, rdEmailMaj,
-  rdEmailFermer, rdEmailEnvoyer, rdFacture, rdGenererPdf,
+  rdEmailFermer, rdEmailEnvoyer, rdFacture, rdDevis, rdGenererPdf,
   rdResetCfg: ()=>{ RD_CFG=null; },
 });
 })();

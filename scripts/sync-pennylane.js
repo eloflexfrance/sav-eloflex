@@ -577,9 +577,10 @@ async function genererFacturePennylane(cmd, lignes) {
   return data;
 }
 
-// ── Facture brouillon pour un retour de démo (forfaits, nettoyage, pièces facturées) ──
+// ── Facture brouillon (ou devis, type='devis') pour un retour de démo (forfaits, nettoyage, pièces facturées) ──
 // lignes : [{ label, quantity, pu, vat }] — customerId prioritaire, sinon recherche par nom.
-async function creerFactureRetourDemo({ customerId, nom, reference, date, lignes }) {
+async function creerFactureRetourDemo({ type, customerId, nom, reference, date, lignes }) {
+  const devis = type === 'devis';
   const api = plApi();
   let cid = customerId || null;
   if (!cid && nom) {
@@ -614,7 +615,7 @@ async function creerFactureRetourDemo({ customerId, nom, reference, date, lignes
     customer_id: Number(cid) || cid,
     date: today,
     deadline: (() => { const d = new Date(today); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); })(),
-    draft: true,
+    ...(devis ? {} : { draft: true }),
     external_reference: reference || undefined,
     invoice_lines: lignes.map(l => ({
       label: String(l.label).slice(0, 250),
@@ -624,7 +625,8 @@ async function creerFactureRetourDemo({ customerId, nom, reference, date, lignes
       vat_rate: l.vat || 'FR_200',
     })),
   };
-  const { data } = await api.post('/customer_invoices', payload);
+  // Devis : la « deadline » est la date de fin de validité (30 jours).
+  const { data } = await api.post(devis ? '/quotes' : '/customer_invoices', payload);
   return data;
 }
 

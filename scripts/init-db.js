@@ -864,6 +864,8 @@ async function initDB() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_retours_demo_serie ON retours_demo(num_serie)`);
+    await client.query(`ALTER TABLE retours_demo ADD COLUMN IF NOT EXISTS pl_quote_id TEXT`);
+    await client.query(`ALTER TABLE retours_demo ADD COLUMN IF NOT EXISTS pl_quote_num TEXT`);
     await client.query(`CREATE TABLE IF NOT EXISTS retours_demo_photos (
       id SERIAL PRIMARY KEY,
       retour_id INTEGER NOT NULL REFERENCES retours_demo(id) ON DELETE CASCADE,
