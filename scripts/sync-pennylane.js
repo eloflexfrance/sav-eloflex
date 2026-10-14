@@ -577,6 +577,57 @@ async function genererFacturePennylane(cmd, lignes) {
   return data;
 }
 
+// ── Facture brouillon pour un retour de démo (forfaits, nettoyage, pièces facturées) ──
+// lignes : [{ label, quantity, pu, vat }] — customerId prioritaire, sinon recherche par nom.
+async function creerFactureRetourDemo({ customerId, nom, reference, date, lignes }) {
+  const api = plApi();
+  let cid = customerId || null;
+  if (!cid && nom) {
+    const cible = String(nom).toLowerCase().trim();
+    const corr = c => {
+      const n = (c.name || c.company_name || c.label || '').toLowerCase().trim();
+      return n && (n === cible || n.includes(cible.slice(0, 8)) || cible.includes(n.slice(0, 8)));
+    };
+    try {
+      const { data } = await api.get('/customers', {
+        params: { filter: JSON.stringify([{ field: 'name', operator: 'start_with', value: String(nom).slice(0, 6) }]), limit: 20 }
+      });
+      const m = (data.items || []).find(c => (c.name || '').toLowerCase().trim() === cible) || (data.items || []).find(corr);
+      if (m) cid = m.id;
+    } catch (_) {}
+    if (!cid) {
+      try {
+        let cursor = null;
+        for (let pg = 0; pg < 5 && !cid; pg++) {
+          const { data: d } = await api.get('/customers', { params: { limit: 100, ...(cursor ? { cursor } : {}) } });
+          const m = (d.items || []).find(corr);
+          if (m) cid = m.id;
+          cursor = d.next_cursor || null;
+          if (!cursor) break;
+        }
+      } catch (_) {}
+    }
+  }
+  if (!cid) throw new Error(`Client « ${nom || '?'} » introuvable dans Pennylane : créez-le (ou reliez la fiche distributeur) puis réessayez.`);
+  const today = date || new Date().toISOString().slice(0, 10);
+  const payload = {
+    customer_id: Number(cid) || cid,
+    date: today,
+    deadline: (() => { const d = new Date(today); d.setDate(d.getDate() + 30); return d.toISOString().slice(0, 10); })(),
+    draft: true,
+    external_reference: reference || undefined,
+    invoice_lines: lignes.map(l => ({
+      label: String(l.label).slice(0, 250),
+      quantity: Number(l.quantity) || 1,
+      unit: 'piece',
+      raw_currency_unit_price: (Math.round((Number(l.pu) || 0) * 100) / 100).toFixed(2),
+      vat_rate: l.vat || 'FR_200',
+    })),
+  };
+  const { data } = await api.post('/customer_invoices', payload);
+  return data;
+}
+
 // ── Suggestions de factures Pennylane à rattacher à une commande ────────────
 // Renvoie les factures récentes du distributeur (ou correspondant au n° saisi),
 // pour rattachement MANUEL (aucun lien automatique). Format aligné sur les
@@ -1012,6 +1063,7 @@ module.exports = {
   analyserEssai,
   majStatutsDevisPennylane,
   genererFacturePennylane,
+  creerFactureRetourDemo,
   suggestFacturesPennylane,
   syncProduitsPennylane,
   plApi,

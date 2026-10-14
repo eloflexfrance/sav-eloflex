@@ -827,6 +827,57 @@ async function initDB() {
     )`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_retour_lignes_cmd ON commandes_retour_lignes(commande_id)`);
 
+    // ── Retours démo : compte rendu de réception d'un fauteuil de démonstration ──
+    await client.query(`CREATE TABLE IF NOT EXISTS retours_demo (
+      id SERIAL PRIMARY KEY,
+      commande_id INTEGER REFERENCES commandes(id) ON DELETE SET NULL,
+      pret_id INTEGER REFERENCES prets(id) ON DELETE SET NULL,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      distributeur_nom TEXT,
+      distributeur_email TEXT,
+      modele TEXT,
+      num_serie TEXT,
+      date_reception DATE DEFAULT CURRENT_DATE,
+      transporteur TEXT DEFAULT 'DSV',
+      num_suivi TEXT,
+      receptionnaire TEXT,
+      carton_origine BOOLEAN,
+      mousses_presentes BOOLEAN,
+      etat_general TEXT,
+      nettoyage TEXT DEFAULT 'propre',
+      commentaire TEXT,
+      pieces JSONB DEFAULT '[]'::jsonb,
+      fact_forfait_retour BOOLEAN DEFAULT TRUE,
+      fact_forfait_carton BOOLEAN DEFAULT FALSE,
+      montant_forfait_retour NUMERIC DEFAULT 0,
+      montant_forfait_carton NUMERIC DEFAULT 0,
+      montant_nettoyage NUMERIC DEFAULT 0,
+      total_pieces_facturees NUMERIC DEFAULT 0,
+      total_pieces_offertes NUMERIC DEFAULT 0,
+      total_facture NUMERIC DEFAULT 0,
+      statut TEXT DEFAULT 'brouillon',
+      envois JSONB DEFAULT '[]'::jsonb,
+      pl_invoice_id TEXT,
+      pl_invoice_num TEXT,
+      cree_par INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_retours_demo_serie ON retours_demo(num_serie)`);
+    await client.query(`CREATE TABLE IF NOT EXISTS retours_demo_photos (
+      id SERIAL PRIMARY KEY,
+      retour_id INTEGER NOT NULL REFERENCES retours_demo(id) ON DELETE CASCADE,
+      etape TEXT NOT NULL DEFAULT 'ensemble',
+      filename TEXT NOT NULL,
+      filename_thumb TEXT,
+      legende TEXT,
+      taille INTEGER,
+      mime TEXT,
+      ordre INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_retours_demo_photos ON retours_demo_photos(retour_id)`);
+
     console.log("✅ Tables créées");
 
     // Paramètres par défaut
@@ -841,7 +892,13 @@ async function initDB() {
       ['email_smtp_port','587'],
       ['email_smtp_user',''],
       ['email_smtp_pass',''],
-      ['email_from','']
+      ['email_from',''],
+      // Retours démo : forfaits HT et destinataires par défaut du compte rendu
+      ['retour_demo_forfait_retour','50'],
+      ['retour_demo_forfait_carton','90'],
+      ['retour_demo_nettoyage_base','0'],
+      ['retour_demo_nettoyage_complet','0'],
+      ['retour_demo_emails','frederic@eloflex.fr, info@eloflex.fr, sav@eloflex.fr']
     ]) {
       await client.query(
         'INSERT INTO parametres (cle,valeur) VALUES ($1,$2) ON CONFLICT (cle) DO NOTHING',

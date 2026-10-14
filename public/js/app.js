@@ -85,6 +85,7 @@ const MODULES = [
   { key:'eclates',       label:'Éclatés (schémas pièces)' },
   { key:'prets',         label:'Prêts' },
   { key:'parc-demo',     label:'Parc de démo' },
+  { key:'retours-demo',  label:'Retours démo' },
   { key:'transferts',    label:'Transferts fauteuils' },
   { key:'commande-suede',label:'Commande Suède' },
   { key:'retours_suede', label:'Retours Suède' },
@@ -101,6 +102,7 @@ const PERM_FALLBACK = {
   'devis':      'commandes',     // Devis hérite de commandes
   'dashboard':  'commandes',     // Tableau de bord toujours accessible si commandes
   'parc-demo':  'commandes',     // Parc démo : visible si accès au suivi commandes
+  'retours-demo': 'commandes',   // Retours démo (comptes rendus de réception) : suivent le suivi commandes
   'commande-suede': 'commandes', // Commande Suède : suit le suivi commandes
   'eclates':    'catalogue',     // Éclatés : suivent le catalogue pièces
   // Vues de détail (ouvertes via setView, absentes du menu) → module qui les gouverne.
@@ -252,6 +254,7 @@ async function render(){
     else if(STATE.view==='retours-suede')  await renderRetoursSuede(ttl,c,a);
     else if(STATE.view==='transferts')     await renderTransferts(ttl,c,a);
     else if(STATE.view==='parc-demo')       await renderParcDemo(ttl,c,a);
+    else if(STATE.view==='retours-demo')    await renderRetoursDemo(ttl,c,a);
     else if(STATE.view==='prets')          await renderPrets(ttl,c,a);
     else if(STATE.view==='logs')           await renderLogs(ttl,c,a);
   }catch(e){c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`;}
@@ -2885,6 +2888,17 @@ async function renderParametres(ttl,c,a){
       </div>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-clipboard-check"></i> ${TR('Retours démo')}</h3>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Tarifs HT appliqués aux comptes rendus de retour des fauteuils de démonstration, et destinataires cochés par défaut lors de l’envoi.')}</div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">${TR('Forfait retour (€ HT)')}</label><input class="form-input" type="number" min="0" step="0.01" id="p-rd-retour" value="${esc(p.retour_demo_forfait_retour!=null?p.retour_demo_forfait_retour:'50')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Forfait carton / mousses (€ HT)')}</label><input class="form-input" type="number" min="0" step="0.01" id="p-rd-carton" value="${esc(p.retour_demo_forfait_carton!=null?p.retour_demo_forfait_carton:'90')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Nettoyage de base (€ HT)')}</label><input class="form-input" type="number" min="0" step="0.01" id="p-rd-nett-base" value="${esc(p.retour_demo_nettoyage_base!=null?p.retour_demo_nettoyage_base:'0')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Nettoyage complet (€ HT)')}</label><input class="form-input" type="number" min="0" step="0.01" id="p-rd-nett-complet" value="${esc(p.retour_demo_nettoyage_complet!=null?p.retour_demo_nettoyage_complet:'0')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Destinataires par défaut du compte rendu (+ e-mail du distributeur)')}</label><input class="form-input" id="p-rd-emails" value="${esc(p.retour_demo_emails!=null?p.retour_demo_emails:'frederic@eloflex.fr, info@eloflex.fr, sav@eloflex.fr')}"></div>
+      </div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-mail"></i> ${TR('Email relances devis (compte séparé)')}</h3>
       <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Utilisé pour les relances devis et BDC commercial. Laissez vide pour utiliser le même compte que SAV.')}</div>
       <div class="grid-2">
@@ -3932,6 +3946,14 @@ async function saveParametres(){
     email_smtp_user_relance:gv('p-smtp-user-relance')||'',
     email_smtp_pass_relance:gv('p-smtp-pass-relance')||''
   };
+  if(document.getElementById('p-rd-retour')){
+    p.retour_demo_forfait_retour=gv('p-rd-retour')||'0';
+    p.retour_demo_forfait_carton=gv('p-rd-carton')||'0';
+    p.retour_demo_nettoyage_base=gv('p-rd-nett-base')||'0';
+    p.retour_demo_nettoyage_complet=gv('p-rd-nett-complet')||'0';
+    p.retour_demo_emails=gv('p-rd-emails').trim();
+    if(window.rdResetCfg) window.rdResetCfg();
+  }
   await API.saveParametres(p);
   if(p.mode_sombre==='1') document.body.classList.add('dark'); else document.body.classList.remove('dark');
   localStorage.setItem('dark', p.mode_sombre==='1'?'1':'0');
@@ -5044,7 +5066,7 @@ async function renderParcDemo(ttl,c,a){
     const voirBtn = `<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="setView('commandes',{q:'${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}'})"><i class="ti ti-arrow-right"></i></button>`;
     const actions = isHist
       ? voirBtn
-      : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Clôturer en avoir (annulation — sort du parc)')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-receipt-refund"></i></button>${voirBtn}`;
+      : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Clôturer en avoir (annulation — sort du parc)')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-receipt-refund"></i></button><button class="btn sm" title="${TR('Compte rendu de retour démo (photos, contrôle, pièces, forfaits)')}" onclick="rdNouveau({commande_id:${d.id}${pretLie?', pret_id:'+pretLie.id:''}})"><i class="ti ti-clipboard-check"></i></button>${voirBtn}`;
     return `<tr data-k="${esc(cle.toLowerCase())}" data-echu="${(!isHist && d.rappel_echu)?1:0}" data-noserie="${(!isHist && !sn)?1:0}">
       <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:13px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
@@ -8870,6 +8892,7 @@ async function modalPret(id, prefillClientId){
       <p style="font-size:12px;color:var(--text3);margin:0">${TR('Rappel automatique : Essai court → avant l\'échéance de retour (retour proposé à +30 j de la remise). Prêt long terme → rappel périodique (bilan trimestriel).')}</p>
     </div>
     <div class="modal-footer">
+      ${id && hasAccess('retours-demo') ? `<button class="btn" style="margin-right:auto" title="${TR('Compte rendu de réception du fauteuil retourné (photos, contrôle, pièces, forfaits)')}" onclick="closeModal();rdNouveau({pret_id:${id}})"><i class="ti ti-clipboard-check"></i>${TR('Retour démo')}</button>` : ''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="savePret()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
     </div>`);

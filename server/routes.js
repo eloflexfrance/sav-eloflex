@@ -106,6 +106,7 @@ function moduleFromPath(p) {
   if (p.startsWith('/eclates'))                     return 'eclates';
   if (p.startsWith('/rapports')||p.startsWith('/export')) return 'rapports';
   if (p.startsWith('/alertes'))                     return 'alertes';
+  if (p.startsWith('/demo-retours'))                return 'retours-demo';
   if (p.startsWith('/retours'))                     return 'retours_suede';
   if (p.startsWith('/transferts'))                  return 'transferts';
   if (p.startsWith('/parametres'))                  return 'parametres';
@@ -127,6 +128,8 @@ router.use((req, res, next) => {
   if (perm === undefined && module === 'carte') perm = perms['clients'];
   // Éclatés : hérite du catalogue pièces tant que la permission n'est pas réglée
   if (perm === undefined && module === 'eclates') perm = perms['catalogue'];
+  // Retours démo : suivent le suivi commandes tant que la permission n'est pas réglée
+  if (perm === undefined && module === 'retours-demo') perm = perms['retours_demo'] !== undefined ? perms['retours_demo'] : perms['commandes'];
   perm = perm || 'none';
   // Envoi des éclatés par e-mail : la lecture suffit (rien n'est modifié)
   if (req.method === 'POST' && req.path === '/eclates/envoyer-mail' && perm === 'read') return next();
@@ -182,7 +185,7 @@ const adminOnly = requireRole('admin');
 // (les comptes « utilisateur » à droits complets n'étaient pas reconnus : relances devis, signature, e-mails… refusés).
 const _MODULE_ECRITURE = [
   ['/devis', 'devis', 'commandes'], ['/pennylane', 'commandes'], ['/commandes-suede', 'commande-suede', 'commandes'],
-  ['/commandes', 'commandes'], ['/notes', 'commandes', 'discussions'], ['/catalogue', 'catalogue'], ['/stock', 'catalogue'],
+  ['/demo-retours', 'retours-demo', 'commandes'], ['/commandes', 'commandes'], ['/notes', 'commandes', 'discussions'], ['/catalogue', 'catalogue'], ['/stock', 'catalogue'],
 ];
 function _droitEcriture(user, chemin) {
   const perms = (user && user.permissions) || {};
@@ -9347,6 +9350,13 @@ router.get('/demandes-info/distributeurs', requireAuth, async (req, res) => {
        ORDER BY nom`);
     res.json(rows.map(r => r.nom));
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Retours démo (compte rendu de réception des fauteuils de démonstration) ──
+require('./retours-demo')(router, {
+  db, upload, savePhoto, getPhotoUrl, deleteFiles, sendBrevoMail,
+  signatureSav: () => SIGNATURE_EMAIL_HTML.replace('Service Commercial', 'Service Après-Vente')
+    .replace(/info@eloflex\.fr/g, 'sav@eloflex.fr').replace('06&nbsp;87&nbsp;04&nbsp;69&nbsp;19', '07&nbsp;54&nbsp;37&nbsp;47&nbsp;40'),
 });
 
 module.exports = router;
