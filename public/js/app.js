@@ -8797,14 +8797,13 @@ async function renderPrets(ttl,c,a){
       <td style="font-size:13px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
       <td style="white-space:nowrap">${fdate(p.date_remise)}</td>
       <td style="white-space:nowrap">${fdate(p.date_retour_prevue)}</td>
-      <td style="white-space:nowrap">${pretStatutIcons(p)}${sign}</td>
+      <td style="white-space:nowrap">${pretStatutIcons(p)}${sign}${pretARelancer(p) ? `<button class="btn sm" style="margin-left:8px;color:#E1442E;border-color:#E1442E66;font-weight:600" title="${TR('Offre de prêt toujours pas signée : relancer le distributeur')}${p.nb_relances?' — '+p.nb_relances+' '+TR('relance(s)')+(p.derniere_relance?', '+TR('dernière le')+' '+fdate(p.derniere_relance):''):''}" onclick="relancerPret(${p.id})"><i class="ti ti-bell-ringing"></i>${TR('Relancer')}${p.nb_relances?` (${p.nb_relances})`:''}</button>` : ''}</td>
       <td style="text-align:right;white-space:nowrap">
         <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
         <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
         ${p.nb_docs?`<button class="btn sm" title="${TR('Document(s) signé(s) reçu(s)')}" onclick="modalDocsSignes('pret',${p.id},'${esc(String(p.distributeur_nom||'')).replace(/'/g,'&#39;')}')" style="color:#16a34a"><i class="ti ti-paperclip"></i>${p.nb_docs>1?p.nb_docs:''}</button>`:''}
         <button class="btn sm" title="Lien de signature (test, sans e-mail)" onclick="montrerLienSignature(location.origin+'/pret/'+'${p.token_signature||''}')"><i class="ti ti-link"></i></button>
         <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
-        ${(p.statut==='envoye' && !p.signed_at) ? `<button class="btn sm" title="${TR('Relancer : offre de prêt toujours pas signée')}${p.nb_relances?' — '+p.nb_relances+' '+TR('relance(s)')+(p.derniere_relance?', '+TR('dernière le')+' '+fdate(p.derniere_relance):''):''}" onclick="relancerPret(${p.id})" style="color:#E1442E;position:relative"><i class="ti ti-bell-ringing"></i>${p.nb_relances?`<span style="font-size:10.5px;font-weight:700;margin-left:2px">${p.nb_relances}</span>`:''}</button>` : ''}
         <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
         <button class="btn sm danger" title="Supprimer" onclick="supprPret(${p.id})"><i class="ti ti-trash"></i></button>
       </td></tr>`;
@@ -8898,6 +8897,7 @@ async function modalPret(id, prefillClientId){
       <p style="font-size:12px;color:var(--text3);margin:0">${TR('Rappel automatique : Essai court → avant l\'échéance de retour (retour proposé à +30 j de la remise). Prêt long terme → rappel périodique (bilan trimestriel).')}</p>
     </div>
     <div class="modal-footer">
+      ${id && pretARelancer(p) ? `<button class="btn" style="color:#E1442E" onclick="closeModal();relancerPret(${id})"><i class="ti ti-bell-ringing"></i>${TR('Relancer la signature')}</button>` : ''}
       ${id && hasAccess('retours-demo') ? `<button class="btn" style="margin-right:auto" title="${TR('Compte rendu de réception du fauteuil retourné (photos, contrôle, pièces, forfaits)')}" onclick="closeModal();rdNouveau({pret_id:${id}})"><i class="ti ti-clipboard-check"></i>${TR('Retour démo')}</button>` : ''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="savePret()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button>
@@ -9243,6 +9243,9 @@ async function relancerPret(id){
   try{ await envoyerPretEtContrat(id, email.trim(), {relance:true}); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.relancerPret = relancerPret;
+// Offre envoyée (ou en brouillon déjà envoyée) mais pas encore signée, et prêt non clôturé
+function pretARelancer(p){ return !p.signed_at && ['envoye','brouillon'].includes(p.statut||'') && (p.statut==='envoye' || (Array.isArray(p.envois) && p.envois.length>0)); }
+window.pretARelancer = pretARelancer;
 
 function menuPretStatut(id){
   showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut du prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>

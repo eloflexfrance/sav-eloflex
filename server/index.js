@@ -91,9 +91,22 @@ app.get('/carte-mini/:id/:sig.png', (req, res) => require('../scripts/carte-mini
 app.use('/api', require('./routes'));
 
 // ── App principale (protégée) ────────────────────────────────────────
+// Les scripts et feuilles de style reçoivent un numéro de version (date de démarrage du serveur) :
+// après chaque déploiement, le navigateur recharge forcément les nouveaux fichiers (plus de vieux app.js en cache).
+const VERSION_FICHIERS = Date.now().toString(36);
+let _indexHtml = null;
 app.get('*', (req, res) => {
   if (!req.session?.user) return res.redirect('/login');
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  try {
+    if (!_indexHtml) {
+      _indexHtml = require('fs').readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8')
+        .replace(/((?:src|href)="\/(?:js|css)\/[^"?]+\.(?:js|css))"/g, `$1?v=${VERSION_FICHIERS}"`);
+    }
+    res.set('Cache-Control', 'no-cache');
+    res.type('html').send(_indexHtml);
+  } catch (e) {
+    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  }
 });
 
 app.use((err, req, res, next) => {
