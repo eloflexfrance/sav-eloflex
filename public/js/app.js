@@ -8804,6 +8804,7 @@ async function renderPrets(ttl,c,a){
         ${p.nb_docs?`<button class="btn sm" title="${TR('Document(s) signé(s) reçu(s)')}" onclick="modalDocsSignes('pret',${p.id},'${esc(String(p.distributeur_nom||'')).replace(/'/g,'&#39;')}')" style="color:#16a34a"><i class="ti ti-paperclip"></i>${p.nb_docs>1?p.nb_docs:''}</button>`:''}
         <button class="btn sm" title="Lien de signature (test, sans e-mail)" onclick="montrerLienSignature(location.origin+'/pret/'+'${p.token_signature||''}')"><i class="ti ti-link"></i></button>
         <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
+        ${(p.statut==='envoye' && !p.signed_at) ? `<button class="btn sm" title="${TR('Relancer : offre de prêt toujours pas signée')}${p.nb_relances?' — '+p.nb_relances+' '+TR('relance(s)')+(p.derniere_relance?', '+TR('dernière le')+' '+fdate(p.derniere_relance):''):''}" onclick="relancerPret(${p.id})" style="color:#E1442E;position:relative"><i class="ti ti-bell-ringing"></i>${p.nb_relances?`<span style="font-size:10.5px;font-weight:700;margin-left:2px">${p.nb_relances}</span>`:''}</button>` : ''}
         <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
         <button class="btn sm danger" title="Supprimer" onclick="supprPret(${p.id})"><i class="ti ti-trash"></i></button>
       </td></tr>`;
@@ -9216,18 +9217,32 @@ async function enregistrerAssistantContrat(envoyer){
 window.enregistrerAssistantContrat = enregistrerAssistantContrat;
 
 // Envoi groupé : PDF du bon de prêt + PDF du contrat-cadre (s'il reste à signer)
-async function envoyerPretEtContrat(pretId, dest){
+async function envoyerPretEtContrat(pretId, dest, opts){
   const p = await API.pret(pretId);
   const j = await API.pretContratJoint(pretId);
   let pdfData=null, ccPdf=null;
   try{ if(typeof PDF!=='undefined' && PDF.pretDoc) pdfData = PDF.pretDoc(p).output('datauristring'); }catch(e){}
   if(j && j.contrat){ try{ if(typeof PDF!=='undefined' && PDF.contratCadreDoc) ccPdf = PDF.contratCadreDoc(await API.contratCadre(j.contrat.id)).output('datauristring'); }catch(e){} }
-  const r = await API.envoyerPret(pretId, dest, pdfData, ccPdf);
+  const r = await API.envoyerPret(pretId, dest, pdfData, ccPdf, opts);
+  if(r.relance){ toast(TR('Relance envoyée à ')+r.to+(r.contrat_inclus?' ('+TR('offre de prêt + contrat-cadre')+')':''),'ti-bell-ringing','var(--success)'); if(STATE.view==='prets') render(); return r; }
   toast((r.contrat_inclus ? TR('Bon de prêt + contrat-cadre envoyés (une seule signature) à ') : TR('Bon de prêt envoyé à signer à '))+r.to,'ti-mail','var(--success)');
   if(STATE.view==='prets') render();
   return r;
 }
 window.envoyerPretEtContrat = envoyerPretEtContrat;
+
+// Relance du distributeur qui n'a pas encore signé l'offre de prêt (et le contrat-cadre s'il est joint) :
+// même e-mail que l'envoi initial, avec un rappel « en attente de validation ».
+async function relancerPret(id){
+  let p; try{ p = await API.pret(id); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); return; }
+  if(p.signed_at){ toast(TR('Cette offre de prêt est déjà signée.'),'ti-check','var(--success)'); return; }
+  const deja = p.nb_relances ? '\n'+TR('Déjà relancé')+' '+p.nb_relances+' '+TR('fois')+(p.derniere_relance?' ('+TR('dernière le')+' '+fd(String(p.derniere_relance).slice(0,10))+')':'')+'.' : '';
+  const email = prompt(TR('Relancer le distributeur pour la signature de l’offre de prêt.')+deja+'\n\n'+TR('Envoyer la relance à :'), p.email || p.client_email_actuel || '');
+  if(!email) return;
+  toast(TR('Envoi de la relance…'),'ti-loader-2');
+  try{ await envoyerPretEtContrat(id, email.trim(), {relance:true}); }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.relancerPret = relancerPret;
 
 function menuPretStatut(id){
   showModal(`<div class="modal-header"><i class="ti ti-adjustments" style="color:var(--accent)"></i><h2>${TR('Statut du prêt')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>

@@ -210,6 +210,10 @@ async function initDB() {
     // Offre d'essai Pennylane (références ESSAI-…) : conditions particulières + durée de l'essai en jours
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS conditions_essai TEXT`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS duree_essai INTEGER`);
+    // Historique des envois / relances du lien de signature
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS envois JSONB DEFAULT '[]'::jsonb`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS nb_relances INTEGER DEFAULT 0`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS derniere_relance TIMESTAMPTZ`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS bdc_vf_id TEXT`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS articles JSONB`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_autre BOOLEAN DEFAULT FALSE`);

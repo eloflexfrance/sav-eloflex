@@ -4494,7 +4494,11 @@ async function sendBrevoMail({ from, fromName, to, cc, bcc, subject, html, attac
     sender: { name: fromName||'Eloflex France', email: from||'sav@eloflex.fr' },
     to: String(to).split(/[,;\s]+/).filter(Boolean).map(email => ({ email })),
     ...(cc ? { cc: String(cc).split(/[,;\s]+/).filter(Boolean).map(email => ({ email })) } : {}),
-    ...(bcc ? { bcc: [{ email: bcc }] } : {}),
+    ...(bcc ? (() => {
+      const deja = new Set([to, cc].filter(Boolean).join(',').split(/[,;\s]+/).filter(Boolean).map(e => e.toLowerCase()));
+      const l = [...new Set(String(bcc).split(/[,;\s]+/).filter(Boolean).map(e => e.toLowerCase()))].filter(e => !deja.has(e));
+      return l.length ? { bcc: l.map(email => ({ email })) } : {};
+    })() : {}),
     ...(attachments && attachments.length ? { attachment: attachments } : {}),
     subject, htmlContent: html
   }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
@@ -8061,6 +8065,8 @@ const SIGNATURE_EMAIL_HTML = `
 </table>`;
 
 // Envoi d'e-mail lié à un prêt — via l'API Brevo (le SMTP est bloqué par Render)
+// Copie cachée systématique des e-mails d'offre de prêt / contrat-cadre (envoi, relance, signature)
+const BCC_PRETS = 'frederic@eloflex.fr, info@eloflex.fr';
 async function envoyerEmailPret({ to, cc, bcc, subject, html, attachments }) {
   const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
   const att = (attachments || []).map(a => ({
@@ -8490,6 +8496,15 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
          </div>`
       : '';
     const fauteuil = [p.designation, p.num_serie].filter(Boolean).join(' ');
+    const relance = !!(req.body && req.body.relance);
+    // Relance : même e-mail que l'envoi initial, précédé d'un rappel « en attente de validation »
+    const blocRelance = relance
+      ? `<div style="border-left:4px solid #E1442E;background:#fff4f2;border-radius:6px;padding:12px 16px;margin:0 0 16px;font-size:14px;color:#222">
+           <b>Relance — document${cc ? 's' : ''} en attente de signature</b><br>
+           Sauf erreur de notre part, nous n'avons pas encore reçu votre validation de ${cc ? 'l\'offre de prêt et du contrat-cadre' : 'l\'offre de prêt'} envoyé${cc ? 's' : 'e'} précédemment.
+           Nous restons dans l'attente de votre confirmation : <b>faute de confirmation ou de signature, nous ne pourrons malheureusement pas expédier votre demande de prêt.</b>
+         </div>`
+      : '';
     const corps = cc
       ? `<p>Bonjour,</p>
          <p>Nous avons le plaisir de vous confier ${fauteuil ? 'le fauteuil <b>' + fauteuil + '</b>' : 'un fauteuil Eloflex'} en prêt. Comme il s'agit de votre premier prêt avec Eloflex, <b>deux documents</b> sont à valider :</p>
@@ -8507,21 +8522,27 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le bon de prêt</a></p>
          <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>`;
     await envoyerEmailPret({
-      to: dest,
-      subject: cc ? `Contrat-cadre et bon de prêt Eloflex — une seule signature en ligne` : `Bon de prêt Eloflex — à signer en ligne`,
+      to: dest, bcc: BCC_PRETS,
+      subject: (relance ? 'Relance — ' : '') + (cc ? `Contrat-cadre et bon de prêt Eloflex — une seule signature en ligne` : `Bon de prêt Eloflex — à signer en ligne`),
       attachments,
       html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
         <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">${cc ? 'Eloflex — Contrat-cadre et bon de prêt à signer' : 'Eloflex — Bon de prêt à signer'}</h2></div>
         <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px">
+          ${blocRelance}
           ${corps}
           ${blocManuel}
         </div>
         <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
       </div>`
     });
-    const updated = await db.run("UPDATE prets SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END, updated_at=NOW() WHERE id=$1 RETURNING id, statut", [p.id]);
+    const u = (res.locals && res.locals.user) || {};
+    const trace = JSON.stringify([{ date: new Date().toISOString(), par: u.nom || u.email || null, to: dest, relance }]);
+    const updated = await db.run(`UPDATE prets SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END,
+        envois=COALESCE(envois,'[]'::jsonb) || $2::jsonb, derniere_relance=CASE WHEN $3 THEN NOW() ELSE derniere_relance END,
+        nb_relances=COALESCE(nb_relances,0) + CASE WHEN $3 THEN 1 ELSE 0 END, updated_at=NOW()
+      WHERE id=$1 RETURNING id, statut, nb_relances`, [p.id, trace, relance]);
     if (cc) await db.run("UPDATE contrats_cadre SET statut=CASE WHEN statut='brouillon' THEN 'envoye' ELSE statut END, updated_at=NOW() WHERE id=$1", [cc.id]);
-    res.json({ ok: true, to: dest, statut: updated.statut, contrat_inclus: !!cc });
+    res.json({ ok: true, to: dest, statut: updated.statut, contrat_inclus: !!cc, relance, nb_relances: updated.nb_relances });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -8608,7 +8629,7 @@ router.post('/pret-public/:token/signer', async (req, res) => {
              content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' });
       await envoyerEmailPret({
         to: p.email || 'sav@eloflex.fr',
-        cc: p.email ? 'sav@eloflex.fr' : undefined,
+        cc: p.email ? 'sav@eloflex.fr' : undefined, bcc: BCC_PRETS,
         subject: ccSigne ? `Contrat-cadre et bon de prêt Eloflex — signés par ${nomSign}` : `Bon de prêt Eloflex — signé par ${nomSign}`,
         html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
           ${ccSigne
@@ -8759,7 +8780,7 @@ router.post('/contrats-cadre/:id/envoyer', requireAuth, async (req, res) => {
          </div>`
       : '';
     await envoyerEmailPret({
-      to: dest,
+      to: dest, bcc: BCC_PRETS,
       subject: `Contrat-cadre de prêt Eloflex — à signer en ligne`,
       attachments,
       html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
@@ -8813,7 +8834,7 @@ router.post('/contrat-public/:token/signer', async (req, res) => {
              content: d.pdf_data.replace(/^data:application\/pdf;base64,/, ''), encoding: 'base64' }]
         : [];
       await envoyerEmailPret({
-        to: 'sav@eloflex.fr',
+        to: 'sav@eloflex.fr', bcc: BCC_PRETS,
         subject: `Contrat-cadre de prêt Eloflex — signé par ${d.signataire_nom} (${cc.distributeur_nom || ''})`,
         html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
           <p>Le contrat-cadre de prêt du distributeur <b>${cc.distributeur_nom || ''}</b> a été signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
