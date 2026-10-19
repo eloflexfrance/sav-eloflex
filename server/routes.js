@@ -9383,3 +9383,4 @@ require('./retours-demo')(router, {
 module.exports = router;
 module.exports.executerTachesQuotidiennes = executerTachesQuotidiennes;
 module.exports.envoyerSauvegardeHebdo = envoyerSauvegardeHebdo;
+module.exports.SIGNATURE_EMAIL_HTML = SIGNATURE_EMAIL_HTML;

@@ -116,7 +116,7 @@ async function runDailyChecks() {
     let pretsDus = [];
     try {
       const essais = await db.all(
-        `SELECT p.id, p.distributeur_nom, p.email, p.designation, p.num_serie, p.date_remise,
+        `SELECT p.id, p.distributeur_nom, p.email, p.designation, p.num_serie, p.articles, p.date_remise,
                 p.date_retour_prevue, p.formule, c.nom AS client_nom, c.email AS client_email
          FROM prets p LEFT JOIN clients c ON c.id=p.client_id
          WHERE p.rappel_envoye = FALSE AND p.date_remise IS NOT NULL
@@ -127,11 +127,11 @@ async function runDailyChecks() {
       for (const p of essais) {
         const ech = p.date_retour_prevue || '(≈ remise + 30 j)';
         await addAlerte('pret_rappel', p.id,
-          `📄 Essai court à échéance : ${p.client_nom || p.distributeur_nom} — ${p.designation || ''} ${p.num_serie || ''} (remis le ${p.date_remise}, retour prévu ${ech}). Organiser le retour ou prolonger.`);
+          `📄 Essai court à échéance : ${p.client_nom || p.distributeur_nom} — ${p.designation || ''} ${p.num_serie || ''} (remis le ${_fdate(p.date_remise)}, retour prévu ${p.date_retour_prevue ? _fdate(p.date_retour_prevue) : ech}). Organiser le retour ou prolonger.`);
         await db.run("UPDATE prets SET rappel_envoye=TRUE, dernier_rappel=NOW(), statut=CASE WHEN statut='signe' THEN 'en_cours' ELSE statut END, updated_at=NOW() WHERE id=$1", [p.id]);
       }
       const longs = await db.all(
-        `SELECT p.id, p.distributeur_nom, p.email, p.designation, p.num_serie, p.date_remise,
+        `SELECT p.id, p.distributeur_nom, p.email, p.designation, p.num_serie, p.articles, p.date_remise,
                 p.date_retour_prevue, p.formule, c.nom AS client_nom, c.email AS client_email
          FROM prets p LEFT JOIN clients c ON c.id=p.client_id
          WHERE p.date_remise IS NOT NULL
@@ -141,7 +141,7 @@ async function runDailyChecks() {
       );
       for (const p of longs) {
         await addAlerte('pret_rappel', p.id,
-          `📄 Prêt long terme — bilan trimestriel : ${p.client_nom || p.distributeur_nom} — ${p.designation || ''} ${p.num_serie || ''} (remis le ${p.date_remise}). Demander le bilan des essais (≥ 1/mois) et l'état du matériel.`);
+          `📄 Prêt long terme — bilan trimestriel : ${p.client_nom || p.distributeur_nom} — ${p.designation || ''} ${p.num_serie || ''} (remis le ${_fdate(p.date_remise)}). Demander le bilan des essais (≥ 1/mois) et l'état du matériel.`);
         await db.run("UPDATE prets SET dernier_rappel=NOW(), statut=CASE WHEN statut='signe' THEN 'en_cours' ELSE statut END, updated_at=NOW() WHERE id=$1", [p.id]);
       }
       pretsDus = essais.concat(longs);
@@ -154,7 +154,21 @@ async function runDailyChecks() {
   } catch(e) { console.error('[CRON] Erreur :', e.message); }
 }
 
-// Email de relance des bons de prêt (au distributeur + copie interne)
+// Date lisible « 23/10/2026 » (les dates PostgreSQL arrivent en objets Date → éviter « Fri Oct 23 2026 00:00:00 GMT… »)
+function _fdate(v) {
+  if (!v) return '';
+  let iso;
+  if (v instanceof Date) {
+    if (isNaN(v)) return '';
+    // Date « pure » (minuit) : on prend le jour en heure de Paris pour ne jamais décaler d'un jour
+    iso = v.toLocaleDateString('fr-CA', { timeZone: 'Europe/Paris' });
+  } else iso = String(v).slice(0, 10);
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(v);
+}
+const _escH = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// Email de relance des bons de prêt (au distributeur + copie interne), même présentation que les e-mails de prêt
 async function envoyerEmailPretsRappel(prets) {
   try {
     const p = {}; const rows = await db.all('SELECT cle,valeur FROM parametres'); rows.forEach(r => p[r.cle] = r.valeur);
@@ -162,22 +176,55 @@ async function envoyerEmailPretsRappel(prets) {
     const key = process.env.BREVO_API_KEY;
     if (!key) { console.warn('[CRON] BREVO_API_KEY manquante — relance prêts non envoyée'); return; }
     const axios = require('axios');
+    let signature = '';
+    try { signature = require('./routes').SIGNATURE_EMAIL_HTML || ''; } catch (_) {}
     for (const pr of prets) {
       const dest = pr.email || pr.client_email;
       if (!dest) continue;
       const estLong = (pr.formule === 'long_terme');
+      // Matériel prêté : articles du bon (désignation + n° de série), sinon désignation simple
+      let arts = pr.articles;
+      if (typeof arts === 'string') { try { arts = JSON.parse(arts); } catch (_) { arts = null; } }
+      const mats = (Array.isArray(arts) ? arts : []).map(a => [a && a.designation, a && a.num_serie ? 'n° ' + a.num_serie : ''].filter(Boolean).join(' — ')).filter(Boolean);
+      if (!mats.length) mats.push([pr.designation, pr.num_serie ? 'n° ' + pr.num_serie : ''].filter(Boolean).join(' — ') || 'Fauteuil Eloflex');
+      const ligne = (k, v) => `<tr><td style="padding:7px 10px;border:1px solid #e5e7eb;background:#f8fafc;width:150px;color:#555;font-size:13px">${k}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:14px">${v}</td></tr>`;
+      const recap = `<table role="presentation" style="width:100%;border-collapse:collapse;margin:8px 0 16px">
+          ${ligne('Matériel prêté', mats.map(_escH).join('<br>'))}
+          ${pr.date_remise ? ligne('Remis le', `<b>${_fdate(pr.date_remise)}</b>`) : ''}
+          ${!estLong && pr.date_retour_prevue ? ligne('Retour prévu le', `<b style="color:#C2410C">${_fdate(pr.date_retour_prevue)}</b>`) : ''}
+          ${estLong ? ligne('Formule', 'Prêt long terme') : ''}
+        </table>`;
       const corps = estLong
-        ? `<p>Dans le cadre de votre prêt long terme du fauteuil <b>${pr.designation || ''} ${pr.num_serie || ''}</b> (remis le ${pr.date_remise}), pourriez-vous nous communiquer un <b>bilan trimestriel</b> des essais réalisés (nombre, retours patients) et nous confirmer l'état du matériel (rappel : au moins 1 essai/mois) ?</p>`
-        : `<p>Votre essai du fauteuil <b>${pr.designation || ''} ${pr.num_serie || ''}</b> (remis le ${pr.date_remise}) approche de son échéance${pr.date_retour_prevue ? ` (retour prévu le ${pr.date_retour_prevue})` : ''}.</p>
-           <p>Pourriez-vous nous indiquer où en est l'essai : retour à organiser, prolongation souhaitée, ou rachat ?</p>`;
+        ? `<p>Dans le cadre de votre <b>prêt long terme</b>, nous revenons vers vous pour le point trimestriel :</p>
+           ${recap}
+           <p>Pourriez-vous nous communiquer un <b>bilan des essais réalisés</b> (nombre d'essais, retours des patients) et nous confirmer <b>l'état du matériel</b> ?</p>
+           <p style="font-size:13px;color:#555">Pour rappel, le prêt long terme prévoit au moins un essai par mois.</p>`
+        : `<p>L'essai du matériel ci-dessous <b>arrive bientôt à échéance</b> :</p>
+           ${recap}
+           <p>Pourriez-vous nous indiquer où en est l'essai et la suite que vous souhaitez lui donner ?</p>
+           <ul style="margin:6px 0 14px;padding-left:20px;line-height:1.7">
+             <li><b>Retour</b> du fauteuil : nous organisons l'enlèvement ;</li>
+             <li><b>Prolongation</b> de l'essai : merci de nous indiquer la durée souhaitée ;</li>
+             <li><b>Rachat</b> du fauteuil : nous vous adressons le devis correspondant.</li>
+           </ul>
+           <p>Il vous suffit de répondre à cet e-mail.</p>`;
+      const titre = estLong ? 'Eloflex — Suivi de votre prêt long terme' : 'Eloflex — Votre essai arrive à échéance';
+      const sujetMat = [pr.designation, pr.num_serie].filter(Boolean).join(' ');
       await axios.post('https://api.brevo.com/v3/smtp/email', {
         sender: { name: 'Eloflex France', email: p.email_from || 'sav@eloflex.fr' },
         to: [{ email: dest }], cc: [{ email: p.email_cc_sav || 'sav@eloflex.fr' }],
-        subject: `Eloflex — Suivi de votre prêt de fauteuil (${pr.designation || ''} ${pr.num_serie || ''})`,
-        htmlContent: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
-          <p>Bonjour,</p>
-          ${corps}
-          <p style="font-size:12px;color:#888">Eloflex France</p></div>`
+        subject: estLong
+          ? `Eloflex — Suivi de votre prêt long terme${sujetMat ? ' (' + sujetMat + ')' : ''}`
+          : `Eloflex — Votre essai arrive à échéance${pr.date_retour_prevue ? ' le ' + _fdate(pr.date_retour_prevue) : ''}${sujetMat ? ' (' + sujetMat + ')' : ''}`,
+        htmlContent: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
+          <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">${titre}</h2></div>
+          <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px;font-size:14px;line-height:1.55">
+            <p>Bonjour,</p>
+            ${corps}
+            <p>Restant à votre disposition.<br>Bien cordialement</p>
+          </div>
+          <div style="margin-top:24px">${signature}</div>
+        </div>`
       }, { headers: { 'api-key': key, 'Content-Type': 'application/json' }, timeout: 60000 });
     }
     console.log(`[CRON] Email relance prêts (Brevo) envoyé (${prets.length})`);
