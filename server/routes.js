@@ -4771,7 +4771,7 @@ router.put('/commandes/:id', async (req, res) => {
       'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
       'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation',
       'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'facture_vf_id', 'bdc_source', 'bdc_doc_id', 'pays',
-      'proforma', 'num_proforma', 'proforma_date', 'proforma_payee'];
+      'proforma', 'num_proforma', 'proforma_date', 'proforma_payee', 'docs_fre'];
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
@@ -9427,6 +9427,9 @@ router.get('/demandes-info/distributeurs', requireAuth, async (req, res) => {
     res.json(rows.map(r => r.nom));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ── « Test suivi commandes » : vue tableur (lecture ; écritures via /commandes) ──
+require('./commandes-tableur')(router, { db, statutCommande });
 
 // ── Retours démo (compte rendu de réception des fauteuils de démonstration) ──
 require('./retours-demo')(router, {

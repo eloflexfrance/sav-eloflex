@@ -80,6 +80,7 @@ const MODULES = [
   { key:'demandes',      label:"Demandes d'infos" },
   { key:'interventions', label:'Interventions SAV' },
   { key:'commandes',     label:'Suivi commandes' },
+  { key:'commandes-tableur', label:'Test suivi commandes (tableur)' },
   { key:'devis',         label:'Devis en attente' },
   { key:'catalogue',     label:'Catalogue pièces' },
   { key:'eclates',       label:'Éclatés (schémas pièces)' },
@@ -102,7 +103,8 @@ const PERM_FALLBACK = {
   'devis':      'commandes',     // Devis hérite de commandes
   'dashboard':  'commandes',     // Tableau de bord toujours accessible si commandes
   'parc-demo':  'commandes',     // Parc démo : visible si accès au suivi commandes
-  'retours-demo': 'commandes',   // Retours démo (comptes rendus de réception) : suivent le suivi commandes
+  'retours-demo': 'commandes',
+  'commandes-tableur': 'commandes', // Vue tableur : mêmes droits que le Suivi commandes   // Retours démo (comptes rendus de réception) : suivent le suivi commandes
   'commande-suede': 'commandes', // Commande Suède : suit le suivi commandes
   'eclates':    'catalogue',     // Éclatés : suivent le catalogue pièces
   // Vues de détail (ouvertes via setView, absentes du menu) → module qui les gouverne.
@@ -237,6 +239,7 @@ async function render(){
     else if(STATE.view==='interventions') await renderInterventions(ttl,c,a);
     else if(STATE.view==='expeditions')   await renderExpeditions(ttl,c,a);
     else if(STATE.view==='commandes')     await renderCommandes(ttl,c,a);
+    else if(STATE.view==='commandes-tableur') await renderCommandesTableur(ttl,c,a);
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
     else if(STATE.view==='eclates')       await renderEclates(ttl,c,a);
     else if(STATE.view==='commande-suede') await renderCommandeSuede(ttl,c,a);

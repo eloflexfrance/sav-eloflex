@@ -22,6 +22,7 @@ const TRANSLATIONS = {
     nav_retours_suede: 'Retours Suède',
     nav_parc_demo: 'Parc de démo',
     nav_retours_demo: 'Retours démo',
+    nav_commandes_tableur: 'Test suivi commandes',
     nav_prets: 'Prêts',
     nav_dark: 'Mode sombre',
 
@@ -611,6 +612,7 @@ const TRANSLATIONS = {
     nav_retours_suede: 'Sweden returns',
     nav_parc_demo: 'Demo fleet',
     nav_retours_demo: 'Demo returns',
+    nav_commandes_tableur: 'Orders (spreadsheet test)',
     nav_prets: 'Loans',
     nav_dark: 'Dark mode',
 

@@ -36,7 +36,7 @@ const info  = t => console.log(`      ${C.gris(t)}`);
 
 const FICHIERS_JS = [
   'server/routes.js', 'server/index.js', 'server/db.js',
-  'public/js/app.js', 'public/js/api.js', 'public/js/devis.js', 'public/js/eclates.js', 'public/js/retours-demo.js', 'server/retours-demo.js',
+  'public/js/app.js', 'public/js/api.js', 'public/js/devis.js', 'public/js/eclates.js', 'public/js/retours-demo.js', 'public/js/commandes-tableur.js', 'server/commandes-tableur.js', 'server/retours-demo.js',
   'public/js/i18n.js', 'public/js/pdf.js', 'scripts/init-db.js'
 ].filter(f => fs.existsSync(P(f)));
 
@@ -254,7 +254,7 @@ titre('4. Routes appelées par le navigateur');
 if (!fs.existsSync(P('server/routes.js'))) {
   note('server/routes.js absent, contrôle ignoré');
 } else {
-  const routes = lire('server/routes.js') + (fs.existsSync(P('server/retours-demo.js')) ? '\n' + lire('server/retours-demo.js') : '');
+  const routes = lire('server/routes.js') + (fs.existsSync(P('server/retours-demo.js')) ? '\n' + lire('server/retours-demo.js') : '') + (fs.existsSync(P('server/commandes-tableur.js')) ? '\n' + lire('server/commandes-tableur.js') : '');
   const gabarit = c => c.split('?')[0].replace(/\/+$/, '')
     .split('/').map(s => (s.startsWith(':') || s === '*' ? '*' : s)).join('/');
 

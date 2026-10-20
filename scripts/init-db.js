@@ -830,6 +830,8 @@ async function initDB() {
       ordre INTEGER DEFAULT 0
     )`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_retour_lignes_cmd ON commandes_retour_lignes(commande_id)`);
+    // Vue tableur : colonne « Docs FRE » du fichier Excel (Oui / Non / Partielle)
+    await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS docs_fre TEXT`);
 
     // ── Retours démo : compte rendu de réception d'un fauteuil de démonstration ──
     await client.query(`CREATE TABLE IF NOT EXISTS retours_demo (
