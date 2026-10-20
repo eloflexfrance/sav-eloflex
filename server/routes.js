@@ -4053,12 +4053,22 @@ router.post('/devis-public/:token/signer', async (req, res) => {
         to: clientMail || 'info@eloflex.fr',
         cc: clientMail ? 'info@eloflex.fr' : undefined,
         subject: `✍️ ${m.Doc} ${d.numero||''} — signé par ${b.signataire_nom}`,
-        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
-          <p>Le ${m.doc} <b>${d.numero||''}</b>${d.distributeur_nom?` (${d.distributeur_nom})`:''} a été signé en ligne (${m.accord}) par <b>${String(b.signataire_nom)}</b> le ${new Date().toLocaleDateString('fr-FR')}.</p>
-          ${pdfB64 ? '<p>Le document signé (original + page de signature) est joint en PDF.</p>' : '<p style="color:#b45309">Le PDF signé n’a pas pu être généré automatiquement — disponible dans l’application.</p>'}
-          ${sealInfo ? `<p style="font-size:12px;color:#555">Un <b>certificat de preuve d’intégrité</b> est également joint (empreinte SHA-256 et cachet électronique Eloflex).</p>` : ''}
-          ${cmdId ? '<p>Il a été ajouté au <b>Suivi commandes</b>.</p>' : ''}
-          <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
+        html: _mailCharte({
+          titre: `Eloflex — ${m.Doc} ${_escMail(d.numero || '')} signé`,
+          corps: `<p>Bonjour,</p>
+            <p>Nous vous remercions : le ${m.doc} <b>${_escMail(d.numero || '')}</b> a bien été signé en ligne (${m.accord}).</p>
+            ${_mailRecap([
+              [m.Doc, `<b>${_escMail(d.numero || '')}</b>`],
+              ['Client', _escMail(d.distributeur_nom || '')],
+              ['Signé par', `<b>${_escMail(b.signataire_nom)}</b>`],
+              ['Date de signature', `<b>${_dateFr(new Date())}</b> à ${_heureFr(new Date())}`],
+            ])}
+            ${pdfB64
+              ? '<div style="border:1px dashed #cbd5e1;border-radius:8px;padding:12px 16px;margin:14px 0;background:#f8fafc;font-size:13px;color:#334">📎 Le document signé (original + page de signature) est joint en PDF' + (sealInfo ? ', accompagné d’un <b>certificat de preuve d’intégrité</b> (empreinte SHA-256 et cachet électronique Eloflex)' : '') + '.</div>'
+              : '<p style="color:#b45309;font-size:13px">Le PDF signé n’a pas pu être généré automatiquement : nous vous le transmettrons séparément.</p>'}
+            <p>Nous revenons vers vous très prochainement pour la suite de votre commande.</p>
+            <p>Restant à votre disposition.<br>Bien cordialement</p>`,
+        }),
         attachments
       });
       mailOk = true;
@@ -8021,6 +8031,26 @@ router.post('/carte/rattachements', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 const PRET_STATUTS = ['brouillon','envoye','signe','en_cours','retard','prolonge','cloture','rachete'];
 
+// Mise en page commune des e-mails Éloflex (bandeau bleu, cadre, tableau récapitulatif, signature)
+function _escMail(x) { return String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function _mailRecap(lignes) {
+  const l = (lignes || []).filter(x => x && x[1] != null && String(x[1]).trim() !== '');
+  if (!l.length) return '';
+  return `<table role="presentation" style="width:100%;border-collapse:collapse;margin:8px 0 16px">${l.map(([k, v]) =>
+    `<tr><td style="padding:7px 10px;border:1px solid #e5e7eb;background:#f8fafc;width:160px;color:#555;font-size:13px;vertical-align:top">${k}</td><td style="padding:7px 10px;border:1px solid #e5e7eb;font-size:14px">${v}</td></tr>`).join('')}</table>`;
+}
+function _mailCharte({ titre, corps, signature }) {
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;margin:0 auto;color:#222">
+    <div style="background:#1F5C8C;padding:18px 22px;border-radius:8px 8px 0 0"><h2 style="color:#fff;margin:0;font-size:17px">${titre}</h2></div>
+    <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px;font-size:14px;line-height:1.55">
+      ${corps}
+    </div>
+    <div style="margin-top:24px">${signature === undefined ? SIGNATURE_EMAIL_HTML : signature}</div>
+  </div>`;
+}
+const _dateFr = d => (d instanceof Date ? d : new Date(d || Date.now())).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
+const _heureFr = d => (d instanceof Date ? d : new Date(d || Date.now())).toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' });
+
 // Signature e-mail Éloflex (Service Commercial) — ajoutée aux e-mails de demande de signature
 const SIGNATURE_EMAIL_HTML = `
 <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:collapse; font-family:Arial, Helvetica, sans-serif;">
@@ -8631,13 +8661,30 @@ router.post('/pret-public/:token/signer', async (req, res) => {
         to: p.email || 'sav@eloflex.fr',
         cc: p.email ? 'sav@eloflex.fr' : undefined, bcc: BCC_PRETS,
         subject: ccSigne ? `Contrat-cadre et bon de prêt Eloflex — signés par ${nomSign}` : `Bon de prêt Eloflex — signé par ${nomSign}`,
-        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
-          ${ccSigne
-            ? `<p>Le <b>contrat-cadre de prêt</b> et le <b>bon de prêt</b> du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> ont été signés en ligne (signature unique) par <b>${nomSign}</b>.</p>
-               <p>Le contrat-cadre est désormais en place : vos prochains prêts ne comporteront plus que le bon de prêt.</p>`
-            : `<p>Le bon de prêt du fauteuil <b>${p.designation || ''} ${p.num_serie || ''}</b> a été signé en ligne par <b>${nomSign}</b>.</p>`}
-          ${attachments.length ? `<p>${attachments.length > 1 ? 'Les documents signés sont joints' : 'Le document signé est joint'} à cet e-mail (PDF).</p>` : ''}
-          <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
+        html: (() => {
+          let arts = p.articles; if (typeof arts === 'string') { try { arts = JSON.parse(arts); } catch (_) { arts = null; } }
+          const mats = (Array.isArray(arts) ? arts : []).map(a => [a && a.designation, a && a.num_serie ? 'n° ' + a.num_serie : ''].filter(Boolean).join(' — ')).filter(Boolean);
+          if (!mats.length && (p.designation || p.num_serie)) mats.push([p.designation, p.num_serie ? 'n° ' + p.num_serie : ''].filter(Boolean).join(' — '));
+          const maintenant = new Date();
+          const recap = _mailRecap([
+            ['Document' + (ccSigne ? 's' : '') + ' signé' + (ccSigne ? 's' : ''), ccSigne ? 'Contrat-cadre de prêt<br>Bon de prêt' : 'Bon de prêt'],
+            ['Distributeur', _escMail(p.distributeur_nom || '')],
+            ['Matériel prêté', mats.map(_escMail).join('<br>')],
+            ['Signé par', `<b>${_escMail(nomSign)}</b>`],
+            ['Date de signature', `<b>${_dateFr(maintenant)}</b> à ${_heureFr(maintenant)}`],
+            [p.duree_essai ? "Durée de l'essai" : null, p.duree_essai ? p.duree_essai + ' jours' : null],
+          ].filter(x => x[0]));
+          return _mailCharte({
+            titre: ccSigne ? 'Eloflex — Contrat-cadre et bon de prêt signés' : 'Eloflex — Bon de prêt signé',
+            corps: `<p>Bonjour,</p>
+              <p>Nous vous remercions : ${ccSigne ? 'le <b>contrat-cadre de prêt</b> et le <b>bon de prêt</b> ont bien été signés' : 'le <b>bon de prêt</b> a bien été signé'} en ligne.</p>
+              ${recap}
+              ${ccSigne ? '<p>Le contrat-cadre est désormais en place : <b>vos prochains prêts ne comporteront plus que le bon de prêt</b> à signer.</p>' : ''}
+              <p>Nous revenons vers vous très prochainement pour l'organisation de la mise à disposition du matériel.</p>
+              ${attachments.length ? `<div style="border:1px dashed #cbd5e1;border-radius:8px;padding:12px 16px;margin:14px 0;background:#f8fafc;font-size:13px;color:#334">📎 ${attachments.length > 1 ? 'Les documents signés sont joints' : 'Le document signé est joint'} à cet e-mail (PDF) : conservez-${attachments.length > 1 ? 'les' : 'le'} pour vos archives.</div>` : ''}
+              <p>Restant à votre disposition.<br>Bien cordialement</p>`,
+          });
+        })(),
         attachments
       });
     } catch (mailErr) { console.error('[PRET] e-mail signature:', mailErr.message); }
@@ -8836,10 +8883,18 @@ router.post('/contrat-public/:token/signer', async (req, res) => {
       await envoyerEmailPret({
         to: 'sav@eloflex.fr', bcc: BCC_PRETS,
         subject: `Contrat-cadre de prêt Eloflex — signé par ${d.signataire_nom} (${cc.distributeur_nom || ''})`,
-        html: `<div style="font-family:sans-serif;max-width:560px;color:#222;margin:0 auto">
-          <p>Le contrat-cadre de prêt du distributeur <b>${cc.distributeur_nom || ''}</b> a été signé en ligne par <b>${String(d.signataire_nom)}</b>.</p>
-          ${attachments.length ? '<p>Le document signé est joint à cet e-mail (PDF).</p>' : ''}
-          <p style="font-size:12px;color:#888">Eloflex France</p></div>`,
+        html: _mailCharte({
+          titre: 'Eloflex — Contrat-cadre de prêt signé',
+          corps: `<p>Bonjour,</p>
+            <p>Le <b>contrat-cadre de prêt</b> a été signé en ligne.</p>
+            ${_mailRecap([
+              ['Distributeur', `<b>${_escMail(cc.distributeur_nom || '')}</b>`],
+              ['Signé par', `<b>${_escMail(d.signataire_nom)}</b>`],
+              ['Date de signature', `<b>${_dateFr(new Date())}</b> à ${_heureFr(new Date())}`],
+            ])}
+            <p>Les prochains prêts de ce distributeur ne comporteront plus que le bon de prêt à signer.</p>
+            ${attachments.length ? '<div style="border:1px dashed #cbd5e1;border-radius:8px;padding:12px 16px;margin:14px 0;background:#f8fafc;font-size:13px;color:#334">📎 Le contrat signé est joint à cet e-mail (PDF).</div>' : ''}`,
+        }),
         attachments
       });
     } catch (mailErr) { console.error('[CONTRAT] e-mail signature:', mailErr.message); }
