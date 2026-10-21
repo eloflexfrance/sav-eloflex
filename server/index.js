@@ -69,6 +69,9 @@ app.get('/setup', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'setup.html'));
 });
 
+// ── Espace distributeurs : page de connexion par e-mail + lien magique ──
+require('./espace-distributeurs').monterPages(app, require('./db'));
+
 // ── Page publique de signature d'un bon de prêt (sans auth) ──────────
 app.get('/pret/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'pret.html'));

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eloflex — Espace distributeur</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: #f4f5f7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e2e4e9;
+      border-radius: 14px;
+      padding: 40px 36px 32px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.07);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .logo i { font-size: 26px; color: #2563eb; }
+    .logo-text { font-size: 19px; font-weight: 700; color: #111; }
+    .subtitle { font-size: 13px; color: #6b7280; margin-bottom: 28px; margin-top: 4px; }
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
+      letter-spacing: .03em;
+    }
+    .field input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fafafa;
+      color: #111;
+      font-size: 14px;
+      font-family: inherit;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .field input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+      background: #fff;
+    }
+    .btn-login {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-login:hover { background: #1d4ed8; }
+    .btn-login:disabled { opacity: .6; cursor: wait; }
+    .error {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #fef2f2;
+      color: #dc2626;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      font-size: 12.5px;
+    }
+      .ok { display:none; margin-top:12px; padding:12px 14px; background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; border-radius:8px; font-size:13px; line-height:1.5; }
+    .points { margin: 18px 0 4px; padding: 0; list-style: none; font-size: 12.5px; color: #4b5563; line-height: 1.7; }
+    .points i { color: #2563eb; margin-right: 6px; }
+    .bas { margin-top: 18px; font-size: 11.5px; color: #9ca3af; text-align: center; }
+    .bas a { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <i class="ti ti-building-store"></i>
+      <span class="logo-text">Espace distributeur Eloflex</span>
+    </div>
+    <p class="subtitle">Saisissez l'adresse e-mail enregistrée chez Eloflex : vous recevrez un lien de connexion, sans mot de passe.</p>
+
+    <div class="field">
+      <label for="email">Adresse e-mail</label>
+      <input type="email" id="email" autocomplete="email" placeholder="contact@votre-societe.fr">
+    </div>
+    <button class="btn-login" id="btn" onclick="demander()">Recevoir mon lien de connexion</button>
+    <div class="error" id="err"></div>
+    <div class="ok" id="ok"></div>
+
+    <ul class="points">
+      <li><i class="ti ti-schema"></i>Éclatés de tous les fauteuils Eloflex avec les références des pièces</li>
+      <li><i class="ti ti-shopping-cart"></i>Bon de commande de pièces détachées en PDF, transmis directement à Eloflex</li>
+    </ul>
+    <div class="bas">Une question ? <a href="mailto:sav@eloflex.fr">sav@eloflex.fr</a> · 09 67 66 51 29<br><a href="/login">Accès équipe Eloflex</a></div>
+  </div>
+
+  <script>
+    const q = new URLSearchParams(location.search);
+    if (q.get('erreur')) {
+      const e = document.getElementById('err');
+      e.textContent = q.get('erreur') === 'lien' ? 'Ce lien de connexion a expiré ou n’est plus valide : demandez-en un nouveau ci-dessous.' : 'Une erreur est survenue, réessayez.';
+      e.style.display = 'block';
+    }
+    document.getElementById('email').addEventListener('keydown', e => { if (e.key === 'Enter') demander(); });
+    async function demander() {
+      const email = document.getElementById('email').value.trim();
+      const err = document.getElementById('err'), ok = document.getElementById('ok'), btn = document.getElementById('btn');
+      err.style.display = 'none'; ok.style.display = 'none';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Veuillez saisir une adresse e-mail valide.'; err.style.display = 'block'; return; }
+      btn.disabled = true; btn.textContent = 'Envoi en cours…';
+      try {
+        const r = await fetch('/api/espace/lien', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'Envoi impossible.');
+        ok.innerHTML = '<b>C’est envoyé !</b><br>Si cette adresse est enregistrée chez Eloflex, vous allez recevoir un e-mail avec votre lien de connexion (pensez à vérifier les courriers indésirables). Le lien est valable 48 heures.';
+        ok.style.display = 'block';
+        btn.textContent = 'Renvoyer le lien';
+      } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.textContent = 'Recevoir mon lien de connexion'; }
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>

@@ -154,8 +154,9 @@ const isOp = () => isAdmin() || Object.values(CURRENT_USER?.permissions || {}).i
 
 async function seDeconnecter(){
   if(!confirm(TR('Se déconnecter ?'))) return;
+  const versEspace = estDistributeur();
   await fetch('/api/auth/logout', { method:'POST' });
-  window.location.href = '/login';
+  window.location.href = versEspace ? '/espace' : '/login';
 }
 
 function toast(msg,icon='ti-check',color=''){
@@ -201,7 +202,21 @@ function appliquerNavRole(){
     ${CURRENT_USER.pays?`<span style="font-size:12px;padding:2px 7px;border-radius:10px;background:var(--accent-soft,rgba(59,130,246,.12));color:var(--accent);font-weight:600">${esc(CURRENT_USER.pays)}</span>`:''}
     <div id="pays-switcher" style="display:flex"></div>
     <button class="btn sm" onclick="seDeconnecter()" title="${TR("Se déconnecter")}" style="padding:4px 8px"><i class="ti ti-logout"></i></button>`;
+  // Espace distributeur : interface réduite aux éclatés (pas d'alertes, ni de journal)
+  if(CURRENT_USER.role==='distributeur'){
+    ['btn-alertes','btn-logs'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+    const lg=document.querySelector('.sidebar .logo, .sidebar-logo, .logo'); if(lg && !lg.dataset.esp){ lg.dataset.esp='1'; lg.insertAdjacentHTML('beforeend','<div style="font-size:11px;font-weight:600;color:var(--text3);margin-top:2px">Espace distributeur</div>'); }
+  }
 }
+const estDistributeur = () => !!(CURRENT_USER && CURRENT_USER.role==='distributeur');
+window.estDistributeur = estDistributeur;
+async function inviterEspaceDistributeur(id, email){
+  const dest = prompt(TR('Envoyer le lien d’accès à l’espace distributeur (éclatés + bon de commande de pièces) à :'), email||'');
+  if(!dest) return;
+  try{ const r = await API.post(`/espace/inviter/${id}`, { email: dest.trim() }); toast(TR('Invitation envoyée à ')+r.email,'ti-mail-check','var(--success)'); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.inviterEspaceDistributeur = inviterEspaceDistributeur;
 
 function setView(v, extra={}){
   if(!hasAccess(v)) return;
@@ -757,6 +772,7 @@ function ficheDistributeurBloc(cl){
     <div style="margin-top:10px;display:flex;gap:6px">
       <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
       <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>${TR('Fusionner')}</button>
+      ${cl.email?`<button class="btn sm" onclick="inviterEspaceDistributeur(${cl.id},'${esc(String(cl.email).split(/[,;\s]+/)[0]).replace(/'/g,'&#39;')}')" title="${TR('Envoyer au distributeur son lien d’accès à l’espace distributeur (éclatés + bon de commande de pièces)')}"><i class="ti ti-building-store"></i>${TR('Inviter à l’espace distributeur')}</button>`:''}
     </div>
   </div>`;
 }
@@ -6073,6 +6089,7 @@ applyNavTranslations();
     const premier=[...document.querySelectorAll('.nav-item[data-view]')].find(n=>hasAccess(n.dataset.view));
     if(premier){ STATE.view=premier.dataset.view; document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===STATE.view)); }
   }
+  if(estDistributeur()){ render(); return; }   // espace distributeur : rien d'autre à charger
   loadVfStatus();
   refreshBadges();
   setInterval(refreshBadges, 60000);
@@ -8792,16 +8809,18 @@ async function renderPrets(ttl,c,a){
     const bdc = bdcNum
       ? `<span class="mono" style="cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px" title="${TR('Ouvrir le bon de commande dans Pennylane')}" onclick="ouvrirPennylaneParNumero('${esc(bdcNum).replace(/'/g,'&#39;')}','bdc')">${esc(bdcNum)}</span>`
       : '<span style="color:var(--text3)">—</span>';
+    const L = k => `data-l="${esc(TR(k))}"`;
+    const relance = pretARelancer(p) ? `<button class="btn sm" style="color:#E1442E;border-color:#E1442E66;font-weight:600" title="${TR('Offre de prêt toujours pas signée : relancer le distributeur')}${p.nb_relances?' — '+p.nb_relances+' '+TR('relance(s)')+(p.derniere_relance?', '+TR('dernière le')+' '+fdate(p.derniere_relance):''):''}" onclick="relancerPret(${p.id})"><i class="ti ti-bell-ringing"></i>${TR('Relancer')}${p.nb_relances?` (${p.nb_relances})`:''}</button>` : '';
     return `<tr>
-      <td>${nom}</td>
-      <td style="white-space:nowrap">${bdc}</td>
-      <td>${mat}</td>
-      <td class="mono" style="white-space:nowrap">${serie}</td>
-      <td style="font-size:13px">${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
-      <td style="white-space:nowrap">${fdate(p.date_remise)}</td>
-      <td style="white-space:nowrap">${fdate(p.date_retour_prevue)}</td>
-      <td style="white-space:nowrap">${pretStatutIcons(p)}${sign}${pretARelancer(p) ? `<button class="btn sm" style="margin-left:8px;color:#E1442E;border-color:#E1442E66;font-weight:600" title="${TR('Offre de prêt toujours pas signée : relancer le distributeur')}${p.nb_relances?' — '+p.nb_relances+' '+TR('relance(s)')+(p.derniere_relance?', '+TR('dernière le')+' '+fdate(p.derniere_relance):''):''}" onclick="relancerPret(${p.id})"><i class="ti ti-bell-ringing"></i>${TR('Relancer')}${p.nb_relances?` (${p.nb_relances})`:''}</button>` : ''}</td>
-      <td style="text-align:right;white-space:nowrap">
+      <td class="p-dist" ${L('Distributeur')}>${nom}</td>
+      <td class="p-bdc" ${L('N° BDC')}>${bdc}</td>
+      <td class="p-mat" ${L('Matériel')} title="${mat}"><div class="p-mat-txt">${mat}</div></td>
+      <td class="p-serie mono" ${L('N° de série')}>${serie}</td>
+      <td class="p-form" ${L('Formule')}>${esc(PRET_FORMULES[p.formule]||p.formule||'—')}</td>
+      <td class="p-rem" ${L('Remise')}>${fdate(p.date_remise)}</td>
+      <td class="p-ret" ${L('Retour prévu')}>${fdate(p.date_retour_prevue)}</td>
+      <td class="p-stat" ${L('Statut')}><div class="p-statw"><span style="white-space:nowrap">${pretStatutIcons(p)}${sign}</span>${relance}</div></td>
+      <td class="p-act"><div class="p-btns">
         <button class="btn sm" title="Aperçu" onclick="apercuPret(${p.id})"><i class="ti ti-eye"></i></button>
         <button class="btn sm" title="PDF" onclick="exportPretPDF(${p.id})"><i class="ti ti-file-type-pdf"></i></button>
         ${p.nb_docs?`<button class="btn sm" title="${TR('Document(s) signé(s) reçu(s)')}" onclick="modalDocsSignes('pret',${p.id},'${esc(String(p.distributeur_nom||'')).replace(/'/g,'&#39;')}')" style="color:#16a34a"><i class="ti ti-paperclip"></i>${p.nb_docs>1?p.nb_docs:''}</button>`:''}
@@ -8809,16 +8828,53 @@ async function renderPrets(ttl,c,a){
         <button class="btn sm" title="Envoyer le lien de signature" onclick="envoyerPretLien(${p.id})"><i class="ti ti-mail"></i></button>
         <button class="btn sm" title="Modifier" onclick="modalPret(${p.id})"><i class="ti ti-pencil"></i></button>
         <button class="btn sm danger" title="Supprimer" onclick="supprPret(${p.id})"><i class="ti ti-trash"></i></button>
+      </div>
       </td></tr>`;
   }).join('');
-  c.innerHTML = `<style>#prets-tbl th,#prets-tbl td{padding:13px 18px;vertical-align:middle}#prets-tbl tbody tr{border-top:0.5px solid var(--border-s,#e8eaed)}#prets-tbl tbody tr:hover{background:var(--surface-2,rgba(0,0,0,.02))}</style>
+  // Mise en page adaptative : tableau sur une ligne au-delà de 1280 px de large ; en dessous, chaque prêt
+  // tient sur 2 lignes (identité / matériel, puis formule / dates / statut / actions) — plus rien ne sort du cadre.
+  c.innerHTML = `<style>
+      #prets-tbl{width:100%;border-collapse:collapse}
+      #prets-tbl th,#prets-tbl td{padding:11px 12px;vertical-align:middle}
+      #prets-tbl tbody tr{border-top:0.5px solid var(--border-s,#e8eaed)}
+      #prets-tbl tbody tr:hover{background:var(--surface-2,rgba(0,0,0,.02))}
+      #prets-tbl .p-bdc,#prets-tbl .p-rem,#prets-tbl .p-ret,#prets-tbl .p-serie{white-space:nowrap}
+      #prets-tbl .p-form{font-size:13px;min-width:105px}
+      #prets-tbl .p-mat{min-width:170px;max-width:320px;line-height:1.35}
+      #prets-tbl .p-mat-txt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+      #prets-tbl .p-statw{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+      #prets-tbl .p-btns{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;width:146px;margin-left:auto}
+        #prets-tbl.p-2l,#prets-tbl.p-2l tbody{display:block}
+        #prets-tbl.p-2l thead{display:none}
+        #prets-tbl.p-2l tbody tr{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));column-gap:14px;row-gap:10px;padding:12px 16px;
+          grid-template-areas:"dist dist dist bdc bdc mat mat mat mat serie serie serie" "form form rem rem ret ret stat stat stat stat act act"}
+        #prets-tbl.p-2l tbody td{display:block;padding:0;border:0;min-width:0;max-width:none;white-space:normal;overflow-wrap:anywhere}
+        #prets-tbl.p-2l tbody td[data-l]::before{content:attr(data-l);display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);font-weight:600;margin-bottom:2px}
+        #prets-tbl.p-2l .p-dist{grid-area:dist;font-weight:600} #prets-tbl.p-2l .p-bdc{grid-area:bdc} #prets-tbl.p-2l .p-mat{grid-area:mat}
+        #prets-tbl.p-2l .p-serie{grid-area:serie;white-space:normal;word-break:break-all} #prets-tbl.p-2l .p-form{grid-area:form}
+        #prets-tbl.p-2l .p-rem{grid-area:rem} #prets-tbl.p-2l .p-ret{grid-area:ret} #prets-tbl.p-2l .p-stat{grid-area:stat}
+        #prets-tbl.p-2l .p-act{grid-area:act;align-self:end} #prets-tbl.p-2l .p-btns{width:auto}
+        #prets-tbl.p-2l .p-mat-txt{-webkit-line-clamp:3}
+      
+      @media (max-width:860px){
+        #prets-tbl.p-2l tbody tr{grid-template-areas:"dist dist dist dist dist dist dist bdc bdc bdc bdc bdc" "mat mat mat mat mat mat mat serie serie serie serie serie" "form form form form rem rem rem rem ret ret ret ret" "stat stat stat stat stat stat stat act act act act act"}
+      }
+    </style>
     <div class="card" style="padding:0;overflow:auto">
     <table class="table" id="prets-tbl"><thead><tr>
       <th>${TR('Distributeur')}</th><th>${TR('N° BDC')}</th><th>${TR('Matériel')}</th><th>${TR('N° de série')}</th><th>${TR('Formule')}</th>
       <th>${TR('Remise')}</th><th>${TR('Retour prévu')}</th><th>${TR('Statut')}</th><th></th>
     </tr></thead><tbody>${lignes}</tbody></table></div>`;
+  pretsAdapterLargeur();
 }
 window.renderPrets = renderPrets;
+// 2 lignes par prêt si l'écran fait moins de 1280 px de large, ou si le tableau dépasse du cadre
+function pretsAdapterLargeur(){
+  const t = document.getElementById('prets-tbl'); if(!t) return;
+  t.classList.remove('p-2l');
+  if(window.innerWidth < 1280 || t.scrollWidth > t.parentElement.clientWidth + 2) t.classList.add('p-2l');
+}
+window.addEventListener('resize', ()=>{ clearTimeout(window._pretsRz); window._pretsRz = setTimeout(()=>{ if(STATE.view==='prets') pretsAdapterLargeur(); }, 150); });
 
 async function modalPret(id, prefillClientId){
   await ensureClientsCache();

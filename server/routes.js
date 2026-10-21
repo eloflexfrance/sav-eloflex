@@ -70,11 +70,15 @@ router.post('/auth/setup', async (req, res) => {
 // ── Middleware d'authentification ──────────────────────────────────
 // Routes publiques protégées par jeton (signature en ligne côté client/distributeur,
 // qui n'est PAS connecté) : elles gèrent elles-mêmes leur token_signature.
-const PUBLIC_TOKEN_PREFIXES = ['/devis-public/', '/pret-public/', '/contrat-public/'];
+const PUBLIC_TOKEN_PREFIXES = ['/devis-public/', '/pret-public/', '/contrat-public/', '/espace/lien'];
 router.use((req, res, next) => {
   if (PUBLIC_TOKEN_PREFIXES.some(p => req.path.startsWith(p))) return next();
   if (!req.session?.user) return res.status(401).json({ error: 'Non authentifié', redirect: '/login' });
   res.locals.user = req.session.user;
+  // Session « distributeur » (espace distributeurs) : uniquement les éclatés et le bon de commande
+  if (req.session.user.role === 'distributeur' && !require('./espace-distributeurs').routeAutoriseeDistributeur(req.method, req.path)) {
+    return res.status(403).json({ error: 'Accès réservé à l’équipe Eloflex' });
+  }
   next();
 });
 
@@ -1125,7 +1129,7 @@ router.get('/expeditions', async (req, res) => {
 // sauf si une désignation manuelle (desc_fr) a été saisie.
 const _ECL_NORM = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const _ECL_CAT_JOIN = `LEFT JOIN LATERAL (
-    SELECT c.id, c.designation, c.stock, c.stock_alerte, c.pxht, c.prix_public_ttc, c.stock_actif
+    SELECT c.id, c.designation, c.stock, c.stock_alerte, c.pxht, c.prix_public_ttc, c.stock_actif, c.tva_distributeur
     FROM catalogue c
     WHERE regexp_replace(UPPER(c.ref),'[^A-Z0-9]','','g') = regexp_replace(UPPER(COALESCE(l.ref,'')),'[^A-Z0-9]','','g')
       AND COALESCE(l.ref,'') <> ''
@@ -1162,13 +1166,17 @@ router.get('/eclates/:id', async (req, res) => {
       FROM eclates_vues v WHERE v.modele_id=$1 ORDER BY v.ordre, v.id`, [m.id]);
     const lignes = await db.all(`SELECT l.id, l.vue_id, l.ordre, l.pos, l.ref, l.desc_en, l.desc_fr, l.desc_fr_auto, l.qty, l.note, l.cable,
         l.modifie_par, l.updated_at, cat.id AS cat_id, cat.designation AS cat_designation, cat.stock AS cat_stock,
-        cat.stock_alerte AS cat_stock_alerte, cat.pxht AS cat_prix_distrib, cat.prix_public_ttc AS cat_prix_public
+        cat.stock_alerte AS cat_stock_alerte, cat.pxht AS cat_prix_distrib, cat.prix_public_ttc AS cat_prix_public,
+        cat.tva_distributeur AS cat_tva
       FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id ${_ECL_CAT_JOIN}
       WHERE v.modele_id=$1 ORDER BY l.vue_id, l.cable, l.ordre, l.id`, [m.id]);
     const pages = (await db.all('SELECT page FROM eclates_pages WHERE modele_id=$1 ORDER BY page', [m.id])).map(p => p.page);
     // Compte sans accès au catalogue (ex. accès « éclatés uniquement ») : ni stock ni prix
     const u = res.locals.user || {};
-    if (u.role !== 'admin' && u.role !== 'operateur' && !(u.permissions && ['read', 'write'].includes(u.permissions.catalogue))) {
+    if (u.role === 'distributeur') {
+      // Distributeur connecté : prix distributeur HT visibles (bon de commande), mais ni stock, ni prix public, ni fiche article interne
+      lignes.forEach(l => { l.cat_stock = null; l.cat_stock_alerte = null; l.cat_prix_public = null; l.cat_fiche_masquee = true; });
+    } else if (u.role !== 'admin' && u.role !== 'operateur' && !(u.permissions && ['read', 'write'].includes(u.permissions.catalogue))) {
       lignes.forEach(l => { l.cat_stock = null; l.cat_stock_alerte = null; l.cat_prix_distrib = null; l.cat_prix_public = null; l.cat_masque = true; });
     }
     res.json({ ...m, pages, vues, lignes });
@@ -9430,6 +9438,13 @@ router.get('/demandes-info/distributeurs', requireAuth, async (req, res) => {
 
 // ── « Test suivi commandes » : vue tableur (lecture ; écritures via /commandes) ──
 require('./commandes-tableur')(router, { db, statutCommande });
+
+// ── Espace distributeurs : lien magique, bon de commande de pièces depuis les éclatés ──
+require('./espace-distributeurs').monterApi(router, {
+  db, sendBrevoMail, addAlerte, requireAuth, mailCharte: _mailCharte, mailRecap: _mailRecap,
+  signatureSav: () => SIGNATURE_EMAIL_HTML.replace('Service Commercial', 'Service Après-Vente')
+    .replace(/info@eloflex\.fr/g, 'sav@eloflex.fr').replace('06&nbsp;87&nbsp;04&nbsp;69&nbsp;19', '07&nbsp;54&nbsp;37&nbsp;47&nbsp;40'),
+});
 
 // ── Retours démo (compte rendu de réception des fauteuils de démonstration) ──
 require('./retours-demo')(router, {

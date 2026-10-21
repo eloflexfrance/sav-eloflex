@@ -902,6 +902,7 @@ async function initDB() {
       ['email_smtp_pass',''],
       ['email_from',''],
       // Retours démo : forfaits HT et destinataires par défaut du compte rendu
+      ['espace_distributeurs_actif','1'],
       ['retour_demo_forfait_retour','50'],
       ['retour_demo_forfait_carton','90'],
       ['retour_demo_nettoyage_base','0'],

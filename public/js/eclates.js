@@ -108,6 +108,17 @@ function elsewhere(ref, vid){
 }
 
 // ── CSS ─────────────────────────────────────────────────────────────
+function cssPanier(){
+  if (document.getElementById('ecl-panier-css')) return;
+  const st = document.createElement('style'); st.id = 'ecl-panier-css';
+  st.textContent = `.ecl-cmd{margin-top:5px;border:1px solid #1F5C8C55;background:#1F5C8C10;color:#1F5C8C;border-radius:6px;padding:3px 8px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+    .ecl-cmd:hover{background:#1F5C8C;color:#fff}
+    .ecl-pan-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:9px;background:#E1442E;color:#fff;font-size:11px;font-weight:700;padding:0 5px;margin-left:4px}
+    #ecl-pan-tbl{width:100%;border-collapse:collapse;font-size:13px}
+    #ecl-pan-tbl th{text-align:left;font-size:11px;text-transform:uppercase;color:var(--text3);padding:6px;border-bottom:1px solid var(--border)}
+    #ecl-pan-tbl td{padding:6px;border-bottom:1px solid var(--border);vertical-align:middle}`;
+  document.head.appendChild(st);
+}
 function css(){
   if ($('ecl-css')) return;
   const s = document.createElement('style'); s.id = 'ecl-css';
@@ -253,7 +264,8 @@ async function renderListe(ttl, c, a){
   const admin = typeof isAdmin === 'function' && isAdmin();
   a.innerHTML = `<div style="display:flex;gap:8px;align-items:center">
     <div style="position:relative"><input id="ecl-gsearch" class="search-bar" placeholder="${TR('Référence (tous modèles)…')}" style="max-width:260px"><div class="ecl-res" id="ecl-gres"></div></div>
-    ${SITE_SE() ? '' : `<button class="btn" id="ecl-mail-tous" title="${TR('Envoyer par e-mail tous les éclatés en PDF')}"><i class="ti ti-mail-forward"></i> ${TR('Envoyer des éclatés par e-mail')}</button>`}
+    ${peutCommander() ? boutonPanier() : ''}
+    ${SITE_SE() || estDistrib() ? '' : `<button class="btn" id="ecl-mail-tous" title="${TR('Envoyer par e-mail tous les éclatés en PDF')}"><i class="ti ti-mail-forward"></i> ${TR('Envoyer des éclatés par e-mail')}</button>`}
     ${admin ? `<label class="btn primary" style="cursor:pointer"><i class="ti ti-upload"></i> ${TR('Importer des éclatés')}<input type="file" id="ecl-import" accept=".json,application/json" multiple style="display:none"></label>` : ''}
   </div>`;
   const list = await API.get('/eclates');
@@ -356,6 +368,7 @@ function renderViewer(ttl, c, a){
     <button class="btn" id="ecl-back"><i class="ti ti-arrow-left"></i> ${T('back')}</button>
     <div style="position:relative"><input id="ecl-q" class="search-bar" placeholder="${T('search')}" autocomplete="off" style="width:260px"><div class="ecl-res" id="ecl-res"></div></div>
     <div class="ecl-seg"><button data-lg="fr" class="${L()==='fr'?'on':''}">FR</button><button data-lg="en" class="${L()==='en'?'on':''}">EN</button><button data-lg="sv" class="${L()==='sv'?'on':''}">SV</button></div>
+    ${peutCommander() ? boutonPanier() : ''}
     <button class="btn primary" id="ecl-pdf"><i class="ti ti-file-type-pdf"></i> ${({fr:'Télécharger PDF',en:'Download PDF',sv:'Ladda ner PDF'})[L()]}</button>
     ${lienM(d,'lien_web') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_web'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_web'))}"><i class="ti ti-world"></i> ${({fr:'Site web',en:'Website',sv:'Webbplats'})[L()]}</a>` : ''}
     ${lienM(d,'lien_notice') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_notice'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_notice'))}"><i class="ti ti-book"></i> ${({fr:'Notice',en:'User manual',sv:'Bruksanvisning'})[L()]}</a>` : ''}
@@ -478,7 +491,7 @@ function items(num){ return cur().items.filter(i => i.nums.includes(num)); }
 function keyNums(key){ const its = cur().items.filter(i => i.pos === key); return its.length ? [...new Set(its.flatMap(i => i.nums))] : [key]; }
 
 function stockBadge(it){
-  if (!it.cat_id || L() !== 'fr' || it.cat_masque) return '';
+  if (!it.cat_id || L() !== 'fr' || it.cat_masque || it.cat_stock == null) return '';
   const s = +it.cat_stock || 0, al = +it.cat_stock_alerte || 0;
   return `<span class="ecl-stock ${s <= 0 ? 'zero' : (s <= al ? 'bas' : '')}">${T('stock')} ${s}</span>`;
 }
@@ -495,16 +508,16 @@ function list(){
       <div class="ecl-pos ${isCable || !has ? 'none' : ''} ${String(it.pos || '').length > 3 ? 'multi' : ''}">${isCable ? '–' : e_(it.pos)}</div>
       <div><div class="ecl-nm">${e_(label(it))}</div>${(L() === 'fr' || L() === 'sv') && label(it) !== it.desc_en && it.desc_en ? `<div class="ecl-en">${e_(it.desc_en)}</div>` : ''}
         <div class="ecl-ref">${e_(it.ref || '')}${it.ref ? ` <button data-copy="${e_(it.ref)}">${T('copy')}</button>` : ''}
-          ${it.cat_id && !it.cat_masque ? `<button data-fiche="${it.cat_id}">${T('fiche')}</button>` : ''}
+          ${it.cat_id && !it.cat_masque && !it.cat_fiche_masquee ? `<button data-fiche="${it.cat_id}">${T('fiche')}</button>` : ''}
           <button class="ecl-pen" data-edit="${it.id}" title="${T('edit')}"><i class="ti ti-pencil"></i></button></div>
         ${sub && sub.id !== v.id ? `<span class="ecl-tag" data-go="${sub.id}">${T('detail')}</span>` : ''}
         ${oth.map(o => `<span class="ecl-tag" data-go="${o.v.id}" data-pos="${e_(o.pos)}">${e_(T('posOn')(o.pos, vname(o.v)))}</span>`).join('')}
         ${!isCable && !has && !oth.length ? `<span class="ecl-tag warn">${T('notMarked')}</span>` : ''}
         ${it.dup === 'dup' ? `<span class="ecl-tag warn">${T('dup')}</span>` : ''}
-        ${it.horscat && L() === 'fr' && !it.cat_masque ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
+        ${it.horscat && L() === 'fr' && !it.cat_masque && !it.cat_fiche_masquee ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
         ${it.note ? `<span class="ecl-tag warn">${T('sold')}</span>` : ''}
       </div>
-      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}</div>
+      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TR('Ajouter au bon de commande')}"><i class="ti ti-shopping-cart-plus"></i> ${TR('Commander')}</button>` : ''}</div>
     </div>`;
   };
   v.items.forEach(it => h += row(it, false));
@@ -522,6 +535,11 @@ function list(){
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = ev => { ev.stopPropagation(); editerLigne(+b.dataset.edit); });
   el.querySelectorAll('[data-creer]').forEach(b => b.onclick = ev => { ev.stopPropagation(); creerArticle(+b.dataset.creer); });
   if ($('ecl-addl')) $('ecl-addl').onclick = () => editerLigne(null);
+  el.querySelectorAll('[data-cmd]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    const it = v.items.concat(v.extras).find(x => x.id === +b.dataset.cmd); if (!it) return;
+    panierAjouter(it); b.innerHTML = '<i class="ti ti-check"></i> ' + TR('Ajouté'); setTimeout(() => { b.innerHTML = '<i class="ti ti-shopping-cart-plus"></i> ' + TR('Commander'); }, 1300);
+  });
 }
 
 function hot(key, on){
@@ -927,4 +945,154 @@ async function exporterPDF(lang, vues, prog, opts){
   if (opts.base64) return { nom: nomFic, data: pdf.output('datauristring').split(',')[1] };
   pdf.save(nomFic);
 }
+
+// ══════════════════════════════════════════════════════════════════
+// Bon de commande de pièces détachées (espace distributeur + équipe)
+// ══════════════════════════════════════════════════════════════════
+const estDistrib = () => typeof window.estDistributeur === 'function' && window.estDistributeur();
+function peutCommander(){
+  if (estDistrib()) return true;
+  if (typeof isAdmin === 'function' && isAdmin()) return true;
+  return typeof canWrite === 'function' && (canWrite('catalogue') || canWrite('commandes'));
+}
+const CLE_PANIER = () => 'ecl_panier_' + ((typeof CURRENT_USER !== 'undefined' && CURRENT_USER && (CURRENT_USER.distributeur ? 'd' + CURRENT_USER.distributeur.client_id : 'u' + CURRENT_USER.id)) || 'x');
+function panierLire(){ try { return JSON.parse(localStorage.getItem(CLE_PANIER()) || '[]') || []; } catch (_) { return E._panier || []; } }
+function panierEcrire(p){ E._panier = p; try { localStorage.setItem(CLE_PANIER(), JSON.stringify(p)); } catch (_) {} majBadgePanier(); }
+function panierNb(){ return panierLire().reduce((s, l) => s + (parseInt(l.qte) || 0), 0); }
+function boutonPanier(){ cssPanier(); const n = panierNb(); return `<button class="btn" id="ecl-panier" onclick="ouvrirPanier()" title="${TR('Bon de commande de pièces détachées')}"><i class="ti ti-shopping-cart"></i> ${TR('Bon de commande')}<span class="ecl-pan-badge" id="ecl-pan-n" style="${n ? '' : 'display:none'}">${n}</span></button>`; }
+function majBadgePanier(){ const b = $('ecl-pan-n'); if (!b) return; const n = panierNb(); b.textContent = n; b.style.display = n ? '' : 'none'; }
+function panierAjouter(it){
+  const p = panierLire();
+  const cle = normRef(it.ref) || ('L' + it.id);
+  const ex = p.find(l => l.cle === cle);
+  if (ex) ex.qte = (parseInt(ex.qte) || 1) + 1;
+  else p.push({ cle, ref: it.ref || '', designation: it.cat_designation || it.fr || it.desc_en || '', modele: E.data ? E.data.nom : '',
+    qte: 1, pu: (it.cat_id && it.cat_prix_distrib != null && !it.cat_masque) ? +it.cat_prix_distrib : null, tva: it.cat_tva != null ? +it.cat_tva : null });
+  panierEcrire(p);
+  if (typeof toast === 'function') toast((it.ref ? it.ref + ' — ' : '') + TR('ajouté au bon de commande'), 'ti-shopping-cart-plus');
+}
+const eurF = v => (Math.round((+v || 0) * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+function totaux(p){
+  let ht = 0, tva = 0, surDevis = 0;
+  p.forEach(l => { if (l.pu == null) { surDevis++; return; } const t = l.pu * (parseInt(l.qte) || 1); ht += t; tva += t * ((l.tva != null ? l.tva : 20) / 100); });
+  return { ht, tva, ttc: ht + tva, surDevis };
+}
+async function ouvrirPanier(){
+  const p = panierLire();
+  let moi = {}; try { moi = await API.get('/espace/moi'); } catch (_) {}
+  const c = moi.client || {};
+  const adr = [c.nom, c.adresse, c.adresse2, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join('\n');
+  E._moi = moi;
+  showModal(`<div class="modal-header"><i class="ti ti-shopping-cart" style="color:var(--accent)"></i><h2>${TR('Bon de commande — pièces détachées')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      ${p.length ? '' : `<div class="empty" style="padding:20px"><i class="ti ti-shopping-cart"></i>${TR('Votre bon de commande est vide : ouvrez un éclaté et cliquez sur « Commander » à côté des pièces souhaitées.')}</div>`}
+      <div id="ecl-pan-lignes"></div>
+      ${p.length ? `<div class="grid-2" style="margin-top:14px">
+        ${moi.interne ? `<div class="form-group"><label class="form-label">${TR('Distributeur')}</label><input class="form-input" id="pan-distrib" placeholder="${TR('Nom du distributeur')}"></div>` : ''}
+        <div class="form-group"><label class="form-label">${TR('Votre référence de commande')}</label><input class="form-input" id="pan-ref" placeholder="${TR('ex. n° de dossier patient, n° interne…')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Adresse de livraison')}</label><textarea class="form-input" id="pan-adr" rows="3">${e_(adr)}</textarea></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Commentaire')}</label><textarea class="form-input" id="pan-com" rows="2" placeholder="${TR('Précisions, urgence, n° de série du fauteuil…')}"></textarea></div>
+      </div>
+      <div style="font-size:12px;color:var(--text3)">${TR('Tarifs distributeur HT en vigueur. Frais de port selon vos conditions commerciales. La commande est confirmée après validation par Eloflex.')}</div>` : ''}
+    </div>
+    <div class="modal-footer" style="flex-wrap:wrap">
+      ${p.length ? `<button class="btn danger" style="margin-right:auto" onclick="viderPanier()"><i class="ti ti-trash"></i>${TR('Vider')}</button>` : ''}
+      <button class="btn" onclick="closeModal()">${TR('Continuer mes recherches')}</button>
+      ${p.length ? `<button class="btn" onclick="bonCommandePDF(false)"><i class="ti ti-file-type-pdf"></i>${TR('Télécharger le PDF')}</button>` : ''}
+      ${p.length && estDistrib() ? `<button class="btn primary" id="pan-envoyer" onclick="bonCommandePDF(true)"><i class="ti ti-send"></i>${TR('Valider et envoyer à Eloflex')}</button>` : ''}
+    </div>`);
+  const m = document.querySelector('#modal-area .modal'); if (m) m.style.maxWidth = '900px';
+  dessinerLignesPanier();
+}
+function dessinerLignesPanier(){
+  const box = $('ecl-pan-lignes'); if (!box) return;
+  const p = panierLire(); if (!p.length) { box.innerHTML = ''; return; }
+  const t = totaux(p);
+  box.innerHTML = `<div class="table-wrap"><table id="ecl-pan-tbl"><thead><tr><th>${TR('Référence')}</th><th>${TR('Désignation')}</th><th style="width:78px">${TR('Qté')}</th><th style="text-align:right">${TR('PU HT')}</th><th style="text-align:right">${TR('Total HT')}</th><th></th></tr></thead><tbody>
+    ${p.map((l, i) => `<tr><td class="mono" style="white-space:nowrap">${e_(l.ref || '—')}</td><td>${e_(l.designation)}${l.modele ? `<div style="font-size:11px;color:var(--text3)">${e_(l.modele)}</div>` : ''}</td>
+      <td><input class="form-input" type="number" min="1" max="999" value="${parseInt(l.qte) || 1}" style="padding:4px 6px" onchange="panierQte(${i}, this.value)"></td>
+      <td style="text-align:right;white-space:nowrap">${l.pu != null ? eurF(l.pu) : '<span style="color:var(--text3)">' + TR('sur devis') + '</span>'}</td>
+      <td style="text-align:right;white-space:nowrap;font-weight:600">${l.pu != null ? eurF(l.pu * (parseInt(l.qte) || 1)) : '—'}</td>
+      <td><button class="btn sm" title="${TR('Retirer')}" onclick="panierRetirer(${i})"><i class="ti ti-x"></i></button></td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:8px"><table style="font-size:13.5px">
+      <tr><td style="padding:2px 14px;color:var(--text2)">${TR('Total HT')}</td><td style="text-align:right;font-weight:700">${eurF(t.ht)}</td></tr>
+      <tr><td style="padding:2px 14px;color:var(--text2)">${TR('TVA')}</td><td style="text-align:right">${eurF(t.tva)}</td></tr>
+      <tr><td style="padding:2px 14px;color:var(--text2)">${TR('Total TTC')}</td><td style="text-align:right;font-weight:700">${eurF(t.ttc)}</td></tr>
+      ${t.surDevis ? `<tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:#b45309">${t.surDevis} ${TR('pièce(s) hors tarif : prix communiqué par Eloflex')}</td></tr>` : ''}
+    </table></div>`;
+}
+function panierQte(i, v){ const p = panierLire(); if (!p[i]) return; p[i].qte = Math.max(1, Math.min(999, parseInt(v) || 1)); panierEcrire(p); dessinerLignesPanier(); }
+function panierRetirer(i){ const p = panierLire(); p.splice(i, 1); panierEcrire(p); if (!p.length) ouvrirPanier(); else dessinerLignesPanier(); }
+function viderPanier(){ if (!confirm(TR('Vider le bon de commande ?'))) return; panierEcrire([]); ouvrirPanier(); }
+
+async function bonCommandePDF(envoyer){
+  const p = panierLire(); if (!p.length) return;
+  const moi = E._moi || {}, c = moi.client || {};
+  const ref = ($('pan-ref') || {}).value || '', adr = ($('pan-adr') || {}).value || '', com = ($('pan-com') || {}).value || '';
+  const distrib = moi.interne ? (($('pan-distrib') || {}).value || '') : (c.nom || '');
+  const now = new Date(), pad = n => String(n).padStart(2, '0');
+  const numero = `BC-WEB-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const { jsPDF } = window.jspdf; const doc = new jsPDF();
+  const L0 = 15, R0 = 195, W0 = R0 - L0, BLEU = [31, 92, 140];
+  let y = 18;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...BLEU); doc.text('BON DE COMMANDE', L0, y);
+  doc.setFontSize(10.5); doc.text('Pièces détachées Eloflex', L0, y + 6);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 60, 60);
+  doc.text(['ELOFLEX France', '41 rue des Maraichers — 17140 LAGORD', 'sav@eloflex.fr — 09 67 66 51 29'], R0, y - 4, { align: 'right' });
+  y += 14; doc.setDrawColor(...BLEU); doc.setLineWidth(0.5); doc.line(L0, y, R0, y); y += 7;
+  doc.setTextColor(0, 0, 0); doc.setFontSize(9.5);
+  const bloc = (x, titre, lignes) => { doc.setFont('helvetica', 'bold'); doc.text(titre, x, y); doc.setFont('helvetica', 'normal'); let yy = y + 5; lignes.filter(Boolean).forEach(t => { doc.splitTextToSize(String(t), 85).forEach(s => { doc.text(s, x, yy); yy += 4.5; }); }); return yy; };
+  const y1 = bloc(L0, 'Commande', [`N° : ${numero}`, `Date : ${now.toLocaleDateString('fr-FR')}`, ref ? `Votre référence : ${ref}` : null]);
+  const y2 = bloc(110, 'Distributeur', [distrib, moi.email || c.email ? 'E-mail : ' + (moi.email || String(c.email || '').split(/[,;\s]+/)[0]) : null, (c.tel || c.portable) ? 'Tél. : ' + (c.tel || c.portable) : null]);
+  y = Math.max(y1, y2) + 3;
+  if (adr.trim()) { const ya = bloc(L0, 'Adresse de livraison', adr.split('\n')); y = ya + 3; }
+  // Tableau
+  const X = { ref: L0, des: L0 + 32, qte: L0 + 120, pu: L0 + 147, tot: R0 };
+  const entete = () => { doc.setFillColor(...BLEU); doc.rect(L0, y - 4.5, W0, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+    doc.text('Référence', X.ref + 1.5, y); doc.text('Désignation', X.des, y); doc.text('Qté', X.qte, y, { align: 'right' }); doc.text('PU HT', X.pu, y, { align: 'right' }); doc.text('Total HT', X.tot - 1.5, y, { align: 'right' });
+    doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'normal'); y += 7; };
+  entete();
+  p.forEach((l, i) => {
+    const des = doc.splitTextToSize(String(l.designation || '') + (l.modele ? ` (${l.modele})` : ''), 78);
+    const h = Math.max(1, des.length) * 4.2 + 2.5;
+    if (y + h > 265) { doc.addPage(); y = 20; entete(); }
+    if (i % 2) { doc.setFillColor(245, 247, 250); doc.rect(L0, y - 4, W0, h, 'F'); }
+    doc.setFontSize(8.5);
+    doc.text(String(l.ref || '—'), X.ref + 1.5, y); doc.text(des, X.des, y);
+    doc.text(String(parseInt(l.qte) || 1), X.qte, y, { align: 'right' });
+    doc.text(l.pu != null ? eurF(l.pu).replace(/ | /g, ' ') : 'sur devis', X.pu, y, { align: 'right' });
+    doc.text(l.pu != null ? eurF(l.pu * (parseInt(l.qte) || 1)).replace(/ | /g, ' ') : '—', X.tot - 1.5, y, { align: 'right' });
+    y += h;
+  });
+  const t = totaux(p);
+  if (y + 30 > 280) { doc.addPage(); y = 20; }
+  y += 3; doc.setDrawColor(200, 200, 200); doc.line(L0 + 100, y - 3, R0, y - 3);
+  const lt = (k, v, b) => { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.setFontSize(b ? 10.5 : 9.5); doc.text(k, L0 + 140, y, { align: 'right' }); doc.text(v.replace(/ | /g, ' '), R0 - 1.5, y, { align: 'right' }); y += 5.5; };
+  lt('Total HT', eurF(t.ht), true); lt('TVA', eurF(t.tva)); lt('Total TTC', eurF(t.ttc), true);
+  if (t.surDevis) { doc.setFontSize(8.5); doc.setTextColor(180, 83, 9); doc.text(`${t.surDevis} pièce(s) hors tarif : prix communiqué par Eloflex à la confirmation.`, L0, y); doc.setTextColor(0, 0, 0); y += 6; }
+  if (com.trim()) { y += 2; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('Commentaire', L0, y); y += 5; doc.setFont('helvetica', 'normal'); doc.splitTextToSize(com, W0).forEach(s => { if (y > 280) { doc.addPage(); y = 20; } doc.text(s, L0, y); y += 4.5; }); }
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(130, 130, 130);
+    doc.text('Tarifs distributeur HT en vigueur — frais de port selon conditions commerciales — commande confirmée après validation par Eloflex.', L0, 289);
+    doc.text(`${numero} — page ${i}/${n}`, R0, 293, { align: 'right' }); }
+  const nomFic = `Bon_de_commande_${numero}.pdf`;
+  if (!envoyer) { doc.save(nomFic); return; }
+  const btn = $('pan-envoyer'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> ' + TR('Envoi…'); }
+  try {
+    const data = doc.output('datauristring').split(',')[1];
+    await API.post('/espace/bon-commande', { numero, reference: ref, adresse: adr, commentaire: com,
+      lignes: p.map(l => ({ ref: l.ref, designation: l.designation, modele: l.modele, qte: l.qte, pu: l.pu })), pdf: { nom: nomFic, data } });
+    doc.save(nomFic);
+    panierEcrire([]);
+    showModal(`<div class="modal-header"><i class="ti ti-circle-check" style="color:var(--success)"></i><h2>${TR('Bon de commande envoyé')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body"><p style="font-size:14px;line-height:1.6">${TR('Merci ! Votre bon de commande')} <b>${e_(numero)}</b> ${TR('a bien été transmis à Eloflex. Vous en recevez une copie par e-mail et le PDF vient d’être téléchargé.')}</p>
+      <p style="font-size:13px;color:var(--text2)">${TR('Notre équipe revient vers vous pour confirmer la commande et le délai de livraison.')}</p></div>
+      <div class="modal-footer"><button class="btn primary" onclick="closeModal()">${TR('Fermer')}</button></div>`);
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-send"></i> ' + TR('Valider et envoyer à Eloflex'); }
+    if (typeof toast === 'function') toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)');
+  }
+}
+Object.assign(window, { ouvrirPanier, panierQte, panierRetirer, viderPanier, bonCommandePDF });
 })();
