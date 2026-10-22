@@ -138,6 +138,9 @@ async function start() {
     console.error(e.stack);
     // On continue — les tables existent peut-être déjà
   }
+  // Éclatés livrés avec l'application (scripts/eclates/*.json) : importés s'ils ne sont pas encore en base
+  try { await require('./eclates-import').importerEclatesLivres(require('./db').pool); }
+  catch (e) { console.error('❌ Import éclatés livrés :', e.message); }
 
   // Récupérer APP_URL depuis la DB si pas dans les variables d'env
   if (!process.env.APP_URL) {

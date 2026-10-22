@@ -1291,56 +1291,13 @@ router.get('/eclates/:id/pages/:page', async (req, res) => {
 
 // Import d'un éclaté (fichier .json préparé à partir du PDF). Remplace l'existant si remplacer=true.
 router.post('/eclates/import', adminOnly, async (req, res) => {
-  const b = req.body || {};
-  const meta = b.meta || {};
-  if (b.format !== 'eclate-v1' || !meta.slug || !Array.isArray(b.views) || !b.pages) {
-    return res.status(400).json({ error: "Fichier d'éclaté invalide" });
-  }
-  const pg = await db.pool.connect();
   try {
-    const ex = await pg.query('SELECT id, photo, lien_web, lien_notice, lien_fiche, lien_web_se, lien_notice_se, lien_fiche_se, caracteristiques FROM eclates_modeles WHERE slug=$1', [meta.slug]);
-    if (ex.rows.length && b.remplacer !== true) {
-      return res.status(409).json({ error: 'existe', message: `L'éclaté « ${meta.modele} » existe déjà.` });
-    }
-    await pg.query('BEGIN');
-    if (ex.rows.length) await pg.query('DELETE FROM eclates_modeles WHERE id=$1', [ex.rows[0].id]);
-    // en cas de remplacement, on conserve la photo et le lien site web déjà saisis
-    const prev = ex.rows[0] || {};
-    const m = (await pg.query(`INSERT INTO eclates_modeles (slug, nom, ref_modele, fichier, date_doc, largeur, hauteur, ordre, photo, lien_web)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-      [meta.slug, meta.modele || meta.slug, meta.ref_modele || null, meta.fichier || null, meta.date_doc || null,
-       meta.W || 842, meta.H || 596, meta.ordre || 0, prev.photo || null,
-       (prev.lien_web != null ? prev.lien_web : null) || meta.lien_web || null])).rows[0];
-    if (prev.lien_notice != null || prev.lien_fiche != null || meta.lien_notice || meta.lien_fiche)
-      await pg.query('UPDATE eclates_modeles SET lien_notice=$1, lien_fiche=$2 WHERE id=$3',
-        [prev.lien_notice != null ? prev.lien_notice : (meta.lien_notice || null), prev.lien_fiche != null ? prev.lien_fiche : (meta.lien_fiche || null), m.id]);
-    if (prev.lien_web_se != null || prev.lien_notice_se != null || prev.lien_fiche_se != null)
-      await pg.query('UPDATE eclates_modeles SET lien_web_se=$1, lien_notice_se=$2, lien_fiche_se=$3 WHERE id=$4',
-        [prev.lien_web_se, prev.lien_notice_se, prev.lien_fiche_se, m.id]);
-    if (prev.caracteristiques) await pg.query('UPDATE eclates_modeles SET caracteristiques=$1 WHERE id=$2', [JSON.stringify(prev.caracteristiques), m.id]);
-    for (const [page, svg] of Object.entries(b.pages)) {
-      await pg.query('INSERT INTO eclates_pages (modele_id, page, svg) VALUES ($1,$2,$3)', [m.id, parseInt(page), svg]);
-    }
-    let nl = 0;
-    for (const [k, v] of b.views.entries()) {
-      const vr = (await pg.query(`INSERT INTO eclates_vues (modele_id, code, page, ordre, nom_en, nom_fr, assembly_ref, clip, reperes, ocr)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-        [m.id, v.code || null, v.page, k, v.nom_en || null, v.nom_fr || null, v.assembly_ref || null,
-         JSON.stringify(v.clip || null), JSON.stringify(v.reperes || []), !!v.ocr])).rows[0];
-      const all = [...(v.items || []).map(i => ({ ...i, cable: false })), ...(v.extras || []).map(i => ({ ...i, cable: true }))];
-      for (const [j, i] of all.entries()) {
-        await pg.query(`INSERT INTO eclates_lignes (vue_id, ordre, pos, ref, desc_en, desc_fr_auto, qty, note, cable)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [vr.id, j, i.pos || null, i.ref || null, i.desc || null, i.fr_auto || null, i.qty || null, i.note || null, !!i.cable]);
-        nl++;
-      }
-    }
-    await pg.query('COMMIT');
-    res.json({ ok: true, id: m.id, remplace: !!ex.rows.length, vues: b.views.length, lignes: nl });
+    const r = await require('./eclates-import').importerEclate(db.pool, req.body || {});
+    res.json({ ok: true, ...r });
   } catch (e) {
-    try { await pg.query('ROLLBACK'); } catch (_) {}
-    res.status(500).json({ error: e.message });
-  } finally { try { pg.release(); } catch (_) {} }
+    if (e.code === 'existe') return res.status(409).json({ error: 'existe', message: e.message });
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 router.delete('/eclates/:id', adminOnly, async (req, res) => {
