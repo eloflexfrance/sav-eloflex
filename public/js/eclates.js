@@ -49,7 +49,105 @@ if (typeof EN_STR !== 'undefined') Object.assign(EN_STR, {
   'Modifier les liens (site, notice, fiche technique)': 'Edit links (website, user manual, technical data)', 'Page du fauteuil sur le site': 'Wheelchair page on the website',
   'Notice d’utilisation (PDF)': 'User manual (PDF)', 'Fiche technique (PDF)': 'Technical data (PDF)', 'Liens enregistrés': 'Links saved',
   'comptes en anglais / suédois': 'English / Swedish accounts', 'Changer la photo': 'Change photo', 'Photo': 'Photo', 'Photo enregistrée': 'Photo saved',
-  'Laisser un champ vide pour retirer le lien. Les documents sont sur': 'Leave a field empty to remove the link. Documents are on'
+  'Laisser un champ vide pour retirer le lien. Les documents sont sur': 'Leave a field empty to remove the link. Documents are on',
+  "Adresse de la page du fauteuil sur le site web (laisser vide pour retirer le lien) :": "Address of the wheelchair page on the website (leave empty to remove the link):",
+  "Lien enregistré": "Link saved",
+  "Lecture du fichier impossible": "Unable to read the file",
+  "caractéristiques": "specifications",
+  "Spécifications techniques": "Technical specifications",
+  "Envoyer par e-mail tous les éclatés en PDF": "E-mail all exploded views as PDF",
+  "Envoyer des éclatés par e-mail": "E-mail exploded views",
+  "Importer des éclatés": "Import exploded views",
+  "Éclaté bientôt disponible": "Exploded view coming soon",
+  "Caractéristiques techniques": "Technical specifications",
+  "Caractéristiques": "Specifications",
+  "Utilisez « Importer des éclatés » avec les fichiers .json fournis.": "Use “Import exploded views” with the supplied .json files.",
+  "L’éclaté de ce modèle sera bientôt disponible.": "The exploded view of this model will be available soon.",
+  "Supprimer l’éclaté": "Delete the exploded view",
+  "repère": "callout",
+  "Le remplacer ? (les modifications faites dans l’appli sur ce modèle seront perdues)": "Replace it? (changes made in the app on this model will be lost)",
+  "Erreurs :": "Errors:",
+  "éclaté(s) importé(s)": "exploded view(s) imported",
+  "Cliquez à l’endroit de la nouvelle bulle (Échap pour annuler)": "Click where the new callout goes (Esc to cancel)",
+  "Prix public conseillé TTC": "Recommended retail price incl. VAT",
+  "Ajouter à la demande de devis": "Add to the quote request",
+  "Ajouter au devis": "Add to quote",
+  "Ajouté": "Added",
+  "Modifier la ligne": "Edit line",
+  "Nouvelle ligne": "New line",
+  "Repère(s)": "Callout(s)",
+  "Désignation anglaise (document)": "English description (document)",
+  "Désignation française (laisser vide pour utiliser le catalogue)": "French description (leave empty to use the catalogue)",
+  "Catalogue": "Catalogue",
+  "Dernière modification": "Last modified",
+  "Supprimer cette ligne ?": "Delete this line?",
+  "Nom français (laisser vide pour utiliser le catalogue)": "French name (leave empty to use the catalogue)",
+  "Nom anglais": "English name",
+  "Référence du sous-ensemble": "Sub-assembly part number",
+  "Numéro de la bulle (laisser vide pour la supprimer) :": "Callout number (leave empty to delete it):",
+  "Supprimer cette bulle ?": "Delete this callout?",
+  "Bulle enregistrée": "Callout saved",
+  "Numéro de la nouvelle bulle :": "New callout number:",
+  "Cliquez maintenant sur la pièce pour tracer le trait (Échap = sans trait)": "Now click the part to draw the leader line (Esc = no line)",
+  "Bulle ajoutée": "Callout added",
+  "Adresse e-mail du destinataire": "Recipient e-mail address",
+  "Fiches à joindre (PDF en français)": "Sheets to attach (PDF in French)",
+  "Tout cocher": "Select all",
+  "Tout décocher": "Unselect all",
+  "copie à": "copy to",
+  "PDF sélectionné(s)": "PDF selected",
+  "Cochez au moins une fiche": "Select at least one sheet",
+  "Préparation des PDF": "Preparing PDFs",
+  "Envoi de l’e-mail": "Sending the e-mail",
+  "Éclatés envoyés à": "Exploded views sent to",
+  "e-mails": "e-mails",
+  "Demande de devis de pièces détachées": "Spare parts quote request",
+  "Demande de devis": "Quote request",
+  "ajouté à la demande de devis": "added to the quote request",
+  "Demande de devis — pièces détachées": "Quote request — spare parts",
+  "Ouvrez un éclaté et cliquez sur « Ajouter au devis » à côté des pièces souhaitées. Vous pouvez aussi ajouter une pièce que vous ne trouvez pas, ou simplement décrire votre besoin dans « Informations complémentaires ».": "Open an exploded view and click “Add to quote” next to the parts you need. You can also add a part you cannot find, or simply describe your need under “Additional information”.",
+  "Ajouter une pièce non trouvée dans les éclatés": "Add a part not found in the exploded views",
+  "Informations complémentaires": "Additional information",
+  "Tout ce qui peut nous aider : n° de série du fauteuil, description d’une pièce introuvable, urgence, contraintes de livraison, question…": "Anything that helps us: wheelchair serial number, description of a part you cannot find, urgency, delivery constraints, question…",
+  "Votre référence": "Your reference",
+  "ex. n° de dossier patient, n° interne…": "e.g. patient file no., internal no.…",
+  "Montants indicatifs, tarifs distributeur HT en vigueur, hors frais de port. Eloflex vous adresse le devis définitif (frais de port et délai compris).": "Indicative amounts, current dealer prices excl. VAT, excluding shipping. Eloflex will send you the final quote (shipping and lead time included).",
+  "Eloflex vous adresse le devis : prix, frais de port et délai de livraison.": "Eloflex will send you the quote: prices, shipping costs and delivery time.",
+  "Vider": "Empty",
+  "Continuer mes recherches": "Continue browsing",
+  "Télécharger le PDF": "Download PDF",
+  "Envoyer la demande de devis à Eloflex": "Send the quote request to Eloflex",
+  "PU HT": "Unit price excl. VAT",
+  "Réf. (si connue)": "Part no. (if known)",
+  "Description de la pièce, modèle du fauteuil…": "Part description, wheelchair model…",
+  "sur devis": "on quote",
+  "Retirer": "Remove",
+  "Les prix et les frais de port vous seront communiqués dans le devis Eloflex.": "Prices and shipping costs will be given in the Eloflex quote.",
+  "Total TTC": "Total incl. VAT",
+  "pièce(s) hors tarif : prix communiqué dans le devis": "part(s) without a listed price: price given in the quote",
+  "Hors frais de port (ajoutés dans le devis)": "Excluding shipping (added in the quote)",
+  "Vider la demande de devis ?": "Empty the quote request?",
+  "Ajoutez au moins une pièce ou décrivez votre besoin dans « Informations complémentaires ».": "Add at least one part or describe your need under “Additional information”.",
+  "Envoi…": "Sending…",
+  "Demande de devis envoyée": "Quote request sent",
+  "Merci ! Votre demande de devis": "Thank you! Your quote request",
+  "a bien été transmise à Eloflex. Vous en recevez une copie par e-mail et le PDF vient d’être téléchargé.": "has been sent to Eloflex. You will receive a copy by e-mail and the PDF has just been downloaded.",
+  "Notre équipe vous adresse très prochainement le devis, frais de port et délai de livraison compris.": "Our team will send you the quote shortly, including shipping costs and delivery time.",
+  "Référence": "Part number",
+  "Désignation": "Description",
+  "Qté": "Qty",
+  "Total HT": "Total excl. VAT",
+  "TVA": "VAT",
+  "Fermer": "Close",
+  "Source": "Source",
+  "Distributeur": "Dealer",
+  "Nom du distributeur": "Dealer name",
+  "Adresse de livraison": "Delivery address",
+  "Supprimer": "Delete",
+  "Société / demandeur": "Company / requester",
+  "Réf.": "Ref.",
+  "Chargement…": "Loading…",
+  "Erreur": "Error"
 });
 // Libellés suédois : traduction automatique depuis l'anglais (public/js/trad-sv.js)
 const SV = s => (typeof tradSV === 'function') ? tradSV(s) : s;
@@ -318,11 +416,11 @@ async function renderListe(ttl, c, a){
       <div class="ecl-photo"><img src="/api/eclates/${m.id}/photo?v=${encodeURIComponent(m.updated_at || '')}" alt="${e_(m.nom)}" loading="lazy" onerror="this.parentNode.classList.add('vide');this.replaceWith(Object.assign(document.createElement('i'),{className:'ti ti-wheelchair'}))">
         ${edit ? `<label class="ecl-phbtn" data-photo="${m.id}" title="${TR('Changer la photo')}"><i class="ti ti-camera"></i> ${TR('Photo')}<input type="file" accept="image/jpeg,image/png,image/webp" style="display:none"></label>` : ''}</div>
       <b><i class="ti ti-schema" style="color:var(--accent)"></i> ${e_(m.nom)}</b>
-      <small>${m.ref_modele ? 'Réf. ' + e_(m.ref_modele) + ' · ' : ''}${e_(m.date_doc || '')}</small>
+      <small>${m.ref_modele ? TR('Réf.') + ' ' + e_(m.ref_modele) + ' · ' : ''}${e_(m.date_doc || '')}</small>
       <small>${m.nb_vues ? `${m.nb_vues} ${TR('vues')} · ${m.nb_lignes} ${TR('lignes')}` : `<span style="color:#b45309;font-weight:600"><i class="ti ti-clock"></i> ${TR('Éclaté bientôt disponible')}</span>`}</small>
       <div class="ecl-acts">
         ${m.nb_vues ? `<span class="ecl-act pdf" data-pdf="${m.id}" title="${TR('Télécharger la fiche éclaté (PDF français ou anglais)')}"><i class="ti ti-file-type-pdf"></i> ${TR('PDF éclaté')}</span>` : ''}
-        ${m.caracteristiques ? `<span class="ecl-act ecl-carac" data-carac="${m.id}" style="color:var(--accent)" title="${TR('Caractéristiques techniques')}"><i class="ti ti-list-details"></i> ${TR('Caractéristiques')}</span>` : ''}
+        ${m.caracteristiques && !SITE_SE() ? `<span class="ecl-act ecl-carac" data-carac="${m.id}" style="color:var(--accent)" title="${TR('Caractéristiques techniques')}"><i class="ti ti-list-details"></i> ${TR('Caractéristiques')}</span>` : ''}
         ${lienM(m,'lien_web') ? `<a href="${e_(lienM(m,'lien_web'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_web'))}"><i class="ti ti-world"></i> ${TR('Site web')}</a>` : ''}
         ${lienM(m,'lien_notice') ? `<a href="${e_(lienM(m,'lien_notice'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_notice'))}"><i class="ti ti-book"></i> ${TR('Notice')}</a>` : ''}
         ${lienM(m,'lien_fiche') ? `<a href="${e_(lienM(m,'lien_fiche'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_fiche'))}"><i class="ti ti-file-description"></i> ${TR('Fiche technique')}</a>` : ''}
@@ -334,7 +432,7 @@ async function renderListe(ttl, c, a){
   c.querySelectorAll('.ecl-card').forEach(el => el.addEventListener('click', ev => {
     if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-liens]') || ev.target.closest('[data-pdf]') || ev.target.closest('.ecl-web') || ev.target.closest('[data-carac]')) return;
     const mm = list.find(x => x.id === +el.dataset.id);
-    if (mm && !mm.nb_vues) { if (mm.caracteristiques) ficheCaracteristiques(mm); else if (typeof toast === 'function') toast(TR('L’éclaté de ce modèle sera bientôt disponible.'), 'ti-clock'); return; }
+    if (mm && !mm.nb_vues) { if (SITE_SE() && lienM(mm, 'lien_web')) window.open(lienM(mm, 'lien_web'), '_blank', 'noopener'); else if (mm.caracteristiques && !SITE_SE()) ficheCaracteristiques(mm); else if (typeof toast === 'function') toast(TR('L’éclaté de ce modèle sera bientôt disponible.'), 'ti-clock'); return; }
     E.modeleId = +el.dataset.id; E.vueId = null; E.data = null; back = null; render();
   }));
   c.querySelectorAll('[data-del]').forEach(el => el.addEventListener('click', async ev => {
@@ -1001,10 +1099,11 @@ async function exporterPDF(lang, vues, prog, opts){
 // Demande de devis de pièces détachées (espace distributeur + équipe)
 // ══════════════════════════════════════════════════════════════════
 const estDistrib = () => typeof window.estDistributeur === 'function' && window.estDistributeur();
+// Demande de devis : ouverte à tout utilisateur qui a accès aux éclatés (distributeurs, équipe, comptes étrangers)
 function peutCommander(){
   if (estDistrib()) return true;
   if (typeof isAdmin === 'function' && isAdmin()) return true;
-  return typeof canWrite === 'function' && (canWrite('catalogue') || canWrite('commandes'));
+  return typeof hasAccess === 'function' ? hasAccess('eclates') : true;
 }
 const CLE_PANIER = () => 'ecl_panier_' + ((typeof CURRENT_USER !== 'undefined' && CURRENT_USER && (CURRENT_USER.distributeur ? 'd' + CURRENT_USER.distributeur.client_id : 'u' + CURRENT_USER.id)) || 'x');
 function panierLire(){ try { return JSON.parse(localStorage.getItem(CLE_PANIER()) || '[]') || []; } catch (_) { return E._panier || []; } }
@@ -1017,7 +1116,7 @@ function panierAjouter(it){
   const cle = normRef(it.ref) || ('L' + it.id);
   const ex = p.find(l => l.cle === cle);
   if (ex) ex.qte = (parseInt(ex.qte) || 1) + 1;
-  else p.push({ cle, ref: it.ref || '', designation: it.cat_designation || it.fr || it.desc_en || '', modele: E.data ? E.data.nom : '',
+  else p.push({ cle, ref: it.ref || '', designation: (L() === 'fr' ? (it.cat_designation || it.fr || it.desc_en) : (label(it) || it.desc_en || it.fr)) || '', modele: E.data ? E.data.nom : '',
     qte: 1, pu: (it.cat_id && it.cat_prix_distrib != null && !it.cat_masque) ? +it.cat_prix_distrib : null, tva: it.cat_tva != null ? +it.cat_tva : null });
   panierEcrire(p);
   if (typeof toast === 'function') toast((it.ref ? it.ref + ' — ' : '') + TR('ajouté à la demande de devis'), 'ti-file-plus');
@@ -1044,7 +1143,7 @@ async function ouvrirPanier(){
       <div class="form-group" style="margin-top:14px"><label class="form-label">${TR('Informations complémentaires')}</label>
         <textarea class="form-input" id="pan-com" rows="4" oninput="panierForm('com',this.value)" placeholder="${TR('Tout ce qui peut nous aider : n° de série du fauteuil, description d’une pièce introuvable, urgence, contraintes de livraison, question…')}">${v('com')}</textarea></div>
       <div class="grid-2">
-        ${moi.interne ? `<div class="form-group"><label class="form-label">${TR('Distributeur')}</label><input class="form-input" id="pan-distrib" oninput="panierForm('distrib',this.value)" value="${v('distrib')}" placeholder="${TR('Nom du distributeur')}"></div>` : ''}
+        ${moi.interne ? `<div class="form-group"><label class="form-label">${TR('Société / demandeur')}</label><input class="form-input" id="pan-distrib" oninput="panierForm('distrib',this.value)" value="${v('distrib', (typeof CURRENT_USER!=='undefined' && CURRENT_USER && CURRENT_USER.nom) || '')}" placeholder="${TR('Nom du distributeur')}"></div>` : ''}
         <div class="form-group"><label class="form-label">${TR('Votre référence')}</label><input class="form-input" id="pan-ref" oninput="panierForm('ref',this.value)" value="${v('ref')}" placeholder="${TR('ex. n° de dossier patient, n° interne…')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Adresse de livraison')}</label><textarea class="form-input" id="pan-adr" rows="3" oninput="panierForm('adr',this.value)">${v('adr', adrFiche)}</textarea></div>
       </div>
@@ -1055,7 +1154,7 @@ async function ouvrirPanier(){
       ${p.length ? `<button class="btn danger" style="margin-right:auto" onclick="viderPanier()"><i class="ti ti-trash"></i>${TR('Vider')}</button>` : ''}
       <button class="btn" onclick="closeModal()">${TR('Continuer mes recherches')}</button>
       <button class="btn" onclick="bonCommandePDF(false)"><i class="ti ti-file-type-pdf"></i>${TR('Télécharger le PDF')}</button>
-      ${estDistrib() ? `<button class="btn primary" id="pan-envoyer" onclick="bonCommandePDF(true)"><i class="ti ti-send"></i>${TR('Envoyer la demande de devis à Eloflex')}</button>` : ''}
+      ${peutCommander() ? `<button class="btn primary" id="pan-envoyer" onclick="bonCommandePDF(true)"><i class="ti ti-send"></i>${TR('Envoyer la demande de devis à Eloflex')}</button>` : ''}
     </div>`);
   const m = document.querySelector('#modal-area .modal'); if (m) m.style.maxWidth = '900px';
   dessinerLignesPanier();
@@ -1102,26 +1201,39 @@ async function bonCommandePDF(envoyer){
   const distrib = moi.interne ? (($('pan-distrib') || {}).value || '') : (c.nom || '');
   const now = new Date(), pad = n => String(n).padStart(2, '0');
   const numero = `DDV-WEB-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  // PDF en anglais pour une interface en anglais / suédois
+  const EN = typeof LANG !== 'undefined' && LANG !== 'fr';
+  const PDF_EN = { 'DEMANDE DE DEVIS': 'QUOTE REQUEST', 'Pièces détachées Eloflex': 'Eloflex spare parts', 'Demande': 'Request', 'N°': 'No.',
+    'Votre référence': 'Your reference', 'Demandeur': 'Requester', 'Distributeur': 'Dealer', 'Tél.': 'Phone', 'Adresse de livraison': 'Delivery address',
+    'Référence': 'Part no.', 'Désignation': 'Description', 'Qté': 'Qty', 'PU HT': 'Unit price', 'Total HT': 'Total',
+    'Aucune pièce sélectionnée : voir les informations complémentaires ci-dessous.': 'No part selected: see additional information below.',
+    'sur devis': 'on quote', 'Prix, frais de port et délai communiqués dans le devis Eloflex.': 'Prices, shipping and lead time will be given in the Eloflex quote.',
+    'Total HT indicatif': 'Indicative total excl. VAT', 'TVA': 'VAT', 'Total TTC indicatif': 'Indicative total incl. VAT',
+    'Hors frais de port, ajoutés dans le devis Eloflex.': 'Excluding shipping, added in the Eloflex quote.',
+    'pièce(s) hors tarif : prix communiqué dans le devis Eloflex.': 'part(s) without a listed price: price given in the Eloflex quote.',
+    'Informations complémentaires': 'Additional information',
+    'Document non contractuel — tarifs distributeur HT indicatifs, hors frais de port — devis définitif établi par Eloflex.': 'Non-binding document — indicative dealer prices excl. VAT, excluding shipping — final quote issued by Eloflex.' };
+  const P = t => (EN && PDF_EN[t]) || t;
   const { jsPDF } = window.jspdf; const doc = new jsPDF();
   const L0 = 15, R0 = 195, W0 = R0 - L0, BLEU = [31, 92, 140];
   let y = 18;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...BLEU); doc.text('DEMANDE DE DEVIS', L0, y);
-  doc.setFontSize(10.5); doc.text('Pièces détachées Eloflex', L0, y + 6);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...BLEU); doc.text(P('DEMANDE DE DEVIS'), L0, y);
+  doc.setFontSize(10.5); doc.text(P('Pièces détachées Eloflex'), L0, y + 6);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 60, 60);
   doc.text(['ELOFLEX France', '41 rue des Maraichers — 17140 LAGORD', 'sav@eloflex.fr — 09 67 66 51 29'], R0, y - 4, { align: 'right' });
   y += 14; doc.setDrawColor(...BLEU); doc.setLineWidth(0.5); doc.line(L0, y, R0, y); y += 7;
   doc.setTextColor(0, 0, 0); doc.setFontSize(9.5);
   const bloc = (x, titre, lignes) => { doc.setFont('helvetica', 'bold'); doc.text(titre, x, y); doc.setFont('helvetica', 'normal'); let yy = y + 5; lignes.filter(Boolean).forEach(t => { doc.splitTextToSize(String(t), 85).forEach(s => { doc.text(s, x, yy); yy += 4.5; }); }); return yy; };
-  const y1 = bloc(L0, 'Demande', [`N° : ${numero}`, `Date : ${now.toLocaleDateString('fr-FR')}`, ref ? `Votre référence : ${ref}` : null]);
-  const y2 = bloc(110, 'Distributeur', [distrib, moi.email || c.email ? 'E-mail : ' + (moi.email || String(c.email || '').split(/[,;\s]+/)[0]) : null, (c.tel || c.portable) ? 'Tél. : ' + (c.tel || c.portable) : null]);
+  const y1 = bloc(L0, P('Demande'), [`${P('N°')} : ${numero}`, `Date : ${now.toLocaleDateString(EN ? 'en-GB' : 'fr-FR')}`, ref ? `${P('Votre référence')} : ${ref}` : null]);
+  const y2 = bloc(110, moi.interne ? P('Demandeur') : P('Distributeur'), [distrib, moi.email || c.email ? 'E-mail : ' + (moi.email || String(c.email || '').split(/[,;\s]+/)[0]) : null, (c.tel || c.portable) ? P('Tél.') + ' : ' + (c.tel || c.portable) : null]);
   y = Math.max(y1, y2) + 3;
-  if (adr.trim()) { const ya = bloc(L0, 'Adresse de livraison', adr.split('\n')); y = ya + 3; }
+  if (adr.trim()) { const ya = bloc(L0, P('Adresse de livraison'), adr.split('\n')); y = ya + 3; }
   // Tableau
   const X = { ref: L0, des: L0 + 32, qte: L0 + 120, pu: L0 + 147, tot: R0 };
   const entete = () => { doc.setFillColor(...BLEU); doc.rect(L0, y - 4.5, W0, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
-    doc.text('Référence', X.ref + 1.5, y); doc.text('Désignation', X.des, y); doc.text('Qté', X.qte, y, { align: 'right' }); doc.text('PU HT', X.pu, y, { align: 'right' }); doc.text('Total HT', X.tot - 1.5, y, { align: 'right' });
+    doc.text(P('Référence'), X.ref + 1.5, y); doc.text(P('Désignation'), X.des, y); doc.text(P('Qté'), X.qte, y, { align: 'right' }); doc.text(P('PU HT'), X.pu, y, { align: 'right' }); doc.text(P('Total HT'), X.tot - 1.5, y, { align: 'right' });
     doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'normal'); y += 7; };
-  if (p.length) entete(); else { doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.text('Aucune pièce sélectionnée : voir les informations complémentaires ci-dessous.', L0, y); y += 6; }
+  if (p.length) entete(); else { doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.text(P('Aucune pièce sélectionnée : voir les informations complémentaires ci-dessous.'), L0, y); y += 6; }
   p.forEach((l, i) => {
     const des = doc.splitTextToSize(String(l.designation || '') + (l.modele ? ` (${l.modele})` : ''), 78);
     const h = Math.max(1, des.length) * 4.2 + 2.5;
@@ -1130,31 +1242,31 @@ async function bonCommandePDF(envoyer){
     doc.setFontSize(8.5);
     doc.text(String(l.ref || '—'), X.ref + 1.5, y); doc.text(des, X.des, y);
     doc.text(String(parseInt(l.qte) || 1), X.qte, y, { align: 'right' });
-    doc.text(l.pu != null ? eurF(l.pu).replace(/ | /g, ' ') : 'sur devis', X.pu, y, { align: 'right' });
+    doc.text(l.pu != null ? eurF(l.pu).replace(/ | /g, ' ') : P('sur devis'), X.pu, y, { align: 'right' });
     doc.text(l.pu != null ? eurF(l.pu * (parseInt(l.qte) || 1)).replace(/ | /g, ' ') : '—', X.tot - 1.5, y, { align: 'right' });
     y += h;
   });
   const t = totaux(p), avecPrix = p.some(l => l.pu != null);
   if (y + 30 > 280) { doc.addPage(); y = 20; }
-  if (!avecPrix) { doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor(90, 90, 90); doc.text('Prix, frais de port et délai communiqués dans le devis Eloflex.', R0 - 1.5, y + 2, { align: 'right' }); doc.setTextColor(0, 0, 0); y += 8; }
+  if (!avecPrix) { doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor(90, 90, 90); doc.text(P('Prix, frais de port et délai communiqués dans le devis Eloflex.'), R0 - 1.5, y + 2, { align: 'right' }); doc.setTextColor(0, 0, 0); y += 8; }
   else {
   y += 3; doc.setDrawColor(200, 200, 200); doc.line(L0 + 100, y - 3, R0, y - 3);
   const lt = (k, v, b) => { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.setFontSize(b ? 10.5 : 9.5); doc.text(k, L0 + 140, y, { align: 'right' }); doc.text(v.replace(/ | /g, ' '), R0 - 1.5, y, { align: 'right' }); y += 5.5; };
-  lt('Total HT indicatif', eurF(t.ht), true); lt('TVA', eurF(t.tva)); lt('Total TTC indicatif', eurF(t.ttc), true);
-  doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(100, 100, 100); doc.text('Hors frais de port, ajoutés dans le devis Eloflex.', R0 - 1.5, y, { align: 'right' }); doc.setTextColor(0, 0, 0); y += 5;
-  if (t.surDevis) { doc.setFontSize(8.5); doc.setTextColor(180, 83, 9); doc.text(`${t.surDevis} pièce(s) hors tarif : prix communiqué dans le devis Eloflex.`, L0, y); doc.setTextColor(0, 0, 0); y += 6; }
+  lt(P('Total HT indicatif'), eurF(t.ht), true); lt(P('TVA'), eurF(t.tva)); lt(P('Total TTC indicatif'), eurF(t.ttc), true);
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(100, 100, 100); doc.text(P('Hors frais de port, ajoutés dans le devis Eloflex.'), R0 - 1.5, y, { align: 'right' }); doc.setTextColor(0, 0, 0); y += 5;
+  if (t.surDevis) { doc.setFontSize(8.5); doc.setTextColor(180, 83, 9); doc.text(`${t.surDevis} ${P('pièce(s) hors tarif : prix communiqué dans le devis Eloflex.')}`, L0, y); doc.setTextColor(0, 0, 0); y += 6; }
   }
-  if (com.trim()) { y += 2; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('Informations complémentaires', L0, y); y += 5; doc.setFont('helvetica', 'normal'); doc.splitTextToSize(com, W0).forEach(s => { if (y > 280) { doc.addPage(); y = 20; } doc.text(s, L0, y); y += 4.5; }); }
+  if (com.trim()) { y += 2; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text(P('Informations complémentaires'), L0, y); y += 5; doc.setFont('helvetica', 'normal'); doc.splitTextToSize(com, W0).forEach(s => { if (y > 280) { doc.addPage(); y = 20; } doc.text(s, L0, y); y += 4.5; }); }
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(130, 130, 130);
-    doc.text('Document non contractuel — tarifs distributeur HT indicatifs, hors frais de port — devis définitif établi par Eloflex.', L0, 289);
+    doc.text(P('Document non contractuel — tarifs distributeur HT indicatifs, hors frais de port — devis définitif établi par Eloflex.'), L0, 289);
     doc.text(`${numero} — page ${i}/${n}`, R0, 293, { align: 'right' }); }
-  const nomFic = `Demande_de_devis_${numero}.pdf`;
+  const nomFic = (EN ? 'Quote_request_' : 'Demande_de_devis_') + numero + '.pdf';
   if (!envoyer) { doc.save(nomFic); return; }
   const btn = $('pan-envoyer'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> ' + TR('Envoi…'); }
   try {
     const data = doc.output('datauristring').split(',')[1];
-    await API.post('/espace/bon-commande', { numero, reference: ref, adresse: adr, commentaire: com,
+    await API.post('/espace/bon-commande', { numero, reference: ref, adresse: adr, commentaire: com, distributeur: distrib,
       lignes: p.map(l => ({ ref: l.ref, designation: l.designation, modele: l.modele, qte: l.qte, pu: l.pu })), pdf: { nom: nomFic, data } });
     doc.save(nomFic);
     panierEcrire([]); E._panForm = {};

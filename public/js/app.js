@@ -183,8 +183,17 @@ const NAV_ROLES = {
   consultation: ['dashboard'],
 };
 
+// Titres de sections du menu et boutons du bas : traduits selon la langue de l'interface
+const _MENU_EN = { 'Principal':'Main', 'Distributeurs':'Dealers', 'Ressources':'Resources', 'Rapports':'Reports', 'Système':'System',
+  "Logs d'activité":'Activity log', 'Mode sombre':'Dark mode', 'Espace distributeur':'Dealer area' };
+function traduireMenu(){
+  const en = (typeof LANG!=='undefined' && LANG!=='fr');
+  document.querySelectorAll('[data-fr]').forEach(el=>{ const fr=el.dataset.fr; el.textContent = en ? (_MENU_EN[fr]||fr) : fr; });
+}
+window.traduireMenu = traduireMenu;
 function appliquerNavRole(){
   if(!CURRENT_USER) return;
+  traduireMenu();
   document.querySelectorAll('.nav-item[data-view]').forEach(n => {
     n.style.display = hasAccess(n.dataset.view) ? '' : 'none';
   });
@@ -205,7 +214,7 @@ function appliquerNavRole(){
   // Espace distributeur : interface réduite aux éclatés (pas d'alertes, ni de journal)
   if(CURRENT_USER.role==='distributeur'){
     ['btn-alertes','btn-logs'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
-    const lg=document.querySelector('.sidebar .logo, .sidebar-logo, .logo'); if(lg && !lg.dataset.esp){ lg.dataset.esp='1'; lg.insertAdjacentHTML('beforeend','<div style="font-size:11px;font-weight:600;color:var(--text3);margin-top:2px">Espace distributeur</div>'); }
+    const lg=document.querySelector('.sidebar .logo, .sidebar-logo, .logo'); if(lg && !lg.dataset.esp){ lg.dataset.esp='1'; lg.insertAdjacentHTML('beforeend','<div data-fr="Espace distributeur" style="font-size:11px;font-weight:600;color:var(--text3);margin-top:2px">Espace distributeur</div>'); }
   }
 }
 const estDistributeur = () => !!(CURRENT_USER && CURRENT_USER.role==='distributeur');
@@ -5681,6 +5690,7 @@ function applyNavTranslations(){
 function switchLang(lang, doRender=true){
   setLang(lang);
   applyNavTranslations();
+  if(typeof traduireMenu==='function') traduireMenu();
   if(doRender) render();
 }
 

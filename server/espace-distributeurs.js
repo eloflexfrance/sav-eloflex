@@ -129,7 +129,7 @@ function monterApi(router, deps) {
   router.get('/espace/moi', async (req, res) => {
     try {
       const u = res.locals.user || {};
-      if (u.role !== 'distributeur') return res.json({ interne: true });
+      if (u.role !== 'distributeur') return res.json({ interne: true, email: u.email || null, nom: u.nom || null });
       const c = await db.get('SELECT id, nom, email, tel, portable, adresse, adresse2, cp, ville FROM clients WHERE id=$1', [u.distributeur.client_id]);
       res.json({ client: c, email: u.email });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -139,7 +139,8 @@ function monterApi(router, deps) {
   router.post('/espace/bon-commande', async (req, res) => {
     try {
       const u = res.locals.user || {};
-      if (u.role !== 'distributeur') return res.status(403).json({ error: 'Réservé aux distributeurs connectés' });
+      // Distributeur connecté, ou utilisateur de l'appli (ex. compte en anglais « éclatés uniquement ») : demande pour son compte
+      const interne = u.role !== 'distributeur';
       const b = req.body || {};
       const lignes = (Array.isArray(b.lignes) ? b.lignes : []).map(l => ({
         ref: String(l.ref || '').slice(0, 60), designation: String(l.designation || '').slice(0, 250), modele: String(l.modele || '').slice(0, 80),
@@ -148,7 +149,9 @@ function monterApi(router, deps) {
       if (!lignes.length && !String(b.commentaire || '').trim()) return res.status(400).json({ error: 'La demande de devis est vide' });
       if (!b.pdf || !b.pdf.data) return res.status(400).json({ error: 'PDF manquant' });
       await ensureTables(db);
-      const c = await db.get('SELECT id, nom, email FROM clients WHERE id=$1', [u.distributeur.client_id]);
+      const c = interne
+        ? { id: null, nom: String(b.distributeur || '').trim().slice(0, 120) || u.nom || u.email || 'Utilisateur', email: u.email }
+        : await db.get('SELECT id, nom, email FROM clients WHERE id=$1', [u.distributeur.client_id]);
       const totalHT = lignes.reduce((s, l) => s + (l.pu != null ? l.pu * l.qte : 0), 0);
       const numero = String(b.numero || '').slice(0, 40) || ('DDV-WEB-' + Date.now());
       const rec = await db.run(`INSERT INTO espace_commandes (client_id, email, numero, reference, adresse_livraison, commentaire, lignes, total_ht)
@@ -161,7 +164,7 @@ function monterApi(router, deps) {
         ${lignes.some(l => l.pu != null) ? `<tr><td colspan="3" style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:700">Total HT indicatif (hors port)</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:700;white-space:nowrap">${eur(totalHT)}</td></tr>` : ''}</table>`;
       const recap = mailRecap([
         ['N° de demande', `<b>${escH(numero)}</b>`],
-        ['Distributeur', `<b>${escH(c.nom)}</b>`],
+        [interne ? 'Demandeur' : 'Distributeur', `<b>${escH(c.nom)}</b>${interne ? ` <span style="color:#888">(compte ${escH(u.nom || '')} — ${escH(u.email || '')})</span>` : ''}`],
         ['Votre référence', escH(b.reference || '')],
         ['Adresse de livraison', escH(b.adresse || '').replace(/\n/g, '<br>')],
         ['Informations complémentaires', `<b>${escH(b.commentaire || '').replace(/\n/g, '<br>')}</b>`],
@@ -174,7 +177,7 @@ function monterApi(router, deps) {
         html: mailCharte({
           titre: 'Eloflex — Demande de devis pièces détachées',
           corps: `<p>Bonjour,</p>
-            <p>Une demande de devis de pièces détachées vient d'être transmise depuis l'<b>espace distributeur</b>. Le PDF est joint à cet e-mail.</p>
+            <p>Une demande de devis de pièces détachées vient d'être transmise depuis ${interne ? 'la page <b>Éclatés</b> de l’application' : 'l’<b>espace distributeur</b>'}. Le PDF est joint à cet e-mail.</p>
             ${recap}${tableau}
             <p style="font-size:13px;color:#555">${ccDistrib ? `Le distributeur est en copie (${escH(ccDistrib)}). ` : ''}Eloflex établit le devis définitif (frais de port et délai compris).</p>
             <p>Bien cordialement</p>`,
@@ -182,7 +185,7 @@ function monterApi(router, deps) {
         }),
         attachments: [{ name: String(b.pdf.nom || numero + '.pdf').replace(/[^\w.\-]+/g, '_'), content: String(b.pdf.data).replace(/^data:[^,]+,/, '') }],
       });
-      try { await addAlerte('bdc_espace', rec.id, `🧾 Demande de devis pièces ${numero} reçue de ${c.nom} via l'espace distributeur (${lignes.length} ligne(s), ${eur(totalHT)} HT indicatif) : devis à établir.`); } catch (_) {}
+      try { await addAlerte('bdc_espace', rec.id, `🧾 Demande de devis pièces ${numero} reçue de ${c.nom} via ${interne ? 'les éclatés' : "l'espace distributeur"} (${lignes.length} ligne(s), ${eur(totalHT)} HT indicatif) : devis à établir.`); } catch (_) {}
       res.json({ ok: true, numero, id: rec.id });
     } catch (e) {
       const msg = (e.response && e.response.data && (e.response.data.message || JSON.stringify(e.response.data))) || e.message;
