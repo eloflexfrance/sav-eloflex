@@ -180,8 +180,8 @@ function css(){
 #ecl-ov .lead.on{opacity:.95}#ecl-ov .dot.on{opacity:1}
 @keyframes eclpulse{0%{r:3;opacity:.9}100%{r:16;opacity:0}}
 #ecl-ov .halo.on{opacity:1;animation:eclpulse 1.2s ease-out infinite}
-.ecl-grid{display:flex;flex-wrap:wrap;gap:12px;align-items:stretch}
-.ecl-grid>.ecl-card{flex:0 0 auto;min-width:0;box-sizing:border-box}
+.ecl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;align-items:stretch}
+.ecl-grid>.ecl-card{min-width:0;box-sizing:border-box}
 .ecl-card{border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;background:var(--surface,#fff)}
 .ecl-card:hover{border-color:var(--accent)}
 .ecl-card .ecl-photo{height:170px;margin:-14px -14px 10px;border-radius:12px 12px 0 0;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:1px solid var(--border);position:relative}
@@ -260,8 +260,9 @@ function photoReduite(file, max){
 }
 
 // ── Liste des modèles ──────────────────────────────────────────────
-// Grille des modèles : chaque ligne occupe toute la largeur et les cartes sont réparties le plus
-// également possible entre les lignes (ex. 16 modèles → 2 × 8, 3 lignes → 6 + 5 + 5), bords alignés.
+// Grille des modèles : toutes les cartes ont la même largeur sur toutes les lignes, et la grille occupe
+// toute la largeur. Le nombre de colonnes est choisi pour répartir les modèles le plus également possible
+// (ex. 16 modèles → 2 × 8 ; 17 modèles → 9 + 8, la dernière case de la 2ᵉ ligne restant vide).
 const LARGEUR_MIN_CARTE = 200, ECART = 12;
 function grilleEquilibree(g){
   if (!g) return;
@@ -270,12 +271,9 @@ function grilleEquilibree(g){
     const n = cartes.length, W = g.clientWidth; if (!n || !W) return;
     const maxCols = Math.max(1, Math.floor((W + ECART) / (LARGEUR_MIN_CARTE + ECART)));
     const lignes = Math.ceil(n / maxCols);
-    const base = Math.floor(n / lignes), plus = n % lignes;   // les premières lignes prennent une carte de plus
-    let i = 0;
-    for (let r = 0; r < lignes; r++) {
-      const k = base + (r < plus ? 1 : 0);
-      for (let j = 0; j < k && i < n; j++, i++) cartes[i].style.width = `calc((100% - ${(k - 1) * ECART}px) / ${k})`;
-    }
+    const cols = Math.ceil(n / lignes);
+    g.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+    cartes.forEach(c => { c.style.width = ''; });
   };
   placer();
   if (window.ResizeObserver) { if (g._ro) g._ro.disconnect(); g._ro = new ResizeObserver(() => placer()); g._ro.observe(g); }
@@ -291,13 +289,15 @@ function ficheCaracteristiques(m){
       <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
         <img src="/api/eclates/${m.id}/photo?v=${encodeURIComponent(m.updated_at || '')}" alt="" style="width:220px;max-width:100%;border-radius:12px;background:#fff;object-fit:contain" onerror="this.remove()">
         <div style="flex:1;min-width:260px">
-          ${k.description ? `<p style="font-size:14px;line-height:1.6;margin-top:0">${e_(k.description)}</p>` : ''}
+          ${k.description ? `<p style="font-size:14px;line-height:1.6;margin-top:0;white-space:pre-line">${e_(k.description)}</p>` : ''}
           ${(k.points || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">${k.points.map(x => `<span class="badge" style="background:var(--accent-soft,rgba(31,92,140,.1));color:var(--accent);font-size:12px"><i class="ti ti-check" style="font-size:12px"></i> ${e_(x)}</span>`).join('')}</div>` : ''}
         </div>
       </div>
-      ${(k.fonctions || []).length ? `<div style="margin-top:14px">${k.fonctions.map(f => `<div style="margin-bottom:8px"><b style="font-size:13.5px">${e_(f[0])}</b><div style="font-size:13px;color:var(--text2)">${e_(f[1])}</div></div>`).join('')}</div>` : ''}
+      ${(k.notes || []).length ? `<div style="font-size:11.5px;color:var(--text3);margin-top:4px">${k.notes.map(e_).join(' · ')}</div>` : ''}
+      ${(k.fonctions || []).length ? `<div style="margin-top:14px">${k.fonctions.map(f => `<div style="margin-bottom:9px"><b style="font-size:12.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--accent)">${e_(f[0])}</b><div style="font-size:13px;color:var(--text2)">${e_(f[1])}</div></div>`).join('')}</div>` : ''}
       ${(k.specs || []).length ? `<div class="section-title" style="margin-top:14px"><i class="ti ti-list-details"></i>${TR('Spécifications techniques')}</div>
         <table style="width:100%;border-collapse:collapse;font-size:13.5px">${k.specs.map((r, i) => `<tr style="${i % 2 ? '' : 'background:var(--bg)'}"><td style="padding:6px 10px;color:var(--text2);width:42%">${e_(r[0])}</td><td style="padding:6px 10px;font-weight:600">${e_(r[1])}</td></tr>`).join('')}</table>` : ''}
+      ${k.source_specs ? `<p style="font-size:12px;color:var(--text3);margin:8px 0 0">${e_(k.source_specs)}</p>` : ''}
       ${src ? `<p style="font-size:12px;color:var(--text3);margin-top:12px">${TR('Source')} : <a href="${e_(src)}" target="_blank" rel="noopener">${e_(src.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</a></p>` : ''}
     </div>
     <div class="modal-footer"><button class="btn primary" onclick="closeModal()">${TR('Fermer')}</button></div>`);
@@ -568,7 +568,7 @@ function list(){
         ${it.horscat && L() === 'fr' && !it.cat_masque && !it.cat_fiche_masquee ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
         ${it.note ? `<span class="ecl-tag warn">${T('sold')}</span>` : ''}
       </div>
-      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TR('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TR('Ajouter au devis')}</button>` : ''}</div>
+      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque && it.cat_prix_distrib != null ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TR('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TR('Ajouter au devis')}</button>` : ''}</div>
     </div>`;
   };
   v.items.forEach(it => h += row(it, false));
@@ -1048,7 +1048,7 @@ async function ouvrirPanier(){
         <div class="form-group"><label class="form-label">${TR('Votre référence')}</label><input class="form-input" id="pan-ref" oninput="panierForm('ref',this.value)" value="${v('ref')}" placeholder="${TR('ex. n° de dossier patient, n° interne…')}"></div>
         <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Adresse de livraison')}</label><textarea class="form-input" id="pan-adr" rows="3" oninput="panierForm('adr',this.value)">${v('adr', adrFiche)}</textarea></div>
       </div>
-      <div style="font-size:12px;color:var(--text3)">${TR('Montants indicatifs, tarifs distributeur HT en vigueur, hors frais de port. Eloflex vous adresse le devis définitif (frais de port et délai compris).')}</div>
+      <div style="font-size:12px;color:var(--text3)">${p.some(l => l.pu != null) ? TR('Montants indicatifs, tarifs distributeur HT en vigueur, hors frais de port. Eloflex vous adresse le devis définitif (frais de port et délai compris).') : TR('Eloflex vous adresse le devis : prix, frais de port et délai de livraison.')}</div>
       <div id="pan-msg" style="font-size:13px;margin-top:6px;min-height:16px"></div>
     </div>
     <div class="modal-footer" style="flex-wrap:wrap">
@@ -1081,13 +1081,14 @@ function dessinerLignesPanier(){
       <td style="text-align:right;white-space:nowrap;font-weight:600">${l.pu != null ? eurF(l.pu * (parseInt(l.qte) || 1)) : '—'}</td>
       <td><button class="btn sm" title="${TR('Retirer')}" onclick="panierRetirer(${i})"><i class="ti ti-x"></i></button></td></tr>`).join('')}
     </tbody></table></div>
+    ${p.every(l => l.pu == null) ? `<div style="text-align:right;font-size:13px;color:var(--text2);margin-top:8px"><i class="ti ti-info-circle"></i> ${TR('Les prix et les frais de port vous seront communiqués dans le devis Eloflex.')}</div>` : `
     <div style="display:flex;justify-content:flex-end;margin-top:8px"><table style="font-size:13.5px">
       <tr><td style="padding:2px 14px;color:var(--text2)">${TR('Total HT')}</td><td style="text-align:right;font-weight:700">${eurF(t.ht)}</td></tr>
       <tr><td style="padding:2px 14px;color:var(--text2)">${TR('TVA')}</td><td style="text-align:right">${eurF(t.tva)}</td></tr>
       <tr><td style="padding:2px 14px;color:var(--text2)">${TR('Total TTC')}</td><td style="text-align:right;font-weight:700">${eurF(t.ttc)}</td></tr>
       ${t.surDevis ? `<tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:#b45309">${t.surDevis} ${TR('pièce(s) hors tarif : prix communiqué dans le devis')}</td></tr>` : ''}
       <tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:var(--text3);text-align:right">${TR('Hors frais de port (ajoutés dans le devis)')}</td></tr>
-    </table></div>`;
+    </table></div>`}`;
 }
 function panierQte(i, v){ const p = panierLire(); if (!p[i]) return; p[i].qte = Math.max(1, Math.min(999, parseInt(v) || 1)); panierEcrire(p); dessinerLignesPanier(); }
 function panierRetirer(i){ const p = panierLire(); p.splice(i, 1); panierEcrire(p); dessinerLignesPanier(); }
@@ -1133,13 +1134,16 @@ async function bonCommandePDF(envoyer){
     doc.text(l.pu != null ? eurF(l.pu * (parseInt(l.qte) || 1)).replace(/ | /g, ' ') : '—', X.tot - 1.5, y, { align: 'right' });
     y += h;
   });
-  const t = totaux(p);
+  const t = totaux(p), avecPrix = p.some(l => l.pu != null);
   if (y + 30 > 280) { doc.addPage(); y = 20; }
+  if (!avecPrix) { doc.setFont('helvetica', 'italic'); doc.setFontSize(9); doc.setTextColor(90, 90, 90); doc.text('Prix, frais de port et délai communiqués dans le devis Eloflex.', R0 - 1.5, y + 2, { align: 'right' }); doc.setTextColor(0, 0, 0); y += 8; }
+  else {
   y += 3; doc.setDrawColor(200, 200, 200); doc.line(L0 + 100, y - 3, R0, y - 3);
   const lt = (k, v, b) => { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.setFontSize(b ? 10.5 : 9.5); doc.text(k, L0 + 140, y, { align: 'right' }); doc.text(v.replace(/ | /g, ' '), R0 - 1.5, y, { align: 'right' }); y += 5.5; };
   lt('Total HT indicatif', eurF(t.ht), true); lt('TVA', eurF(t.tva)); lt('Total TTC indicatif', eurF(t.ttc), true);
   doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(100, 100, 100); doc.text('Hors frais de port, ajoutés dans le devis Eloflex.', R0 - 1.5, y, { align: 'right' }); doc.setTextColor(0, 0, 0); y += 5;
   if (t.surDevis) { doc.setFontSize(8.5); doc.setTextColor(180, 83, 9); doc.text(`${t.surDevis} pièce(s) hors tarif : prix communiqué dans le devis Eloflex.`, L0, y); doc.setTextColor(0, 0, 0); y += 6; }
+  }
   if (com.trim()) { y += 2; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('Informations complémentaires', L0, y); y += 5; doc.setFont('helvetica', 'normal'); doc.splitTextToSize(com, W0).forEach(s => { if (y > 280) { doc.addPage(); y = 20; } doc.text(s, L0, y); y += 4.5; }); }
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(130, 130, 130);

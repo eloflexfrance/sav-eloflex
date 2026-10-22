@@ -2910,6 +2910,8 @@ async function renderParametres(ttl,c,a){
       <h3><i class="ti ti-schema"></i> ${TR('Éclatés')}</h3>
       <div class="form-group"><label class="form-label">${TR('Ordre d’affichage des modèles (séparés par des virgules ; les modèles non cités suivent)')}</label>
         <input class="form-input" id="p-ecl-ordre" value="${esc(p.eclates_ordre!=null?p.eclates_ordre:'L2, R, H2, L, F, D2, P, X, K, H, F Pre 2022, D2 Pre 2022, P Pre 2022, S1, C')}"></div>
+      <div class="form-group"><label class="form-label">${TR('Prix distributeur HT visibles dans l’espace distributeur')}</label>
+        <select class="form-input" id="p-esp-prix"><option value="0" ${p.espace_prix_visibles!=='1'?'selected':''}>${TR('Non — masqués (pièces « sur devis »)')}</option><option value="1" ${p.espace_prix_visibles==='1'?'selected':''}>${TR('Oui — affichés aux distributeurs')}</option></select></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-clipboard-check"></i> ${TR('Retours démo')}</h3>
@@ -3971,6 +3973,7 @@ async function saveParametres(){
     email_smtp_pass_relance:gv('p-smtp-pass-relance')||''
   };
   if(document.getElementById('p-ecl-ordre')) p.eclates_ordre=gv('p-ecl-ordre').trim();
+  if(document.getElementById('p-esp-prix')) p.espace_prix_visibles=gv('p-esp-prix')||'0';
   if(document.getElementById('p-rd-retour')){
     p.retour_demo_forfait_retour=gv('p-rd-retour')||'0';
     p.retour_demo_forfait_carton=gv('p-rd-carton')||'0';

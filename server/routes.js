@@ -1187,8 +1187,11 @@ router.get('/eclates/:id', async (req, res) => {
     // Compte sans accès au catalogue (ex. accès « éclatés uniquement ») : ni stock ni prix
     const u = res.locals.user || {};
     if (u.role === 'distributeur') {
-      // Distributeur connecté : prix distributeur HT visibles (bon de commande), mais ni stock, ni prix public, ni fiche article interne
-      lignes.forEach(l => { l.cat_stock = null; l.cat_stock_alerte = null; l.cat_prix_public = null; l.cat_fiche_masquee = true; });
+      // Distributeur connecté : ni stock, ni prix public, ni fiche article interne ; prix distributeur HT
+      // affichés seulement si Paramètres → « Prix visibles dans l'espace distributeur » est activé
+      let prixOk = false;
+      try { const pv = await db.get("SELECT valeur FROM parametres WHERE cle='espace_prix_visibles'"); prixOk = !!(pv && pv.valeur === '1'); } catch (_) {}
+      lignes.forEach(l => { l.cat_stock = null; l.cat_stock_alerte = null; l.cat_prix_public = null; l.cat_fiche_masquee = true; if (!prixOk) l.cat_prix_distrib = null; });
     } else if (u.role !== 'admin' && u.role !== 'operateur' && !(u.permissions && ['read', 'write'].includes(u.permissions.catalogue))) {
       lignes.forEach(l => { l.cat_stock = null; l.cat_stock_alerte = null; l.cat_prix_distrib = null; l.cat_prix_public = null; l.cat_masque = true; });
     }

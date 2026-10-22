@@ -609,6 +609,13 @@ async function initDB() {
           }
         } catch (e) { console.warn('⚠️  Photo Eloflex L2 (eloflex.se) :', e.message); }
       }
+      // Caractéristiques des autres modèles (reprises des fiches produits eloflex.fr) : seulement si encore vides
+      try {
+        const CARAC = require('./eclates-caracteristiques.json');
+        for (const [slug, k] of Object.entries(CARAC)) {
+          await client.query(`UPDATE eclates_modeles SET caracteristiques=$1 WHERE slug=$2 AND caracteristiques IS NULL`, [JSON.stringify(k), slug]);
+        }
+      } catch (e) { console.warn('⚠️  Caractéristiques éclatés :', e.message); }
       await client.query(`CREATE TABLE IF NOT EXISTS eclates_vues (
         id SERIAL PRIMARY KEY,
         modele_id INTEGER NOT NULL REFERENCES eclates_modeles(id) ON DELETE CASCADE,
@@ -945,6 +952,7 @@ async function initDB() {
       ['email_from',''],
       // Retours démo : forfaits HT et destinataires par défaut du compte rendu
       ['espace_distributeurs_actif','1'],
+      ['espace_prix_visibles','0'],   // prix distributeur affichés dans l'espace distributeur (0 = masqués)
       // Ordre d'affichage des éclatés (noms sans « Eloflex », séparés par des virgules ; les autres suivent)
       ['eclates_ordre','L2, R, H2, L, F, D2, P, X, K, H, F Pre 2022, D2 Pre 2022, P Pre 2022, S1, C'],
       ['retour_demo_forfait_retour','50'],
