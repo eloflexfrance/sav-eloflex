@@ -142,7 +142,8 @@
         });
         const data = await r.json();
         if (r.ok && data.ok) {
-          window.location.href = '/';
+          const dm = new URLSearchParams(location.search).get('espace_demande');
+          window.location.href = /^\d+$/.test(dm || '') ? '/?espace_demande=' + dm : '/';
         } else {
           errEl.textContent = data.error || 'Identifiants incorrects.';
           errEl.style.display = 'block';

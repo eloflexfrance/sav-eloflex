@@ -50,6 +50,18 @@
     [/\(pair\)/g, '(par)'],
     [/\(alt\. /g, '(alt. '],
     [/^NO\. /, ''],
+    // Modèle L2 (éclaté 2026-09)
+    [/\bModel(?=[A-Z]\d?\b)/g, 'Model '],
+    [/Cable control box to battery/g, 'Kabel styrbox till batteri'],
+    [/Cable control box to motor/g, 'Kabel styrbox till motor'],
+    [/Jumper cable batteries/g, 'Bygelkabel batterier'],
+    [/Front fork spacer/g, 'Distans framgaffel'],
+    [/Armrest frame/g, 'Armstödsram'],
+    [/Backrest Upper/g, 'Ryggstöd övre del'],
+    [/Backrest Middle/g, 'Ryggstöd mittdel'],
+    [/Backrest Lower/g, 'Ryggstöd nedre del'],
+    [/Chassis jointed knee/g, 'Chassi ledat knä'],
+    [/\bleft\b/g, 'vänster'],
     // Ensembles / pièces composées
     [/Anti slip bottom plate/g, 'Halkskyddad bottenplatta'],
     [/Anti-tip rod and wheel/g, 'Tippskyddsstång och hjul'],

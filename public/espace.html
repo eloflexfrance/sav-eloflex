@@ -91,53 +91,133 @@
     .points i { color: #2563eb; margin-right: 6px; }
     .bas { margin-top: 18px; font-size: 11.5px; color: #9ca3af; text-align: center; }
     .bas a { color: #6b7280; }
+    .langs { display:flex; justify-content:flex-end; gap:4px; margin:-18px -12px 14px 0; }
+    .langs button { border:1px solid #e2e4e9; background:#fff; color:#374151; border-radius:7px; padding:4px 9px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .langs button.on { background:#2563eb; border-color:#2563eb; color:#fff; }
+    .opt { font-weight:400; color:#9ca3af; letter-spacing:0; }
+    .sep { margin:18px 0 12px; font-size:12px; color:#6b7280; border-top:1px solid #eef0f3; padding-top:12px; line-height:1.5; }
   </style>
 </head>
 <body>
   <div class="card">
+    <div class="langs" role="group" aria-label="Langue / Language / Språk">
+      <button type="button" data-lg="fr">FR</button><button type="button" data-lg="en">EN</button><button type="button" data-lg="sv">SV</button>
+    </div>
     <div class="logo">
       <i class="ti ti-building-store"></i>
-      <span class="logo-text">Espace distributeur Eloflex</span>
+      <span class="logo-text" data-t="titre"></span>
     </div>
-    <p class="subtitle">Saisissez l'adresse e-mail enregistrée chez Eloflex : vous recevrez un lien de connexion, sans mot de passe.</p>
+    <p class="subtitle" data-t="sous"></p>
 
     <div class="field">
-      <label for="email">Adresse e-mail</label>
-      <input type="email" id="email" autocomplete="email" placeholder="contact@votre-societe.fr">
+      <label for="email" data-t="lEmail"></label>
+      <input type="email" id="email" autocomplete="email" data-ph="phEmail">
     </div>
-    <button class="btn-login" id="btn" onclick="demander()">Recevoir mon lien de connexion</button>
+    <p class="sep" data-t="premiere"></p>
+    <div class="field">
+      <label for="societe"><span data-t="lSociete"></span> <span class="opt" data-t="facult"></span></label>
+      <input type="text" id="societe" autocomplete="organization" maxlength="120">
+    </div>
+    <div class="field">
+      <label for="nom"><span data-t="lNom"></span> <span class="opt" data-t="facult"></span></label>
+      <input type="text" id="nom" autocomplete="name" maxlength="120">
+    </div>
+    <div class="field">
+      <label for="tel"><span data-t="lTel"></span> <span class="opt" data-t="facult"></span></label>
+      <input type="tel" id="tel" autocomplete="tel" maxlength="40">
+    </div>
+    <button class="btn-login" id="btn" onclick="demander()" data-t="btn"></button>
     <div class="error" id="err"></div>
     <div class="ok" id="ok"></div>
 
     <ul class="points">
-      <li><i class="ti ti-schema"></i>Éclatés de tous les fauteuils Eloflex avec les références des pièces</li>
-      <li><i class="ti ti-file-invoice"></i>Demande de devis de pièces détachées en PDF, transmise directement à Eloflex</li>
+      <li><i class="ti ti-schema"></i><span data-t="p1"></span></li>
+      <li><i class="ti ti-file-invoice"></i><span data-t="p2"></span></li>
     </ul>
-    <div class="bas">Une question ? <a href="mailto:sav@eloflex.fr">sav@eloflex.fr</a> · 09 67 66 51 29<br><a href="/login">Accès équipe Eloflex</a></div>
+    <div class="bas"><span data-t="question"></span> <a href="mailto:sav@eloflex.fr">sav@eloflex.fr</a> · <span data-t="tel"></span><br><a href="/login" data-t="equipe"></a></div>
   </div>
 
   <script>
+    const TXT = {
+      fr: {
+        doc: 'Eloflex — Espace distributeur', titre: 'Espace distributeur Eloflex',
+        sous: 'Saisissez votre adresse e-mail professionnelle : vous recevrez un lien de connexion, sans mot de passe.',
+        lEmail: 'Adresse e-mail', phEmail: 'contact@votre-societe.fr',
+        premiere: 'Première demande d’accès ? Indiquez votre société : notre équipe validera votre accès et vous enverra votre lien.',
+        lSociete: 'Société', lNom: 'Nom et prénom', lTel: 'Téléphone', facult: '(facultatif)',
+        btn: 'Recevoir mon lien de connexion', btnEnvoi: 'Envoi en cours…', btnRenvoi: 'Renvoyer le lien',
+        okHtml: '<b>Demande bien reçue !</b><br>Si votre adresse est déjà enregistrée chez Eloflex, vous recevez votre lien de connexion dans quelques instants (pensez à vérifier les courriers indésirables ; le lien est valable 48 heures).<br>Sinon, votre demande est transmise à notre équipe, qui validera votre accès et vous enverra votre lien par e-mail.',
+        eEmail: 'Veuillez saisir une adresse e-mail valide.', eFerme: 'L’espace distributeur est momentanément fermé.',
+        eServeur: 'Envoi impossible pour le moment, réessayez plus tard.', eLien: 'Ce lien de connexion a expiré ou n’est plus valide : demandez-en un nouveau ci-dessous.',
+        eAutre: 'Une erreur est survenue, réessayez.',
+        p1: 'Éclatés de tous les fauteuils Eloflex avec les références des pièces', p2: 'Demande de devis de pièces détachées en PDF, transmise directement à Eloflex',
+        question: 'Une question ?', tel: '09 67 66 51 29', equipe: 'Accès équipe Eloflex'
+      },
+      en: {
+        doc: 'Eloflex — Dealer area', titre: 'Eloflex dealer area',
+        sous: 'Enter your business e-mail address: you will receive a sign-in link, no password needed.',
+        lEmail: 'E-mail address', phEmail: 'contact@your-company.com',
+        premiere: 'First access request? Tell us your company: our team will approve your access and send you your link.',
+        lSociete: 'Company', lNom: 'Full name', lTel: 'Phone', facult: '(optional)',
+        btn: 'Send me my sign-in link', btnEnvoi: 'Sending…', btnRenvoi: 'Send the link again',
+        okHtml: '<b>Request received!</b><br>If your address is already registered with Eloflex, you will receive your sign-in link in a few moments (please check your spam folder; the link is valid for 48 hours).<br>Otherwise, your request is forwarded to our team, who will approve your access and e-mail you your link.',
+        eEmail: 'Please enter a valid e-mail address.', eFerme: 'The dealer area is temporarily closed.',
+        eServeur: 'Unable to send right now, please try again later.', eLien: 'This sign-in link has expired or is no longer valid: request a new one below.',
+        eAutre: 'An error occurred, please try again.',
+        p1: 'Exploded views of all Eloflex wheelchairs with spare part numbers', p2: 'Spare parts quote request as a PDF, sent directly to Eloflex',
+        question: 'Any questions?', tel: '+33 9 67 66 51 29', equipe: 'Eloflex staff sign-in'
+      },
+      sv: {
+        doc: 'Eloflex — Återförsäljarportal', titre: 'Eloflex återförsäljarportal',
+        sous: 'Ange din e-postadress i tjänsten: du får en inloggningslänk, inget lösenord behövs.',
+        lEmail: 'E-postadress', phEmail: 'kontakt@ditt-foretag.se',
+        premiere: 'Första gången du begär åtkomst? Ange ditt företag: vårt team godkänner din åtkomst och skickar din länk.',
+        lSociete: 'Företag', lNom: 'För- och efternamn', lTel: 'Telefon', facult: '(valfritt)',
+        btn: 'Skicka min inloggningslänk', btnEnvoi: 'Skickar…', btnRenvoi: 'Skicka länken igen',
+        okHtml: '<b>Förfrågan mottagen!</b><br>Om din adress redan är registrerad hos Eloflex får du din inloggningslänk inom kort (kontrollera skräpposten; länken är giltig i 48 timmar).<br>Annars skickas din förfrågan till vårt team, som godkänner din åtkomst och mejlar dig din länk.',
+        eEmail: 'Ange en giltig e-postadress.', eFerme: 'Återförsäljarportalen är tillfälligt stängd.',
+        eServeur: 'Det går inte att skicka just nu, försök igen senare.', eLien: 'Den här inloggningslänken har gått ut eller är inte längre giltig: begär en ny nedan.',
+        eAutre: 'Ett fel uppstod, försök igen.',
+        p1: 'Sprängskisser för alla Eloflex-rullstolar med reservdelarnas artikelnummer', p2: 'Offertförfrågan på reservdelar som PDF, skickas direkt till Eloflex',
+        question: 'Frågor?', tel: '+33 9 67 66 51 29', equipe: 'Inloggning för Eloflex-personal'
+      }
+    };
+    const LS = { get(k){ try { return localStorage.getItem(k); } catch(_) { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch(_) {} } };
     const q = new URLSearchParams(location.search);
-    if (q.get('erreur')) {
-      const e = document.getElementById('err');
-      e.textContent = q.get('erreur') === 'lien' ? 'Ce lien de connexion a expiré ou n’est plus valide : demandez-en un nouveau ci-dessous.' : 'Une erreur est survenue, réessayez.';
-      e.style.display = 'block';
+    const nav = (navigator.language || 'fr').slice(0, 2).toLowerCase();
+    let LG = [q.get('lang'), LS.get('espace_lang'), nav].find(v => v && TXT[v]) || 'en';
+    let envoye = false;
+    const $ = id => document.getElementById(id);
+    function appliquer(lg) {
+      LG = TXT[lg] ? lg : 'fr'; LS.set('espace_lang', LG);
+      const T = TXT[LG];
+      document.documentElement.lang = LG; document.title = T.doc;
+      document.querySelectorAll('[data-t]').forEach(el => { el.textContent = T[el.dataset.t]; });
+      document.querySelectorAll('[data-ph]').forEach(el => { el.placeholder = T[el.dataset.ph]; });
+      document.querySelectorAll('.langs button').forEach(b => b.classList.toggle('on', b.dataset.lg === LG));
+      if (envoye) { $('btn').textContent = T.btnRenvoi; $('ok').innerHTML = T.okHtml; }
+      if ($('err').dataset.k) $('err').textContent = T[$('err').dataset.k];
     }
-    document.getElementById('email').addEventListener('keydown', e => { if (e.key === 'Enter') demander(); });
+    function erreur(k) { const e = $('err'); e.dataset.k = k; e.textContent = TXT[LG][k]; e.style.display = 'block'; }
+    document.querySelectorAll('.langs button').forEach(b => b.onclick = () => appliquer(b.dataset.lg));
+    appliquer(LG);
+    if (q.get('erreur')) erreur(q.get('erreur') === 'lien' ? 'eLien' : 'eAutre');
+    $('email').addEventListener('keydown', e => { if (e.key === 'Enter') demander(); });
     async function demander() {
-      const email = document.getElementById('email').value.trim();
-      const err = document.getElementById('err'), ok = document.getElementById('ok'), btn = document.getElementById('btn');
-      err.style.display = 'none'; ok.style.display = 'none';
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Veuillez saisir une adresse e-mail valide.'; err.style.display = 'block'; return; }
-      btn.disabled = true; btn.textContent = 'Envoi en cours…';
+      const T = TXT[LG];
+      const email = $('email').value.trim();
+      const err = $('err'), ok = $('ok'), btn = $('btn');
+      err.style.display = 'none'; err.dataset.k = ''; ok.style.display = 'none';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { erreur('eEmail'); return; }
+      btn.disabled = true; btn.textContent = T.btnEnvoi;
       try {
-        const r = await fetch('/api/espace/lien', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+        const r = await fetch('/api/espace/lien', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, societe: $('societe').value.trim(), nom: $('nom').value.trim(), tel: $('tel').value.trim(), langue: LG }) });
         const d = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(d.error || 'Envoi impossible.');
-        ok.innerHTML = '<b>C’est envoyé !</b><br>Si cette adresse est enregistrée chez Eloflex, vous allez recevoir un e-mail avec votre lien de connexion (pensez à vérifier les courriers indésirables). Le lien est valable 48 heures.';
-        ok.style.display = 'block';
-        btn.textContent = 'Renvoyer le lien';
-      } catch (e) { err.textContent = e.message; err.style.display = 'block'; btn.textContent = 'Recevoir mon lien de connexion'; }
+        if (!r.ok) throw new Error(d.error === 'email' ? 'eEmail' : d.error === 'ferme' ? 'eFerme' : 'eServeur');
+        envoye = true; ok.innerHTML = TXT[LG].okHtml; ok.style.display = 'block';
+        btn.textContent = TXT[LG].btnRenvoi;
+      } catch (e) { erreur(TXT[LG][e.message] ? e.message : 'eServeur'); btn.textContent = envoye ? TXT[LG].btnRenvoi : TXT[LG].btn; }
       btn.disabled = false;
     }
   </script>

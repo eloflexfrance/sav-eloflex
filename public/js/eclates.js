@@ -156,6 +156,54 @@ const SITE_SE = () => typeof LANG !== 'undefined' && LANG !== 'fr';
 const lienM = (m, k) => SITE_SE() ? (m[k + '_se'] || '') : (m[k] || '');
 const L = () => E.lang || (typeof LANG !== 'undefined' && LANG === 'en' ? 'en' : 'fr');
 const T = k => (TX[L()] || TX.en)[k];
+// Libellés « demande de devis » selon la langue de la visionneuse (FR / EN / SV)
+const SV_UI = {
+"Adresse de livraison": "Leveransadress",
+"Ajouter une pièce non trouvée dans les éclatés": "Lägg till en del som inte finns i sprängskisserna",
+"Ajoutez au moins une pièce ou décrivez votre besoin dans « Informations complémentaires ».": "Lägg till minst en del eller beskriv ditt behov under ”Övrig information”.",
+"Continuer mes recherches": "Fortsätt söka",
+"Demande de devis de pièces détachées": "Offertförfrågan reservdelar",
+"Demande de devis envoyée": "Offertförfrågan skickad",
+"Demande de devis — pièces détachées": "Offertförfrågan — reservdelar",
+"Demande de devis": "Offertförfrågan",
+"Description de la pièce, modèle du fauteuil…": "Beskrivning av delen, rullstolsmodell…",
+"Désignation": "Benämning",
+"Eloflex vous adresse le devis : prix, frais de port et délai de livraison.": "Eloflex skickar offerten: pris, frakt och leveranstid.",
+"Envoi…": "Skickar…",
+"Envoyer la demande de devis à Eloflex": "Skicka offertförfrågan till Eloflex",
+"Fermer": "Stäng",
+"Hors frais de port (ajoutés dans le devis)": "Exkl. frakt (läggs till i offerten)",
+"Informations complémentaires": "Övrig information",
+"Les prix et les frais de port vous seront communiqués dans le devis Eloflex.": "Priser och frakt anges i offerten från Eloflex.",
+"Merci ! Votre demande de devis": "Tack! Din offertförfrågan",
+"Montants indicatifs, tarifs distributeur HT en vigueur, hors frais de port. Eloflex vous adresse le devis définitif (frais de port et délai compris).": "Vägledande belopp, gällande återförsäljarpriser exkl. moms och frakt. Eloflex skickar den slutliga offerten (inkl. frakt och leveranstid).",
+"Nom du distributeur": "Återförsäljarens namn",
+"Notre équipe vous adresse très prochainement le devis, frais de port et délai de livraison compris.": "Vårt team skickar snart offerten, inklusive frakt och leveranstid.",
+"Ouvrez un éclaté et cliquez sur « Ajouter au devis » à côté des pièces souhaitées. Vous pouvez aussi ajouter une pièce que vous ne trouvez pas, ou simplement décrire votre besoin dans « Informations complémentaires ».": "Öppna en sprängskiss och klicka på ”Lägg till i offert” bredvid de delar du behöver. Du kan också lägga till en del du inte hittar, eller bara beskriva ditt behov under ”Övrig information”.",
+"PU HT": "À-pris exkl. moms",
+"Qté": "Antal",
+"Retirer": "Ta bort",
+"Réf. (si connue)": "Art.nr (om känt)",
+"Référence": "Art.nr",
+"Société / demandeur": "Företag / beställare",
+"TVA": "Moms",
+"Total HT": "Summa exkl. moms",
+"Total TTC": "Summa inkl. moms",
+"Tout ce qui peut nous aider : n° de série du fauteuil, description d’une pièce introuvable, urgence, contraintes de livraison, question…": "Allt som kan hjälpa oss: rullstolens serienummer, beskrivning av en del som saknas, brådska, leveranskrav, frågor…",
+"Télécharger le PDF": "Ladda ner PDF",
+"Vider la demande de devis ?": "Töm offertförfrågan?",
+"Vider": "Töm",
+"Votre référence": "Er referens",
+"a bien été transmise à Eloflex. Vous en recevez une copie par e-mail et le PDF vient d’être téléchargé.": "har skickats till Eloflex. Du får en kopia via e-post och PDF:en har laddats ner.",
+"ajouté à la demande de devis": "tillagd i offertförfrågan",
+"ex. n° de dossier patient, n° interne…": "t.ex. patientärende, internt nr…",
+"pièce(s) hors tarif : prix communiqué dans le devis": "del(ar) utan listpris: pris anges i offerten",
+"sur devis": "enligt offert",
+"Ajouter au devis": "Lägg till i offert",
+"Ajouté": "Tillagd",
+"Ajouter à la demande de devis": "Lägg till i offertförfrågan"
+};
+const TV = s => L() === 'sv' ? (SV_UI[s] || ((typeof EN_STR !== 'undefined' && EN_STR[s]) || s)) : L() === 'en' ? ((typeof EN_STR !== 'undefined' && EN_STR[s]) || TR(s)) : TR(s);
 const peutModifier = () => (typeof canWrite === 'function') && canWrite('eclates');
 
 // ── Données dérivées ────────────────────────────────────────────────
@@ -666,7 +714,7 @@ function list(){
         ${it.horscat && L() === 'fr' && !it.cat_masque && !it.cat_fiche_masquee ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
         ${it.note ? `<span class="ecl-tag warn">${T('sold')}</span>` : ''}
       </div>
-      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque && it.cat_prix_distrib != null ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TR('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TR('Ajouter au devis')}</button>` : ''}</div>
+      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque && it.cat_prix_distrib != null ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TV('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TV('Ajouter au devis')}</button>` : ''}</div>
     </div>`;
   };
   v.items.forEach(it => h += row(it, false));
@@ -687,7 +735,7 @@ function list(){
   el.querySelectorAll('[data-cmd]').forEach(b => b.onclick = ev => {
     ev.stopPropagation();
     const it = v.items.concat(v.extras).find(x => x.id === +b.dataset.cmd); if (!it) return;
-    panierAjouter(it); b.innerHTML = '<i class="ti ti-check"></i> ' + TR('Ajouté'); setTimeout(() => { b.innerHTML = '<i class="ti ti-file-plus"></i> ' + TR('Ajouter au devis'); }, 1300);
+    panierAjouter(it); b.innerHTML = '<i class="ti ti-check"></i> ' + TV('Ajouté'); setTimeout(() => { b.innerHTML = '<i class="ti ti-file-plus"></i> ' + TV('Ajouter au devis'); }, 1300);
   });
 }
 
@@ -1109,17 +1157,17 @@ const CLE_PANIER = () => 'ecl_panier_' + ((typeof CURRENT_USER !== 'undefined' &
 function panierLire(){ try { return JSON.parse(localStorage.getItem(CLE_PANIER()) || '[]') || []; } catch (_) { return E._panier || []; } }
 function panierEcrire(p){ E._panier = p; try { localStorage.setItem(CLE_PANIER(), JSON.stringify(p)); } catch (_) {} majBadgePanier(); }
 function panierNb(){ return panierLire().reduce((s, l) => s + (parseInt(l.qte) || 0), 0); }
-function boutonPanier(){ cssPanier(); const n = panierNb(); return `<button class="btn" id="ecl-panier" onclick="ouvrirPanier()" title="${TR('Demande de devis de pièces détachées')}"><i class="ti ti-file-invoice"></i> ${TR('Demande de devis')}<span class="ecl-pan-badge" id="ecl-pan-n" style="${n ? '' : 'display:none'}">${n}</span></button>`; }
+function boutonPanier(){ cssPanier(); const n = panierNb(); return `<button class="btn" id="ecl-panier" onclick="ouvrirPanier()" title="${TV('Demande de devis de pièces détachées')}"><i class="ti ti-file-invoice"></i> ${TV('Demande de devis')}<span class="ecl-pan-badge" id="ecl-pan-n" style="${n ? '' : 'display:none'}">${n}</span></button>`; }
 function majBadgePanier(){ const b = $('ecl-pan-n'); if (!b) return; const n = panierNb(); b.textContent = n; b.style.display = n ? '' : 'none'; }
 function panierAjouter(it){
   const p = panierLire();
   const cle = normRef(it.ref) || ('L' + it.id);
   const ex = p.find(l => l.cle === cle);
   if (ex) ex.qte = (parseInt(ex.qte) || 1) + 1;
-  else p.push({ cle, ref: it.ref || '', designation: (L() === 'fr' ? (it.cat_designation || it.fr || it.desc_en) : (label(it) || it.desc_en || it.fr)) || '', modele: E.data ? E.data.nom : '',
+  else p.push({ cle, ref: it.ref || '', designation: (L() === 'fr' ? (it.cat_designation || it.fr || it.desc_en) : (it.desc_en || label(it) || it.fr)) || '', modele: E.data ? E.data.nom : '',
     qte: 1, pu: (it.cat_id && it.cat_prix_distrib != null && !it.cat_masque) ? +it.cat_prix_distrib : null, tva: it.cat_tva != null ? +it.cat_tva : null });
   panierEcrire(p);
-  if (typeof toast === 'function') toast((it.ref ? it.ref + ' — ' : '') + TR('ajouté à la demande de devis'), 'ti-file-plus');
+  if (typeof toast === 'function') toast((it.ref ? it.ref + ' — ' : '') + TV('ajouté à la demande de devis'), 'ti-file-plus');
 }
 const eurF = v => (Math.round((+v || 0) * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 function totaux(p){
@@ -1135,26 +1183,26 @@ async function ouvrirPanier(){
   E._moi = moi;
   const f = E._panForm = E._panForm || {};
   const v = (k, d) => e_(f[k] != null ? f[k] : (d || ''));
-  showModal(`<div class="modal-header"><i class="ti ti-file-invoice" style="color:var(--accent)"></i><h2>${TR('Demande de devis — pièces détachées')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  showModal(`<div class="modal-header"><i class="ti ti-file-invoice" style="color:var(--accent)"></i><h2>${TV('Demande de devis — pièces détachées')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      ${p.length ? '' : `<div style="font-size:13.5px;color:var(--text2);background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:6px"><i class="ti ti-info-circle"></i> ${TR('Ouvrez un éclaté et cliquez sur « Ajouter au devis » à côté des pièces souhaitées. Vous pouvez aussi ajouter une pièce que vous ne trouvez pas, ou simplement décrire votre besoin dans « Informations complémentaires ».')}</div>`}
+      ${p.length ? '' : `<div style="font-size:13.5px;color:var(--text2);background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:6px"><i class="ti ti-info-circle"></i> ${TV('Ouvrez un éclaté et cliquez sur « Ajouter au devis » à côté des pièces souhaitées. Vous pouvez aussi ajouter une pièce que vous ne trouvez pas, ou simplement décrire votre besoin dans « Informations complémentaires ».')}</div>`}
       <div id="ecl-pan-lignes"></div>
-      <div style="margin-top:8px"><button class="btn sm" onclick="panierLigneLibre()"><i class="ti ti-plus"></i>${TR('Ajouter une pièce non trouvée dans les éclatés')}</button></div>
-      <div class="form-group" style="margin-top:14px"><label class="form-label">${TR('Informations complémentaires')}</label>
-        <textarea class="form-input" id="pan-com" rows="4" oninput="panierForm('com',this.value)" placeholder="${TR('Tout ce qui peut nous aider : n° de série du fauteuil, description d’une pièce introuvable, urgence, contraintes de livraison, question…')}">${v('com')}</textarea></div>
+      <div style="margin-top:8px"><button class="btn sm" onclick="panierLigneLibre()"><i class="ti ti-plus"></i>${TV('Ajouter une pièce non trouvée dans les éclatés')}</button></div>
+      <div class="form-group" style="margin-top:14px"><label class="form-label">${TV('Informations complémentaires')}</label>
+        <textarea class="form-input" id="pan-com" rows="4" oninput="panierForm('com',this.value)" placeholder="${TV('Tout ce qui peut nous aider : n° de série du fauteuil, description d’une pièce introuvable, urgence, contraintes de livraison, question…')}">${v('com')}</textarea></div>
       <div class="grid-2">
-        ${moi.interne ? `<div class="form-group"><label class="form-label">${TR('Société / demandeur')}</label><input class="form-input" id="pan-distrib" oninput="panierForm('distrib',this.value)" value="${v('distrib', (typeof CURRENT_USER!=='undefined' && CURRENT_USER && CURRENT_USER.nom) || '')}" placeholder="${TR('Nom du distributeur')}"></div>` : ''}
-        <div class="form-group"><label class="form-label">${TR('Votre référence')}</label><input class="form-input" id="pan-ref" oninput="panierForm('ref',this.value)" value="${v('ref')}" placeholder="${TR('ex. n° de dossier patient, n° interne…')}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Adresse de livraison')}</label><textarea class="form-input" id="pan-adr" rows="3" oninput="panierForm('adr',this.value)">${v('adr', adrFiche)}</textarea></div>
+        ${moi.interne ? `<div class="form-group"><label class="form-label">${TV('Société / demandeur')}</label><input class="form-input" id="pan-distrib" oninput="panierForm('distrib',this.value)" value="${v('distrib', (typeof CURRENT_USER!=='undefined' && CURRENT_USER && CURRENT_USER.nom) || '')}" placeholder="${TV('Nom du distributeur')}"></div>` : ''}
+        <div class="form-group"><label class="form-label">${TV('Votre référence')}</label><input class="form-input" id="pan-ref" oninput="panierForm('ref',this.value)" value="${v('ref')}" placeholder="${TV('ex. n° de dossier patient, n° interne…')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TV('Adresse de livraison')}</label><textarea class="form-input" id="pan-adr" rows="3" oninput="panierForm('adr',this.value)">${v('adr', adrFiche)}</textarea></div>
       </div>
-      <div style="font-size:12px;color:var(--text3)">${p.some(l => l.pu != null) ? TR('Montants indicatifs, tarifs distributeur HT en vigueur, hors frais de port. Eloflex vous adresse le devis définitif (frais de port et délai compris).') : TR('Eloflex vous adresse le devis : prix, frais de port et délai de livraison.')}</div>
+      <div style="font-size:12px;color:var(--text3)">${p.some(l => l.pu != null) ? TV('Montants indicatifs, tarifs distributeur HT en vigueur, hors frais de port. Eloflex vous adresse le devis définitif (frais de port et délai compris).') : TV('Eloflex vous adresse le devis : prix, frais de port et délai de livraison.')}</div>
       <div id="pan-msg" style="font-size:13px;margin-top:6px;min-height:16px"></div>
     </div>
     <div class="modal-footer" style="flex-wrap:wrap">
-      ${p.length ? `<button class="btn danger" style="margin-right:auto" onclick="viderPanier()"><i class="ti ti-trash"></i>${TR('Vider')}</button>` : ''}
-      <button class="btn" onclick="closeModal()">${TR('Continuer mes recherches')}</button>
-      <button class="btn" onclick="bonCommandePDF(false)"><i class="ti ti-file-type-pdf"></i>${TR('Télécharger le PDF')}</button>
-      ${peutCommander() ? `<button class="btn primary" id="pan-envoyer" onclick="bonCommandePDF(true)"><i class="ti ti-send"></i>${TR('Envoyer la demande de devis à Eloflex')}</button>` : ''}
+      ${p.length ? `<button class="btn danger" style="margin-right:auto" onclick="viderPanier()"><i class="ti ti-trash"></i>${TV('Vider')}</button>` : ''}
+      <button class="btn" onclick="closeModal()">${TV('Continuer mes recherches')}</button>
+      <button class="btn" onclick="bonCommandePDF(false)"><i class="ti ti-file-type-pdf"></i>${TV('Télécharger le PDF')}</button>
+      ${peutCommander() ? `<button class="btn primary" id="pan-envoyer" onclick="bonCommandePDF(true)"><i class="ti ti-send"></i>${TV('Envoyer la demande de devis à Eloflex')}</button>` : ''}
     </div>`);
   const m = document.querySelector('#modal-area .modal'); if (m) m.style.maxWidth = '900px';
   dessinerLignesPanier();
@@ -1171,38 +1219,38 @@ function dessinerLignesPanier(){
   const box = $('ecl-pan-lignes'); if (!box) return;
   const p = panierLire(); if (!p.length) { box.innerHTML = ''; return; }
   const t = totaux(p);
-  box.innerHTML = `<div class="table-wrap"><table id="ecl-pan-tbl"><thead><tr><th>${TR('Référence')}</th><th>${TR('Désignation')}</th><th style="width:78px">${TR('Qté')}</th><th style="text-align:right">${TR('PU HT')}</th><th style="text-align:right">${TR('Total HT')}</th><th></th></tr></thead><tbody>
+  box.innerHTML = `<div class="table-wrap"><table id="ecl-pan-tbl"><thead><tr><th>${TV('Référence')}</th><th>${TV('Désignation')}</th><th style="width:78px">${TV('Qté')}</th><th style="text-align:right">${TV('PU HT')}</th><th style="text-align:right">${TV('Total HT')}</th><th></th></tr></thead><tbody>
     ${p.map((l, i) => `${l.libre
-      ? `<tr><td><input class="form-input mono" style="padding:4px 6px;font-size:12px;min-width:90px" placeholder="${TR('Réf. (si connue)')}" value="${e_(l.ref)}" onchange="panierLibre(${i},'ref',this.value)"></td><td><input class="form-input pan-libre-des" style="padding:4px 6px" placeholder="${TR('Description de la pièce, modèle du fauteuil…')}" value="${e_(l.designation)}" onchange="panierLibre(${i},'designation',this.value)"></td>`
+      ? `<tr><td><input class="form-input mono" style="padding:4px 6px;font-size:12px;min-width:90px" placeholder="${TV('Réf. (si connue)')}" value="${e_(l.ref)}" onchange="panierLibre(${i},'ref',this.value)"></td><td><input class="form-input pan-libre-des" style="padding:4px 6px" placeholder="${TV('Description de la pièce, modèle du fauteuil…')}" value="${e_(l.designation)}" onchange="panierLibre(${i},'designation',this.value)"></td>`
       : `<tr><td class="mono" style="white-space:nowrap">${e_(l.ref || '—')}</td><td>${e_(l.designation)}${l.modele ? `<div style="font-size:11px;color:var(--text3)">${e_(l.modele)}</div>` : ''}</td>`}
       <td><input class="form-input" type="number" min="1" max="999" value="${parseInt(l.qte) || 1}" style="padding:4px 6px" onchange="panierQte(${i}, this.value)"></td>
-      <td style="text-align:right;white-space:nowrap">${l.pu != null ? eurF(l.pu) : '<span style="color:var(--text3)">' + TR('sur devis') + '</span>'}</td>
+      <td style="text-align:right;white-space:nowrap">${l.pu != null ? eurF(l.pu) : '<span style="color:var(--text3)">' + TV('sur devis') + '</span>'}</td>
       <td style="text-align:right;white-space:nowrap;font-weight:600">${l.pu != null ? eurF(l.pu * (parseInt(l.qte) || 1)) : '—'}</td>
-      <td><button class="btn sm" title="${TR('Retirer')}" onclick="panierRetirer(${i})"><i class="ti ti-x"></i></button></td></tr>`).join('')}
+      <td><button class="btn sm" title="${TV('Retirer')}" onclick="panierRetirer(${i})"><i class="ti ti-x"></i></button></td></tr>`).join('')}
     </tbody></table></div>
-    ${p.every(l => l.pu == null) ? `<div style="text-align:right;font-size:13px;color:var(--text2);margin-top:8px"><i class="ti ti-info-circle"></i> ${TR('Les prix et les frais de port vous seront communiqués dans le devis Eloflex.')}</div>` : `
+    ${p.every(l => l.pu == null) ? `<div style="text-align:right;font-size:13px;color:var(--text2);margin-top:8px"><i class="ti ti-info-circle"></i> ${TV('Les prix et les frais de port vous seront communiqués dans le devis Eloflex.')}</div>` : `
     <div style="display:flex;justify-content:flex-end;margin-top:8px"><table style="font-size:13.5px">
-      <tr><td style="padding:2px 14px;color:var(--text2)">${TR('Total HT')}</td><td style="text-align:right;font-weight:700">${eurF(t.ht)}</td></tr>
-      <tr><td style="padding:2px 14px;color:var(--text2)">${TR('TVA')}</td><td style="text-align:right">${eurF(t.tva)}</td></tr>
-      <tr><td style="padding:2px 14px;color:var(--text2)">${TR('Total TTC')}</td><td style="text-align:right;font-weight:700">${eurF(t.ttc)}</td></tr>
-      ${t.surDevis ? `<tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:#b45309">${t.surDevis} ${TR('pièce(s) hors tarif : prix communiqué dans le devis')}</td></tr>` : ''}
-      <tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:var(--text3);text-align:right">${TR('Hors frais de port (ajoutés dans le devis)')}</td></tr>
+      <tr><td style="padding:2px 14px;color:var(--text2)">${TV('Total HT')}</td><td style="text-align:right;font-weight:700">${eurF(t.ht)}</td></tr>
+      <tr><td style="padding:2px 14px;color:var(--text2)">${TV('TVA')}</td><td style="text-align:right">${eurF(t.tva)}</td></tr>
+      <tr><td style="padding:2px 14px;color:var(--text2)">${TV('Total TTC')}</td><td style="text-align:right;font-weight:700">${eurF(t.ttc)}</td></tr>
+      ${t.surDevis ? `<tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:#b45309">${t.surDevis} ${TV('pièce(s) hors tarif : prix communiqué dans le devis')}</td></tr>` : ''}
+      <tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:var(--text3);text-align:right">${TV('Hors frais de port (ajoutés dans le devis)')}</td></tr>
     </table></div>`}`;
 }
 function panierQte(i, v){ const p = panierLire(); if (!p[i]) return; p[i].qte = Math.max(1, Math.min(999, parseInt(v) || 1)); panierEcrire(p); dessinerLignesPanier(); }
 function panierRetirer(i){ const p = panierLire(); p.splice(i, 1); panierEcrire(p); dessinerLignesPanier(); }
-function viderPanier(){ if (!confirm(TR('Vider la demande de devis ?'))) return; panierEcrire([]); ouvrirPanier(); }
+function viderPanier(){ if (!confirm(TV('Vider la demande de devis ?'))) return; panierEcrire([]); ouvrirPanier(); }
 
 async function bonCommandePDF(envoyer){
   const p = panierLire().filter(l => !l.libre || String(l.designation || l.ref || '').trim());
   const moi = E._moi || {}, c = moi.client || {};
   const ref = ($('pan-ref') || {}).value || '', adr = ($('pan-adr') || {}).value || '', com = ($('pan-com') || {}).value || '';
-  if (!p.length && !com.trim()) { const mm = $('pan-msg'); if (mm) mm.innerHTML = '<span style="color:var(--danger)">' + TR('Ajoutez au moins une pièce ou décrivez votre besoin dans « Informations complémentaires ».') + '</span>'; return; }
+  if (!p.length && !com.trim()) { const mm = $('pan-msg'); if (mm) mm.innerHTML = '<span style="color:var(--danger)">' + TV('Ajoutez au moins une pièce ou décrivez votre besoin dans « Informations complémentaires ».') + '</span>'; return; }
   const distrib = moi.interne ? (($('pan-distrib') || {}).value || '') : (c.nom || '');
   const now = new Date(), pad = n => String(n).padStart(2, '0');
   const numero = `DDV-WEB-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   // PDF en anglais pour une interface en anglais / suédois
-  const EN = typeof LANG !== 'undefined' && LANG !== 'fr';
+  const EN = (typeof LANG !== 'undefined' && LANG !== 'fr') || L() !== 'fr';
   const PDF_EN = { 'DEMANDE DE DEVIS': 'QUOTE REQUEST', 'Pièces détachées Eloflex': 'Eloflex spare parts', 'Demande': 'Request', 'N°': 'No.',
     'Votre référence': 'Your reference', 'Demandeur': 'Requester', 'Distributeur': 'Dealer', 'Tél.': 'Phone', 'Adresse de livraison': 'Delivery address',
     'Référence': 'Part no.', 'Désignation': 'Description', 'Qté': 'Qty', 'PU HT': 'Unit price', 'Total HT': 'Total',
@@ -1263,19 +1311,19 @@ async function bonCommandePDF(envoyer){
     doc.text(`${numero} — page ${i}/${n}`, R0, 293, { align: 'right' }); }
   const nomFic = (EN ? 'Quote_request_' : 'Demande_de_devis_') + numero + '.pdf';
   if (!envoyer) { doc.save(nomFic); return; }
-  const btn = $('pan-envoyer'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> ' + TR('Envoi…'); }
+  const btn = $('pan-envoyer'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> ' + TV('Envoi…'); }
   try {
     const data = doc.output('datauristring').split(',')[1];
     await API.post('/espace/bon-commande', { numero, reference: ref, adresse: adr, commentaire: com, distributeur: distrib,
       lignes: p.map(l => ({ ref: l.ref, designation: l.designation, modele: l.modele, qte: l.qte, pu: l.pu })), pdf: { nom: nomFic, data } });
     doc.save(nomFic);
     panierEcrire([]); E._panForm = {};
-    showModal(`<div class="modal-header"><i class="ti ti-circle-check" style="color:var(--success)"></i><h2>${TR('Demande de devis envoyée')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-      <div class="modal-body"><p style="font-size:14px;line-height:1.6">${TR('Merci ! Votre demande de devis')} <b>${e_(numero)}</b> ${TR('a bien été transmise à Eloflex. Vous en recevez une copie par e-mail et le PDF vient d’être téléchargé.')}</p>
-      <p style="font-size:13px;color:var(--text2)">${TR('Notre équipe vous adresse très prochainement le devis, frais de port et délai de livraison compris.')}</p></div>
-      <div class="modal-footer"><button class="btn primary" onclick="closeModal()">${TR('Fermer')}</button></div>`);
+    showModal(`<div class="modal-header"><i class="ti ti-circle-check" style="color:var(--success)"></i><h2>${TV('Demande de devis envoyée')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body"><p style="font-size:14px;line-height:1.6">${TV('Merci ! Votre demande de devis')} <b>${e_(numero)}</b> ${TV('a bien été transmise à Eloflex. Vous en recevez une copie par e-mail et le PDF vient d’être téléchargé.')}</p>
+      <p style="font-size:13px;color:var(--text2)">${TV('Notre équipe vous adresse très prochainement le devis, frais de port et délai de livraison compris.')}</p></div>
+      <div class="modal-footer"><button class="btn primary" onclick="closeModal()">${TV('Fermer')}</button></div>`);
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-send"></i> ' + TR('Envoyer la demande de devis à Eloflex'); }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-send"></i> ' + TV('Envoyer la demande de devis à Eloflex'); }
     if (typeof toast === 'function') toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)');
   }
 }

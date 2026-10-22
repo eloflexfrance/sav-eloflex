@@ -24,7 +24,35 @@ async function ensureTables(db) {
     id SERIAL PRIMARY KEY, client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL, email TEXT,
     numero TEXT, reference TEXT, adresse_livraison TEXT, commentaire TEXT, lignes JSONB,
     total_ht NUMERIC, created_at TIMESTAMPTZ DEFAULT NOW())`);
+  await db.run(`ALTER TABLE espace_liens ADD COLUMN IF NOT EXISTS langue TEXT`);
+  await db.run(`CREATE TABLE IF NOT EXISTS espace_demandes (
+    id SERIAL PRIMARY KEY, email TEXT, societe TEXT, nom TEXT, tel TEXT, langue TEXT,
+    client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL, statut TEXT DEFAULT 'attente',
+    ip TEXT, nb INTEGER DEFAULT 1, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
+    traite_at TIMESTAMPTZ, traite_par TEXT)`);
 }
+
+const LANGUES = ['fr', 'en', 'sv'];
+const lgOk = v => LANGUES.includes(String(v || '').toLowerCase()) ? String(v).toLowerCase() : 'fr';
+const LG_NOM = { fr: 'Français', en: 'Anglais', sv: 'Suédois' };
+// Textes du mail « lien de connexion » envoyé au distributeur, dans sa langue
+const MAIL_LIEN = {
+  fr: { sujet: 'Eloflex — Votre accès à l’espace distributeur', titre: 'Eloflex — Espace distributeur', bonjour: 'Bonjour,',
+    intro: n => `Voici votre lien d'accès personnel à l'<b>espace distributeur Eloflex</b> (${n}) : vous y retrouvez les <b>éclatés</b> de nos fauteuils avec les références des pièces détachées, et vous pouvez préparer votre <b>demande de devis</b> de pièces en quelques clics.`,
+    bouton: 'Accéder à l’espace distributeur',
+    validite: (h, l) => `Ce lien est personnel et valable ${h} heures ; votre connexion reste ensuite active 7 jours sur cet appareil. Si le bouton ne fonctionne pas, copiez ce lien :<br>${l}`,
+    pasVous: 'Vous n’êtes pas à l’origine de cette demande ? Ignorez simplement cet e-mail.', fin: 'Restant à votre disposition.<br>Bien cordialement' },
+  en: { sujet: 'Eloflex — Your access to the dealer area', titre: 'Eloflex — Dealer area', bonjour: 'Hello,',
+    intro: n => `Here is your personal access link to the <b>Eloflex dealer area</b> (${n}): you will find the <b>exploded views</b> of our wheelchairs with the spare part numbers, and you can prepare your spare parts <b>quote request</b> in a few clicks.`,
+    bouton: 'Open the dealer area',
+    validite: (h, l) => `This link is personal and valid for ${h} hours; you then stay signed in for 7 days on this device. If the button does not work, copy this link:<br>${l}`,
+    pasVous: 'Did not request this? Simply ignore this e-mail.', fin: 'Kind regards' },
+  sv: { sujet: 'Eloflex — Din åtkomst till återförsäljarportalen', titre: 'Eloflex — Återförsäljarportal', bonjour: 'Hej,',
+    intro: n => `Här är din personliga länk till <b>Eloflex återförsäljarportal</b> (${n}): där hittar du <b>sprängskisserna</b> för våra rullstolar med reservdelarnas artikelnummer, och du kan skapa din <b>offertförfrågan</b> på reservdelar med några klick.`,
+    bouton: 'Öppna återförsäljarportalen',
+    validite: (h, l) => `Länken är personlig och giltig i ${h} timmar; därefter förblir du inloggad i 7 dagar på den här enheten. Om knappen inte fungerar, kopiera den här länken:<br>${l}`,
+    pasVous: 'Har du inte begärt detta? Ignorera bara det här e-postmeddelandet.', fin: 'Med vänliga hälsningar' },
+};
 
 // Fiches distributeur dont le champ e-mail contient cette adresse (le champ peut en lister plusieurs)
 async function clientsParEmail(db, email) {
@@ -35,9 +63,10 @@ async function clientsParEmail(db, email) {
 }
 
 // Session « distributeur » : jamais d'id utilisateur, seulement le module Éclatés en lecture
-function sessionDistributeur(c, email) {
+function sessionDistributeur(c, email, langue) {
+  const lg = lgOk(langue);
   return {
-    id: null, role: 'distributeur', nom: c.nom, email, langue: 'fr', pays: null,
+    id: null, role: 'distributeur', nom: c.nom, email, langue: lg === 'fr' ? 'fr' : 'en', langue_eclates: lg, pays: null,
     permissions: { eclates: 'read' },
     distributeur: { client_id: c.id, nom: c.nom },
   };
@@ -56,7 +85,7 @@ function monterPages(app, db) {
         WHERE l.token=$1 AND l.expires_at > NOW()`, [String(req.params.token)]);
       if (!l) return res.redirect('/espace?erreur=lien');
       await db.run('UPDATE espace_liens SET used_at=COALESCE(used_at, NOW()) WHERE token=$1', [l.token]);
-      req.session.user = sessionDistributeur({ id: l.client_id, nom: l.nom }, l.email);
+      req.session.user = sessionDistributeur({ id: l.client_id, nom: l.nom }, l.email, l.langue);
       req.session.save(() => res.redirect('/'));
     } catch (e) { res.redirect('/espace?erreur=serveur'); }
   });
@@ -66,46 +95,147 @@ function monterPages(app, db) {
 function monterApi(router, deps) {
   const { db, sendBrevoMail, mailCharte, mailRecap, signatureSav, addAlerte, requireAuth } = deps;
 
-  async function envoyerLien(c, email, base, ip) {
+  async function envoyerLien(c, email, base, ip, langue) {
     await ensureTables(db);
+    const lg = lgOk(langue), M = MAIL_LIEN[lg];
     const token = crypto.randomBytes(24).toString('hex');
-    await db.run(`INSERT INTO espace_liens (token, client_id, email, expires_at, ip) VALUES ($1,$2,$3,NOW() + INTERVAL '${VALIDITE_LIEN_H} hours',$4)`,
-      [token, c.id, email.toLowerCase(), ip || null]);
+    await db.run(`INSERT INTO espace_liens (token, client_id, email, expires_at, ip, langue) VALUES ($1,$2,$3,NOW() + INTERVAL '${VALIDITE_LIEN_H} hours',$4,$5)`,
+      [token, c.id, email.toLowerCase(), ip || null, lg]);
     const lien = `${base}/espace/connexion/${token}`;
     await sendBrevoMail({
       from: 'sav@eloflex.fr', fromName: 'Eloflex France', to: email,
-      subject: 'Eloflex — Votre accès à l’espace distributeur',
+      subject: M.sujet,
       html: mailCharte({
-        titre: 'Eloflex — Espace distributeur',
-        corps: `<p>Bonjour,</p>
-          <p>Voici votre lien d'accès personnel à l'<b>espace distributeur Eloflex</b> (${escH(c.nom)}) : vous y retrouvez les <b>éclatés</b> de nos fauteuils avec les références des pièces détachées, et vous pouvez préparer votre <b>demande de devis</b> de pièces en quelques clics.</p>
-          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Accéder à l'espace distributeur</a></p>
-          <p style="font-size:12px;color:#666">Ce lien est personnel et valable ${VALIDITE_LIEN_H} heures ; votre connexion reste ensuite active 7 jours sur cet appareil. Si le bouton ne fonctionne pas, copiez ce lien :<br>${lien}</p>
-          <p style="font-size:12px;color:#666">Vous n'êtes pas à l'origine de cette demande ? Ignorez simplement cet e-mail.</p>
-          <p>Restant à votre disposition.<br>Bien cordialement</p>`,
+        titre: M.titre,
+        corps: `<p>${M.bonjour}</p>
+          <p>${M.intro(escH(c.nom))}</p>
+          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">${M.bouton}</a></p>
+          <p style="font-size:12px;color:#666">${M.validite(VALIDITE_LIEN_H, lien)}</p>
+          <p style="font-size:12px;color:#666">${M.pasVous}</p>
+          <p>${M.fin}</p>`,
         signature: signatureSav(),
       }),
+    });
+  }
+
+  const baseUrl = req => process.env.APP_URL || (req.protocol + '://' + req.get('host'));
+  const ipDe = req => (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
+  const interneOk = u => u && u.role !== 'distributeur' && (u.role === 'admin' || ['write'].includes((u.permissions || {}).clients) || ['write'].includes((u.permissions || {}).commandes));
+
+  // Mail à sav@ à chaque demande d'accès (adresse connue ou non)
+  async function notifierSav(d, fiche, auto, base) {
+    const lienValider = `${base}/?espace_demande=${d.id}`;
+    const recap = mailRecap([
+      ['Adresse e-mail', `<b>${escH(d.email)}</b>`],
+      ['Société indiquée', escH(d.societe || '—')],
+      ['Nom indiqué', escH(d.nom || '—')],
+      ['Téléphone', escH(d.tel || '—')],
+      ['Langue choisie', LG_NOM[lgOk(d.langue)]],
+      ['Fiche distributeur', fiche ? `<b>${escH(fiche.nom)}</b> (adresse présente dans la fiche)` : '<span style="color:#b45309"><b>Aucune fiche</b> ne contient cette adresse</span>'],
+    ]);
+    const corps = auto
+      ? `<p>Bonjour,</p><p>Une demande d'accès à l'<b>espace distributeur</b> vient d'être faite. L'adresse est enregistrée dans la fiche <b>${escH(fiche.nom)}</b> : <b>le lien de connexion lui a été envoyé automatiquement</b>.</p>${recap}
+         <p style="font-size:13px;color:#555">Si cette personne ne doit pas avoir accès, retirez son adresse de la fiche distributeur : elle ne pourra plus recevoir de lien.</p>`
+      : `<p>Bonjour,</p><p>Une demande d'accès à l'<b>espace distributeur</b> est <b>en attente de validation</b>.</p>${recap}
+         <p>Pour valider, rattachez l'adresse à la bonne fiche distributeur : le lien de connexion lui sera alors envoyé dans sa langue.</p>
+         <p style="text-align:center;margin:22px 0"><a href="${lienValider}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Valider ou refuser l'accès</a></p>
+         <p style="font-size:12px;color:#666">La demande est aussi visible dans l'application : Clients / Distributeurs → « Demandes d'accès ».</p>`;
+    await sendBrevoMail({
+      from: 'sav@eloflex.fr', fromName: 'Eloflex — Espace distributeur', to: 'sav@eloflex.fr',
+      subject: `Espace distributeur — demande d'accès ${auto ? '(lien envoyé)' : 'à valider'} : ${d.societe || (fiche && fiche.nom) || d.email}`,
+      html: mailCharte({ titre: 'Eloflex — Demande d’accès espace distributeur', corps: corps + '<p>Bien cordialement</p>', signature: signatureSav() }),
     });
   }
 
   // Demande de lien (publique) : réponse identique que l'adresse soit connue ou non
   router.post('/espace/lien', async (req, res) => {
     try {
-      const email = String((req.body && req.body.email) || '').trim().toLowerCase();
-      if (!emailOk(email)) return res.status(400).json({ error: 'Adresse e-mail invalide' });
+      const body = req.body || {};
+      const email = String(body.email || '').trim().toLowerCase();
+      if (!emailOk(email)) return res.status(400).json({ error: 'email' });
       const actif = await db.get("SELECT valeur FROM parametres WHERE cle='espace_distributeurs_actif'");
-      if (actif && actif.valeur === '0') return res.status(403).json({ error: 'L’espace distributeur est momentanément fermé.' });
+      if (actif && actif.valeur === '0') return res.status(403).json({ error: 'ferme' });
       await ensureTables(db);
       const recents = await db.get(`SELECT COUNT(*)::int AS n FROM espace_liens WHERE email=$1 AND created_at > NOW() - INTERVAL '1 hour'`, [email]);
-      if (recents.n >= 5) return res.json({ ok: true });   // anti-abus silencieux
+      const recentsD = await db.get(`SELECT COALESCE(SUM(nb),0)::int AS n FROM espace_demandes WHERE email=$1 AND updated_at > NOW() - INTERVAL '1 hour'`, [email]);
+      if (recents.n >= 5 || recentsD.n >= 5) return res.json({ ok: true });   // anti-abus silencieux
+      const langue = lgOk(body.langue);
+      const champ = (k, n) => String(body[k] || '').trim().slice(0, n) || null;
+      const societe = champ('societe', 120), nom = champ('nom', 120), tel = champ('tel', 40);
+      const base = baseUrl(req), ip = ipDe(req);
       const cls = await clientsParEmail(db, email);
-      if (cls.length) {
-        const base = process.env.APP_URL || (req.protocol + '://' + req.get('host'));
-        const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString().split(',')[0].trim();
-        await envoyerLien(cls[0], email, base, ip);
+      const pAuto = await db.get("SELECT valeur FROM parametres WHERE cle='espace_lien_auto'");
+      const auto = cls.length > 0 && !(pAuto && pAuto.valeur === '0');
+      if (auto) await envoyerLien(cls[0], email, base, ip, langue);
+      // Une demande « en cours » par adresse : regroupée sur 24 h pour ne pas inonder sav@
+      const statut = auto ? 'auto' : 'attente';
+      const prec = await db.get(`SELECT * FROM espace_demandes WHERE email=$1 AND statut=$2 AND created_at > NOW() - INTERVAL '24 hours' ORDER BY id DESC LIMIT 1`, [email, statut]);
+      let d;
+      if (prec) {
+        d = (await db.run(`UPDATE espace_demandes SET societe=COALESCE($2,societe), nom=COALESCE($3,nom), tel=COALESCE($4,tel), langue=$5, nb=nb+1, updated_at=NOW() WHERE id=$1 RETURNING *`,
+          [prec.id, societe, nom, tel, langue]));
+      } else {
+        d = (await db.run(`INSERT INTO espace_demandes (email, societe, nom, tel, langue, client_id, statut, ip) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+          [email, societe, nom, tel, langue, cls[0] ? cls[0].id : null, statut, ip || null]));
+        try { await notifierSav(d, cls[0] || null, auto, base); } catch (e) { console.error('[espace] mail sav@', e.message); }
+        if (!auto) { try { await addAlerte('espace_acces', d.id, `🔑 Demande d'accès à l'espace distributeur : ${d.societe || d.email} (${d.email}) — à valider dans Clients / Distributeurs.`); } catch (_) {} }
       }
       res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: 'Envoi impossible pour le moment, réessayez plus tard.' }); }
+    } catch (e) { console.error('[espace] lien', e.message); res.status(500).json({ error: 'serveur' }); }
+  });
+
+  // ── Demandes d'accès : liste, validation (rattachement à une fiche + envoi du lien), refus ──
+  router.get('/espace/demandes', requireAuth, async (req, res) => {
+    try {
+      const u = res.locals.user || {};
+      if (u.role === 'distributeur') return res.status(403).json({ error: 'Accès refusé' });
+      await ensureTables(db);
+      const st = String(req.query.statut || 'attente');
+      const rows = await db.all(`SELECT d.*, c.nom AS client_nom FROM espace_demandes d LEFT JOIN clients c ON c.id=d.client_id
+        ${st === 'tous' ? '' : 'WHERE d.statut=$1'} ORDER BY d.created_at DESC LIMIT 200`, st === 'tous' ? [] : [st]);
+      res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  router.get('/espace/demandes/:id', requireAuth, async (req, res) => {
+    try {
+      const u = res.locals.user || {};
+      if (u.role === 'distributeur') return res.status(403).json({ error: 'Accès refusé' });
+      await ensureTables(db);
+      const d = await db.get(`SELECT d.*, c.nom AS client_nom FROM espace_demandes d LEFT JOIN clients c ON c.id=d.client_id WHERE d.id=$1`, [req.params.id]);
+      if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+      res.json(d);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  router.post('/espace/demandes/:id/valider', requireAuth, async (req, res) => {
+    try {
+      const u = res.locals.user || {};
+      if (!interneOk(u)) return res.status(403).json({ error: 'Droits insuffisants (écriture sur Clients requise)' });
+      await ensureTables(db);
+      const d = await db.get('SELECT * FROM espace_demandes WHERE id=$1', [req.params.id]);
+      if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+      const c = await db.get('SELECT id, nom, email FROM clients WHERE id=$1', [parseInt((req.body || {}).client_id)]);
+      if (!c) return res.status(400).json({ error: 'Choisissez la fiche distributeur à laquelle rattacher cette adresse' });
+      const dejaLa = (await clientsParEmail(db, d.email)).some(x => x.id === c.id);
+      if (!dejaLa) await db.run(`UPDATE clients SET email = CASE WHEN COALESCE(TRIM(email),'')='' THEN $2 ELSE TRIM(email) || ', ' || $2 END WHERE id=$1`, [c.id, d.email]);
+      await envoyerLien(c, d.email, baseUrl(req), null, d.langue);
+      const ids = (await db.all(`UPDATE espace_demandes SET statut='validee', client_id=$2, traite_at=NOW(), traite_par=$3
+        WHERE id=$1 OR (email=$4 AND statut='attente') RETURNING id`, [d.id, c.id, u.nom || u.email || null, d.email])).map(x => x.id);
+      try { await db.run(`UPDATE alertes SET lue=TRUE WHERE type='espace_acces' AND reference_id = ANY($1::int[])`, [ids]); } catch (_) {}
+      res.json({ ok: true, email: d.email, client: c.nom, ajoute: !dejaLa });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  router.post('/espace/demandes/:id/refuser', requireAuth, async (req, res) => {
+    try {
+      const u = res.locals.user || {};
+      if (!interneOk(u)) return res.status(403).json({ error: 'Droits insuffisants (écriture sur Clients requise)' });
+      await ensureTables(db);
+      const d = await db.get('SELECT * FROM espace_demandes WHERE id=$1', [req.params.id]);
+      if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+      const ids = (await db.all(`UPDATE espace_demandes SET statut='refusee', traite_at=NOW(), traite_par=$2
+        WHERE email=$1 AND statut='attente' RETURNING id`, [d.email, u.nom || u.email || null])).map(x => x.id);
+      try { await db.run(`UPDATE alertes SET lue=TRUE WHERE type='espace_acces' AND reference_id = ANY($1::int[])`, [ids]); } catch (_) {}
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
   // Invitation envoyée depuis l'appli (fiche distributeur)
@@ -120,7 +250,7 @@ function monterApi(router, deps) {
       const dansFiche = (await clientsParEmail(db, email)).some(x => x.id === c.id);
       if (!dansFiche) return res.status(400).json({ error: 'Cette adresse ne figure pas dans la fiche distributeur : ajoutez-la d’abord dans la fiche.' });
       const base = process.env.APP_URL || (req.protocol + '://' + req.get('host'));
-      await envoyerLien(c, email, base, null);
+      await envoyerLien(c, email, base, null, (req.body || {}).langue);
       res.json({ ok: true, email });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });

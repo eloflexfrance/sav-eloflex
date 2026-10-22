@@ -679,9 +679,81 @@ async function renderClients(ttl,c,a){
     window._clientsQ = e.target.value;
     clearTimeout(window._CLT); window._CLT = setTimeout(() => chargerListeClients(), 250);
   });
-  c.innerHTML=`<div id="clients-list-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')}</div></div>`;
+  c.innerHTML=`<div id="esp-demandes-bandeau"></div><div id="clients-list-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')}</div></div>`;
   chargerListeClients();
+  bandeauDemandesEspace();
 }
+
+// ── Demandes d'accès à l'espace distributeur ─────────────────────────
+const _LG_ESP = { fr:'🇫🇷 Français', en:'🇬🇧 English', sv:'🇸🇪 Svenska' };
+async function bandeauDemandesEspace(){
+  const el = document.getElementById('esp-demandes-bandeau'); if(!el) return;
+  let l = []; try{ l = await API.get('/espace/demandes?statut=attente'); }catch(_){ return; }
+  if(!Array.isArray(l) || !l.length){ el.innerHTML=''; return; }
+  el.innerHTML = `<div style="background:var(--warning-bg,#fff7ed);border:1px solid #fed7aa;border-radius:12px;padding:12px 14px;margin-bottom:12px">
+    <div style="font-weight:700;margin-bottom:6px"><i class="ti ti-key"></i> ${TR('Demandes d’accès à l’espace distributeur')} (${l.length})</div>
+    ${l.map(d=>`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px solid rgba(0,0,0,.06)">
+      <div style="flex:1;min-width:220px"><b>${esc(d.societe||'—')}</b> · ${esc(d.nom||'')} <span class="mono" style="color:var(--text2)">${esc(d.email)}</span>
+        <span style="color:var(--text3);font-size:12px">· ${_LG_ESP[d.langue]||''} · ${new Date(d.created_at).toLocaleDateString('fr-FR')}</span></div>
+      <button class="btn sm primary" onclick="ouvrirDemandeEspace(${d.id})"><i class="ti ti-check"></i>${TR('Traiter')}</button></div>`).join('')}
+  </div>`;
+}
+async function ouvrirDemandeEspace(id){
+  let d; try{ d = await API.get('/espace/demandes/'+id); }catch(e){ toast(TR('Demande introuvable'),'ti-alert-circle','var(--danger)'); return; }
+  const deja = d.statut!=='attente';
+  const stTxt = { validee:TR('déjà validée'), refusee:TR('refusée'), auto:TR('lien envoyé automatiquement') }[d.statut]||'';
+  showModal(`<div class="modal-header"><i class="ti ti-key" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Demande d’accès — espace distributeur')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+    <div style="display:grid;grid-template-columns:150px 1fr;gap:6px 12px;font-size:14px;margin-bottom:14px">
+      <div style="color:var(--text2)">${TR('E-mail')}</div><div class="mono"><b>${esc(d.email)}</b></div>
+      <div style="color:var(--text2)">${TR('Société')}</div><div>${esc(d.societe||'—')}</div>
+      <div style="color:var(--text2)">${TR('Nom')}</div><div>${esc(d.nom||'—')}</div>
+      <div style="color:var(--text2)">${TR('Téléphone')}</div><div>${esc(d.tel||'—')}</div>
+      <div style="color:var(--text2)">${TR('Langue')}</div><div>${_LG_ESP[d.langue]||'—'}</div>
+      <div style="color:var(--text2)">${TR('Reçue le')}</div><div>${new Date(d.created_at).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'})}${d.nb>1?` · ${d.nb} ${TR('demandes')}`:''}</div>
+    </div>
+    ${deja?`<div style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:12px"><i class="ti ti-info-circle"></i> ${TR('Cette demande est')} <b>${stTxt}</b>${d.client_nom?` — ${TR('fiche')} <b>${esc(d.client_nom)}</b>`:''}${d.traite_par?` (${esc(d.traite_par)})`:''}.</div>`:''}
+    ${d.statut==='validee'||d.statut==='auto'?'':`<div class="form-group"><label class="form-label">${TR('Fiche distributeur à rattacher')}</label>
+      <input class="form-input" id="esp-cli-q" placeholder="${TR('Rechercher une fiche (nom, ville, e-mail…)')}" value="${esc(d.client_nom||d.societe||'')}" oninput="espChercherFiche(this.value)">
+      <input type="hidden" id="esp-cli-id" value="${d.client_id||''}">
+      <div id="esp-cli-res" style="max-height:220px;overflow:auto;margin-top:6px"></div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:6px">${TR('L’adresse sera ajoutée au champ e-mail de la fiche (si absente) et le lien de connexion envoyé au distributeur dans sa langue.')}</div></div>`}
+    </div>
+    <div class="modal-footer">
+      ${d.statut==='attente'?`<button class="btn" style="color:var(--danger)" onclick="refuserDemandeEspace(${d.id})"><i class="ti ti-ban"></i>${TR('Refuser')}</button>`:''}
+      <button class="btn" onclick="closeModal()">${TR('Fermer')}</button>
+      ${d.statut==='validee'||d.statut==='auto'?'':`<button class="btn primary" onclick="validerDemandeEspace(${d.id})"><i class="ti ti-mail-check"></i>${TR('Valider et envoyer le lien')}</button>`}
+    </div>`);
+  if(!(d.statut==='validee'||d.statut==='auto')) espChercherFiche($('esp-cli-q').value, d.client_id);
+}
+async function espChercherFiche(q, selId){
+  clearTimeout(window._ESPQ);
+  window._ESPQ = setTimeout(async()=>{
+    const box = $('esp-cli-res'); if(!box) return;
+    let l=[]; try{ l = await API.clients(String(q||'').trim()); }catch(_){}
+    l = (l||[]).slice(0,30);
+    const cur = selId!=null ? String(selId) : ($('esp-cli-id')||{}).value;
+    box.innerHTML = l.length ? l.map(c=>`<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;cursor:pointer;${String(c.id)===String(cur)?'background:var(--accent-bg,#eef4ff)':''}">
+        <input type="radio" name="esp-cli" value="${c.id}" ${String(c.id)===String(cur)?'checked':''} onchange="$('esp-cli-id').value=this.value">
+        <span><b>${esc(c.nom)}</b> <span style="color:var(--text2);font-size:12.5px">${esc([c.cp,c.ville].filter(Boolean).join(' '))}</span><br><span class="mono" style="font-size:12px;color:var(--text3)">${esc(c.email||'')}</span></span></label>`).join('')
+      : `<div style="color:var(--text2);font-size:13px;padding:6px">${TR('Aucune fiche trouvée — créez d’abord la fiche distributeur si besoin.')}</div>`;
+  }, selId!=null?0:250);
+}
+async function validerDemandeEspace(id){
+  const cid = ($('esp-cli-id')||{}).value;
+  if(!cid){ toast(TR('Choisissez la fiche distributeur'),'ti-alert-circle','var(--danger)'); return; }
+  try{
+    const r = await API.post(`/espace/demandes/${id}/valider`, { client_id: parseInt(cid) });
+    closeModal(); toast(TR('Accès validé : lien envoyé à ')+r.email,'ti-mail-check','var(--success)');
+    bandeauDemandesEspace(); if(typeof refreshBadges==='function') refreshBadges();
+  }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+async function refuserDemandeEspace(id){
+  if(!confirm(TR('Refuser cette demande d’accès ? Aucun e-mail n’est envoyé au demandeur.'))) return;
+  try{ await API.post(`/espace/demandes/${id}/refuser`, {}); closeModal(); toast(TR('Demande refusée'),'ti-ban'); bandeauDemandesEspace(); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+Object.assign(window, { ouvrirDemandeEspace, espChercherFiche, validerDemandeEspace, refuserDemandeEspace, bandeauDemandesEspace });
 
 let _clientsReqId = 0;
 async function chargerListeClients(){
@@ -2921,6 +2993,8 @@ async function renderParametres(ttl,c,a){
         <input class="form-input" id="p-ecl-ordre" value="${esc(p.eclates_ordre!=null?p.eclates_ordre:'L2, R, H2, L, F, D2, P, X, K, H, F Pre 2022, D2 Pre 2022, P Pre 2022, S1, C')}"></div>
       <div class="form-group"><label class="form-label">${TR('Prix distributeur HT visibles dans l’espace distributeur')}</label>
         <select class="form-input" id="p-esp-prix"><option value="0" ${p.espace_prix_visibles!=='1'?'selected':''}>${TR('Non — masqués (pièces « sur devis »)')}</option><option value="1" ${p.espace_prix_visibles==='1'?'selected':''}>${TR('Oui — affichés aux distributeurs')}</option></select></div>
+      <div class="form-group"><label class="form-label">${TR('Adresse déjà enregistrée dans une fiche distributeur : envoi du lien de connexion')}</label>
+        <select class="form-input" id="p-esp-auto"><option value="1" ${p.espace_lien_auto!=='0'?'selected':''}>${TR('Automatique (sav@ est prévenu par e-mail)')}</option><option value="0" ${p.espace_lien_auto==='0'?'selected':''}>${TR('Après validation par l’équipe (comme une adresse inconnue)')}</option></select></div>
     </div>
     <div class="param-section">
       <h3><i class="ti ti-clipboard-check"></i> ${TR('Retours démo')}</h3>
@@ -3983,6 +4057,7 @@ async function saveParametres(){
   };
   if(document.getElementById('p-ecl-ordre')) p.eclates_ordre=gv('p-ecl-ordre').trim();
   if(document.getElementById('p-esp-prix')) p.espace_prix_visibles=gv('p-esp-prix')||'0';
+  if(document.getElementById('p-esp-auto')) p.espace_lien_auto=gv('p-esp-auto')||'1';
   if(document.getElementById('p-rd-retour')){
     p.retour_demo_forfait_retour=gv('p-rd-retour')||'0';
     p.retour_demo_forfait_carton=gv('p-rd-carton')||'0';
@@ -6089,6 +6164,8 @@ document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.
 applyNavTranslations();
 
 (async () => {
+  // Lien « Valider l'accès » du mail sav@ : on garde l'id même si la connexion est demandée d'abord
+  try{ const q=new URLSearchParams(location.search).get('espace_demande'); if(q){ sessionStorage.setItem('espace_demande', q); history.replaceState(null,'',location.pathname); } }catch(_){}
   // Charger l'utilisateur courant (rôle, nom) avant d'afficher quoi que ce soit
   try {
     const r = await fetch('/api/auth/me');
@@ -6108,7 +6185,11 @@ applyNavTranslations();
     const premier=[...document.querySelectorAll('.nav-item[data-view]')].find(n=>hasAccess(n.dataset.view));
     if(premier){ STATE.view=premier.dataset.view; document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===STATE.view)); }
   }
-  if(estDistributeur()){ render(); return; }   // espace distributeur : rien d'autre à charger
+  if(estDistributeur()){   // espace distributeur : rien d'autre à charger
+    if(CURRENT_USER.langue_eclates==='sv' && window._ECL && !window._ECL.lang) window._ECL.lang='sv';
+    render(); return;
+  }
+  try{ const dm=sessionStorage.getItem('espace_demande'); if(dm){ sessionStorage.removeItem('espace_demande'); setTimeout(()=>ouvrirDemandeEspace(parseInt(dm)),600); } }catch(_){}
   loadVfStatus();
   refreshBadges();
   setInterval(refreshBadges, 60000);

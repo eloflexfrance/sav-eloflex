@@ -953,6 +953,7 @@ async function initDB() {
       // Retours démo : forfaits HT et destinataires par défaut du compte rendu
       ['espace_distributeurs_actif','1'],
       ['espace_prix_visibles','0'],   // prix distributeur affichés dans l'espace distributeur (0 = masqués)
+      ['espace_lien_auto','1'],      // adresse déjà dans une fiche : lien envoyé automatiquement (sav@ prévenu) ; 0 = validation par l'équipe
       // Ordre d'affichage des éclatés (noms sans « Eloflex », séparés par des virgules ; les autres suivent)
       ['eclates_ordre','L2, R, H2, L, F, D2, P, X, K, H, F Pre 2022, D2 Pre 2022, P Pre 2022, S1, C'],
       ['retour_demo_forfait_retour','50'],

@@ -99,7 +99,11 @@ app.use('/api', require('./routes'));
 const VERSION_FICHIERS = Date.now().toString(36);
 let _indexHtml = null;
 app.get('*', (req, res) => {
-  if (!req.session?.user) return res.redirect('/login');
+  if (!req.session?.user) {
+    // Lien « Valider l'accès » (mail sav@) : on retrouve la demande après la connexion
+    const dm = /^\d+$/.test(String(req.query.espace_demande || '')) ? '?espace_demande=' + req.query.espace_demande : '';
+    return res.redirect('/login' + dm);
+  }
   try {
     if (!_indexHtml) {
       _indexHtml = require('fs').readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8')
