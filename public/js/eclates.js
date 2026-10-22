@@ -180,7 +180,8 @@ function css(){
 #ecl-ov .lead.on{opacity:.95}#ecl-ov .dot.on{opacity:1}
 @keyframes eclpulse{0%{r:3;opacity:.9}100%{r:16;opacity:0}}
 #ecl-ov .halo.on{opacity:1;animation:eclpulse 1.2s ease-out infinite}
-.ecl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.ecl-grid{display:flex;flex-wrap:wrap;gap:12px;align-items:stretch}
+.ecl-grid>.ecl-card{flex:0 0 auto;min-width:0;box-sizing:border-box}
 .ecl-card{border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;background:var(--surface,#fff)}
 .ecl-card:hover{border-color:var(--accent)}
 .ecl-card .ecl-photo{height:170px;margin:-14px -14px 10px;border-radius:12px 12px 0 0;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;border-bottom:1px solid var(--border);position:relative}
@@ -259,6 +260,49 @@ function photoReduite(file, max){
 }
 
 // ── Liste des modèles ──────────────────────────────────────────────
+// Grille des modèles : chaque ligne occupe toute la largeur et les cartes sont réparties le plus
+// également possible entre les lignes (ex. 16 modèles → 2 × 8, 3 lignes → 6 + 5 + 5), bords alignés.
+const LARGEUR_MIN_CARTE = 200, ECART = 12;
+function grilleEquilibree(g){
+  if (!g) return;
+  const placer = () => {
+    const cartes = [...g.children].filter(x => x.classList.contains('ecl-card'));
+    const n = cartes.length, W = g.clientWidth; if (!n || !W) return;
+    const maxCols = Math.max(1, Math.floor((W + ECART) / (LARGEUR_MIN_CARTE + ECART)));
+    const lignes = Math.ceil(n / maxCols);
+    const base = Math.floor(n / lignes), plus = n % lignes;   // les premières lignes prennent une carte de plus
+    let i = 0;
+    for (let r = 0; r < lignes; r++) {
+      const k = base + (r < plus ? 1 : 0);
+      for (let j = 0; j < k && i < n; j++, i++) cartes[i].style.width = `calc((100% - ${(k - 1) * ECART}px) / ${k})`;
+    }
+  };
+  placer();
+  if (window.ResizeObserver) { if (g._ro) g._ro.disconnect(); g._ro = new ResizeObserver(() => placer()); g._ro.observe(g); }
+  else window.addEventListener('resize', placer);
+}
+// Fiche « Caractéristiques » d'un modèle (ex. Eloflex L2, en attendant son éclaté)
+function ficheCaracteristiques(m){
+  let k = m.caracteristiques; if (typeof k === 'string') { try { k = JSON.parse(k); } catch (_) { k = null; } }
+  if (!k) return;
+  const src = k.source || lienM(m, 'lien_web') || m.lien_web_se || '';
+  showModal(`<div class="modal-header"><i class="ti ti-wheelchair" style="color:var(--accent)"></i><h2>${e_(k.titre || m.nom)} — ${TR('caractéristiques')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+        <img src="/api/eclates/${m.id}/photo?v=${encodeURIComponent(m.updated_at || '')}" alt="" style="width:220px;max-width:100%;border-radius:12px;background:#fff;object-fit:contain" onerror="this.remove()">
+        <div style="flex:1;min-width:260px">
+          ${k.description ? `<p style="font-size:14px;line-height:1.6;margin-top:0">${e_(k.description)}</p>` : ''}
+          ${(k.points || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">${k.points.map(x => `<span class="badge" style="background:var(--accent-soft,rgba(31,92,140,.1));color:var(--accent);font-size:12px"><i class="ti ti-check" style="font-size:12px"></i> ${e_(x)}</span>`).join('')}</div>` : ''}
+        </div>
+      </div>
+      ${(k.fonctions || []).length ? `<div style="margin-top:14px">${k.fonctions.map(f => `<div style="margin-bottom:8px"><b style="font-size:13.5px">${e_(f[0])}</b><div style="font-size:13px;color:var(--text2)">${e_(f[1])}</div></div>`).join('')}</div>` : ''}
+      ${(k.specs || []).length ? `<div class="section-title" style="margin-top:14px"><i class="ti ti-list-details"></i>${TR('Spécifications techniques')}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13.5px">${k.specs.map((r, i) => `<tr style="${i % 2 ? '' : 'background:var(--bg)'}"><td style="padding:6px 10px;color:var(--text2);width:42%">${e_(r[0])}</td><td style="padding:6px 10px;font-weight:600">${e_(r[1])}</td></tr>`).join('')}</table>` : ''}
+      ${src ? `<p style="font-size:12px;color:var(--text3);margin-top:12px">${TR('Source')} : <a href="${e_(src)}" target="_blank" rel="noopener">${e_(src.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</a></p>` : ''}
+    </div>
+    <div class="modal-footer"><button class="btn primary" onclick="closeModal()">${TR('Fermer')}</button></div>`);
+  const md = document.querySelector('#modal-area .modal'); if (md) md.style.maxWidth = '820px';
+}
 async function renderListe(ttl, c, a){
   ttl.textContent = TR('Éclatés');
   const admin = typeof isAdmin === 'function' && isAdmin();
@@ -275,9 +319,10 @@ async function renderListe(ttl, c, a){
         ${edit ? `<label class="ecl-phbtn" data-photo="${m.id}" title="${TR('Changer la photo')}"><i class="ti ti-camera"></i> ${TR('Photo')}<input type="file" accept="image/jpeg,image/png,image/webp" style="display:none"></label>` : ''}</div>
       <b><i class="ti ti-schema" style="color:var(--accent)"></i> ${e_(m.nom)}</b>
       <small>${m.ref_modele ? 'Réf. ' + e_(m.ref_modele) + ' · ' : ''}${e_(m.date_doc || '')}</small>
-      <small>${m.nb_vues} ${TR('vues')} · ${m.nb_lignes} ${TR('lignes')}</small>
+      <small>${m.nb_vues ? `${m.nb_vues} ${TR('vues')} · ${m.nb_lignes} ${TR('lignes')}` : `<span style="color:#b45309;font-weight:600"><i class="ti ti-clock"></i> ${TR('Éclaté bientôt disponible')}</span>`}</small>
       <div class="ecl-acts">
-        <span class="ecl-act pdf" data-pdf="${m.id}" title="${TR('Télécharger la fiche éclaté (PDF français ou anglais)')}"><i class="ti ti-file-type-pdf"></i> ${TR('PDF éclaté')}</span>
+        ${m.nb_vues ? `<span class="ecl-act pdf" data-pdf="${m.id}" title="${TR('Télécharger la fiche éclaté (PDF français ou anglais)')}"><i class="ti ti-file-type-pdf"></i> ${TR('PDF éclaté')}</span>` : ''}
+        ${m.caracteristiques ? `<span class="ecl-act ecl-carac" data-carac="${m.id}" style="color:var(--accent)" title="${TR('Caractéristiques techniques')}"><i class="ti ti-list-details"></i> ${TR('Caractéristiques')}</span>` : ''}
         ${lienM(m,'lien_web') ? `<a href="${e_(lienM(m,'lien_web'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_web'))}"><i class="ti ti-world"></i> ${TR('Site web')}</a>` : ''}
         ${lienM(m,'lien_notice') ? `<a href="${e_(lienM(m,'lien_notice'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_notice'))}"><i class="ti ti-book"></i> ${TR('Notice')}</a>` : ''}
         ${lienM(m,'lien_fiche') ? `<a href="${e_(lienM(m,'lien_fiche'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_fiche'))}"><i class="ti ti-file-description"></i> ${TR('Fiche technique')}</a>` : ''}
@@ -287,7 +332,9 @@ async function renderListe(ttl, c, a){
     </div>`).join('')}</div>`
     : `<div class="empty"><i class="ti ti-schema"></i>${TR('Aucun éclaté importé pour le moment.')}${admin ? '<br>' + TR('Utilisez « Importer des éclatés » avec les fichiers .json fournis.') : ''}</div>`;
   c.querySelectorAll('.ecl-card').forEach(el => el.addEventListener('click', ev => {
-    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-liens]') || ev.target.closest('[data-pdf]') || ev.target.closest('.ecl-web')) return;
+    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-liens]') || ev.target.closest('[data-pdf]') || ev.target.closest('.ecl-web') || ev.target.closest('[data-carac]')) return;
+    const mm = list.find(x => x.id === +el.dataset.id);
+    if (mm && !mm.nb_vues) { if (mm.caracteristiques) ficheCaracteristiques(mm); else if (typeof toast === 'function') toast(TR('L’éclaté de ce modèle sera bientôt disponible.'), 'ti-clock'); return; }
     E.modeleId = +el.dataset.id; E.vueId = null; E.data = null; back = null; render();
   }));
   c.querySelectorAll('[data-del]').forEach(el => el.addEventListener('click', async ev => {
@@ -298,6 +345,9 @@ async function renderListe(ttl, c, a){
   c.querySelectorAll('[data-liens]').forEach(el => el.addEventListener('click', ev => {
     ev.stopPropagation();
     const m = list.find(x => x.id === +el.dataset.liens); if (m) modifierLiens(m, () => render());
+  }));
+  c.querySelectorAll('[data-carac]').forEach(el => el.addEventListener('click', ev => {
+    ev.stopPropagation(); const m = list.find(x => x.id === +el.dataset.carac); if (m) ficheCaracteristiques(m);
   }));
   c.querySelectorAll('[data-pdf]').forEach(el => el.addEventListener('click', async ev => {
     ev.stopPropagation();
@@ -321,6 +371,7 @@ async function renderListe(ttl, c, a){
       } catch (err) { if (typeof toast === 'function') toast('Erreur : ' + err.message, 'ti-alert-circle', 'var(--danger)'); }
     });
   });
+  grilleEquilibree(c.querySelector('.ecl-grid'));
   const inp = $('ecl-import'); if (inp) inp.addEventListener('change', () => importer(inp));
   if ($('ecl-mail-tous')) $('ecl-mail-tous').onclick = () => envoyerTousEclates(list);
   const gs = $('ecl-gsearch');
@@ -517,7 +568,7 @@ function list(){
         ${it.horscat && L() === 'fr' && !it.cat_masque && !it.cat_fiche_masquee ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
         ${it.note ? `<span class="ecl-tag warn">${T('sold')}</span>` : ''}
       </div>
-      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TR('Ajouter au bon de commande')}"><i class="ti ti-shopping-cart-plus"></i> ${TR('Commander')}</button>` : ''}</div>
+      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TR('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TR('Ajouter au devis')}</button>` : ''}</div>
     </div>`;
   };
   v.items.forEach(it => h += row(it, false));
@@ -538,7 +589,7 @@ function list(){
   el.querySelectorAll('[data-cmd]').forEach(b => b.onclick = ev => {
     ev.stopPropagation();
     const it = v.items.concat(v.extras).find(x => x.id === +b.dataset.cmd); if (!it) return;
-    panierAjouter(it); b.innerHTML = '<i class="ti ti-check"></i> ' + TR('Ajouté'); setTimeout(() => { b.innerHTML = '<i class="ti ti-shopping-cart-plus"></i> ' + TR('Commander'); }, 1300);
+    panierAjouter(it); b.innerHTML = '<i class="ti ti-check"></i> ' + TR('Ajouté'); setTimeout(() => { b.innerHTML = '<i class="ti ti-file-plus"></i> ' + TR('Ajouter au devis'); }, 1300);
   });
 }
 
@@ -947,7 +998,7 @@ async function exporterPDF(lang, vues, prog, opts){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// Bon de commande de pièces détachées (espace distributeur + équipe)
+// Demande de devis de pièces détachées (espace distributeur + équipe)
 // ══════════════════════════════════════════════════════════════════
 const estDistrib = () => typeof window.estDistributeur === 'function' && window.estDistributeur();
 function peutCommander(){
@@ -959,7 +1010,7 @@ const CLE_PANIER = () => 'ecl_panier_' + ((typeof CURRENT_USER !== 'undefined' &
 function panierLire(){ try { return JSON.parse(localStorage.getItem(CLE_PANIER()) || '[]') || []; } catch (_) { return E._panier || []; } }
 function panierEcrire(p){ E._panier = p; try { localStorage.setItem(CLE_PANIER(), JSON.stringify(p)); } catch (_) {} majBadgePanier(); }
 function panierNb(){ return panierLire().reduce((s, l) => s + (parseInt(l.qte) || 0), 0); }
-function boutonPanier(){ cssPanier(); const n = panierNb(); return `<button class="btn" id="ecl-panier" onclick="ouvrirPanier()" title="${TR('Bon de commande de pièces détachées')}"><i class="ti ti-shopping-cart"></i> ${TR('Bon de commande')}<span class="ecl-pan-badge" id="ecl-pan-n" style="${n ? '' : 'display:none'}">${n}</span></button>`; }
+function boutonPanier(){ cssPanier(); const n = panierNb(); return `<button class="btn" id="ecl-panier" onclick="ouvrirPanier()" title="${TR('Demande de devis de pièces détachées')}"><i class="ti ti-file-invoice"></i> ${TR('Demande de devis')}<span class="ecl-pan-badge" id="ecl-pan-n" style="${n ? '' : 'display:none'}">${n}</span></button>`; }
 function majBadgePanier(){ const b = $('ecl-pan-n'); if (!b) return; const n = panierNb(); b.textContent = n; b.style.display = n ? '' : 'none'; }
 function panierAjouter(it){
   const p = panierLire();
@@ -969,7 +1020,7 @@ function panierAjouter(it){
   else p.push({ cle, ref: it.ref || '', designation: it.cat_designation || it.fr || it.desc_en || '', modele: E.data ? E.data.nom : '',
     qte: 1, pu: (it.cat_id && it.cat_prix_distrib != null && !it.cat_masque) ? +it.cat_prix_distrib : null, tva: it.cat_tva != null ? +it.cat_tva : null });
   panierEcrire(p);
-  if (typeof toast === 'function') toast((it.ref ? it.ref + ' — ' : '') + TR('ajouté au bon de commande'), 'ti-shopping-cart-plus');
+  if (typeof toast === 'function') toast((it.ref ? it.ref + ' — ' : '') + TR('ajouté à la demande de devis'), 'ti-file-plus');
 }
 const eurF = v => (Math.round((+v || 0) * 100) / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 function totaux(p){
@@ -981,35 +1032,50 @@ async function ouvrirPanier(){
   const p = panierLire();
   let moi = {}; try { moi = await API.get('/espace/moi'); } catch (_) {}
   const c = moi.client || {};
-  const adr = [c.nom, c.adresse, c.adresse2, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join('\n');
+  const adrFiche = [c.nom, c.adresse, c.adresse2, [c.cp, c.ville].filter(Boolean).join(' ')].filter(Boolean).join('\n');
   E._moi = moi;
-  showModal(`<div class="modal-header"><i class="ti ti-shopping-cart" style="color:var(--accent)"></i><h2>${TR('Bon de commande — pièces détachées')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  const f = E._panForm = E._panForm || {};
+  const v = (k, d) => e_(f[k] != null ? f[k] : (d || ''));
+  showModal(`<div class="modal-header"><i class="ti ti-file-invoice" style="color:var(--accent)"></i><h2>${TR('Demande de devis — pièces détachées')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
-      ${p.length ? '' : `<div class="empty" style="padding:20px"><i class="ti ti-shopping-cart"></i>${TR('Votre bon de commande est vide : ouvrez un éclaté et cliquez sur « Commander » à côté des pièces souhaitées.')}</div>`}
+      ${p.length ? '' : `<div style="font-size:13.5px;color:var(--text2);background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:6px"><i class="ti ti-info-circle"></i> ${TR('Ouvrez un éclaté et cliquez sur « Ajouter au devis » à côté des pièces souhaitées. Vous pouvez aussi ajouter une pièce que vous ne trouvez pas, ou simplement décrire votre besoin dans « Informations complémentaires ».')}</div>`}
       <div id="ecl-pan-lignes"></div>
-      ${p.length ? `<div class="grid-2" style="margin-top:14px">
-        ${moi.interne ? `<div class="form-group"><label class="form-label">${TR('Distributeur')}</label><input class="form-input" id="pan-distrib" placeholder="${TR('Nom du distributeur')}"></div>` : ''}
-        <div class="form-group"><label class="form-label">${TR('Votre référence de commande')}</label><input class="form-input" id="pan-ref" placeholder="${TR('ex. n° de dossier patient, n° interne…')}"></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Adresse de livraison')}</label><textarea class="form-input" id="pan-adr" rows="3">${e_(adr)}</textarea></div>
-        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Commentaire')}</label><textarea class="form-input" id="pan-com" rows="2" placeholder="${TR('Précisions, urgence, n° de série du fauteuil…')}"></textarea></div>
+      <div style="margin-top:8px"><button class="btn sm" onclick="panierLigneLibre()"><i class="ti ti-plus"></i>${TR('Ajouter une pièce non trouvée dans les éclatés')}</button></div>
+      <div class="form-group" style="margin-top:14px"><label class="form-label">${TR('Informations complémentaires')}</label>
+        <textarea class="form-input" id="pan-com" rows="4" oninput="panierForm('com',this.value)" placeholder="${TR('Tout ce qui peut nous aider : n° de série du fauteuil, description d’une pièce introuvable, urgence, contraintes de livraison, question…')}">${v('com')}</textarea></div>
+      <div class="grid-2">
+        ${moi.interne ? `<div class="form-group"><label class="form-label">${TR('Distributeur')}</label><input class="form-input" id="pan-distrib" oninput="panierForm('distrib',this.value)" value="${v('distrib')}" placeholder="${TR('Nom du distributeur')}"></div>` : ''}
+        <div class="form-group"><label class="form-label">${TR('Votre référence')}</label><input class="form-input" id="pan-ref" oninput="panierForm('ref',this.value)" value="${v('ref')}" placeholder="${TR('ex. n° de dossier patient, n° interne…')}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Adresse de livraison')}</label><textarea class="form-input" id="pan-adr" rows="3" oninput="panierForm('adr',this.value)">${v('adr', adrFiche)}</textarea></div>
       </div>
-      <div style="font-size:12px;color:var(--text3)">${TR('Tarifs distributeur HT en vigueur. Frais de port selon vos conditions commerciales. La commande est confirmée après validation par Eloflex.')}</div>` : ''}
+      <div style="font-size:12px;color:var(--text3)">${TR('Montants indicatifs, tarifs distributeur HT en vigueur, hors frais de port. Eloflex vous adresse le devis définitif (frais de port et délai compris).')}</div>
+      <div id="pan-msg" style="font-size:13px;margin-top:6px;min-height:16px"></div>
     </div>
     <div class="modal-footer" style="flex-wrap:wrap">
       ${p.length ? `<button class="btn danger" style="margin-right:auto" onclick="viderPanier()"><i class="ti ti-trash"></i>${TR('Vider')}</button>` : ''}
       <button class="btn" onclick="closeModal()">${TR('Continuer mes recherches')}</button>
-      ${p.length ? `<button class="btn" onclick="bonCommandePDF(false)"><i class="ti ti-file-type-pdf"></i>${TR('Télécharger le PDF')}</button>` : ''}
-      ${p.length && estDistrib() ? `<button class="btn primary" id="pan-envoyer" onclick="bonCommandePDF(true)"><i class="ti ti-send"></i>${TR('Valider et envoyer à Eloflex')}</button>` : ''}
+      <button class="btn" onclick="bonCommandePDF(false)"><i class="ti ti-file-type-pdf"></i>${TR('Télécharger le PDF')}</button>
+      ${estDistrib() ? `<button class="btn primary" id="pan-envoyer" onclick="bonCommandePDF(true)"><i class="ti ti-send"></i>${TR('Envoyer la demande de devis à Eloflex')}</button>` : ''}
     </div>`);
   const m = document.querySelector('#modal-area .modal'); if (m) m.style.maxWidth = '900px';
   dessinerLignesPanier();
 }
+function panierForm(k, val){ (E._panForm = E._panForm || {})[k] = val; const mm = $('pan-msg'); if (mm) mm.innerHTML = ''; }
+function panierLigneLibre(){
+  const p = panierLire();
+  p.push({ cle: 'LIBRE' + Date.now(), ref: '', designation: '', modele: '', qte: 1, pu: null, tva: null, libre: true });
+  panierEcrire(p); dessinerLignesPanier();
+  setTimeout(() => { const ins = document.querySelectorAll('#ecl-pan-tbl .pan-libre-des'); if (ins.length) ins[ins.length - 1].focus(); }, 50);
+}
+function panierLibre(i, k, val){ const p = panierLire(); if (!p[i]) return; p[i][k] = String(val || '').slice(0, k === 'ref' ? 60 : 250); panierEcrire(p); }
 function dessinerLignesPanier(){
   const box = $('ecl-pan-lignes'); if (!box) return;
   const p = panierLire(); if (!p.length) { box.innerHTML = ''; return; }
   const t = totaux(p);
   box.innerHTML = `<div class="table-wrap"><table id="ecl-pan-tbl"><thead><tr><th>${TR('Référence')}</th><th>${TR('Désignation')}</th><th style="width:78px">${TR('Qté')}</th><th style="text-align:right">${TR('PU HT')}</th><th style="text-align:right">${TR('Total HT')}</th><th></th></tr></thead><tbody>
-    ${p.map((l, i) => `<tr><td class="mono" style="white-space:nowrap">${e_(l.ref || '—')}</td><td>${e_(l.designation)}${l.modele ? `<div style="font-size:11px;color:var(--text3)">${e_(l.modele)}</div>` : ''}</td>
+    ${p.map((l, i) => `${l.libre
+      ? `<tr><td><input class="form-input mono" style="padding:4px 6px;font-size:12px;min-width:90px" placeholder="${TR('Réf. (si connue)')}" value="${e_(l.ref)}" onchange="panierLibre(${i},'ref',this.value)"></td><td><input class="form-input pan-libre-des" style="padding:4px 6px" placeholder="${TR('Description de la pièce, modèle du fauteuil…')}" value="${e_(l.designation)}" onchange="panierLibre(${i},'designation',this.value)"></td>`
+      : `<tr><td class="mono" style="white-space:nowrap">${e_(l.ref || '—')}</td><td>${e_(l.designation)}${l.modele ? `<div style="font-size:11px;color:var(--text3)">${e_(l.modele)}</div>` : ''}</td>`}
       <td><input class="form-input" type="number" min="1" max="999" value="${parseInt(l.qte) || 1}" style="padding:4px 6px" onchange="panierQte(${i}, this.value)"></td>
       <td style="text-align:right;white-space:nowrap">${l.pu != null ? eurF(l.pu) : '<span style="color:var(--text3)">' + TR('sur devis') + '</span>'}</td>
       <td style="text-align:right;white-space:nowrap;font-weight:600">${l.pu != null ? eurF(l.pu * (parseInt(l.qte) || 1)) : '—'}</td>
@@ -1019,31 +1085,33 @@ function dessinerLignesPanier(){
       <tr><td style="padding:2px 14px;color:var(--text2)">${TR('Total HT')}</td><td style="text-align:right;font-weight:700">${eurF(t.ht)}</td></tr>
       <tr><td style="padding:2px 14px;color:var(--text2)">${TR('TVA')}</td><td style="text-align:right">${eurF(t.tva)}</td></tr>
       <tr><td style="padding:2px 14px;color:var(--text2)">${TR('Total TTC')}</td><td style="text-align:right;font-weight:700">${eurF(t.ttc)}</td></tr>
-      ${t.surDevis ? `<tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:#b45309">${t.surDevis} ${TR('pièce(s) hors tarif : prix communiqué par Eloflex')}</td></tr>` : ''}
+      ${t.surDevis ? `<tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:#b45309">${t.surDevis} ${TR('pièce(s) hors tarif : prix communiqué dans le devis')}</td></tr>` : ''}
+      <tr><td colspan="2" style="padding:2px 14px;font-size:12px;color:var(--text3);text-align:right">${TR('Hors frais de port (ajoutés dans le devis)')}</td></tr>
     </table></div>`;
 }
 function panierQte(i, v){ const p = panierLire(); if (!p[i]) return; p[i].qte = Math.max(1, Math.min(999, parseInt(v) || 1)); panierEcrire(p); dessinerLignesPanier(); }
-function panierRetirer(i){ const p = panierLire(); p.splice(i, 1); panierEcrire(p); if (!p.length) ouvrirPanier(); else dessinerLignesPanier(); }
-function viderPanier(){ if (!confirm(TR('Vider le bon de commande ?'))) return; panierEcrire([]); ouvrirPanier(); }
+function panierRetirer(i){ const p = panierLire(); p.splice(i, 1); panierEcrire(p); dessinerLignesPanier(); }
+function viderPanier(){ if (!confirm(TR('Vider la demande de devis ?'))) return; panierEcrire([]); ouvrirPanier(); }
 
 async function bonCommandePDF(envoyer){
-  const p = panierLire(); if (!p.length) return;
+  const p = panierLire().filter(l => !l.libre || String(l.designation || l.ref || '').trim());
   const moi = E._moi || {}, c = moi.client || {};
   const ref = ($('pan-ref') || {}).value || '', adr = ($('pan-adr') || {}).value || '', com = ($('pan-com') || {}).value || '';
+  if (!p.length && !com.trim()) { const mm = $('pan-msg'); if (mm) mm.innerHTML = '<span style="color:var(--danger)">' + TR('Ajoutez au moins une pièce ou décrivez votre besoin dans « Informations complémentaires ».') + '</span>'; return; }
   const distrib = moi.interne ? (($('pan-distrib') || {}).value || '') : (c.nom || '');
   const now = new Date(), pad = n => String(n).padStart(2, '0');
-  const numero = `BC-WEB-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const numero = `DDV-WEB-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   const { jsPDF } = window.jspdf; const doc = new jsPDF();
   const L0 = 15, R0 = 195, W0 = R0 - L0, BLEU = [31, 92, 140];
   let y = 18;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...BLEU); doc.text('BON DE COMMANDE', L0, y);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...BLEU); doc.text('DEMANDE DE DEVIS', L0, y);
   doc.setFontSize(10.5); doc.text('Pièces détachées Eloflex', L0, y + 6);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 60, 60);
   doc.text(['ELOFLEX France', '41 rue des Maraichers — 17140 LAGORD', 'sav@eloflex.fr — 09 67 66 51 29'], R0, y - 4, { align: 'right' });
   y += 14; doc.setDrawColor(...BLEU); doc.setLineWidth(0.5); doc.line(L0, y, R0, y); y += 7;
   doc.setTextColor(0, 0, 0); doc.setFontSize(9.5);
   const bloc = (x, titre, lignes) => { doc.setFont('helvetica', 'bold'); doc.text(titre, x, y); doc.setFont('helvetica', 'normal'); let yy = y + 5; lignes.filter(Boolean).forEach(t => { doc.splitTextToSize(String(t), 85).forEach(s => { doc.text(s, x, yy); yy += 4.5; }); }); return yy; };
-  const y1 = bloc(L0, 'Commande', [`N° : ${numero}`, `Date : ${now.toLocaleDateString('fr-FR')}`, ref ? `Votre référence : ${ref}` : null]);
+  const y1 = bloc(L0, 'Demande', [`N° : ${numero}`, `Date : ${now.toLocaleDateString('fr-FR')}`, ref ? `Votre référence : ${ref}` : null]);
   const y2 = bloc(110, 'Distributeur', [distrib, moi.email || c.email ? 'E-mail : ' + (moi.email || String(c.email || '').split(/[,;\s]+/)[0]) : null, (c.tel || c.portable) ? 'Tél. : ' + (c.tel || c.portable) : null]);
   y = Math.max(y1, y2) + 3;
   if (adr.trim()) { const ya = bloc(L0, 'Adresse de livraison', adr.split('\n')); y = ya + 3; }
@@ -1052,7 +1120,7 @@ async function bonCommandePDF(envoyer){
   const entete = () => { doc.setFillColor(...BLEU); doc.rect(L0, y - 4.5, W0, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
     doc.text('Référence', X.ref + 1.5, y); doc.text('Désignation', X.des, y); doc.text('Qté', X.qte, y, { align: 'right' }); doc.text('PU HT', X.pu, y, { align: 'right' }); doc.text('Total HT', X.tot - 1.5, y, { align: 'right' });
     doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'normal'); y += 7; };
-  entete();
+  if (p.length) entete(); else { doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.text('Aucune pièce sélectionnée : voir les informations complémentaires ci-dessous.', L0, y); y += 6; }
   p.forEach((l, i) => {
     const des = doc.splitTextToSize(String(l.designation || '') + (l.modele ? ` (${l.modele})` : ''), 78);
     const h = Math.max(1, des.length) * 4.2 + 2.5;
@@ -1069,14 +1137,15 @@ async function bonCommandePDF(envoyer){
   if (y + 30 > 280) { doc.addPage(); y = 20; }
   y += 3; doc.setDrawColor(200, 200, 200); doc.line(L0 + 100, y - 3, R0, y - 3);
   const lt = (k, v, b) => { doc.setFont('helvetica', b ? 'bold' : 'normal'); doc.setFontSize(b ? 10.5 : 9.5); doc.text(k, L0 + 140, y, { align: 'right' }); doc.text(v.replace(/ | /g, ' '), R0 - 1.5, y, { align: 'right' }); y += 5.5; };
-  lt('Total HT', eurF(t.ht), true); lt('TVA', eurF(t.tva)); lt('Total TTC', eurF(t.ttc), true);
-  if (t.surDevis) { doc.setFontSize(8.5); doc.setTextColor(180, 83, 9); doc.text(`${t.surDevis} pièce(s) hors tarif : prix communiqué par Eloflex à la confirmation.`, L0, y); doc.setTextColor(0, 0, 0); y += 6; }
-  if (com.trim()) { y += 2; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('Commentaire', L0, y); y += 5; doc.setFont('helvetica', 'normal'); doc.splitTextToSize(com, W0).forEach(s => { if (y > 280) { doc.addPage(); y = 20; } doc.text(s, L0, y); y += 4.5; }); }
+  lt('Total HT indicatif', eurF(t.ht), true); lt('TVA', eurF(t.tva)); lt('Total TTC indicatif', eurF(t.ttc), true);
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(100, 100, 100); doc.text('Hors frais de port, ajoutés dans le devis Eloflex.', R0 - 1.5, y, { align: 'right' }); doc.setTextColor(0, 0, 0); y += 5;
+  if (t.surDevis) { doc.setFontSize(8.5); doc.setTextColor(180, 83, 9); doc.text(`${t.surDevis} pièce(s) hors tarif : prix communiqué dans le devis Eloflex.`, L0, y); doc.setTextColor(0, 0, 0); y += 6; }
+  if (com.trim()) { y += 2; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text('Informations complémentaires', L0, y); y += 5; doc.setFont('helvetica', 'normal'); doc.splitTextToSize(com, W0).forEach(s => { if (y > 280) { doc.addPage(); y = 20; } doc.text(s, L0, y); y += 4.5; }); }
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(130, 130, 130);
-    doc.text('Tarifs distributeur HT en vigueur — frais de port selon conditions commerciales — commande confirmée après validation par Eloflex.', L0, 289);
+    doc.text('Document non contractuel — tarifs distributeur HT indicatifs, hors frais de port — devis définitif établi par Eloflex.', L0, 289);
     doc.text(`${numero} — page ${i}/${n}`, R0, 293, { align: 'right' }); }
-  const nomFic = `Bon_de_commande_${numero}.pdf`;
+  const nomFic = `Demande_de_devis_${numero}.pdf`;
   if (!envoyer) { doc.save(nomFic); return; }
   const btn = $('pan-envoyer'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader-2"></i> ' + TR('Envoi…'); }
   try {
@@ -1084,15 +1153,15 @@ async function bonCommandePDF(envoyer){
     await API.post('/espace/bon-commande', { numero, reference: ref, adresse: adr, commentaire: com,
       lignes: p.map(l => ({ ref: l.ref, designation: l.designation, modele: l.modele, qte: l.qte, pu: l.pu })), pdf: { nom: nomFic, data } });
     doc.save(nomFic);
-    panierEcrire([]);
-    showModal(`<div class="modal-header"><i class="ti ti-circle-check" style="color:var(--success)"></i><h2>${TR('Bon de commande envoyé')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-      <div class="modal-body"><p style="font-size:14px;line-height:1.6">${TR('Merci ! Votre bon de commande')} <b>${e_(numero)}</b> ${TR('a bien été transmis à Eloflex. Vous en recevez une copie par e-mail et le PDF vient d’être téléchargé.')}</p>
-      <p style="font-size:13px;color:var(--text2)">${TR('Notre équipe revient vers vous pour confirmer la commande et le délai de livraison.')}</p></div>
+    panierEcrire([]); E._panForm = {};
+    showModal(`<div class="modal-header"><i class="ti ti-circle-check" style="color:var(--success)"></i><h2>${TR('Demande de devis envoyée')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body"><p style="font-size:14px;line-height:1.6">${TR('Merci ! Votre demande de devis')} <b>${e_(numero)}</b> ${TR('a bien été transmise à Eloflex. Vous en recevez une copie par e-mail et le PDF vient d’être téléchargé.')}</p>
+      <p style="font-size:13px;color:var(--text2)">${TR('Notre équipe vous adresse très prochainement le devis, frais de port et délai de livraison compris.')}</p></div>
       <div class="modal-footer"><button class="btn primary" onclick="closeModal()">${TR('Fermer')}</button></div>`);
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-send"></i> ' + TR('Valider et envoyer à Eloflex'); }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-send"></i> ' + TR('Envoyer la demande de devis à Eloflex'); }
     if (typeof toast === 'function') toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)');
   }
 }
-Object.assign(window, { ouvrirPanier, panierQte, panierRetirer, viderPanier, bonCommandePDF });
+Object.assign(window, { ouvrirPanier, panierQte, panierRetirer, viderPanier, bonCommandePDF, panierForm, panierLigneLibre, panierLibre });
 })();

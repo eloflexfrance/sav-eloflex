@@ -567,6 +567,48 @@ async function initDB() {
           if (MAN[code]) await client.query(`UPDATE eclates_modeles SET lien_notice_se=$1 WHERE slug=$2 AND lien_notice_se IS NULL`, [SE + 'media/' + MAN[code], slug]);
         }
       }
+      // Caractéristiques techniques d'un modèle (fiche affichée sur la carte, ex. modèle sans éclaté publié)
+      await client.query(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS caracteristiques JSONB`);
+      // Eloflex L2 : nouveau modèle (fiche + photo depuis eloflex.se), en attendant son éclaté
+      {
+        const L2 = {
+          source: 'https://eloflex.se/produkter/eloflex-l2/',
+          titre: 'Eloflex L2',
+          description: "L'Eloflex L2 est un fauteuil roulant électrique pliant, fiable et économique. Avec un poids d'un peu moins de 20 kg et un châssis robuste en aluminium, il se plie pour se ranger facilement dans de petits espaces. Son format compact est particulièrement adapté à l'intérieur : il passe facilement les portes étroites et les espaces restreints. Ses roues arrière gonflables, ses accoudoirs et son dossier réglables le rendent confortable et simple à utiliser. Très compact une fois plié, il tient même dans les petites voitures et se prête aux voyages.",
+          points: ['Pliable en quelques secondes', 'Léger : 19,8 kg', 'Compact et maniable', 'Autonomie : 30 km', 'Se transporte dans votre voiture',
+            'Poids maximal utilisateur : 120 kg', 'Accepté en avion, bus et train'],
+          fonctions: [
+            ['Construction pliable', 'Se plie en quelques secondes ; format compact et poids réduit, facile à emporter en voiture ou en avion.'],
+            ['Repose-pieds flexible', 'Réglable en hauteur et en profondeur, escamotable pour faciliter l’installation et la sortie du fauteuil.'],
+            ['Dossier inclinable', 'Inclinaison réglable d’un simple geste pour varier la position assise.'],
+            ['Batterie supplémentaire', '3ᵉ logement de batterie : en option, +50 % d’autonomie, jusqu’à 45 km par charge.'],
+            ['Verrou de transport', 'Verrou pratique pour une manipulation plus sûre et plus simple.'],
+          ],
+          specs: [
+            ['Poids', '19,8 kg sans batteries'], ['Poids total', '23,4 kg avec batteries'], ['Vitesse', '6 km/h'], ['Autonomie', '30 km'],
+            ['Durée d’utilisation', '5 heures par charge'], ['Moteurs', '2 × moteur brushless haute performance'], ['Puissance', '2 × 200 W'],
+            ['Batteries', '2 × lithium-ion 10 Ah / 24 V (240 Wh)'], ['Poids d’une batterie', '1,8 kg'], ['Temps de charge', '3 heures'],
+            ['Rayon de braquage', '82,5 cm'], ['Pente maximale', '9°'], ['Roues', '8″ avant (pleines) / 10″ arrière (gonflables)'],
+            ['Hauteur d’assise', '53 cm'], ['Largeur d’assise', '43 cm'], ['Profondeur d’assise', '44 à 47 cm'], ['Poids maximal utilisateur', '120 kg'],
+            ['Joystick', 'côté droit ou gauche'], ['Coussin', 'amovible, housse déhoussable'], ['Dossier', 'hauteur et inclinaison réglables, 8° à 30°'],
+            ['Dimensions', '97,3 cm (H) × 59,2 cm (l) × 95,5 cm (P)'], ['Dimensions plié', '74 cm (H) × 59,2 cm (l) × 32 cm (P)'],
+          ],
+        };
+        await client.query(`INSERT INTO eclates_modeles (slug, nom, ordre, lien_web_se, lien_fiche_se, caracteristiques)
+          VALUES ('Eloflex_L2', 'Eloflex L2', 0, $1, $2, $3) ON CONFLICT (slug) DO NOTHING`,
+          ['https://eloflex.se/produkter/eloflex-l2/', 'https://eloflex.se/produkter/eloflex-l2/#tab1Panel1', JSON.stringify(L2)]);
+        await client.query(`UPDATE eclates_modeles SET caracteristiques=$1 WHERE slug='Eloflex_L2' AND caracteristiques IS NULL`, [JSON.stringify(L2)]);
+        // Photo du modèle récupérée sur eloflex.se (une seule fois, si aucune photo n'est encore enregistrée)
+        try {
+          const ph = await client.query(`SELECT id FROM eclates_modeles WHERE slug='Eloflex_L2' AND photo IS NULL`);
+          if (ph.rows.length) {
+            const axios = require('axios'), sharp = require('sharp');
+            const { data } = await axios.get('https://eloflex.se/media/vzubwwhb/l2_halvprofil_hoeger.jpg?width=900', { responseType: 'arraybuffer', timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0 (EloflexSAV; sav@eloflex.fr)' } });
+            const jpg = await sharp(Buffer.from(data)).flatten({ background: '#ffffff' }).resize(600, 600, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+            await client.query(`UPDATE eclates_modeles SET photo=$1 WHERE id=$2`, ['data:image/jpeg;base64,' + jpg.toString('base64'), ph.rows[0].id]);
+          }
+        } catch (e) { console.warn('⚠️  Photo Eloflex L2 (eloflex.se) :', e.message); }
+      }
       await client.query(`CREATE TABLE IF NOT EXISTS eclates_vues (
         id SERIAL PRIMARY KEY,
         modele_id INTEGER NOT NULL REFERENCES eclates_modeles(id) ON DELETE CASCADE,
@@ -903,6 +945,8 @@ async function initDB() {
       ['email_from',''],
       // Retours démo : forfaits HT et destinataires par défaut du compte rendu
       ['espace_distributeurs_actif','1'],
+      // Ordre d'affichage des éclatés (noms sans « Eloflex », séparés par des virgules ; les autres suivent)
+      ['eclates_ordre','L2, R, H2, L, F, D2, P, X, K, H, F Pre 2022, D2 Pre 2022, P Pre 2022, S1, C'],
       ['retour_demo_forfait_retour','50'],
       ['retour_demo_forfait_carton','90'],
       ['retour_demo_nettoyage_base','0'],

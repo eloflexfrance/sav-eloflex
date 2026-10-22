@@ -1135,12 +1135,25 @@ const _ECL_CAT_JOIN = `LEFT JOIN LATERAL (
       AND COALESCE(l.ref,'') <> ''
     ORDER BY c.id LIMIT 1) cat ON TRUE`;
 
+// Ordre d'affichage des modèles (Paramètres → « eclates_ordre ») : les modèles cités d'abord, dans l'ordre, puis les autres
+const _eclCle = n => String(n || '').replace(/^\s*eloflex\s*/i, '').replace(/\s+/g, ' ').trim().toUpperCase();
+async function _eclTrier(rows) {
+  let ordre = 'L2, R, H2, L, F, D2, P, X, K, H, F Pre 2022, D2 Pre 2022, P Pre 2022, S1, C';
+  try { const p = await db.get("SELECT valeur FROM parametres WHERE cle='eclates_ordre'"); if (p && p.valeur != null) ordre = p.valeur; } catch (_) {}
+  const pos = {}; String(ordre).split(/[,;\n]+/).map(_eclCle).filter(Boolean).forEach((k, i) => { if (pos[k] === undefined) pos[k] = i; });
+  return rows.sort((a, b) => {
+    const pa = pos[_eclCle(a.nom)], pb = pos[_eclCle(b.nom)];
+    if (pa !== undefined || pb !== undefined) return (pa === undefined ? 1e6 : pa) - (pb === undefined ? 1e6 : pb);
+    return (a.ordre || 0) - (b.ordre || 0) || String(a.nom).localeCompare(String(b.nom), 'fr');
+  });
+}
 router.get('/eclates', async (req, res) => {
   try {
-    res.json(await db.all(`SELECT m.id, m.slug, m.nom, m.ref_modele, m.fichier, m.date_doc, m.updated_at, m.lien_web, m.lien_notice, m.lien_fiche, m.lien_web_se, m.lien_notice_se, m.lien_fiche_se, (m.photo IS NOT NULL) AS photo_perso,
+    res.json(await _eclTrier(await db.all(`SELECT m.id, m.slug, m.nom, m.ordre, m.ref_modele, m.fichier, m.date_doc, m.updated_at, m.lien_web, m.lien_notice, m.lien_fiche, m.lien_web_se, m.lien_notice_se, m.lien_fiche_se, (m.photo IS NOT NULL) AS photo_perso,
+        m.caracteristiques,
         (SELECT COUNT(*) FROM eclates_vues v WHERE v.modele_id = m.id)::int AS nb_vues,
         (SELECT COUNT(*) FROM eclates_lignes l JOIN eclates_vues v ON v.id = l.vue_id WHERE v.modele_id = m.id)::int AS nb_lignes
-      FROM eclates_modeles m ORDER BY m.ordre, m.nom`));
+      FROM eclates_modeles m`)));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1279,7 +1292,7 @@ router.post('/eclates/import', adminOnly, async (req, res) => {
   }
   const pg = await db.pool.connect();
   try {
-    const ex = await pg.query('SELECT id, photo, lien_web, lien_notice, lien_fiche, lien_web_se, lien_notice_se, lien_fiche_se FROM eclates_modeles WHERE slug=$1', [meta.slug]);
+    const ex = await pg.query('SELECT id, photo, lien_web, lien_notice, lien_fiche, lien_web_se, lien_notice_se, lien_fiche_se, caracteristiques FROM eclates_modeles WHERE slug=$1', [meta.slug]);
     if (ex.rows.length && b.remplacer !== true) {
       return res.status(409).json({ error: 'existe', message: `L'éclaté « ${meta.modele} » existe déjà.` });
     }
@@ -1298,6 +1311,7 @@ router.post('/eclates/import', adminOnly, async (req, res) => {
     if (prev.lien_web_se != null || prev.lien_notice_se != null || prev.lien_fiche_se != null)
       await pg.query('UPDATE eclates_modeles SET lien_web_se=$1, lien_notice_se=$2, lien_fiche_se=$3 WHERE id=$4',
         [prev.lien_web_se, prev.lien_notice_se, prev.lien_fiche_se, m.id]);
+    if (prev.caracteristiques) await pg.query('UPDATE eclates_modeles SET caracteristiques=$1 WHERE id=$2', [JSON.stringify(prev.caracteristiques), m.id]);
     for (const [page, svg] of Object.entries(b.pages)) {
       await pg.query('INSERT INTO eclates_pages (modele_id, page, svg) VALUES ($1,$2,$3)', [m.id, parseInt(page), svg]);
     }

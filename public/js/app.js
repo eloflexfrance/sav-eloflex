@@ -211,7 +211,7 @@ function appliquerNavRole(){
 const estDistributeur = () => !!(CURRENT_USER && CURRENT_USER.role==='distributeur');
 window.estDistributeur = estDistributeur;
 async function inviterEspaceDistributeur(id, email){
-  const dest = prompt(TR('Envoyer le lien d’accès à l’espace distributeur (éclatés + bon de commande de pièces) à :'), email||'');
+  const dest = prompt(TR('Envoyer le lien d’accès à l’espace distributeur (éclatés + demande de devis de pièces) à :'), email||'');
   if(!dest) return;
   try{ const r = await API.post(`/espace/inviter/${id}`, { email: dest.trim() }); toast(TR('Invitation envoyée à ')+r.email,'ti-mail-check','var(--success)'); }
   catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
@@ -772,7 +772,7 @@ function ficheDistributeurBloc(cl){
     <div style="margin-top:10px;display:flex;gap:6px">
       <button class="btn sm" onclick="modalEditClient(${cl.id})"><i class="ti ti-edit"></i>${t('btn_modifier')}</button>
       <button class="btn sm" onclick="modalFusionnerClient(${cl.id})"><i class="ti ti-git-merge"></i>${TR('Fusionner')}</button>
-      ${cl.email?`<button class="btn sm" onclick="inviterEspaceDistributeur(${cl.id},'${esc(String(cl.email).split(/[,;\s]+/)[0]).replace(/'/g,'&#39;')}')" title="${TR('Envoyer au distributeur son lien d’accès à l’espace distributeur (éclatés + bon de commande de pièces)')}"><i class="ti ti-building-store"></i>${TR('Inviter à l’espace distributeur')}</button>`:''}
+      ${cl.email?`<button class="btn sm" onclick="inviterEspaceDistributeur(${cl.id},'${esc(String(cl.email).split(/[,;\s]+/)[0]).replace(/'/g,'&#39;')}')" title="${TR('Envoyer au distributeur son lien d’accès à l’espace distributeur (éclatés + demande de devis de pièces)')}"><i class="ti ti-building-store"></i>${TR('Inviter à l’espace distributeur')}</button>`:''}
     </div>
   </div>`;
 }
@@ -2907,6 +2907,11 @@ async function renderParametres(ttl,c,a){
       </div>
     </div>
     <div class="param-section">
+      <h3><i class="ti ti-schema"></i> ${TR('Éclatés')}</h3>
+      <div class="form-group"><label class="form-label">${TR('Ordre d’affichage des modèles (séparés par des virgules ; les modèles non cités suivent)')}</label>
+        <input class="form-input" id="p-ecl-ordre" value="${esc(p.eclates_ordre!=null?p.eclates_ordre:'L2, R, H2, L, F, D2, P, X, K, H, F Pre 2022, D2 Pre 2022, P Pre 2022, S1, C')}"></div>
+    </div>
+    <div class="param-section">
       <h3><i class="ti ti-clipboard-check"></i> ${TR('Retours démo')}</h3>
       <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Tarifs HT appliqués aux comptes rendus de retour des fauteuils de démonstration, et destinataires cochés par défaut lors de l’envoi.')}</div>
       <div class="grid-2">
@@ -3965,6 +3970,7 @@ async function saveParametres(){
     email_smtp_user_relance:gv('p-smtp-user-relance')||'',
     email_smtp_pass_relance:gv('p-smtp-pass-relance')||''
   };
+  if(document.getElementById('p-ecl-ordre')) p.eclates_ordre=gv('p-ecl-ordre').trim();
   if(document.getElementById('p-rd-retour')){
     p.retour_demo_forfait_retour=gv('p-rd-retour')||'0';
     p.retour_demo_forfait_carton=gv('p-rd-carton')||'0';

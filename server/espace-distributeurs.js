@@ -1,7 +1,7 @@
 // server/espace-distributeurs.js
 // ─────────────────────────────────────────────────────────────────────────────
 // Espace distributeurs : accès aux éclatés par lien magique envoyé par e-mail
-// (adresse présente dans une fiche distributeur), avec bon de commande de pièces
+// (adresse présente dans une fiche distributeur), avec demande de devis de pièces
 // détachées (PDF généré dans le navigateur, envoyé à sav@ et info@, copie au distributeur).
 //
 // Un distributeur connecté reçoit une session « distributeur » : il ne voit QUE les éclatés
@@ -78,7 +78,7 @@ function monterApi(router, deps) {
       html: mailCharte({
         titre: 'Eloflex — Espace distributeur',
         corps: `<p>Bonjour,</p>
-          <p>Voici votre lien d'accès personnel à l'<b>espace distributeur Eloflex</b> (${escH(c.nom)}) : vous y retrouvez les <b>éclatés</b> de nos fauteuils avec les références des pièces détachées, et vous pouvez préparer votre <b>bon de commande</b> en quelques clics.</p>
+          <p>Voici votre lien d'accès personnel à l'<b>espace distributeur Eloflex</b> (${escH(c.nom)}) : vous y retrouvez les <b>éclatés</b> de nos fauteuils avec les références des pièces détachées, et vous pouvez préparer votre <b>demande de devis</b> de pièces en quelques clics.</p>
           <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Accéder à l'espace distributeur</a></p>
           <p style="font-size:12px;color:#666">Ce lien est personnel et valable ${VALIDITE_LIEN_H} heures ; votre connexion reste ensuite active 7 jours sur cet appareil. Si le bouton ne fonctionne pas, copiez ce lien :<br>${lien}</p>
           <p style="font-size:12px;color:#666">Vous n'êtes pas à l'origine de cette demande ? Ignorez simplement cet e-mail.</p>
@@ -125,7 +125,7 @@ function monterApi(router, deps) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  // Coordonnées du distributeur connecté (pré-remplissage du bon de commande)
+  // Coordonnées du distributeur connecté (pré-remplissage de la demande de devis)
   router.get('/espace/moi', async (req, res) => {
     try {
       const u = res.locals.user || {};
@@ -135,7 +135,7 @@ function monterApi(router, deps) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  // Validation d'un bon de commande : e-mail à sav@ + info@ (copie au distributeur) avec le PDF
+  // Envoi d'une demande de devis : e-mail à sav@ + info@ (copie au distributeur) avec le PDF
   router.post('/espace/bon-commande', async (req, res) => {
     try {
       const u = res.locals.user || {};
@@ -145,44 +145,44 @@ function monterApi(router, deps) {
         ref: String(l.ref || '').slice(0, 60), designation: String(l.designation || '').slice(0, 250), modele: String(l.modele || '').slice(0, 80),
         qte: Math.max(1, Math.min(999, parseInt(l.qte) || 1)), pu: l.pu == null || l.pu === '' ? null : Math.round(parseFloat(l.pu) * 100) / 100,
       })).filter(l => l.ref || l.designation);
-      if (!lignes.length) return res.status(400).json({ error: 'Le bon de commande est vide' });
+      if (!lignes.length && !String(b.commentaire || '').trim()) return res.status(400).json({ error: 'La demande de devis est vide' });
       if (!b.pdf || !b.pdf.data) return res.status(400).json({ error: 'PDF manquant' });
       await ensureTables(db);
       const c = await db.get('SELECT id, nom, email FROM clients WHERE id=$1', [u.distributeur.client_id]);
       const totalHT = lignes.reduce((s, l) => s + (l.pu != null ? l.pu * l.qte : 0), 0);
-      const numero = String(b.numero || '').slice(0, 40) || ('BC-WEB-' + Date.now());
+      const numero = String(b.numero || '').slice(0, 40) || ('DDV-WEB-' + Date.now());
       const rec = await db.run(`INSERT INTO espace_commandes (client_id, email, numero, reference, adresse_livraison, commentaire, lignes, total_ht)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
         [c.id, u.email, numero, String(b.reference || '').slice(0, 80) || null, String(b.adresse || '').slice(0, 500) || null,
          String(b.commentaire || '').slice(0, 2000) || null, JSON.stringify(lignes), totalHT]);
       const tableau = `<table role="presentation" style="width:100%;border-collapse:collapse;margin:8px 0 16px;font-size:13px">
         <tr style="background:#f1f5f9"><th style="padding:6px 8px;border:1px solid #e5e7eb;text-align:left">Réf.</th><th style="padding:6px 8px;border:1px solid #e5e7eb;text-align:left">Désignation</th><th style="padding:6px 8px;border:1px solid #e5e7eb">Qté</th><th style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right">Total HT</th></tr>
-        ${lignes.map(l => `<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;font-family:monospace">${escH(l.ref)}</td><td style="padding:6px 8px;border:1px solid #e5e7eb">${escH(l.designation)}${l.modele ? `<br><span style="color:#888;font-size:11px">${escH(l.modele)}</span>` : ''}</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:center">${l.qte}</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;white-space:nowrap">${l.pu != null ? eur(l.pu * l.qte) : 'sur devis'}</td></tr>`).join('')}
-        <tr><td colspan="3" style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:700">Total HT</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:700;white-space:nowrap">${eur(totalHT)}</td></tr></table>`;
+        ${lignes.length ? '' : '<tr><td colspan="4" style="padding:8px;border:1px solid #e5e7eb;font-style:italic;color:#666">Aucune pièce sélectionnée : voir les informations complémentaires.</td></tr>'}${lignes.map(l => `<tr><td style="padding:6px 8px;border:1px solid #e5e7eb;font-family:monospace">${escH(l.ref)}</td><td style="padding:6px 8px;border:1px solid #e5e7eb">${escH(l.designation)}${l.modele ? `<br><span style="color:#888;font-size:11px">${escH(l.modele)}</span>` : ''}</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:center">${l.qte}</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;white-space:nowrap">${l.pu != null ? eur(l.pu * l.qte) : 'sur devis'}</td></tr>`).join('')}
+        <tr><td colspan="3" style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:700">Total HT indicatif (hors port)</td><td style="padding:6px 8px;border:1px solid #e5e7eb;text-align:right;font-weight:700;white-space:nowrap">${eur(totalHT)}</td></tr></table>`;
       const recap = mailRecap([
-        ['N° de bon', `<b>${escH(numero)}</b>`],
+        ['N° de demande', `<b>${escH(numero)}</b>`],
         ['Distributeur', `<b>${escH(c.nom)}</b>`],
         ['Votre référence', escH(b.reference || '')],
         ['Adresse de livraison', escH(b.adresse || '').replace(/\n/g, '<br>')],
-        ['Commentaire', escH(b.commentaire || '').replace(/\n/g, '<br>')],
+        ['Informations complémentaires', `<b>${escH(b.commentaire || '').replace(/\n/g, '<br>')}</b>`],
       ]);
       const ccDistrib = emailOk(u.email) ? u.email : null;
       await sendBrevoMail({
         from: 'sav@eloflex.fr', fromName: 'Eloflex France — SAV',
         to: DEST_INTERNES, cc: ccDistrib || undefined,
-        subject: `Bon de commande pièces détachées ${numero} — ${c.nom}`,
+        subject: `Demande de devis pièces détachées ${numero} — ${c.nom}`,
         html: mailCharte({
-          titre: 'Eloflex — Bon de commande pièces détachées',
+          titre: 'Eloflex — Demande de devis pièces détachées',
           corps: `<p>Bonjour,</p>
-            <p>Un bon de commande de pièces détachées vient d'être transmis depuis l'<b>espace distributeur</b>. Le PDF est joint à cet e-mail.</p>
+            <p>Une demande de devis de pièces détachées vient d'être transmise depuis l'<b>espace distributeur</b>. Le PDF est joint à cet e-mail.</p>
             ${recap}${tableau}
-            <p style="font-size:13px;color:#555">${ccDistrib ? `Le distributeur est en copie (${escH(ccDistrib)}). ` : ''}La commande sera confirmée après validation par Eloflex.</p>
+            <p style="font-size:13px;color:#555">${ccDistrib ? `Le distributeur est en copie (${escH(ccDistrib)}). ` : ''}Eloflex établit le devis définitif (frais de port et délai compris).</p>
             <p>Bien cordialement</p>`,
           signature: signatureSav(),
         }),
         attachments: [{ name: String(b.pdf.nom || numero + '.pdf').replace(/[^\w.\-]+/g, '_'), content: String(b.pdf.data).replace(/^data:[^,]+,/, '') }],
       });
-      try { await addAlerte('bdc_espace', rec.id, `🛒 Bon de commande pièces ${numero} reçu de ${c.nom} via l'espace distributeur (${lignes.length} ligne(s), ${eur(totalHT)} HT).`); } catch (_) {}
+      try { await addAlerte('bdc_espace', rec.id, `🧾 Demande de devis pièces ${numero} reçue de ${c.nom} via l'espace distributeur (${lignes.length} ligne(s), ${eur(totalHT)} HT indicatif) : devis à établir.`); } catch (_) {}
       res.json({ ok: true, numero, id: rec.id });
     } catch (e) {
       const msg = (e.response && e.response.data && (e.response.data.message || JSON.stringify(e.response.data))) || e.message;
