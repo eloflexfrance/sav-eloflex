@@ -95,13 +95,14 @@ function monterPages(app, db) {
 function monterApi(router, deps) {
   const { db, sendBrevoMail, mailCharte, mailRecap, signatureSav, addAlerte, requireAuth } = deps;
 
-  async function envoyerLien(c, email, base, ip, langue) {
+  async function envoyerLien(c, email, base, ip, langue, opts = {}) {
     await ensureTables(db);
     const lg = lgOk(langue), M = MAIL_LIEN[lg];
     const token = crypto.randomBytes(24).toString('hex');
     await db.run(`INSERT INTO espace_liens (token, client_id, email, expires_at, ip, langue) VALUES ($1,$2,$3,NOW() + INTERVAL '${VALIDITE_LIEN_H} hours',$4,$5)`,
       [token, c.id, email.toLowerCase(), ip || null, lg]);
     const lien = `${base}/espace/connexion/${token}`;
+    if (opts.sansMail) return lien;   // lien à transmettre à la main (mail bloqué chez le destinataire)
     await sendBrevoMail({
       from: 'sav@eloflex.fr', fromName: 'Eloflex France', to: email,
       subject: M.sujet,
@@ -116,6 +117,7 @@ function monterApi(router, deps) {
         signature: signatureSav(),
       }),
     });
+    return lien;
   }
 
   const baseUrl = req => process.env.APP_URL || (req.protocol + '://' + req.get('host'));
@@ -135,6 +137,7 @@ function monterApi(router, deps) {
     ]);
     const corps = auto
       ? `<p>Bonjour,</p><p>Une demande d'accès à l'<b>espace distributeur</b> vient d'être faite. L'adresse est enregistrée dans la fiche <b>${escH(fiche.nom)}</b> : <b>le lien de connexion lui a été envoyé automatiquement</b>.</p>${recap}
+         <p style="font-size:13px;color:#555">Si le distributeur ne reçoit pas l'e-mail (courrier indésirable, quarantaine de sa messagerie), <a href="${lienValider}">ouvrez la demande dans l'application</a> → « Obtenir un lien à transmettre », et envoyez-lui ce lien vous-même.</p>
          <p style="font-size:13px;color:#555">Si cette personne ne doit pas avoir accès, retirez son adresse de la fiche distributeur : elle ne pourra plus recevoir de lien.</p>`
       : `<p>Bonjour,</p><p>Une demande d'accès à l'<b>espace distributeur</b> est <b>en attente de validation</b>.</p>${recap}
          <p>Pour valider, rattachez l'adresse à la bonne fiche distributeur : le lien de connexion lui sera alors envoyé dans sa langue.</p>
@@ -217,11 +220,25 @@ function monterApi(router, deps) {
       if (!c) return res.status(400).json({ error: 'Choisissez la fiche distributeur à laquelle rattacher cette adresse' });
       const dejaLa = (await clientsParEmail(db, d.email)).some(x => x.id === c.id);
       if (!dejaLa) await db.run(`UPDATE clients SET email = CASE WHEN COALESCE(TRIM(email),'')='' THEN $2 ELSE TRIM(email) || ', ' || $2 END WHERE id=$1`, [c.id, d.email]);
-      await envoyerLien(c, d.email, baseUrl(req), null, d.langue);
+      const lien = await envoyerLien(c, d.email, baseUrl(req), null, d.langue);
       const ids = (await db.all(`UPDATE espace_demandes SET statut='validee', client_id=$2, traite_at=NOW(), traite_par=$3
         WHERE id=$1 OR (email=$4 AND statut='attente') RETURNING id`, [d.id, c.id, u.nom || u.email || null, d.email])).map(x => x.id);
       try { await db.run(`UPDATE alertes SET lue=TRUE WHERE type='espace_acces' AND reference_id = ANY($1::int[])`, [ids]); } catch (_) {}
-      res.json({ ok: true, email: d.email, client: c.nom, ajoute: !dejaLa });
+      res.json({ ok: true, email: d.email, client: c.nom, ajoute: !dejaLa, lien, validite_h: VALIDITE_LIEN_H });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  // Nouveau lien de connexion SANS e-mail (à transmettre soi-même si le mail n'arrive pas)
+  router.post('/espace/demandes/:id/lien', requireAuth, async (req, res) => {
+    try {
+      const u = res.locals.user || {};
+      if (!interneOk(u)) return res.status(403).json({ error: 'Droits insuffisants (écriture sur Clients requise)' });
+      await ensureTables(db);
+      const d = await db.get('SELECT * FROM espace_demandes WHERE id=$1', [req.params.id]);
+      if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+      const c = (await clientsParEmail(db, d.email))[0];
+      if (!c) return res.status(400).json({ error: 'Cette adresse ne figure plus dans aucune fiche distributeur : validez d’abord la demande.' });
+      const lien = await envoyerLien(c, d.email, baseUrl(req), null, d.langue, { sansMail: true });
+      res.json({ ok: true, email: d.email, client: c.nom, lien, validite_h: VALIDITE_LIEN_H });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
   router.post('/espace/demandes/:id/refuser', requireAuth, async (req, res) => {
@@ -250,8 +267,8 @@ function monterApi(router, deps) {
       const dansFiche = (await clientsParEmail(db, email)).some(x => x.id === c.id);
       if (!dansFiche) return res.status(400).json({ error: 'Cette adresse ne figure pas dans la fiche distributeur : ajoutez-la d’abord dans la fiche.' });
       const base = process.env.APP_URL || (req.protocol + '://' + req.get('host'));
-      await envoyerLien(c, email, base, null, (req.body || {}).langue);
-      res.json({ ok: true, email });
+      const lien = await envoyerLien(c, email, base, null, (req.body || {}).langue);
+      res.json({ ok: true, email, lien, validite_h: VALIDITE_LIEN_H });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 

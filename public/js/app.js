@@ -222,7 +222,7 @@ window.estDistributeur = estDistributeur;
 async function inviterEspaceDistributeur(id, email){
   const dest = prompt(TR('Envoyer le lien d’accès à l’espace distributeur (éclatés + demande de devis de pièces) à :'), email||'');
   if(!dest) return;
-  try{ const r = await API.post(`/espace/inviter/${id}`, { email: dest.trim() }); toast(TR('Invitation envoyée à ')+r.email,'ti-mail-check','var(--success)'); }
+  try{ const r = await API.post(`/espace/inviter/${id}`, { email: dest.trim() }); afficherLienEspace(r, TR('Invitation envoyée par e-mail à')); }
   catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.inviterEspaceDistributeur = inviterEspaceDistributeur;
@@ -721,6 +721,7 @@ async function ouvrirDemandeEspace(id){
     </div>
     <div class="modal-footer">
       ${d.statut==='attente'?`<button class="btn" style="color:var(--danger)" onclick="refuserDemandeEspace(${d.id})"><i class="ti ti-ban"></i>${TR('Refuser')}</button>`:''}
+      ${d.statut==='validee'||d.statut==='auto'?`<button class="btn" onclick="lienManuelEspace(${d.id})" title="${TR('Si le distributeur ne reçoit pas l’e-mail (spam, quarantaine) : nouveau lien à lui transmettre vous-même')}"><i class="ti ti-link"></i>${TR('Obtenir un lien à transmettre')}</button>`:''}
       <button class="btn" onclick="closeModal()">${TR('Fermer')}</button>
       ${d.statut==='validee'||d.statut==='auto'?'':`<button class="btn primary" onclick="validerDemandeEspace(${d.id})"><i class="ti ti-mail-check"></i>${TR('Valider et envoyer le lien')}</button>`}
     </div>`);
@@ -744,7 +745,7 @@ async function validerDemandeEspace(id){
   if(!cid){ toast(TR('Choisissez la fiche distributeur'),'ti-alert-circle','var(--danger)'); return; }
   try{
     const r = await API.post(`/espace/demandes/${id}/valider`, { client_id: parseInt(cid) });
-    closeModal(); toast(TR('Accès validé : lien envoyé à ')+r.email,'ti-mail-check','var(--success)');
+    afficherLienEspace(r, TR('Accès validé : le lien a été envoyé par e-mail à'));
     bandeauDemandesEspace(); if(typeof refreshBadges==='function') refreshBadges();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
@@ -753,7 +754,29 @@ async function refuserDemandeEspace(id){
   try{ await API.post(`/espace/demandes/${id}/refuser`, {}); closeModal(); toast(TR('Demande refusée'),'ti-ban'); bandeauDemandesEspace(); }
   catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
-Object.assign(window, { ouvrirDemandeEspace, espChercherFiche, validerDemandeEspace, refuserDemandeEspace, bandeauDemandesEspace });
+// Lien de connexion affiché avec bouton Copier (secours si l'e-mail est bloqué chez le distributeur)
+function afficherLienEspace(r, intro){
+  showModal(`<div class="modal-header"><i class="ti ti-link" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Lien de connexion — espace distributeur')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="margin-bottom:10px">${intro?`${esc(intro)} <b>${esc(r.email)}</b>${r.client?` (${esc(r.client)})`:''}.`:''}</p>
+      <div style="background:var(--bg);border-radius:10px;padding:12px 14px;font-size:13.5px;color:var(--text2);margin-bottom:12px"><i class="ti ti-info-circle"></i> ${TR('Si le distributeur ne reçoit pas l’e-mail (courrier indésirable, quarantaine de sa messagerie), transmettez-lui ce lien vous-même, par e-mail ou par message. Il est personnel et valable')} ${r.validite_h||48} ${TR('heures.')}</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="form-input mono" id="esp-lien" readonly value="${esc(r.lien||'')}" style="flex:1;font-size:12.5px" onclick="this.select()">
+        <button class="btn primary" onclick="copierLienEspace()"><i class="ti ti-copy"></i>${TR('Copier')}</button>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Fermer')}</button></div>`);
+}
+async function copierLienEspace(){
+  const el=$('esp-lien'); if(!el) return;
+  try{ await navigator.clipboard.writeText(el.value); }catch(_){ el.select(); try{ document.execCommand('copy'); }catch(__){} }
+  toast(TR('Lien copié'),'ti-copy','var(--success)');
+}
+async function lienManuelEspace(id){
+  try{ const r = await API.post(`/espace/demandes/${id}/lien`, {}); afficherLienEspace(r, TR('Nouveau lien de connexion pour')); }
+  catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
+}
+Object.assign(window, { ouvrirDemandeEspace, espChercherFiche, validerDemandeEspace, refuserDemandeEspace, bandeauDemandesEspace, afficherLienEspace, copierLienEspace, lienManuelEspace });
 
 let _clientsReqId = 0;
 async function chargerListeClients(){
