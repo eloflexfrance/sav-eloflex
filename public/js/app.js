@@ -6185,8 +6185,9 @@ applyNavTranslations();
     const premier=[...document.querySelectorAll('.nav-item[data-view]')].find(n=>hasAccess(n.dataset.view));
     if(premier){ STATE.view=premier.dataset.view; document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===STATE.view)); }
   }
+  // Langue choisie à la connexion (FR / EN / SV) : les éclatés s'ouvrent dans cette langue
+  if(CURRENT_USER.langue_eclates && window._ECL && !window._ECL.lang) window._ECL.lang=CURRENT_USER.langue_eclates;
   if(estDistributeur()){   // espace distributeur : rien d'autre à charger
-    if(CURRENT_USER.langue_eclates==='sv' && window._ECL && !window._ECL.lang) window._ECL.lang='sv';
     render(); return;
   }
   try{ const dm=sessionStorage.getItem('espace_demande'); if(dm){ sessionStorage.removeItem('espace_demande'); setTimeout(()=>ouvrirDemandeEspace(parseInt(dm)),600); } }catch(_){}

@@ -86,77 +86,101 @@
       border-radius: 8px;
       font-size: 12.5px;
     }
+    .langs { display:flex; justify-content:flex-end; gap:4px; margin:-18px -12px 14px 0; }
+    .langs button { border:1px solid #e2e4e9; background:#fff; color:#374151; border-radius:7px; padding:4px 9px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; }
+    .langs button.on { background:#2563eb; border-color:#2563eb; color:#fff; }
   </style>
 </head>
 <body>
   <div class="card">
+    <div class="langs" role="group" aria-label="Langue / Language / Språk">
+      <button type="button" data-lg="fr">FR</button><button type="button" data-lg="en">EN</button><button type="button" data-lg="sv">SV</button>
+    </div>
     <div class="logo">
       <i class="ti ti-wheelchair"></i>
       <span class="logo-text">SAV Éloflex</span>
     </div>
-    <p class="subtitle">Connectez-vous pour accéder à l'application</p>
+    <p class="subtitle" data-t="sous"></p>
 
     <div class="field">
-      <label for="email">Adresse e-mail</label>
-      <input type="email" id="email" autocomplete="email" placeholder="prenom.nom@eloflex.fr">
+      <label for="email" data-t="lEmail"></label>
+      <input type="email" id="email" autocomplete="email" data-ph="phEmail">
     </div>
     <div class="field">
-      <label for="password">Mot de passe</label>
+      <label for="password" data-t="lMdp"></label>
       <input type="password" id="password" autocomplete="current-password" placeholder="••••••••">
     </div>
 
-    <button class="btn-login" id="btn-login" onclick="seConnecter()">Se connecter</button>
+    <button class="btn-login" id="btn-login" onclick="seConnecter()" data-t="btn"></button>
     <div class="error" id="err"></div>
-    <p style="margin-top:18px;font-size:12.5px;color:#6b7280;text-align:center">Vous êtes distributeur ? <a href="/espace" style="color:#2563eb;font-weight:600">Accéder à l'espace distributeur</a></p>
+    <p style="margin-top:18px;font-size:12.5px;color:#6b7280;text-align:center"><span data-t="distrib"></span> <a href="/espace" id="lien-espace" style="color:#2563eb;font-weight:600" data-t="lienEspace"></a></p>
   </div>
 
   <script>
-    document.getElementById('email').addEventListener('keydown', e => {
-      if (e.key === 'Enter') document.getElementById('password').focus();
-    });
-    document.getElementById('password').addEventListener('keydown', e => {
-      if (e.key === 'Enter') seConnecter();
-    });
+    const TXT = {
+      fr: { doc: 'SAV Éloflex — Connexion', sous: 'Connectez-vous pour accéder à l’application', lEmail: 'Adresse e-mail', phEmail: 'prenom.nom@eloflex.fr',
+        lMdp: 'Mot de passe', btn: 'Se connecter', btnEnCours: 'Connexion en cours…', eVide: 'Veuillez saisir votre e-mail et votre mot de passe.',
+        eIdent: 'E-mail ou mot de passe incorrect.', eReseau: 'Impossible de joindre le serveur. Réessayez.',
+        distrib: 'Vous êtes distributeur ?', lienEspace: 'Accéder à l’espace distributeur' },
+      en: { doc: 'Eloflex After-Sales — Sign in', sous: 'Sign in to access the application', lEmail: 'E-mail address', phEmail: 'firstname.lastname@eloflex.com',
+        lMdp: 'Password', btn: 'Sign in', btnEnCours: 'Signing in…', eVide: 'Please enter your e-mail and password.',
+        eIdent: 'Incorrect e-mail or password.', eReseau: 'Unable to reach the server. Please try again.',
+        distrib: 'Are you a dealer?', lienEspace: 'Go to the dealer area' },
+      sv: { doc: 'Eloflex Service — Logga in', sous: 'Logga in för att komma åt applikationen', lEmail: 'E-postadress', phEmail: 'fornamn.efternamn@eloflex.se',
+        lMdp: 'Lösenord', btn: 'Logga in', btnEnCours: 'Loggar in…', eVide: 'Ange din e-postadress och ditt lösenord.',
+        eIdent: 'Fel e-postadress eller lösenord.', eReseau: 'Det går inte att nå servern. Försök igen.',
+        distrib: 'Är du återförsäljare?', lienEspace: 'Gå till återförsäljarportalen' }
+    };
+    const LS = { get(k){ try { return localStorage.getItem(k); } catch(_) { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch(_) {} } };
+    // Langue explicitement choisie (bouton cliqué) : envoyée à la connexion. Sinon la langue du compte s'applique.
+    let choisie = LS.get('login_lang');
+    const nav = (navigator.language || 'fr').slice(0, 2).toLowerCase();
+    let LG = [new URLSearchParams(location.search).get('lang'), choisie, LS.get('lang'), nav].find(v => v && TXT[v]) || 'fr';
+    let errK = '';
+    const $ = id => document.getElementById(id);
+    function appliquer(lg) {
+      LG = TXT[lg] ? lg : 'fr';
+      const T = TXT[LG];
+      document.documentElement.lang = LG; document.title = T.doc;
+      document.querySelectorAll('[data-t]').forEach(el => { el.textContent = T[el.dataset.t]; });
+      document.querySelectorAll('[data-ph]').forEach(el => { el.placeholder = T[el.dataset.ph]; });
+      document.querySelectorAll('.langs button').forEach(b => b.classList.toggle('on', b.dataset.lg === LG));
+      $('lien-espace').href = '/espace?lang=' + LG;
+      if (errK) $('err').textContent = T[errK];
+    }
+    document.querySelectorAll('.langs button').forEach(b => b.onclick = () => { choisie = b.dataset.lg; LS.set('login_lang', choisie); appliquer(choisie); });
+    appliquer(LG);
+    function erreur(k, msg) { errK = msg ? '' : k; const e = $('err'); e.textContent = msg || TXT[LG][k]; e.style.display = 'block'; }
+
+    $('email').addEventListener('keydown', e => { if (e.key === 'Enter') $('password').focus(); });
+    $('password').addEventListener('keydown', e => { if (e.key === 'Enter') seConnecter(); });
 
     async function seConnecter() {
-      const email        = document.getElementById('email').value.trim();
-      const mot_de_passe = document.getElementById('password').value;
-      const errEl        = document.getElementById('err');
-      const btn          = document.getElementById('btn-login');
-
-      errEl.style.display = 'none';
-      if (!email || !mot_de_passe) {
-        errEl.textContent = 'Veuillez saisir votre e-mail et votre mot de passe.';
-        errEl.style.display = 'block';
-        return;
-      }
-
-      btn.disabled = true;
-      btn.textContent = 'Connexion en cours…';
-
+      const T = TXT[LG];
+      const email = $('email').value.trim();
+      const mot_de_passe = $('password').value;
+      const errEl = $('err'), btn = $('btn-login');
+      errEl.style.display = 'none'; errK = '';
+      if (!email || !mot_de_passe) { erreur('eVide'); return; }
+      btn.disabled = true; btn.textContent = T.btnEnCours;
       try {
         const r = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, mot_de_passe })
+          body: JSON.stringify({ email, mot_de_passe, langue: choisie || undefined })
         });
-        const data = await r.json();
+        const data = await r.json().catch(() => ({}));
         if (r.ok && data.ok) {
+          if (choisie) LS.set('lang', choisie === 'fr' ? 'fr' : 'en');
           const dm = new URLSearchParams(location.search).get('espace_demande');
           window.location.href = /^\d+$/.test(dm || '') ? '/?espace_demande=' + dm : '/';
         } else {
-          errEl.textContent = data.error || 'Identifiants incorrects.';
-          errEl.style.display = 'block';
-          btn.disabled = false;
-          btn.textContent = 'Se connecter';
-          document.getElementById('password').value = '';
-          document.getElementById('password').focus();
+          if (r.status === 401) erreur('eIdent'); else erreur('', data.error || TXT[LG].eIdent);
+          btn.disabled = false; btn.textContent = TXT[LG].btn;
+          $('password').value = ''; $('password').focus();
         }
       } catch (e) {
-        errEl.textContent = 'Impossible de joindre le serveur. Réessayez.';
-        errEl.style.display = 'block';
-        btn.disabled = false;
-        btn.textContent = 'Se connecter';
+        erreur('eReseau'); btn.disabled = false; btn.textContent = TXT[LG].btn;
       }
     }
   </script>

@@ -11,6 +11,8 @@ const router   = express.Router();
 router.post('/auth/login', async (req, res) => {
   try {
     const { email, mot_de_passe } = req.body;
+    // Langue choisie sur la page de connexion (FR / EN / SV) : s'applique à la session ; SV = appli en anglais + éclatés en suédois
+    const lgChoisie = ['fr', 'en', 'sv'].includes(req.body.langue) ? req.body.langue : null;
     if (!email || !mot_de_passe) return res.status(400).json({ error: 'Email et mot de passe requis' });
     const user = await db.get(
       'SELECT * FROM users WHERE LOWER(email)=$1 AND actif=TRUE', [email.toLowerCase().trim()]
@@ -21,9 +23,10 @@ router.post('/auth/login', async (req, res) => {
     await db.run('UPDATE users SET last_login=NOW() WHERE id=$1', [user.id]);
     req.session.user = {
       id: user.id, nom: user.nom, email: user.email, role: user.role,
-      permissions: user.permissions || {}, langue: user.langue || 'fr',
+      permissions: user.permissions || {}, langue: lgChoisie ? (lgChoisie === 'fr' ? 'fr' : 'en') : (user.langue || 'fr'),
       pays: user.pays || null
     };
+    if (lgChoisie) req.session.user.langue_eclates = lgChoisie;
     req.session.save(err => {
       if (err) return res.status(500).json({ error: 'Erreur session' });
       res.json({ ok: true, user: req.session.user });
