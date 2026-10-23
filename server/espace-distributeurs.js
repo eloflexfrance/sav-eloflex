@@ -293,7 +293,13 @@ function monterApi(router, deps) {
         ref: String(l.ref || '').slice(0, 60), designation: String(l.designation || '').slice(0, 250), modele: String(l.modele || '').slice(0, 80),
         qte: Math.max(1, Math.min(999, parseInt(l.qte) || 1)), pu: l.pu == null || l.pu === '' ? null : Math.round(parseFloat(l.pu) * 100) / 100,
       })).filter(l => l.ref || l.designation);
-      if (!lignes.length && !String(b.commentaire || '').trim()) return res.status(400).json({ error: 'La demande de devis est vide' });
+      // Photos jointes (JPEG réduits dans le navigateur) : 8 max, ~8 Mo au total
+      let totalPh = 0;
+      const photos = (Array.isArray(b.photos) ? b.photos : []).slice(0, 8)
+        .map((ph, i) => ({ name: `${String(b.numero || 'demande').replace(/[^\w\-]+/g, '_')}_photo${i + 1}.jpg`, content: String((ph && ph.data) || '').replace(/^data:[^,]+,/, '') }))
+        .filter(ph => /^[A-Za-z0-9+/=\s]+$/.test(ph.content) && ph.content.length > 100)
+        .filter(ph => (totalPh += ph.content.length) <= 11 * 1024 * 1024);
+      if (!lignes.length && !String(b.commentaire || '').trim() && !photos.length) return res.status(400).json({ error: 'La demande de devis est vide' });
       if (!b.pdf || !b.pdf.data) return res.status(400).json({ error: 'PDF manquant' });
       await ensureTables(db);
       const c = interne
@@ -315,6 +321,7 @@ function monterApi(router, deps) {
         ['Votre référence', escH(b.reference || '')],
         ['Adresse de livraison', escH(b.adresse || '').replace(/\n/g, '<br>')],
         ['Informations complémentaires', `<b>${escH(b.commentaire || '').replace(/\n/g, '<br>')}</b>`],
+        ...(photos.length ? [['Photos jointes', `<b>${photos.length}</b> photo(s) en pièce jointe (et dans le PDF)`]] : []),
       ]);
       const ccDistrib = emailOk(u.email) ? u.email : null;
       await sendBrevoMail({
@@ -330,9 +337,9 @@ function monterApi(router, deps) {
             <p>Bien cordialement</p>`,
           signature: signatureSav(),
         }),
-        attachments: [{ name: String(b.pdf.nom || numero + '.pdf').replace(/[^\w.\-]+/g, '_'), content: String(b.pdf.data).replace(/^data:[^,]+,/, '') }],
+        attachments: [{ name: String(b.pdf.nom || numero + '.pdf').replace(/[^\w.\-]+/g, '_'), content: String(b.pdf.data).replace(/^data:[^,]+,/, '') }, ...photos],
       });
-      try { await addAlerte('bdc_espace', rec.id, `🧾 Demande de devis pièces ${numero} reçue de ${c.nom} via ${interne ? 'les éclatés' : "l'espace distributeur"} (${lignes.length} ligne(s), ${eur(totalHT)} HT indicatif) : devis à établir.`); } catch (_) {}
+      try { await addAlerte('bdc_espace', rec.id, `🧾 Demande de devis pièces ${numero} reçue de ${c.nom} via ${interne ? 'les éclatés' : "l'espace distributeur"} (${lignes.length} ligne(s)${photos.length ? `, ${photos.length} photo(s)` : ''}, ${eur(totalHT)} HT indicatif) : devis à établir.`); } catch (_) {}
       res.json({ ok: true, numero, id: rec.id });
     } catch (e) {
       const msg = (e.response && e.response.data && (e.response.data.message || JSON.stringify(e.response.data))) || e.message;

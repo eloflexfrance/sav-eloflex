@@ -40,6 +40,15 @@ const TX = {
 };
 // Libellés de l'interface éclatés en anglais (comptes en anglais)
 if (typeof EN_STR !== 'undefined') Object.assign(EN_STR, {
+  "Photos": "Photos",
+  "Ajouter des photos": "Add photos",
+  "Photos de la pièce ou de la zone concernée (facultatif) : utile quand la pièce n’est pas vendue séparément ou difficile à identifier.": "Photos of the part or the area concerned (optional): useful when the part is not sold separately or is hard to identify.",
+  "Retirer la photo": "Remove photo",
+  "photos maximum.": "photos maximum.",
+  "Impossible de lire cette image :": "Unable to read this image:",
+  "Préparation des photos…": "Preparing photos…",
+  "Ajoutez au moins une pièce, une photo ou décrivez votre besoin dans « Informations complémentaires ».": "Add at least one part, a photo, or describe your need under “Additional information”.",
+
   'Éclatés': 'Exploded views', 'Éclaté': 'Exploded view', 'Référence (tous modèles)…': 'Part number (all models)…',
   'vues': 'views', 'lignes': 'lines', 'PDF éclaté': 'PDF', 'Site web': 'Website', 'Notice': 'User manual', 'Fiche technique': 'Technical data',
   'Liens': 'Links', 'Télécharger la fiche éclaté (PDF français ou anglais)': 'Download the exploded view (PDF in English, Swedish or French)',
@@ -158,6 +167,14 @@ const L = () => E.lang || (typeof LANG !== 'undefined' && LANG === 'en' ? 'en' :
 const T = k => (TX[L()] || TX.en)[k];
 // Libellés « demande de devis » selon la langue de la visionneuse (FR / EN / SV)
 const SV_UI = {
+"Photos": "Foton",
+"Ajouter des photos": "Lägg till foton",
+"Photos de la pièce ou de la zone concernée (facultatif) : utile quand la pièce n’est pas vendue séparément ou difficile à identifier.": "Foton av delen eller det berörda området (valfritt): användbart när delen inte säljs separat eller är svår att identifiera.",
+"Retirer la photo": "Ta bort fotot",
+"photos maximum.": "foton max.",
+"Impossible de lire cette image :": "Det går inte att läsa bilden:",
+"Préparation des photos…": "Förbereder foton…",
+"Ajoutez au moins une pièce, une photo ou décrivez votre besoin dans « Informations complémentaires ».": "Lägg till minst en del, ett foto eller beskriv ditt behov under ”Övrig information”.",
 "Adresse de livraison": "Leveransadress",
 "Ajouter une pièce non trouvée dans les éclatés": "Lägg till en del som inte finns i sprängskisserna",
 "Ajoutez au moins une pièce ou décrivez votre besoin dans « Informations complémentaires ».": "Lägg till minst en del eller beskriv ditt behov under ”Övrig information”.",
@@ -1188,6 +1205,11 @@ async function ouvrirPanier(){
       ${p.length ? '' : `<div style="font-size:13.5px;color:var(--text2);background:var(--bg);border-radius:10px;padding:12px 14px;margin-bottom:6px"><i class="ti ti-info-circle"></i> ${TV('Ouvrez un éclaté et cliquez sur « Ajouter au devis » à côté des pièces souhaitées. Vous pouvez aussi ajouter une pièce que vous ne trouvez pas, ou simplement décrire votre besoin dans « Informations complémentaires ».')}</div>`}
       <div id="ecl-pan-lignes"></div>
       <div style="margin-top:8px"><button class="btn sm" onclick="panierLigneLibre()"><i class="ti ti-plus"></i>${TV('Ajouter une pièce non trouvée dans les éclatés')}</button></div>
+      <div class="form-group" style="margin-top:14px"><label class="form-label">${TV('Photos')}</label>
+        <div style="font-size:12.5px;color:var(--text2);margin-bottom:6px">${TV('Photos de la pièce ou de la zone concernée (facultatif) : utile quand la pièce n’est pas vendue séparément ou difficile à identifier.')}</div>
+        <div id="pan-photos" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"></div>
+        <input type="file" id="pan-photo-in" accept="image/*" multiple style="display:none" onchange="panierPhotosAjout(this.files); this.value=''">
+      </div>
       <div class="form-group" style="margin-top:14px"><label class="form-label">${TV('Informations complémentaires')}</label>
         <textarea class="form-input" id="pan-com" rows="4" oninput="panierForm('com',this.value)" placeholder="${TV('Tout ce qui peut nous aider : n° de série du fauteuil, description d’une pièce introuvable, urgence, contraintes de livraison, question…')}">${v('com')}</textarea></div>
       <div class="grid-2">
@@ -1205,8 +1227,49 @@ async function ouvrirPanier(){
       ${peutCommander() ? `<button class="btn primary" id="pan-envoyer" onclick="bonCommandePDF(true)"><i class="ti ti-send"></i>${TV('Envoyer la demande de devis à Eloflex')}</button>` : ''}
     </div>`);
   const m = document.querySelector('#modal-area .modal'); if (m) m.style.maxWidth = '900px';
-  dessinerLignesPanier();
+  dessinerLignesPanier(); dessinerPhotosPanier();
 }
+
+// ── Photos jointes à la demande de devis (gardées en mémoire, réduites avant envoi) ──
+const PHOTOS_MAX = 8, PHOTO_DIM = 1600;
+function photosPanier(){ return E._panPhotos = E._panPhotos || []; }
+function dessinerPhotosPanier(){
+  const box = $('pan-photos'); if (!box) return;
+  const ph = photosPanier();
+  box.innerHTML = ph.map((f, i) => `<div style="position:relative;width:92px;height:92px;border-radius:10px;overflow:hidden;border:1px solid var(--border,#e5e7eb);background:var(--bg)">
+      <img src="${f.data}" alt="" style="width:100%;height:100%;object-fit:cover">
+      <button type="button" title="${TV('Retirer la photo')}" onclick="panierPhotoRetirer(${i})" style="position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:14px;line-height:24px;padding:0">×</button></div>`).join('')
+    + (ph.length < PHOTOS_MAX ? `<button type="button" class="btn sm" onclick="document.getElementById('pan-photo-in').click()"><i class="ti ti-camera-plus"></i>${TV('Ajouter des photos')}</button>` : '')
+    + `<span style="font-size:12px;color:var(--text3)">${ph.length}/${PHOTOS_MAX}</span>`;
+}
+function reduirePhoto(file){
+  return new Promise((ok, ko) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, PHOTO_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); cx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      ok({ nom: String(file.name || 'photo').replace(/\.[^.]+$/, '').replace(/[^\w\-]+/g, '_').slice(0, 40) + '.jpg', data: cv.toDataURL('image/jpeg', 0.82), w, h });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); ko(new Error(file.name)); };
+    img.src = url;
+  });
+}
+async function panierPhotosAjout(files){
+  const ph = photosPanier(), mm = $('pan-msg');
+  const liste = [...(files || [])].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic|heif|webp)$/i.test(f.name || ''));
+  if (mm) mm.innerHTML = `<span style="color:var(--text2)">${TV('Préparation des photos…')}</span>`;
+  const erreurs = [];
+  for (const f of liste) {
+    if (ph.length >= PHOTOS_MAX) { erreurs.push(`${PHOTOS_MAX} ${TV('photos maximum.')}`); break; }
+    try { ph.push(await reduirePhoto(f)); } catch (e) { erreurs.push(`${TV('Impossible de lire cette image :')} ${e.message}`); }
+  }
+  if (mm) mm.innerHTML = erreurs.length ? `<span style="color:var(--danger)">${e_(erreurs.join(' · '))}</span>` : '';
+  dessinerPhotosPanier();
+}
+function panierPhotoRetirer(i){ photosPanier().splice(i, 1); dessinerPhotosPanier(); }
 function panierForm(k, val){ (E._panForm = E._panForm || {})[k] = val; const mm = $('pan-msg'); if (mm) mm.innerHTML = ''; }
 function panierLigneLibre(){
   const p = panierLire();
@@ -1239,13 +1302,14 @@ function dessinerLignesPanier(){
 }
 function panierQte(i, v){ const p = panierLire(); if (!p[i]) return; p[i].qte = Math.max(1, Math.min(999, parseInt(v) || 1)); panierEcrire(p); dessinerLignesPanier(); }
 function panierRetirer(i){ const p = panierLire(); p.splice(i, 1); panierEcrire(p); dessinerLignesPanier(); }
-function viderPanier(){ if (!confirm(TV('Vider la demande de devis ?'))) return; panierEcrire([]); ouvrirPanier(); }
+function viderPanier(){ if (!confirm(TV('Vider la demande de devis ?'))) return; panierEcrire([]); E._panPhotos = []; ouvrirPanier(); }
 
 async function bonCommandePDF(envoyer){
   const p = panierLire().filter(l => !l.libre || String(l.designation || l.ref || '').trim());
   const moi = E._moi || {}, c = moi.client || {};
   const ref = ($('pan-ref') || {}).value || '', adr = ($('pan-adr') || {}).value || '', com = ($('pan-com') || {}).value || '';
-  if (!p.length && !com.trim()) { const mm = $('pan-msg'); if (mm) mm.innerHTML = '<span style="color:var(--danger)">' + TV('Ajoutez au moins une pièce ou décrivez votre besoin dans « Informations complémentaires ».') + '</span>'; return; }
+  const photos = photosPanier().slice();
+  if (!p.length && !com.trim() && !photos.length) { const mm = $('pan-msg'); if (mm) mm.innerHTML = '<span style="color:var(--danger)">' + TV('Ajoutez au moins une pièce, une photo ou décrivez votre besoin dans « Informations complémentaires ».') + '</span>'; return; }
   const distrib = moi.interne ? (($('pan-distrib') || {}).value || '') : (c.nom || '');
   const now = new Date(), pad = n => String(n).padStart(2, '0');
   const numero = `DDV-WEB-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
@@ -1259,7 +1323,7 @@ async function bonCommandePDF(envoyer){
     'Total HT indicatif': 'Indicative total excl. VAT', 'TVA': 'VAT', 'Total TTC indicatif': 'Indicative total incl. VAT',
     'Hors frais de port, ajoutés dans le devis Eloflex.': 'Excluding shipping, added in the Eloflex quote.',
     'pièce(s) hors tarif : prix communiqué dans le devis Eloflex.': 'part(s) without a listed price: price given in the Eloflex quote.',
-    'Informations complémentaires': 'Additional information',
+    'Informations complémentaires': 'Additional information', 'Photos jointes': 'Attached photos',
     'Document non contractuel — tarifs distributeur HT indicatifs, hors frais de port — devis définitif établi par Eloflex.': 'Non-binding document — indicative dealer prices excl. VAT, excluding shipping — final quote issued by Eloflex.' };
   const P = t => (EN && PDF_EN[t]) || t;
   const { jsPDF } = window.jspdf; const doc = new jsPDF();
@@ -1305,6 +1369,22 @@ async function bonCommandePDF(envoyer){
   if (t.surDevis) { doc.setFontSize(8.5); doc.setTextColor(180, 83, 9); doc.text(`${t.surDevis} ${P('pièce(s) hors tarif : prix communiqué dans le devis Eloflex.')}`, L0, y); doc.setTextColor(0, 0, 0); y += 6; }
   }
   if (com.trim()) { y += 2; doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text(P('Informations complémentaires'), L0, y); y += 5; doc.setFont('helvetica', 'normal'); doc.splitTextToSize(com, W0).forEach(s => { if (y > 280) { doc.addPage(); y = 20; } doc.text(s, L0, y); y += 4.5; }); }
+  if (photos.length) {
+    // Photos : 2 par ligne, proportions conservées
+    const CW = (W0 - 6) / 2, CH = 95;
+    y += 4; if (y + 12 + CH > 282) { doc.addPage(); y = 20; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text(`${P('Photos jointes')} (${photos.length})`, L0, y); y += 4;
+    photos.forEach((f, i) => {
+      const col = i % 2;
+      if (col === 0 && i > 0) y += CH + 6;
+      if (col === 0 && y + CH > 282) { doc.addPage(); y = 20; }
+      const k = Math.min(CW / f.w, CH / f.h), w = f.w * k, h = f.h * k;
+      const x = L0 + col * (CW + 6) + (CW - w) / 2;
+      try { doc.addImage(f.data, 'JPEG', x, y + (CH - h) / 2, w, h); } catch (_) {}
+      doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.2); doc.rect(L0 + col * (CW + 6), y, CW, CH);
+    });
+    y += CH + 4;
+  }
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(130, 130, 130);
     doc.text(P('Document non contractuel — tarifs distributeur HT indicatifs, hors frais de port — devis définitif établi par Eloflex.'), L0, 289);
@@ -1315,9 +1395,10 @@ async function bonCommandePDF(envoyer){
   try {
     const data = doc.output('datauristring').split(',')[1];
     await API.post('/espace/bon-commande', { numero, reference: ref, adresse: adr, commentaire: com, distributeur: distrib,
-      lignes: p.map(l => ({ ref: l.ref, designation: l.designation, modele: l.modele, qte: l.qte, pu: l.pu })), pdf: { nom: nomFic, data } });
+      lignes: p.map(l => ({ ref: l.ref, designation: l.designation, modele: l.modele, qte: l.qte, pu: l.pu })), pdf: { nom: nomFic, data },
+      photos: photos.map((f, i) => ({ nom: `${numero}_photo${i + 1}.jpg`, data: f.data.split(',')[1] })) });
     doc.save(nomFic);
-    panierEcrire([]); E._panForm = {};
+    panierEcrire([]); E._panForm = {}; E._panPhotos = [];
     showModal(`<div class="modal-header"><i class="ti ti-circle-check" style="color:var(--success)"></i><h2>${TV('Demande de devis envoyée')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
       <div class="modal-body"><p style="font-size:14px;line-height:1.6">${TV('Merci ! Votre demande de devis')} <b>${e_(numero)}</b> ${TV('a bien été transmise à Eloflex. Vous en recevez une copie par e-mail et le PDF vient d’être téléchargé.')}</p>
       <p style="font-size:13px;color:var(--text2)">${TV('Notre équipe vous adresse très prochainement le devis, frais de port et délai de livraison compris.')}</p></div>
@@ -1327,5 +1408,5 @@ async function bonCommandePDF(envoyer){
     if (typeof toast === 'function') toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)');
   }
 }
-Object.assign(window, { ouvrirPanier, panierQte, panierRetirer, viderPanier, bonCommandePDF, panierForm, panierLigneLibre, panierLibre });
+Object.assign(window, { ouvrirPanier, panierQte, panierRetirer, viderPanier, bonCommandePDF, panierForm, panierLigneLibre, panierLibre, panierPhotosAjout, panierPhotoRetirer });
 })();

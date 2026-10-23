@@ -68,8 +68,25 @@ async function importerEclatesLivres(pool) {
       const slug = b.meta && b.meta.slug; if (!slug) continue;
       const r = await pool.query(`SELECT m.id, (SELECT COUNT(*)::int FROM eclates_vues v WHERE v.modele_id=m.id) AS nb
         FROM eclates_modeles m WHERE m.slug=$1`, [slug]);
-      if (r.rows.length && r.rows[0].nb > 0) continue;
+      const cleV = 'eclate_reperes_v:' + slug, vFic = parseInt(b.meta.reperes_v) || 0;
+      if (r.rows.length && r.rows[0].nb > 0) {
+        // Déjà en base : on ne remplace QUE la position des bulles si le fichier livré est plus récent
+        // (textes, références et quantités corrigés dans l'appli sont conservés)
+        if (!vFic) continue;
+        const pv = await pool.query('SELECT valeur FROM parametres WHERE cle=$1', [cleV]);
+        if ((parseInt(pv.rows[0] && pv.rows[0].valeur) || 1) >= vFic) continue;
+        let n = 0;
+        for (const v of b.views) {
+          if (!v.code) continue;
+          const u = await pool.query('UPDATE eclates_vues SET reperes=$1 WHERE modele_id=$2 AND code=$3', [JSON.stringify(v.reperes || []), r.rows[0].id, v.code]);
+          n += u.rowCount;
+        }
+        await pool.query('INSERT INTO parametres (cle, valeur) VALUES ($1,$2) ON CONFLICT (cle) DO UPDATE SET valeur=EXCLUDED.valeur', [cleV, String(vFic)]);
+        console.log(`✅ Éclaté ${slug} : bulles repositionnées (${n} vues, version ${vFic})`);
+        continue;
+      }
       const res = await importerEclate(pool, { ...b, remplacer: true });
+      if (vFic) await pool.query('INSERT INTO parametres (cle, valeur) VALUES ($1,$2) ON CONFLICT (cle) DO UPDATE SET valeur=EXCLUDED.valeur', [cleV, String(vFic)]);
       console.log(`✅ Éclaté ${slug} importé (${res.vues} vues, ${res.lignes} lignes)`);
     } catch (e) { console.error(`❌ Import éclaté ${f} :`, e.message); }
   }
