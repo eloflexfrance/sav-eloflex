@@ -188,7 +188,11 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
       if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
       const r = await calculer(inv, { non_comptes: req.query.non_comptes });
       const deja = await db.get(`SELECT 1 FROM inventaires WHERE emplacement=$1 AND statut='valide' LIMIT 1`, [inv.emplacement]);
-      res.json({ ...r, emplacement: inv.emplacement, vf_emplacement: !!(EMPL[inv.emplacement] || {}).vf, premier: !deja, vf_configure: !!vfClient() });
+      // Lagord validé avant toute mise en place de Paris : les pièces parties à Paris sortiraient à tort de VosFactures
+      const parisVu = await db.get(`SELECT 1 FROM inventaires WHERE emplacement='paris' AND statut='valide' LIMIT 1`);
+      const parisEnCours = await db.get(`SELECT 1 FROM inventaires WHERE emplacement='paris' AND statut='en_cours' LIMIT 1`);
+      res.json({ ...r, emplacement: inv.emplacement, vf_emplacement: !!(EMPL[inv.emplacement] || {}).vf, premier: !deja, vf_configure: !!vfClient(),
+        paris_a_faire: inv.emplacement === 'lagord' && !parisVu, paris_en_cours: !!parisEnCours });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
