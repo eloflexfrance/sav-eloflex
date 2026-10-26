@@ -83,6 +83,7 @@ const MODULES = [
   { key:'commandes-tableur', label:'Test suivi commandes (tableur)' },
   { key:'devis',         label:'Devis en attente' },
   { key:'catalogue',     label:'Catalogue pièces' },
+  { key:'inventaire',    label:'Inventaire mensuel' },
   { key:'eclates',       label:'Éclatés (schémas pièces)' },
   { key:'prets',         label:'Prêts' },
   { key:'parc-demo',     label:'Parc de démo' },
@@ -107,6 +108,7 @@ const PERM_FALLBACK = {
   'commandes-tableur': 'commandes', // Vue tableur : mêmes droits que le Suivi commandes   // Retours démo (comptes rendus de réception) : suivent le suivi commandes
   'commande-suede': 'commandes', // Commande Suède : suit le suivi commandes
   'eclates':    'catalogue',     // Éclatés : suivent le catalogue pièces
+  'inventaire': 'catalogue',     // Inventaire : suit le catalogue pièces
   // Vues de détail (ouvertes via setView, absentes du menu) → module qui les gouverne.
   'client':     'clients',       // Fiche distributeur : accessible avec l'accès Clients
   'fauteuil':   'clients',       // Fiche fauteuil : idem
@@ -265,6 +267,7 @@ async function render(){
     else if(STATE.view==='commandes')     await renderCommandes(ttl,c,a);
     else if(STATE.view==='commandes-tableur') await renderCommandesTableur(ttl,c,a);
     else if(STATE.view==='catalogue')     await renderCatalogue(ttl,c,a);
+    else if(STATE.view==='inventaire')    await renderInventaire(ttl,c,a);
     else if(STATE.view==='eclates')       await renderEclates(ttl,c,a);
     else if(STATE.view==='commande-suede') await renderCommandeSuede(ttl,c,a);
     else if(STATE.view==='rapports')      await renderRapports(ttl,c,a);
@@ -2730,7 +2733,7 @@ async function chargerListeCatalogue(){
       <td style="font-weight:600">${parseFloat(p.pxht||0).toFixed(2)} €</td>
       <td style="color:var(--text2)">${_tva(p.tva_distributeur!=null?p.tva_distributeur:5.5)}</td>
       <td style="font-weight:600">${_ttc(p.prix_public_ttc)}</td>
-      <td>${p.stock_actif===false?`<span style="color:var(--text3);font-size:12px" title="${TR('Stock non suivi (fauteuil roulant / scooter)')}">${TR('non suivi')}</span>`:`<span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}">${p.stock}</span>`}</td>
+      <td>${p.stock_actif===false?`<span style="color:var(--text3);font-size:12px" title="${TR('Stock non suivi (fauteuil roulant / scooter)')}">${TR('non suivi')}</span>`:`<span class="badge ${p.stock===0?'urgent':p.stock<=p.stock_alerte?'attente':'g'}" ${p.stock_paris?`title="Lagord ${p.stock-p.stock_paris} · Paris ${p.stock_paris}"`:''}>${p.stock}</span>${p.stock_paris?`<div style="font-size:10.5px;color:var(--text3);white-space:nowrap">L ${p.stock-p.stock_paris} · P ${p.stock_paris}</div>`:''}`}</td>
       <td onclick="event.stopPropagation()" style="white-space:nowrap"><span class="stock-sav-ctl" style="display:inline-flex;align-items:center;gap:4px">
         <button class="btn sm" style="padding:1px 7px" title="−1" onclick="majStockSav(${p.id},-1,this)">−</button>
         <span id="ssav-${p.id}" style="min-width:22px;text-align:center;font-weight:700;color:${(p.stock_sav||0)>0?'#7c3aed':'var(--text3)'};cursor:pointer" title="${TR('Cliquer pour saisir une quantité')}" onclick="saisirStockSav(${p.id})">${p.stock_sav||0}</span>
@@ -6580,6 +6583,8 @@ async function modalIntegrerStock(id) {
       <div class="modal-body">
         <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Vérifiez la livraison. Ajustez la quantité reçue (un reliquat est calculé si elle est inférieure à la commande) et, au besoin, corrigez la référence ou reliez une ligne au catalogue pour que le stock soit mis à jour.')}</div>
         <div id="cs-int-liste"></div>
+        <div class="form-group" style="margin-top:12px;max-width:340px"><label class="form-label">${TR('Emplacement de réception')}</label>
+          <select class="form-input" id="cs-int-empl"><option value="lagord">Lagord</option><option value="paris">Paris</option></select></div>
       </div>
       <div class="modal-foot">
         <button class="btn" onclick="ouvrirCommandeSuede(${id})">${t('btn_annuler')||'Annuler'}</button>
@@ -6656,7 +6661,7 @@ async function confirmerIntegrationStock(id) {
     quantite_recue: (l._recu !== undefined) ? l._recu : l.quantite_commandee
   }));
   try {
-    await API.integrerStockSuede(id, lignes);
+    await API.integrerStockSuede(id, lignes, (document.getElementById('cs-int-empl')||{}).value || 'lagord');
     closeModal();
     toast(TR('Stock mis à jour'), 'ti-check', 'var(--success)');
     chargerCommandesSuede();

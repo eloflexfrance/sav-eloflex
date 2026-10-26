@@ -224,7 +224,7 @@ const API = {
   stockDoc:(id,kind,warehouse)=>API.get(`/vosfactures/stock-doc/${id}?kind=${encodeURIComponent(kind||'')}&warehouse=${warehouse||''}`),
   createCommandeSuede:(data)=>API.post('/commandes-suede',data),
   updateCommandeSuede:(id,data)=>API.put(`/commandes-suede/${id}`,data),
-  integrerStockSuede:(id,lignes)=>API.post(`/commandes-suede/${id}/integrer-stock`,{lignes}),
+  integrerStockSuede:(id,lignes,emplacement)=>API.post(`/commandes-suede/${id}/integrer-stock`,{lignes,emplacement:emplacement||'lagord'}),
   deleteCommandeSuede:(id)=>API.del(`/commandes-suede/${id}`),
   // ── Tracking ──
   tracking:(numero)=>API.get(`/tracking/${encodeURIComponent(numero)}`),

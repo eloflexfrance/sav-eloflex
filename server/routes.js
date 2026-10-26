@@ -111,6 +111,7 @@ function moduleFromPath(p) {
   if (p.startsWith('/commandes'))                   return 'commandes';
   if (p.startsWith('/produits')||p.startsWith('/catalogue')) return 'catalogue';
   if (p.startsWith('/eclates'))                     return 'eclates';
+  if (p.startsWith('/inventaires'))                 return 'catalogue';
   if (p.startsWith('/rapports')||p.startsWith('/export')) return 'rapports';
   if (p.startsWith('/alertes'))                     return 'alertes';
   if (p.startsWith('/demo-retours'))                return 'retours-demo';
@@ -1359,8 +1360,10 @@ router.delete('/eclates/lignes/:id', async (req, res) => {
 router.get('/catalogue', async (req, res) => {
   try {
     const q = `%${req.query.q || ''}%`;
+    try { await require('./inventaires').ensureTables(db); } catch (_) {}
     // On exclut image_data (volumineux) de la liste ; un drapeau has_image suffit pour l'affichage.
-    let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, COALESCE(stock_sav,0) AS stock_sav, COALESCE(en_sommeil,false) AS en_sommeil, stock_alerte, stock_actif,
+    let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, COALESCE(stock_sav,0) AS stock_sav,
+                 COALESCE((SELECT quantite FROM catalogue_emplacements e WHERE e.catalogue_id=catalogue.id AND e.emplacement='paris'),0) AS stock_paris, COALESCE(en_sommeil,false) AS en_sommeil, stock_alerte, stock_actif,
                  vf_product_id, pl_product_id, taux_tva, prix_ttc_public, poids, prix_achat_suede, prix_public_ttc, tva_distributeur,
                  (image_data IS NOT NULL) AS has_image, created_at, updated_at
                FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1)`;
@@ -1834,6 +1837,9 @@ router.put('/commandes-suede/:id/lignes', adminOrOp, async (req, res) => {
 
 router.post('/commandes-suede/:id/integrer-stock', adminOrOp, async (req, res) => {
   const receptions = Array.isArray(req.body.lignes) ? req.body.lignes : [];
+  // Emplacement de destination (Lagord par défaut ; Paris = suivi dans catalogue_emplacements, le total reste le stock VF)
+  const versParis = req.body.emplacement === 'paris';
+  if (versParis) await require('./inventaires').ensureTables(db);
   const pgClient = await db.pool.connect();
   try {
     await pgClient.query('BEGIN');
@@ -1859,6 +1865,8 @@ router.post('/commandes-suede/:id/integrer-stock', adminOrOp, async (req, res) =
       );
       if (catalogueId && qteRecue > 0) {
         await pgClient.query('UPDATE catalogue SET stock = stock + $1 WHERE id=$2', [qteRecue, catalogueId]);
+        if (versParis) await pgClient.query(`INSERT INTO catalogue_emplacements (catalogue_id, emplacement, quantite) VALUES ($1,'paris',$2)
+          ON CONFLICT (catalogue_id, emplacement) DO UPDATE SET quantite=catalogue_emplacements.quantite+EXCLUDED.quantite, updated_at=NOW()`, [catalogueId, qteRecue]);
         piecesMaj++;
       }
       totalReliquat += reliquat;
@@ -9415,6 +9423,9 @@ router.get('/demandes-info/distributeurs', requireAuth, async (req, res) => {
 
 // ── « Test suivi commandes » : vue tableur (lecture ; écritures via /commandes) ──
 require('./commandes-tableur')(router, { db, statutCommande });
+
+// ── Inventaire mensuel par emplacement (Lagord / Paris / Stock SAV) → régularisation VosFactures ──
+require('./inventaires')(router, { db, addAlerte });
 
 // ── Espace distributeurs : lien magique, bon de commande de pièces depuis les éclatés ──
 require('./espace-distributeurs').monterApi(router, {
