@@ -42,6 +42,11 @@ async function ensureTables(db) {
   await db.run(`CREATE TABLE IF NOT EXISTS catalogue_zones (
     catalogue_id INTEGER REFERENCES catalogue(id) ON DELETE CASCADE, emplacement TEXT NOT NULL, zone TEXT NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW(), PRIMARY KEY (catalogue_id, emplacement))`);
+  // Liste des zones gérées par emplacement (ajout / renommage / suppression)
+  await db.run(`CREATE TABLE IF NOT EXISTS stock_zones (
+    emplacement TEXT NOT NULL, nom TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW(), PRIMARY KEY (emplacement, nom))`);
+  await db.run(`INSERT INTO stock_zones (emplacement, nom)
+    SELECT DISTINCT emplacement, zone FROM catalogue_zones WHERE zone IS NOT NULL ON CONFLICT DO NOTHING`);
   _tablesOk = true;
 }
 
@@ -94,6 +99,64 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
     res.valeur_plus = Math.round(res.valeur_plus * 100) / 100; res.valeur_moins = Math.round(res.valeur_moins * 100) / 100;
     return res;
   }
+
+  // ── Zones de rangement d'un emplacement ───────────────────────────
+  const nomZone = v => String(v || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  async function listeZones(emplacement) {
+    return db.all(`SELECT z.nom, (SELECT COUNT(*)::int FROM catalogue_zones c WHERE c.emplacement=z.emplacement AND c.zone=z.nom) AS nb
+      FROM stock_zones z WHERE z.emplacement=$1 ORDER BY z.nom`, [emplacement]);
+  }
+  router.get('/inventaires-zones/:empl', async (req, res) => {
+    try {
+      await ensureTables(db);
+      if (!EMPL[req.params.empl]) return res.status(400).json({ error: 'Emplacement inconnu' });
+      res.json(await listeZones(req.params.empl));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  router.post('/inventaires-zones/:empl', async (req, res) => {
+    try {
+      const u = res.locals.user || {};
+      if (!ecritureOk(u)) return res.status(403).json({ error: 'Droits insuffisants' });
+      await ensureTables(db);
+      if (!EMPL[req.params.empl]) return res.status(400).json({ error: 'Emplacement inconnu' });
+      const nom = nomZone((req.body || {}).nom);
+      if (!nom) return res.status(400).json({ error: 'Nom de zone vide' });
+      await db.run('INSERT INTO stock_zones (emplacement, nom) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.params.empl, nom]);
+      res.json({ ok: true, nom, zones: await listeZones(req.params.empl) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  // Renommer : la zone suit sur les pièces et dans les inventaires en cours
+  router.put('/inventaires-zones/:empl', async (req, res) => {
+    try {
+      const u = res.locals.user || {};
+      if (!ecritureOk(u)) return res.status(403).json({ error: 'Droits insuffisants' });
+      await ensureTables(db);
+      const e = req.params.empl, b = req.body || {};
+      const ancien = nomZone(b.ancien), nom = nomZone(b.nom);
+      if (!EMPL[e] || !ancien || !nom) return res.status(400).json({ error: 'Paramètres invalides' });
+      await db.run('DELETE FROM stock_zones WHERE emplacement=$1 AND nom=$2', [e, ancien]);
+      await db.run('INSERT INTO stock_zones (emplacement, nom) VALUES ($1,$2) ON CONFLICT DO NOTHING', [e, nom]);
+      await db.run('UPDATE catalogue_zones SET zone=$3, updated_at=NOW() WHERE emplacement=$1 AND zone=$2', [e, ancien, nom]);
+      await db.run(`UPDATE inventaires_lignes l SET zone=$3 FROM inventaires i
+        WHERE i.id=l.inventaire_id AND i.statut='en_cours' AND i.emplacement=$1 AND l.zone=$2`, [e, ancien, nom]);
+      res.json({ ok: true, zones: await listeZones(e) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  // Supprimer : les pièces de cette zone passent « sans zone » (les inventaires validés restent intacts)
+  router.delete('/inventaires-zones/:empl', async (req, res) => {
+    try {
+      const u = res.locals.user || {};
+      if (!ecritureOk(u)) return res.status(403).json({ error: 'Droits insuffisants' });
+      await ensureTables(db);
+      const e = req.params.empl, nom = nomZone(req.query.nom);
+      if (!EMPL[e] || !nom) return res.status(400).json({ error: 'Paramètres invalides' });
+      await db.run('DELETE FROM stock_zones WHERE emplacement=$1 AND nom=$2', [e, nom]);
+      await db.run('DELETE FROM catalogue_zones WHERE emplacement=$1 AND zone=$2', [e, nom]);
+      await db.run(`UPDATE inventaires_lignes l SET zone=NULL FROM inventaires i
+        WHERE i.id=l.inventaire_id AND i.statut='en_cours' AND i.emplacement=$1 AND l.zone=$2`, [e, nom]);
+      res.json({ ok: true, zones: await listeZones(e) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
 
   router.get('/inventaires', async (req, res) => {
     try {
@@ -159,7 +222,7 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
         for (const l of lignes) l.actuel = (st.get(l.catalogue_id) || {})[inv.emplacement];
       }
       // Zones déjà utilisées dans cet emplacement (suggestions de saisie)
-      const zones = (await db.all(`SELECT zone FROM (SELECT zone FROM catalogue_zones WHERE emplacement=$1
+      const zones = (await db.all(`SELECT zone FROM (SELECT nom AS zone FROM stock_zones WHERE emplacement=$1
           UNION SELECT l.zone FROM inventaires_lignes l WHERE l.inventaire_id=$2 AND l.zone IS NOT NULL) z ORDER BY zone`, [inv.emplacement, inv.id])).map(z => z.zone);
       res.json({ ...inv, emplacement_nom: (EMPL[inv.emplacement] || {}).nom, vf_emplacement: !!(EMPL[inv.emplacement] || {}).vf, lignes, zones });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -191,6 +254,7 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
       if (!r) return res.status(404).json({ error: 'Ligne introuvable' });
       // La zone est mémorisée pour la pièce dans cet emplacement (reprise au prochain inventaire)
       if (avecZone) {
+        if (zone) await db.run('INSERT INTO stock_zones (emplacement, nom) VALUES ($1,$2) ON CONFLICT DO NOTHING', [inv.emplacement, zone]);
         if (zone) await db.run(`INSERT INTO catalogue_zones (catalogue_id, emplacement, zone) VALUES ($1,$2,$3)
           ON CONFLICT (catalogue_id, emplacement) DO UPDATE SET zone=EXCLUDED.zone, updated_at=NOW()`, [req.params.cid, inv.emplacement, zone]);
         else await db.run('DELETE FROM catalogue_zones WHERE catalogue_id=$1 AND emplacement=$2', [req.params.cid, inv.emplacement]);

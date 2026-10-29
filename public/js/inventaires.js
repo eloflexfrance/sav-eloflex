@@ -37,6 +37,7 @@ async function renderInventaire(ttl, c, a){
             <span style="margin-left:auto;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px;${e.vf ? 'background:#dbeafe;color:#1e40af' : 'background:#ede9fe;color:#6d28d9'}">${e.vf ? _T('inclus dans VosFactures') : _T('hors VosFactures')}</span></div>
           <div style="font-size:13px;color:var(--text2)">${_T('Pièces en stock')} : <b>${e.quantite}</b></div>
           <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${_T('Dernier inventaire')} : ${e.dernier ? `<b>${libPeriode(e.dernier.periode)}</b> (${_T('validé le')} ${dateFr(e.dernier.valide_at)})` : `<i>${_T('aucun')}</i>`}</div>
+          ${peutEcrire() ? `<div style="margin:-6px 0 12px"><a href="#" onclick="event.preventDefault();invGererZones('${e.code}')" style="font-size:12.5px;color:var(--accent)"><i class="ti ti-map-pins"></i> ${_T('Gérer les zones de rangement')}</a></div>` : ''}
           ${ec ? `<div style="font-size:13px;margin-bottom:6px">${_T('En cours')} : <b>${libPeriode(ec.periode)}</b> — ${ec.comptees}/${ec.nb} ${_T('comptées')}</div>
               <div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden;margin-bottom:12px"><div style="height:100%;width:${pct}%;background:var(--accent)"></div></div>
               <button class="btn primary" onclick="invOuvrir(${ec.id})"><i class="ti ti-player-play"></i>${_T('Reprendre le comptage')}</button>`
@@ -83,8 +84,8 @@ async function renderFeuille(ttl, c, a){
         ${[['tous', 'Toutes les pièces'], ['a_compter', 'À compter'], ['comptees', 'Comptées'], ['ecarts', 'Avec écart']].map(([v, l]) => `<option value="${v}" ${I.filtre === v ? 'selected' : ''}>${_T(l)}</option>`).join('')}</select>
       <select id="inv-fzone" class="form-input" style="width:auto;padding:6px 8px;max-width:200px" title="${_T('Filtrer par zone')}"></select>
       ${ecr ? `<label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text2)" title="${_T('Zone appliquée automatiquement aux pièces que vous comptez ensuite (si elles n’ont pas déjà une zone). Laisser vide pour ne rien appliquer.')}"><i class="ti ti-map-pin"></i>${_T('Zone en cours')}
-        <input id="inv-zone" class="form-input" list="inv-zones" style="width:170px;padding:6px 8px" placeholder="${_T('aucune')}" value="${e_(I.zone)}" autocomplete="off"></label>` : ''}
-      <datalist id="inv-zones"></datalist>
+        <select id="inv-zone" class="form-input" style="width:170px;padding:6px 8px"></select></label>
+        <button class="btn sm" onclick="invGererZones('${d.emplacement}')" title="${_T('Ajouter, renommer ou supprimer des zones')}"><i class="ti ti-map-pins"></i>${_T('Gérer les zones')}</button>` : ''}
       ${enCours ? `<label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text2);cursor:pointer"><input type="checkbox" id="inv-attendu" ${I.attendu ? 'checked' : ''}> ${_T('Afficher le stock attendu')}</label>` : ''}
       <div id="inv-prog" style="margin-left:auto;font-size:13px;color:var(--text2)"></div>
     </div>
@@ -95,13 +96,17 @@ async function renderFeuille(ttl, c, a){
       <th>${_T('Note')}</th><th style="width:30px"></th></tr></thead><tbody id="inv-body"></tbody></table></div>
     <style>#inv-table:not(.att) .inv-att{display:none} #inv-table input.inv-c{width:90px;padding:5px 8px;font-weight:700;text-align:right}
       #inv-table tr.ok td{background:rgba(34,197,94,.06)} #inv-table input.inv-n{padding:5px 8px;font-size:12.5px}
-      #inv-table input.inv-z{padding:5px 8px;font-size:12.5px;width:150px}</style>`;
+      #inv-table select.inv-z{padding:5px 8px;font-size:12.5px;width:150px}</style>`;
   const tb = $('inv-table'); if (tb) tb.classList.toggle('att', !enCours || I.attendu);
   $('inv-q').addEventListener('input', ev => { I.q = ev.target.value; clearTimeout(I._t); I._t = setTimeout(dessinerLignes, 150); });
   $('inv-q').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); allerAPiece(); } });
   $('inv-filtre').onchange = ev => { I.filtre = ev.target.value; dessinerLignes(); };
   if ($('inv-attendu')) $('inv-attendu').onchange = ev => { I.attendu = ev.target.checked; tb.classList.toggle('att', I.attendu); };
-  if ($('inv-zone')) $('inv-zone').addEventListener('change', ev => definirZone(ev.target.value));
+  if ($('inv-zone')) $('inv-zone').addEventListener('change', async ev => {
+    let v = ev.target.value;
+    if (v === '__new') { v = await nouvelleZone(); if (v == null) { ev.target.value = I.zone; return; } }
+    definirZone(v); majZones();
+  });
   $('inv-fzone').onchange = ev => { I.fzone = ev.target.value; dessinerLignes(); };
   majZones();
   dessinerLignes();
@@ -132,9 +137,9 @@ function dessinerLignes(){
     return `<tr id="inv-r-${l.catalogue_id}" class="${l.compte != null ? 'ok' : ''}">
       <td class="mono">${e_(l.ref)}${l.vf === false && d.vf_emplacement ? ` <i class="ti ti-plug-connected-x" style="color:#b45309" title="${_T('Pièce non liée à VosFactures : régularisée dans l’appli seulement')}"></i>` : ''}</td>
       <td>${e_(l.designation)}</td>
-      <td>${ecr ? `<input class="form-input inv-z" list="inv-zones" value="${e_(l.zone || '')}" placeholder="—" onchange="invZone(${i},this.value)">` : e_(l.zone || '')}</td>
+      <td>${ecr ? `<select class="form-input inv-z" onchange="invZone(${i},this)">${optionsZones(l.zone)}</select>` : e_(l.zone || '')}</td>
       <td class="inv-att" style="text-align:right;color:var(--text2)">${enCours ? (l.actuel ?? l.theorique) : l.theorique}</td>
-      <td>${ecr ? `<input class="form-input inv-c" type="number" min="0" inputmode="numeric" data-i="${i}" value="${l.compte ?? ''}" onchange="invSaisie(${i},this.value)" onkeydown="invTouche(event,this)">` : `<b>${l.compte ?? '—'}</b>`}</td>
+      <td>${ecr ? `<input class="form-input inv-c" type="number" min="0" inputmode="numeric" data-i="${i}" value="${l.compte ?? ''}" onfocus="invZoneAuto(${i})" onchange="invSaisie(${i},this.value)" onkeydown="invTouche(event,this)">` : `<b>${l.compte ?? '—'}</b>`}</td>
       <td class="inv-att inv-ec" style="text-align:right;font-weight:700;color:${ec > 0 ? 'var(--success)' : ec < 0 ? 'var(--danger)' : 'var(--text3)'}">${ec == null ? '' : ec > 0 ? '+' + ec : ec}</td>
       <td>${ecr ? `<input class="form-input inv-n" value="${e_(l.note || '')}" placeholder="—" onchange="invNote(${i},this.value)">` : e_(l.note || '')}</td>
       <td style="color:var(--text3);font-size:11px" title="${e_(l.maj_par ? l.maj_par + ' — ' + new Date(l.maj_at).toLocaleString('fr-FR') : '')}">${l.maj_par ? '<i class="ti ti-user-check"></i>' : ''}</td></tr>`;
@@ -178,7 +183,7 @@ async function invSaisie(i, v){
     const tr = $('inv-r-' + l.catalogue_id);
     if (tr) {
       tr.classList.toggle('ok', l.compte != null);
-      const iz = tr.querySelector('input.inv-z'); if (iz && body.zone) { iz.value = l.zone || ''; majZones(); }
+      const iz = tr.querySelector('select.inv-z'); if (iz && body.zone) { iz.innerHTML = optionsZones(l.zone); majZones(); }
       const ec = ecartDe(l), td = tr.querySelector('td.inv-ec');
       td.textContent = ec == null ? '' : ec > 0 ? '+' + ec : String(ec);
       td.style.color = ec > 0 ? 'var(--success)' : ec < 0 ? 'var(--danger)' : 'var(--text3)';
@@ -187,15 +192,90 @@ async function invSaisie(i, v){
   } catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
 // Zone d'une pièce : enregistrée, mémorisée pour les prochains inventaires, et devient la zone en cours
-async function invZone(i, v){
+async function invZone(i, sel){
   const l = I.data.lignes[i]; if (!l) return;
-  const z = String(v || '').trim().replace(/\s+/g, ' ');
+  let z = sel.value;
+  if (z === '__new') { z = await nouvelleZone(); if (z == null) { sel.innerHTML = optionsZones(l.zone); return; } }
   try {
     const r = await API.put(`/inventaires/${I.data.id}/lignes/${l.catalogue_id}`, { zone: z });
-    l.zone = r.zone;
+    l.zone = r.zone; sel.innerHTML = optionsZones(l.zone);
     if (z) definirZone(z);
     majZones();
   } catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+// Dès qu'on arrive sur une pièce sans zone (recherche + Entrée, clic ou ligne suivante), la zone en cours lui est appliquée
+async function invZoneAuto(i){
+  const l = I.data.lignes[i]; if (!l || l.zone || !I.zone || l._zAuto) return;
+  l._zAuto = true; const z = I.zone;
+  l.zone = z;   // affichage immédiat
+  const sel = document.querySelector(`#inv-r-${l.catalogue_id} select.inv-z`); if (sel) sel.innerHTML = optionsZones(z);
+  try { const r = await API.put(`/inventaires/${I.data.id}/lignes/${l.catalogue_id}`, { zone: z }); l.zone = r.zone; majZones(); }
+  catch (e) { l.zone = null; if (sel) sel.innerHTML = optionsZones(null); toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
+  finally { l._zAuto = false; }
+}
+// Zones connues de l'emplacement (liste gérée + zones présentes sur les lignes)
+function listeZones(){ return [...new Set([...(I.data.zones || []), ...I.data.lignes.map(l => l.zone).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fr')); }
+function optionsZones(sel){
+  const zs = listeZones();
+  return `<option value="">—</option>` + zs.map(z => `<option value="${e_(z)}" ${z === sel ? 'selected' : ''}>${e_(z)}</option>`).join('')
+    + `<option value="__new">➕ ${_T('Nouvelle zone…')}</option>`;
+}
+async function nouvelleZone(empl){
+  const nom = String(prompt(_T('Nom de la nouvelle zone (ex. Rayon A, Étagère 3, Réserve) :')) || '').trim().replace(/\s+/g, ' ');
+  if (!nom) return null;
+  try {
+    const r = await API.post(`/inventaires-zones/${empl || I.data.emplacement}`, { nom });
+    if (I.data && (!empl || empl === I.data.emplacement)) { I.data.zones = r.zones.map(z => z.nom); rafraichirSelectsZones(); }
+    return r.nom;
+  } catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); return null; }
+}
+function rafraichirSelectsZones(){
+  document.querySelectorAll('#inv-body select.inv-z').forEach(s => {
+    const tr = s.closest('tr'), cid = tr && parseInt(tr.id.replace('inv-r-', ''));
+    const l = I.data.lignes.find(x => x.catalogue_id === cid); s.innerHTML = optionsZones(l && l.zone);
+  });
+  majZones();
+}
+
+// ── Gestion des zones (ajout / renommage / suppression) ──
+async function invGererZones(empl){
+  let zs = [];
+  try { zs = await API.get(`/inventaires-zones/${empl}`); } catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); return; }
+  const nomEmpl = { lagord: 'Lagord', paris: 'Paris (Malakoff)', sav: 'Stock SAV' }[empl] || empl;
+  showModal(`<div class="modal-header"><i class="ti ti-map-pins" style="font-size:19px;color:var(--accent)"></i><h2>${_T('Zones de rangement')} — ${e_(nomEmpl)}</h2><button class="btn sm" onclick="invZonesFermer()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${_T('Les zones servent à repérer où se trouve chaque pièce pendant le comptage. Supprimer une zone ne supprime aucune pièce : celles qui y étaient passent simplement « sans zone ».')}</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px"><input class="form-input" id="zn-nom" placeholder="${_T('Nouvelle zone (ex. Rayon A, Étagère 3, Réserve)')}" maxlength="60" onkeydown="if(event.key==='Enter')invZoneAjouter('${empl}')">
+        <button class="btn primary" onclick="invZoneAjouter('${empl}')"><i class="ti ti-plus"></i>${_T('Ajouter')}</button></div>
+      ${zs.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>${_T('Zone')}</th><th style="text-align:right">${_T('Pièces rangées')}</th><th style="width:230px"></th></tr></thead><tbody>
+        ${zs.map(z => `<tr><td><b>${e_(z.nom)}</b></td><td style="text-align:right">${z.nb}</td>
+          <td style="white-space:nowrap;text-align:right"><button class="btn sm" data-z="${e_(z.nom)}" onclick="invZoneRenommer('${empl}',this.dataset.z)" title="${_T('Renommer')}"><i class="ti ti-pencil"></i>${_T('Renommer')}</button>
+          <button class="btn sm" style="color:var(--danger)" data-z="${e_(z.nom)}" data-n="${z.nb}" onclick="invZoneSupprimer('${empl}',this.dataset.z,+this.dataset.n)" title="${_T('Supprimer')}"><i class="ti ti-trash"></i>${_T('Supprimer')}</button></td></tr>`).join('')}
+      </tbody></table></div>` : `<div style="color:var(--text3);font-size:13.5px">${_T('Aucune zone pour l’instant.')}</div>`}
+    </div>
+    <div class="modal-footer"><button class="btn primary" onclick="invZonesFermer()">${_T('Fermer')}</button></div>`);
+  setTimeout(() => $('zn-nom') && $('zn-nom').focus(), 50);
+}
+async function invZoneAjouter(empl){
+  const nom = String(($('zn-nom') || {}).value || '').trim();
+  if (!nom) return;
+  try { await API.post(`/inventaires-zones/${empl}`, { nom }); I._zonesModif = true; invGererZones(empl); }
+  catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+async function invZoneRenommer(empl, ancien){
+  const nom = String(prompt(_T('Nouveau nom de la zone :'), ancien) || '').trim();
+  if (!nom || nom === ancien) return;
+  try { await API.put(`/inventaires-zones/${empl}`, { ancien, nom }); I._zonesModif = true; if (I.zone === ancien) definirZone(nom); invGererZones(empl); }
+  catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+async function invZoneSupprimer(empl, nom, nb){
+  if (!confirm(`${_T('Supprimer la zone')} « ${nom} » ?${nb ? `\n${nb} ${_T('pièce(s) y sont rangées : elles passeront « sans zone ».')}` : ''}`)) return;
+  try { await API.del(`/inventaires-zones/${empl}?nom=${encodeURIComponent(nom)}`); I._zonesModif = true; if (I.zone === nom) definirZone(''); invGererZones(empl); }
+  catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+function invZonesFermer(){
+  closeModal();
+  if (I._zonesModif) { I._zonesModif = false; render(); }   // recharge la feuille / la liste avec les zones à jour
 }
 function definirZone(v){
   I.zone = String(v || '').trim().replace(/\s+/g, ' ');
@@ -203,8 +283,10 @@ function definirZone(v){
   const el = $('inv-zone'); if (el && el.value !== I.zone) el.value = I.zone;
 }
 function majZones(){
-  const zs = [...new Set([...(I.data.zones || []), ...I.data.lignes.map(l => l.zone).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fr'));
-  const dl = $('inv-zones'); if (dl) dl.innerHTML = zs.map(z => `<option value="${e_(z)}">`).join('');
+  const zs = listeZones();
+  const zc = $('inv-zone');
+  if (zc) zc.innerHTML = `<option value="">${_T('aucune')}</option>` + zs.map(z => `<option value="${e_(z)}" ${z === I.zone ? 'selected' : ''}>${e_(z)}</option>`).join('')
+    + `<option value="__new">➕ ${_T('Nouvelle zone…')}</option>`;
   const f = $('inv-fzone'); if (!f) return;
   if (I.fzone && I.fzone !== '__vide' && !zs.includes(I.fzone)) I.fzone = '';
   const n = z => I.data.lignes.filter(l => z === '__vide' ? !l.zone : l.zone === z).length;
@@ -290,5 +372,5 @@ async function invValider(){
   }
 }
 
-Object.assign(window, { invZone, renderInventaire, invDemarrer, invOuvrir, invRetour, invSaisie, invNote, invTouche, invSupprimer, invControle, invOpt, invValider });
+Object.assign(window, { invZoneAuto, invZone, invGererZones, invZoneAjouter, invZoneRenommer, invZoneSupprimer, invZonesFermer, renderInventaire, invDemarrer, invOuvrir, invRetour, invSaisie, invNote, invTouche, invSupprimer, invControle, invOpt, invValider });
 })();
