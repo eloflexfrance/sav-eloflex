@@ -129,6 +129,11 @@ async function start() {
   }
   console.log('✅ DATABASE_URL définie');
 
+  // Le port est ouvert AVANT les migrations : sur Render, l'ancienne instance n'est arrêtée qu'une fois
+  // le port de la nouvelle ouvert. Si elle tenait un verrou, attendre la fin des migrations pour ouvrir
+  // le port bloquait tout (échec « No open ports detected »).
+  await new Promise(ok => app.listen(PORT, '0.0.0.0', () => { console.log(`🚀 SAV Éloflex v2 démarré sur le port ${PORT}`); ok(); }));
+
   // Init base de données
   try {
     const { initDB } = require('../scripts/init-db');
@@ -159,9 +164,7 @@ async function start() {
     console.warn('⚠️  Cron :', e.message);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 SAV Éloflex v2 démarré sur le port ${PORT}`);
-  });
+  console.log('✅ Initialisation terminée');
 }
 
 start().catch(e => {

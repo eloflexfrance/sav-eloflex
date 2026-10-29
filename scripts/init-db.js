@@ -9,6 +9,18 @@ async function initDB() {
   const client = await pool.connect();
   try {
     console.log('✅ Connecté à PostgreSQL');
+    // Déploiement sans coupure : l'ancienne instance tourne encore. Une transaction restée ouverte de son côté
+    // bloquerait les ALTER TABLE ci-dessous (et toute l'appli derrière). On la repère, on la coupe, et on borne l'attente.
+    try {
+      const bloq = await client.query(`SELECT pid, state, wait_event_type, EXTRACT(EPOCH FROM NOW() - COALESCE(xact_start, query_start))::int AS duree_s, LEFT(query, 140) AS requete
+        FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()
+          AND (state LIKE 'idle in transaction%' OR (state = 'active' AND NOW() - query_start > INTERVAL '30 seconds'))`);
+      for (const b of bloq.rows) console.warn(`⚠️  Session PostgreSQL ${b.pid} (${b.state}, ${b.duree_s}s) : ${String(b.requete || '').replace(/\s+/g, ' ')}`);
+      const tues = await client.query(`SELECT pg_terminate_backend(pid) AS ok FROM pg_stat_activity
+        WHERE datname = current_database() AND pid <> pg_backend_pid() AND state LIKE 'idle in transaction%' AND NOW() - state_change > INTERVAL '30 seconds'`);
+      if (tues.rows.length) console.warn(`⚠️  ${tues.rows.length} transaction(s) restée(s) ouverte(s) fermée(s)`);
+    } catch (e) { console.warn('⚠️  Contrôle des verrous :', e.message); }
+    await client.query(`SET lock_timeout = '20s'`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS clients (
@@ -1009,6 +1021,7 @@ async function initDB() {
     }
 
   } finally {
+    try { await client.query('RESET lock_timeout'); } catch (_) {}
     client.release();
   }
 }

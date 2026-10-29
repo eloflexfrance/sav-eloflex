@@ -4,6 +4,8 @@ const { Pool } = require('pg');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // Filet de sécurité : une transaction oubliée ouverte est coupée au bout de 2 min (sinon elle bloque les migrations du déploiement suivant)
+  idle_in_transaction_session_timeout: 120000,
 });
 
 // Helper : query avec paramètres ($1, $2, ...)
