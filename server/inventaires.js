@@ -37,6 +37,11 @@ async function ensureTables(db) {
     inventaire_id INTEGER REFERENCES inventaires(id) ON DELETE CASCADE, catalogue_id INTEGER, ref TEXT, designation TEXT,
     theorique INTEGER, compte INTEGER, note TEXT, maj_par TEXT, maj_at TIMESTAMPTZ, ecart INTEGER,
     PRIMARY KEY (inventaire_id, catalogue_id))`);
+  // Zone de rangement d'une pièce dans un emplacement (rayon, étagère…) : reprise d'un inventaire à l'autre
+  await db.run(`ALTER TABLE inventaires_lignes ADD COLUMN IF NOT EXISTS zone TEXT`);
+  await db.run(`CREATE TABLE IF NOT EXISTS catalogue_zones (
+    catalogue_id INTEGER REFERENCES catalogue(id) ON DELETE CASCADE, emplacement TEXT NOT NULL, zone TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW(), PRIMARY KEY (catalogue_id, emplacement))`);
   _tablesOk = true;
 }
 
@@ -84,7 +89,7 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
       if (ecart > 0) { res.plus += ecart; res.valeur_plus += ecart * pu; } else { res.moins += -ecart; res.valeur_moins += -ecart * pu; }
       if (!l.vf_product_id) res.sans_vf++;
       res.lignes.push({ catalogue_id: l.catalogue_id, ref: l.ref, designation: l.designation, actuel, compte, ecart, compte_saisi: l.compte != null,
-        vf_product_id: l.vf_product_id, pu, note: l.note });
+        vf_product_id: l.vf_product_id, pu, note: l.note, zone: l.zone });
     }
     res.valeur_plus = Math.round(res.valeur_plus * 100) / 100; res.valeur_moins = Math.round(res.valeur_moins * 100) / 100;
     return res;
@@ -126,14 +131,15 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
       if (ex) return res.json({ ok: true, id: ex.id, existant: true });
       const inv = await db.run(`INSERT INTO inventaires (emplacement, periode, cree_par) VALUES ($1,$2,$3) RETURNING *`, [empl.code, periodeDu(), nomU(u)]);
       const st = await stocksParEmplacement(db);
-      const cat = await db.all(`SELECT id, ref, designation, COALESCE(en_sommeil,false) AS en_sommeil FROM catalogue
-        WHERE stock_actif IS DISTINCT FROM false ORDER BY ref`);
+      const cat = await db.all(`SELECT c.id, c.ref, c.designation, COALESCE(c.en_sommeil,false) AS en_sommeil, z.zone FROM catalogue c
+        LEFT JOIN catalogue_zones z ON z.catalogue_id=c.id AND z.emplacement=$1
+        WHERE c.stock_actif IS DISTINCT FROM false ORDER BY c.ref`, [empl.code]);
       let n = 0;
       for (const c of cat) {
         const q = (st.get(c.id) || {})[empl.code] || 0;
         if (c.en_sommeil && !q) continue;
-        await db.run(`INSERT INTO inventaires_lignes (inventaire_id, catalogue_id, ref, designation, theorique) VALUES ($1,$2,$3,$4,$5)`,
-          [inv.id, c.id, c.ref, c.designation, q]);
+        await db.run(`INSERT INTO inventaires_lignes (inventaire_id, catalogue_id, ref, designation, theorique, zone) VALUES ($1,$2,$3,$4,$5,$6)`,
+          [inv.id, c.id, c.ref, c.designation, q, c.zone || null]);
         n++;
       }
       res.json({ ok: true, id: inv.id, lignes: n });
@@ -145,14 +151,17 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
       await ensureTables(db);
       const inv = await db.get('SELECT * FROM inventaires WHERE id=$1', [req.params.id]);
       if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
-      const lignes = await db.all(`SELECT l.catalogue_id, l.ref, l.designation, l.theorique, l.compte, l.note, l.maj_par, l.maj_at, l.ecart,
+      const lignes = await db.all(`SELECT l.catalogue_id, l.ref, l.designation, l.theorique, l.compte, l.note, l.maj_par, l.maj_at, l.ecart, l.zone,
           (c.vf_product_id IS NOT NULL) AS vf
         FROM inventaires_lignes l LEFT JOIN catalogue c ON c.id=l.catalogue_id WHERE l.inventaire_id=$1 ORDER BY l.ref`, [inv.id]);
       if (inv.statut === 'en_cours') {
         const st = await stocksParEmplacement(db, lignes.map(l => l.catalogue_id));
         for (const l of lignes) l.actuel = (st.get(l.catalogue_id) || {})[inv.emplacement];
       }
-      res.json({ ...inv, emplacement_nom: (EMPL[inv.emplacement] || {}).nom, vf_emplacement: !!(EMPL[inv.emplacement] || {}).vf, lignes });
+      // Zones déjà utilisées dans cet emplacement (suggestions de saisie)
+      const zones = (await db.all(`SELECT zone FROM (SELECT zone FROM catalogue_zones WHERE emplacement=$1
+          UNION SELECT l.zone FROM inventaires_lignes l WHERE l.inventaire_id=$2 AND l.zone IS NOT NULL) z ORDER BY zone`, [inv.emplacement, inv.id])).map(z => z.zone);
+      res.json({ ...inv, emplacement_nom: (EMPL[inv.emplacement] || {}).nom, vf_emplacement: !!(EMPL[inv.emplacement] || {}).vf, lignes, zones });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
@@ -160,10 +169,12 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
     try {
       const u = res.locals.user || {};
       if (!ecritureOk(u)) return res.status(403).json({ error: 'Droits insuffisants' });
-      const inv = await db.get('SELECT statut FROM inventaires WHERE id=$1', [req.params.id]);
+      const inv = await db.get('SELECT statut, emplacement FROM inventaires WHERE id=$1', [req.params.id]);
       if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
       if (inv.statut !== 'en_cours') return res.status(409).json({ error: 'Cet inventaire est clôturé' });
       const b = req.body || {};
+      const avecZone = Object.prototype.hasOwnProperty.call(b, 'zone');
+      const zone = avecZone ? (String(b.zone || '').trim().replace(/\s+/g, ' ').slice(0, 60) || null) : undefined;
       const sets = [], vals = [];
       if (Object.prototype.hasOwnProperty.call(b, 'compte')) {
         const v = b.compte === '' || b.compte == null ? null : parseInt(b.compte);
@@ -171,11 +182,19 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
         vals.push(v); sets.push(`compte=$${vals.length}`);
       }
       if (Object.prototype.hasOwnProperty.call(b, 'note')) { vals.push(String(b.note || '').slice(0, 300) || null); sets.push(`note=$${vals.length}`); }
+      const saisie = sets.length > 0;
+      if (avecZone) { vals.push(zone); sets.push(`zone=$${vals.length}`); }
       if (!sets.length) return res.json({ ok: true });
-      vals.push(nomU(u)); sets.push(`maj_par=$${vals.length}`); sets.push('maj_at=NOW()');
+      if (saisie) { vals.push(nomU(u)); sets.push(`maj_par=$${vals.length}`); sets.push('maj_at=NOW()'); }
       vals.push(req.params.id, req.params.cid);
-      const r = await db.run(`UPDATE inventaires_lignes SET ${sets.join(', ')} WHERE inventaire_id=$${vals.length - 1} AND catalogue_id=$${vals.length} RETURNING compte, note, maj_par, maj_at`, vals);
+      const r = await db.run(`UPDATE inventaires_lignes SET ${sets.join(', ')} WHERE inventaire_id=$${vals.length - 1} AND catalogue_id=$${vals.length} RETURNING compte, note, zone, maj_par, maj_at`, vals);
       if (!r) return res.status(404).json({ error: 'Ligne introuvable' });
+      // La zone est mémorisée pour la pièce dans cet emplacement (reprise au prochain inventaire)
+      if (avecZone) {
+        if (zone) await db.run(`INSERT INTO catalogue_zones (catalogue_id, emplacement, zone) VALUES ($1,$2,$3)
+          ON CONFLICT (catalogue_id, emplacement) DO UPDATE SET zone=EXCLUDED.zone, updated_at=NOW()`, [req.params.cid, inv.emplacement, zone]);
+        else await db.run('DELETE FROM catalogue_zones WHERE catalogue_id=$1 AND emplacement=$2', [req.params.cid, inv.emplacement]);
+      }
       res.json({ ok: true, ...r });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -290,11 +309,11 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
       const inv = await db.get('SELECT * FROM inventaires WHERE id=$1', [req.params.id]);
       if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
       const lignes = await db.all(`SELECT l.*, c.prix_achat_suede FROM inventaires_lignes l LEFT JOIN catalogue c ON c.id=l.catalogue_id
-        WHERE l.inventaire_id=$1 ORDER BY l.ref`, [inv.id]);
+        WHERE l.inventaire_id=$1 ORDER BY l.zone NULLS LAST, l.ref`, [inv.id]);
       const q = v => { const s = v == null ? '' : String(v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
       const num = v => v == null || v === '' ? '' : String(v).replace('.', ',');
-      const out = ['Référence;Désignation;Stock au lancement;Compté;Écart validé;Prix achat Suède;Note;Saisi par'];
-      for (const l of lignes) out.push([q(l.ref), q(l.designation), l.theorique, l.compte == null ? '' : l.compte, l.ecart == null ? '' : l.ecart, num(l.prix_achat_suede), q(l.note), q(l.maj_par)].join(';'));
+      const out = ['Zone;Référence;Désignation;Stock au lancement;Compté;Écart validé;Prix achat Suède;Note;Saisi par'];
+      for (const l of lignes) out.push([q(l.zone), q(l.ref), q(l.designation), l.theorique, l.compte == null ? '' : l.compte, l.ecart == null ? '' : l.ecart, num(l.prix_achat_suede), q(l.note), q(l.maj_par)].join(';'));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="Inventaire_${(EMPL[inv.emplacement] || {}).nom || inv.emplacement}_${inv.periode}.csv"`.replace(/ /g, '_'));
       res.send('﻿' + out.join('\r\n'));

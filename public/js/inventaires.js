@@ -59,12 +59,15 @@ async function invDemarrer(code){
   try { const r = await API.post('/inventaires', { emplacement: code }); I.id = r.id; I.q = ''; I.filtre = 'tous'; render(); }
   catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
-function invOuvrir(id){ I.id = id; I.q = ''; I.filtre = 'tous'; render(); }
+function invOuvrir(id){ I.id = id; I.q = ''; I.filtre = 'tous'; I.fzone = ''; render(); }
 function invRetour(){ I.id = null; I.data = null; render(); }
 
 async function renderFeuille(ttl, c, a){
   const d = I.data = await API.get(`/inventaires/${I.id}`);
   const enCours = d.statut === 'en_cours', ecr = enCours && peutEcrire();
+  // Zone en cours (rayon, étagère…) : appliquée aux pièces comptées sans zone ; mémorisée pour cet inventaire
+  try { I.zone = localStorage.getItem('inv_zone_' + d.id) || ''; } catch (_) { I.zone = I.zone || ''; }
+  I.fzone = I.fzone || '';
   ttl.textContent = `${_T('Inventaire')} ${d.emplacement_nom} — ${libPeriode(d.periode)}`;
   a.innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
     <button class="btn" onclick="invRetour()"><i class="ti ti-arrow-left"></i>${_T('Tous les inventaires')}</button>
@@ -78,21 +81,29 @@ async function renderFeuille(ttl, c, a){
       <input id="inv-q" class="search-bar" style="max-width:320px" placeholder="${_T('Référence ou désignation… (Entrée = aller à la pièce)')}" value="${e_(I.q)}" autocomplete="off">
       <select id="inv-filtre" class="form-input" style="width:auto;padding:6px 8px">
         ${[['tous', 'Toutes les pièces'], ['a_compter', 'À compter'], ['comptees', 'Comptées'], ['ecarts', 'Avec écart']].map(([v, l]) => `<option value="${v}" ${I.filtre === v ? 'selected' : ''}>${_T(l)}</option>`).join('')}</select>
+      <select id="inv-fzone" class="form-input" style="width:auto;padding:6px 8px;max-width:200px" title="${_T('Filtrer par zone')}"></select>
+      ${ecr ? `<label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text2)" title="${_T('Zone appliquée automatiquement aux pièces que vous comptez ensuite (si elles n’ont pas déjà une zone). Laisser vide pour ne rien appliquer.')}"><i class="ti ti-map-pin"></i>${_T('Zone en cours')}
+        <input id="inv-zone" class="form-input" list="inv-zones" style="width:170px;padding:6px 8px" placeholder="${_T('aucune')}" value="${e_(I.zone)}" autocomplete="off"></label>` : ''}
+      <datalist id="inv-zones"></datalist>
       ${enCours ? `<label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--text2);cursor:pointer"><input type="checkbox" id="inv-attendu" ${I.attendu ? 'checked' : ''}> ${_T('Afficher le stock attendu')}</label>` : ''}
       <div id="inv-prog" style="margin-left:auto;font-size:13px;color:var(--text2)"></div>
     </div>
     <div class="table-wrap"><table class="t" id="inv-table"><thead><tr>
-      <th style="width:150px">${_T('Réf.')}</th><th>${_T('Désignation')}</th>
+      <th style="width:150px">${_T('Réf.')}</th><th>${_T('Désignation')}</th><th style="width:160px">${_T('Zone')}</th>
       <th class="inv-att" style="width:80px;text-align:right">${enCours ? _T('Attendu') : _T('Au lancement')}</th>
       <th style="width:110px">${_T('Compté')}</th><th class="inv-att" style="width:70px;text-align:right">${_T('Écart')}</th>
       <th>${_T('Note')}</th><th style="width:30px"></th></tr></thead><tbody id="inv-body"></tbody></table></div>
     <style>#inv-table:not(.att) .inv-att{display:none} #inv-table input.inv-c{width:90px;padding:5px 8px;font-weight:700;text-align:right}
-      #inv-table tr.ok td{background:rgba(34,197,94,.06)} #inv-table input.inv-n{padding:5px 8px;font-size:12.5px}</style>`;
+      #inv-table tr.ok td{background:rgba(34,197,94,.06)} #inv-table input.inv-n{padding:5px 8px;font-size:12.5px}
+      #inv-table input.inv-z{padding:5px 8px;font-size:12.5px;width:150px}</style>`;
   const tb = $('inv-table'); if (tb) tb.classList.toggle('att', !enCours || I.attendu);
   $('inv-q').addEventListener('input', ev => { I.q = ev.target.value; clearTimeout(I._t); I._t = setTimeout(dessinerLignes, 150); });
   $('inv-q').addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); allerAPiece(); } });
   $('inv-filtre').onchange = ev => { I.filtre = ev.target.value; dessinerLignes(); };
   if ($('inv-attendu')) $('inv-attendu').onchange = ev => { I.attendu = ev.target.checked; tb.classList.toggle('att', I.attendu); };
+  if ($('inv-zone')) $('inv-zone').addEventListener('change', ev => definirZone(ev.target.value));
+  $('inv-fzone').onchange = ev => { I.fzone = ev.target.value; dessinerLignes(); };
+  majZones();
   dessinerLignes();
   if (enCours) setTimeout(() => $('inv-q') && $('inv-q').focus(), 50);
 }
@@ -105,8 +116,10 @@ function lignesVisibles(){
     if (I.filtre === 'a_compter' && l.compte != null) return false;
     if (I.filtre === 'comptees' && l.compte == null) return false;
     if (I.filtre === 'ecarts' && !(I.data.statut === 'en_cours' ? ecartDe(l) : l.ecart)) return false;
+    if (I.fzone === '__vide' && l.zone) return false;
+    if (I.fzone && I.fzone !== '__vide' && l.zone !== I.fzone) return false;
     if (!mots.length) return true;
-    const t = norm(l.ref + ' ' + l.designation);
+    const t = norm(l.ref + ' ' + l.designation + ' ' + (l.zone || ''));
     return mots.every(m => t.includes(m));
   });
 }
@@ -119,12 +132,13 @@ function dessinerLignes(){
     return `<tr id="inv-r-${l.catalogue_id}" class="${l.compte != null ? 'ok' : ''}">
       <td class="mono">${e_(l.ref)}${l.vf === false && d.vf_emplacement ? ` <i class="ti ti-plug-connected-x" style="color:#b45309" title="${_T('Pièce non liée à VosFactures : régularisée dans l’appli seulement')}"></i>` : ''}</td>
       <td>${e_(l.designation)}</td>
+      <td>${ecr ? `<input class="form-input inv-z" list="inv-zones" value="${e_(l.zone || '')}" placeholder="—" onchange="invZone(${i},this.value)">` : e_(l.zone || '')}</td>
       <td class="inv-att" style="text-align:right;color:var(--text2)">${enCours ? (l.actuel ?? l.theorique) : l.theorique}</td>
       <td>${ecr ? `<input class="form-input inv-c" type="number" min="0" inputmode="numeric" data-i="${i}" value="${l.compte ?? ''}" onchange="invSaisie(${i},this.value)" onkeydown="invTouche(event,this)">` : `<b>${l.compte ?? '—'}</b>`}</td>
-      <td class="inv-att" style="text-align:right;font-weight:700;color:${ec > 0 ? 'var(--success)' : ec < 0 ? 'var(--danger)' : 'var(--text3)'}">${ec == null ? '' : ec > 0 ? '+' + ec : ec}</td>
+      <td class="inv-att inv-ec" style="text-align:right;font-weight:700;color:${ec > 0 ? 'var(--success)' : ec < 0 ? 'var(--danger)' : 'var(--text3)'}">${ec == null ? '' : ec > 0 ? '+' + ec : ec}</td>
       <td>${ecr ? `<input class="form-input inv-n" value="${e_(l.note || '')}" placeholder="—" onchange="invNote(${i},this.value)">` : e_(l.note || '')}</td>
       <td style="color:var(--text3);font-size:11px" title="${e_(l.maj_par ? l.maj_par + ' — ' + new Date(l.maj_at).toLocaleString('fr-FR') : '')}">${l.maj_par ? '<i class="ti ti-user-check"></i>' : ''}</td></tr>`;
-  }).join('') || `<tr><td colspan="7" style="color:var(--text3);padding:16px">${_T('Aucune pièce')}</td></tr>`;
+  }).join('') || `<tr><td colspan="8" style="color:var(--text3);padding:16px">${_T('Aucune pièce')}</td></tr>`;
   majProgression();
 }
 function majProgression(){
@@ -134,6 +148,8 @@ function majProgression(){
 }
 function allerAPiece(){
   const q = norm(I.q).trim(); if (!q) return;
+  // Saisie rapide : le tableau filtré n'est peut-être pas encore redessiné
+  if (I._t) { clearTimeout(I._t); I._t = null; dessinerLignes(); }
   const vis = lignesVisibles();
   const l = I.data.lignes.find(x => norm(x.ref) === q) || (vis.length === 1 ? vis[0] : null);
   if (!l) return;
@@ -154,18 +170,46 @@ async function invSaisie(i, v){
   const val = String(v).trim() === '' ? null : parseInt(v);
   if (val != null && !(val >= 0)) { toast(_T('Quantité invalide'), 'ti-alert-circle', 'var(--danger)'); return; }
   if (val === l.compte) return;
+  const body = { compte: val };
+  if (val != null && !l.zone && I.zone) body.zone = I.zone;   // zone en cours appliquée aux pièces sans zone
   try {
-    const r = await API.put(`/inventaires/${I.data.id}/lignes/${l.catalogue_id}`, { compte: val });
-    Object.assign(l, { compte: r.compte, maj_par: r.maj_par, maj_at: r.maj_at });
+    const r = await API.put(`/inventaires/${I.data.id}/lignes/${l.catalogue_id}`, body);
+    Object.assign(l, { compte: r.compte, maj_par: r.maj_par, maj_at: r.maj_at, zone: r.zone });
     const tr = $('inv-r-' + l.catalogue_id);
     if (tr) {
       tr.classList.toggle('ok', l.compte != null);
-      const ec = ecartDe(l), td = tr.children[4];
+      const iz = tr.querySelector('input.inv-z'); if (iz && body.zone) { iz.value = l.zone || ''; majZones(); }
+      const ec = ecartDe(l), td = tr.querySelector('td.inv-ec');
       td.textContent = ec == null ? '' : ec > 0 ? '+' + ec : String(ec);
       td.style.color = ec > 0 ? 'var(--success)' : ec < 0 ? 'var(--danger)' : 'var(--text3)';
     }
     majProgression();
   } catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+// Zone d'une pièce : enregistrée, mémorisée pour les prochains inventaires, et devient la zone en cours
+async function invZone(i, v){
+  const l = I.data.lignes[i]; if (!l) return;
+  const z = String(v || '').trim().replace(/\s+/g, ' ');
+  try {
+    const r = await API.put(`/inventaires/${I.data.id}/lignes/${l.catalogue_id}`, { zone: z });
+    l.zone = r.zone;
+    if (z) definirZone(z);
+    majZones();
+  } catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+function definirZone(v){
+  I.zone = String(v || '').trim().replace(/\s+/g, ' ');
+  try { localStorage.setItem('inv_zone_' + I.data.id, I.zone); } catch (_) {}
+  const el = $('inv-zone'); if (el && el.value !== I.zone) el.value = I.zone;
+}
+function majZones(){
+  const zs = [...new Set([...(I.data.zones || []), ...I.data.lignes.map(l => l.zone).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fr'));
+  const dl = $('inv-zones'); if (dl) dl.innerHTML = zs.map(z => `<option value="${e_(z)}">`).join('');
+  const f = $('inv-fzone'); if (!f) return;
+  if (I.fzone && I.fzone !== '__vide' && !zs.includes(I.fzone)) I.fzone = '';
+  const n = z => I.data.lignes.filter(l => z === '__vide' ? !l.zone : l.zone === z).length;
+  f.innerHTML = `<option value="">${_T('Toutes les zones')}</option>` + zs.map(z => `<option value="${e_(z)}" ${I.fzone === z ? 'selected' : ''}>${e_(z)} (${n(z)})</option>`).join('')
+    + `<option value="__vide" ${I.fzone === '__vide' ? 'selected' : ''}>${_T('Sans zone')} (${n('__vide')})</option>`;
 }
 async function invNote(i, v){
   const l = I.data.lignes[i]; if (!l) return;
@@ -209,7 +253,7 @@ async function invControle(){
           : `${_T('À la validation, VosFactures reçoit')} ${nPlus ? `<b>${_T('un bon d’entrée interne')}</b> (${nPlus} ${_T('réf.')}, +${r.plus})` : ''}${nPlus && nMoins ? ` ${_T('et')} ` : ''}${nMoins ? `<b>${_T('un bon de sortie interne')}</b> (${nMoins} ${_T('réf.')}, −${r.moins})` : ''}${!nPlus && !nMoins ? _T('aucun bon (aucun écart)') : ''}, ${_T('numéroté')} INV-${d.emplacement.toUpperCase()}-${d.periode}. ${_T('Le stock de l’appli est ensuite mis à jour.')}${r.sans_vf ? `<div style="color:#b45309;margin-top:4px">${r.sans_vf} ${_T('pièce(s) en écart non liée(s) à VosFactures : régularisée(s) dans l’appli seulement.')}</div>` : ''}${r.vf_configure ? '' : `<div style="color:var(--danger);margin-top:4px">${_T('VosFactures n’est pas configuré : validation impossible.')}</div>`}`}
       </div>
       ${r.lignes.length ? `<div class="table-wrap" style="max-height:340px;overflow:auto"><table class="t"><thead><tr><th>${_T('Réf.')}</th><th>${_T('Désignation')}</th><th style="text-align:right">${_T('Stock')}</th><th style="text-align:right">${_T('Compté')}</th><th style="text-align:right">${_T('Écart')}</th><th style="text-align:right">${_T('Valeur')}</th></tr></thead>
-        <tbody>${r.lignes.map(l => `<tr><td class="mono">${e_(l.ref)}</td><td>${e_(l.designation)}${l.compte_saisi ? '' : ` <i style="color:#b45309;font-size:12px">(${_T('non comptée')})</i>`}${l.note ? `<div style="font-size:12px;color:var(--text3)">${e_(l.note)}</div>` : ''}</td>
+        <tbody>${r.lignes.map(l => `<tr><td class="mono">${e_(l.ref)}</td><td>${e_(l.designation)}${l.zone ? ` <span style="font-size:11.5px;color:var(--text3)"><i class="ti ti-map-pin"></i>${e_(l.zone)}</span>` : ''}${l.compte_saisi ? '' : ` <i style="color:#b45309;font-size:12px">(${_T('non comptée')})</i>`}${l.note ? `<div style="font-size:12px;color:var(--text3)">${e_(l.note)}</div>` : ''}</td>
           <td style="text-align:right">${l.actuel}</td><td style="text-align:right"><b>${l.compte}</b></td>
           <td style="text-align:right;font-weight:700;color:${l.ecart > 0 ? 'var(--success)' : 'var(--danger)'}">${l.ecart > 0 ? '+' : ''}${l.ecart}</td>
           <td style="text-align:right;font-size:12.5px">${l.pu ? eur(l.ecart * l.pu) : '—'}</td></tr>`).join('')}</tbody></table></div>`
@@ -246,5 +290,5 @@ async function invValider(){
   }
 }
 
-Object.assign(window, { renderInventaire, invDemarrer, invOuvrir, invRetour, invSaisie, invNote, invTouche, invSupprimer, invControle, invOpt, invValider });
+Object.assign(window, { invZone, renderInventaire, invDemarrer, invOuvrir, invRetour, invSaisie, invNote, invTouche, invSupprimer, invControle, invOpt, invValider });
 })();
