@@ -4785,6 +4785,7 @@ async function modalPiece(id){
     ${p?.pl_product_id?`<div style="margin-top:10px"><a href="https://app.pennylane.com/companies/${PL_COMPANY_ID}/products?id=${p.pl_product_id}" target="_blank" style="color:var(--accent);font-size:13px;text-decoration:none"><i class="ti ti-external-link"></i> ${TR('Voir dans Pennylane')}</a></div>`:''}</div>
     <div class="modal-footer">
       ${id?`<button class="btn danger" onclick="deletePiece(${id})"><i class="ti ti-trash"></i></button>`:''}
+      ${id&&isAdmin()?`<button class="btn" style="margin-right:auto" onclick="modalFusionPiece(${id})" title="${TR('Même pièce enregistrée deux fois : absorber la fiche obsolète dans celle-ci')}"><i class="ti ti-arrows-join"></i>${TR('Fusionner une fiche obsolète')}</button>`:''}
       <button class="btn" onclick="closeModal()">${t('btn_annuler')}</button>
       <button class="btn primary" onclick="savePiece(${id||'null'})"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>
     </div>`);majTarifsPiece();}
@@ -4806,6 +4807,60 @@ function majTarifsPiece(){
 }
 window.majTarifsPiece = majTarifsPiece;
 async function savePiece(id){const data={ref:gv('f-ref'),designation:gv('f-des'),fournisseur:gv('f-fou'),ref_fournisseur:gv('f-reffou'),pxht:parseFloat(gv('f-px'))||0,taux_tva:parseFloat(gv('f-tvadist'))||5.5,tva_distributeur:parseFloat(gv('f-tvadist'))||5.5,prix_ttc_public:Math.round((parseFloat(gv('f-px'))||0)*(1+(parseFloat(gv('f-tvadist'))||5.5)/100)*100)/100,prix_achat_suede:gv('f-achat')===''?null:parseFloat(gv('f-achat')),prix_public_ttc:gv('f-pub')===''?null:parseFloat(gv('f-pub')),poids:gv('f-poids')===''?null:parseFloat(gv('f-poids')),stock:parseInt(gv('f-stock'))||0,stock_sav:Math.max(0,parseInt(gv('f-stocksav'))||0),en_sommeil:!!(document.getElementById('f-sommeil')&&document.getElementById('f-sommeil').checked),stock_alerte:parseInt(gv('f-stalerte'))||2};if(_PIECE_IMG!==undefined)data.image_data=_PIECE_IMG;if(!data.ref||!data.designation){alert(TR('Référence et désignation requises'));return;}try{if(id)await API.updatePiece(id,data);else await API.createPiece(data);CACHE.catalogue=[];_PIECE_IMG=undefined;toast(id?'Pièce mise à jour':'Pièce ajoutée');closeModal();render();refreshBadges();}catch(e){alert(e.message);}}
+// ── Fusion de deux fiches d'une même pièce (la fiche obsolète est absorbée par celle-ci) ──
+async function modalFusionPiece(id){
+  let tous = []; try { tous = await API.catalogue('', false, '1'); } catch(_) {}
+  const t0 = tous.find(x => x.id === id); if(!t0) return;
+  window._fusionPiece = { id, tous, cible: t0, source: null };
+  showModal(`<div class="modal-header"><i class="ti ti-arrows-join" style="font-size:19px;color:var(--accent)"></i><h2>${TR('Fusionner une fiche obsolète')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="font-size:13.5px;margin-bottom:10px">${TR('Fiche conservée')} : <b>${esc(t0.designation)}</b> <span class="mono">(${esc(t0.ref)})</span>, ${TR('stock')} ${t0.stock}</div>
+      <label class="form-label">${TR('Fiche obsolète à absorber (même pièce)')}</label>
+      <input class="form-input" id="fp-q" placeholder="${TR('Référence, désignation ou réf. fournisseur…')}" oninput="fusionPieceChercher(this.value)" autocomplete="off">
+      <div id="fp-res" style="max-height:220px;overflow:auto;margin-top:6px"></div>
+      <div id="fp-recap" style="margin-top:10px"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="modalPiece(${id})">${t('btn_annuler')}</button>
+      <button class="btn primary" id="fp-ok" disabled onclick="fusionPieceValider()"><i class="ti ti-arrows-join"></i>${TR('Fusionner')}</button></div>`);
+  const m = document.querySelector('#modal-area .modal'); if (m) m.style.maxWidth = '760px';
+  // Suggestion : même code fournisseur (EAN) dans la réf. fournisseur
+  const ean = (String(t0.ref_fournisseur||'') + ' ' + t0.ref).match(/\b\d{13}\b/);
+  if (ean) { $('fp-q').value = ean[0]; fusionPieceChercher(ean[0]); }
+}
+function fusionPieceChercher(q){
+  const F = window._fusionPiece; if(!F) return;
+  const n = s => String(s||'').toLowerCase();
+  const mots = n(q).split(/\s+/).filter(Boolean);
+  const l = mots.length ? F.tous.filter(p => p.id !== F.id && mots.every(m => n(p.ref+' '+p.designation+' '+(p.ref_fournisseur||'')).includes(m))).slice(0, 30) : [];
+  $('fp-res').innerHTML = l.map(p => `<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;cursor:pointer">
+      <input type="radio" name="fp-src" value="${p.id}" ${F.source&&F.source.id===p.id?'checked':''} onchange="fusionPieceChoisir(${p.id})">
+      <span><b>${esc(p.designation)}</b> <span class="mono" style="font-size:12.5px">${esc(p.ref)}</span>${p.en_sommeil?` <span style="font-size:11px;color:#6b7280">(${TR('en sommeil')})</span>`:''}<br>
+      <span style="font-size:12px;color:var(--text3)">${esc(p.ref_fournisseur||'')} · ${TR('stock')} ${p.stock}${p.stock_sav?` · SAV ${p.stock_sav}`:''}</span></span></label>`).join('')
+    || (mots.length ? `<div style="color:var(--text3);font-size:13px;padding:6px">${TR('Aucune pièce trouvée')}</div>` : '');
+}
+function fusionPieceChoisir(sid){
+  const F = window._fusionPiece; F.source = F.tous.find(p => p.id === sid); const s = F.source, t0 = F.cible;
+  const reprendre = /^VF-/i.test(t0.ref) || !/^\d{8,}$/.test(t0.ref);
+  $('fp-recap').innerHTML = `<div style="background:var(--bg);border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.6">
+    <label style="display:flex;gap:8px;align-items:center;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="fp-ref" ${reprendre?'checked':''}> ${TR('Donner à la fiche conservée la référence')} <b class="mono">${esc(s.ref)}</b> (${TR('au lieu de')} <span class="mono">${esc(t0.ref)}</span>)</label>
+    • ${TR('L’ancienne fiche passe en sommeil sous la référence')} <span class="mono">${esc(s.ref)}-ANCIEN</span> ${TR('(elle n’est pas supprimée : elle reste liée à son produit VosFactures).')}<br>
+    ${s.pl_product_id?`• ${TR('Son lien Pennylane passe sur la fiche conservée (sorties de stock des BL Pennylane).')}<br>`:''}
+    ${s.stock_sav?`• ${TR('Son stock SAV')} (${s.stock_sav}) ${TR('est ajouté à la fiche conservée.')}<br>`:''}
+    • ${TR('Commandes Suède, zones de rangement et éclatés suivent la fiche conservée.')}
+    ${s.stock?`<div style="color:#b45309;margin-top:6px"><i class="ti ti-alert-triangle"></i> ${TR('Stock VosFactures de l’ancienne fiche')} : <b>${s.stock}</b>. ${TR('Il reste sur l’ancien produit VosFactures : la pièce apparaîtra dans le prochain inventaire de Lagord, où la saisir à 0 le remettra à zéro dans VosFactures (et comptez le stock réel sur la fiche conservée).')}</div>`:''}
+  </div>`;
+  $('fp-ok').disabled = false;
+}
+async function fusionPieceValider(){
+  const F = window._fusionPiece; if(!F || !F.source) return;
+  if(!confirm(`${TR('Fusionner')} « ${F.source.designation} » ${TR('dans')} « ${F.cible.designation} » ?`)) return;
+  try{
+    const r = await API.post(`/catalogue/${F.id}/fusionner`, { source_id: F.source.id, reprendre_ref: !!($('fp-ref')||{}).checked });
+    CACHE.catalogue = []; closeModal(); render();
+    toast(`${TR('Fiches fusionnées')} : ${r.cible.ref}`, 'ti-arrows-join', 'var(--success)');
+  }catch(e){ alert(e.message); }
+}
+Object.assign(window, { modalFusionPiece, fusionPieceChercher, fusionPieceChoisir, fusionPieceValider });
 async function deletePiece(id){if(!confirm(TR('Supprimer ?')))return;await API.deletePiece(id);CACHE.catalogue=[];toast(t('msg_supprime'),'ti-trash');closeModal();render();}
 async function syncCataloguePennylane(btn){
   const old = btn?btn.innerHTML:null;

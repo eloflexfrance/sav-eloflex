@@ -1396,6 +1396,13 @@ async function _majTarifsDistributeur(id, b) {
   vals.push(id);
   await db.run(`UPDATE catalogue SET ${sets.join(', ')} WHERE id=$${vals.length}`, vals);
 }
+// Référence déjà portée par une autre pièce : message explicite (au lieu de l'erreur brute PostgreSQL)
+async function _msgRefDoublon(e, ref, id) {
+  if (!e || e.code !== '23505' || !/catalogue_ref_key/.test(e.constraint || e.message || '')) return null;
+  const autre = await db.get('SELECT id, designation, COALESCE(en_sommeil,false) AS en_sommeil, stock FROM catalogue WHERE ref=$1 AND id<>$2', [ref, parseInt(id) || 0]).catch(() => null);
+  return `La référence ${ref} est déjà utilisée par une autre pièce` + (autre ? ` : « ${autre.designation} »${autre.en_sommeil ? ' (pièce en sommeil — cochez « Afficher aussi les pièces en sommeil » pour la retrouver)' : ''}, stock ${autre.stock}` : '') +
+    `. Changez d'abord la référence de cette autre pièce (ou fusionnez les deux), puis réessayez.`;
+}
 router.post('/catalogue', async (req, res) => {
   try {
     const { ref, designation, fournisseur, ref_fournisseur, pxht, stock, stock_alerte, stock_actif, vf_product_id, taux_tva, prix_ttc_public, poids, image_data } = req.body;
@@ -1408,7 +1415,7 @@ router.post('/catalogue', async (req, res) => {
     );
     await _majTarifsDistributeur(r.id, req.body);
     res.status(201).json(r);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { const m = await _msgRefDoublon(e, (req.body || {}).ref, 0); res.status(m ? 409 : 500).json({ error: m || e.message }); }
 });
 router.put('/catalogue/:id', async (req, res) => {
   try {
@@ -1426,7 +1433,56 @@ router.put('/catalogue/:id', async (req, res) => {
       await db.run('UPDATE catalogue SET image_data=$1 WHERE id=$2', [b.image_data || null, req.params.id]);
     }
     res.json(await db.get('SELECT id, ref FROM catalogue WHERE id=$1', [req.params.id]));
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { const m = await _msgRefDoublon(e, (req.body || {}).ref, req.params.id); res.status(m ? 409 : 500).json({ error: m || e.message }); }
+});
+// Fusion de deux fiches d'une même pièce : la fiche obsolète (source) est absorbée par celle-ci (cible).
+// La source n'est pas supprimée (elle reste liée à son produit VosFactures, sinon la synchro la recréerait) :
+// elle passe en sommeil avec la référence « …-ANCIEN ». La cible peut reprendre sa référence.
+router.post('/catalogue/:id/fusionner', adminOnly, async (req, res) => {
+  const b = req.body || {};
+  const pg = await db.pool.connect();
+  try {
+    try { await require('./inventaires').ensureTables(db); } catch (_) {}
+    await pg.query('BEGIN');
+    const t = (await pg.query('SELECT * FROM catalogue WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0];
+    const s = (await pg.query('SELECT * FROM catalogue WHERE id=$1 FOR UPDATE', [parseInt(b.source_id)])).rows[0];
+    if (!t || !s) { await pg.query('ROLLBACK'); return res.status(404).json({ error: 'Pièce introuvable' }); }
+    if (t.id === s.id) { await pg.query('ROLLBACK'); return res.status(400).json({ error: 'Choisissez une autre pièce' }); }
+    // 1) La source libère sa référence
+    let refAncien = `${s.ref}-ANCIEN`, k = 2;
+    while ((await pg.query('SELECT 1 FROM catalogue WHERE ref=$1', [refAncien])).rows.length) refAncien = `${s.ref}-ANCIEN${k++}`;
+    const designAncien = /obsolète/i.test(s.designation || '') ? s.designation : `${s.designation} (obsolète → ${b.reprendre_ref ? s.ref : t.ref})`;
+    await pg.query(`UPDATE catalogue SET ref=$1, designation=$2, en_sommeil=TRUE, pl_product_id=NULL, stock_sav=0, updated_at=NOW() WHERE id=$3`,
+      [refAncien, designAncien.slice(0, 250), s.id]);
+    // 2) La cible récupère la référence, le lien Pennylane, le stock SAV et ce qui lui manque
+    await pg.query(`UPDATE catalogue SET
+        ref = CASE WHEN $2::boolean THEN $3 ELSE ref END,
+        pl_product_id = COALESCE(pl_product_id, $4),
+        stock_sav = COALESCE(stock_sav,0) + $5,
+        prix_achat_suede = COALESCE(prix_achat_suede, $6), prix_public_ttc = COALESCE(prix_public_ttc, $7), poids = COALESCE(poids, $8),
+        ref_fournisseur = COALESCE(NULLIF(ref_fournisseur,''), $9),
+        image_data = COALESCE(image_data, $10), en_sommeil = FALSE, updated_at = NOW()
+      WHERE id=$1`,
+      [t.id, !!b.reprendre_ref, s.ref, s.pl_product_id || null, s.stock_sav || 0, s.prix_achat_suede, s.prix_public_ttc, s.poids, s.ref_fournisseur || null, s.image_data || null]);
+    // 3) Rattachements : commandes Suède, zones de rangement, quantités à Paris
+    await pg.query('UPDATE commandes_suede_lignes SET catalogue_id=$1 WHERE catalogue_id=$2', [t.id, s.id]).catch(() => {});
+    await pg.query(`INSERT INTO catalogue_zones (catalogue_id, emplacement, zone) SELECT $1, emplacement, zone FROM catalogue_zones WHERE catalogue_id=$2
+      ON CONFLICT (catalogue_id, emplacement) DO NOTHING`, [t.id, s.id]);
+    await pg.query('DELETE FROM catalogue_zones WHERE catalogue_id=$1', [s.id]);
+    await pg.query(`INSERT INTO catalogue_emplacements (catalogue_id, emplacement, quantite) SELECT $1, emplacement, quantite FROM catalogue_emplacements WHERE catalogue_id=$2
+      ON CONFLICT (catalogue_id, emplacement) DO UPDATE SET quantite = catalogue_emplacements.quantite + EXCLUDED.quantite, updated_at=NOW()`, [t.id, s.id]);
+    await pg.query('DELETE FROM catalogue_emplacements WHERE catalogue_id=$1', [s.id]);
+    // Inventaires en cours : la feuille de comptage affiche les nouvelles références
+    await pg.query(`UPDATE inventaires_lignes l SET ref=c.ref, designation=c.designation FROM catalogue c, inventaires i
+      WHERE c.id=l.catalogue_id AND i.id=l.inventaire_id AND i.statut='en_cours' AND l.catalogue_id = ANY($1::int[])`, [[t.id, s.id]]).catch(() => {});
+    await pg.query('COMMIT');
+    const fin = await db.get('SELECT id, ref, designation FROM catalogue WHERE id=$1', [t.id]);
+    try { await addAlerte('catalogue', t.id, `🔗 Pièce « ${s.designation} » (${s.ref}) fusionnée dans « ${fin.designation} » (${fin.ref}) ; ancienne fiche en sommeil sous ${refAncien}.`); } catch (_) {}
+    res.json({ ok: true, cible: fin, ancienne_ref: refAncien, stock_vf_ancien: s.stock || 0, vf_ancien: s.vf_product_id || null, pl_deplace: !!(s.pl_product_id && !t.pl_product_id) });
+  } catch (e) {
+    try { await pg.query('ROLLBACK'); } catch (_) {}
+    res.status(500).json({ error: e.message });
+  } finally { pg.release(); }
 });
 // Mise en sommeil / réveil d'une pièce (retirée du catalogue sans être supprimée)
 router.post('/catalogue/:id/sommeil', async (req, res) => {
