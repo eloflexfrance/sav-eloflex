@@ -158,6 +158,31 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  // Synthèse Lagord + Paris : comptages des inventaires en cours (ou, à défaut, du dernier validé) côte à côte
+  router.get('/inventaires-synthese', async (req, res) => {
+    try {
+      await ensureTables(db);
+      const invDe = async e => (await db.get(`SELECT id, periode, statut, valide_at FROM inventaires WHERE emplacement=$1 AND statut IN ('en_cours','valide')
+        ORDER BY (statut='en_cours') DESC, COALESCE(valide_at, created_at) DESC LIMIT 1`, [e])) || null;
+      const iL = await invDe('lagord'), iP = await invDe('paris');
+      const lignesDe = async inv => inv ? new Map((await db.all('SELECT catalogue_id, compte, zone, note FROM inventaires_lignes WHERE inventaire_id=$1', [inv.id])).map(l => [l.catalogue_id, l])) : new Map();
+      const mL = await lignesDe(iL), mP = await lignesDe(iP);
+      const st = await stocksParEmplacement(db);
+      const cat = await db.all(`SELECT id, ref, ref_fournisseur, designation, prix_achat_suede, COALESCE(en_sommeil,false) AS en_sommeil FROM catalogue
+        WHERE stock_actif IS DISTINCT FROM false ORDER BY ref`);
+      const lignes = [];
+      for (const c of cat) {
+        const s = st.get(c.id) || {}, l = mL.get(c.id), p = mP.get(c.id);
+        const cL = l && l.compte != null ? l.compte : null, cP = p && p.compte != null ? p.compte : null;
+        if (c.en_sommeil && !s.total && cL == null && cP == null) continue;
+        lignes.push({ id: c.id, ref: c.ref, ref_fournisseur: c.ref_fournisseur || null, designation: c.designation, pu: c.prix_achat_suede != null ? +c.prix_achat_suede : null,
+          stock_vf: s.total || 0, stock_lagord: s.lagord || 0, stock_paris: s.paris || 0, compte_lagord: cL, compte_paris: cP,
+          zone_lagord: l && l.zone || null, zone_paris: p && p.zone || null, note: [l && l.note, p && p.note].filter(Boolean).join(' · ') || null });
+      }
+      res.json({ lagord: iL, paris: iP, lignes });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   router.get('/inventaires', async (req, res) => {
     try {
       await ensureTables(db);
@@ -372,12 +397,12 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
     try {
       const inv = await db.get('SELECT * FROM inventaires WHERE id=$1', [req.params.id]);
       if (!inv) return res.status(404).json({ error: 'Inventaire introuvable' });
-      const lignes = await db.all(`SELECT l.*, c.prix_achat_suede FROM inventaires_lignes l LEFT JOIN catalogue c ON c.id=l.catalogue_id
+      const lignes = await db.all(`SELECT l.*, c.prix_achat_suede, c.ref_fournisseur FROM inventaires_lignes l LEFT JOIN catalogue c ON c.id=l.catalogue_id
         WHERE l.inventaire_id=$1 ORDER BY l.zone NULLS LAST, l.ref`, [inv.id]);
       const q = v => { const s = v == null ? '' : String(v); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
       const num = v => v == null || v === '' ? '' : String(v).replace('.', ',');
-      const out = ['Zone;Référence;Désignation;Stock au lancement;Compté;Écart validé;Prix achat Suède;Note;Saisi par'];
-      for (const l of lignes) out.push([q(l.zone), q(l.ref), q(l.designation), l.theorique, l.compte == null ? '' : l.compte, l.ecart == null ? '' : l.ecart, num(l.prix_achat_suede), q(l.note), q(l.maj_par)].join(';'));
+      const out = ['Zone;Référence;Réf. fournisseur (Suède);Désignation;Stock au lancement;Compté;Écart validé;Prix achat Suède;Note;Saisi par'];
+      for (const l of lignes) out.push([q(l.zone), q(l.ref), q(l.ref_fournisseur), q(l.designation), l.theorique, l.compte == null ? '' : l.compte, l.ecart == null ? '' : l.ecart, num(l.prix_achat_suede), q(l.note), q(l.maj_par)].join(';'));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="Inventaire_${(EMPL[inv.emplacement] || {}).nom || inv.emplacement}_${inv.periode}.csv"`.replace(/ /g, '_'));
       res.send('﻿' + out.join('\r\n'));

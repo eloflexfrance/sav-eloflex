@@ -23,6 +23,7 @@ const lienVF = id => `https://${_compteVF || 'eloflex'}.vosfactures.fr/warehouse
 async function renderInventaire(ttl, c, a){
   ttl.textContent = _T('Inventaire');
   if (I.id) return renderFeuille(ttl, c, a);
+  if (I.synthese) return renderSynthese(ttl, c, a);
   a.innerHTML = '';
   const d = await API.get('/inventaires');
   _compteVF = d.compte_vf;
@@ -44,6 +45,7 @@ async function renderInventaire(ttl, c, a){
             : (peutEcrire() ? `<button class="btn primary" onclick="invDemarrer('${e.code}')"><i class="ti ti-plus"></i>${_T('Démarrer l’inventaire')} ${libPeriode(d.periode)}</button>` : '')}
         </div>`; }).join('')}
     </div>
+    <div style="margin:-8px 0 20px"><button class="btn" onclick="invSynthese(true)"><i class="ti ti-columns"></i>${_T('Synthèse Lagord + Paris')}</button></div>
     <h3 style="font-size:15px;margin-bottom:8px">${_T('Historique')}</h3>
     ${d.historique.length ? `<div class="table-wrap"><table class="t"><thead><tr>
         <th>${_T('Mois')}</th><th>${_T('Emplacement')}</th><th>${_T('Validé le')}</th><th>${_T('Par')}</th><th style="text-align:right">${_T('Écarts')}</th><th style="text-align:right">${_T('Valeur achat')}</th><th>VosFactures</th><th></th></tr></thead>
@@ -60,7 +62,7 @@ async function invDemarrer(code){
   try { const r = await API.post('/inventaires', { emplacement: code }); I.id = r.id; I.q = ''; I.filtre = 'tous'; render(); }
   catch (e) { toast('Erreur : ' + e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
-function invOuvrir(id){ I.id = id; I.q = ''; I.filtre = 'tous'; I.fzone = ''; render(); }
+function invOuvrir(id){ I.synthese = false; I.id = id; I.q = ''; I.filtre = 'tous'; I.fzone = ''; render(); }
 function invRetour(){ I.id = null; I.data = null; render(); }
 
 async function renderFeuille(ttl, c, a){
@@ -372,5 +374,75 @@ async function invValider(){
   }
 }
 
+// ── Synthèse Lagord + Paris (colonnes côte à côte, écart par rapport au stock VosFactures) ──
+function invSynthese(on){ I.synthese = !!on; I.id = null; I.sq = ''; I.sf = I.sf || 'tous'; render(); }
+const stSyn = l => {
+  const compte = l.compte_lagord != null || l.compte_paris != null;
+  if (!compte) return l.stock_vf ? 'non' : 'vide';
+  const e = (l.compte_lagord || 0) + (l.compte_paris || 0) - l.stock_vf;
+  return e === 0 ? 'ok' : e > 0 ? 'plus' : 'moins';
+};
+async function renderSynthese(ttl, c, a){
+  ttl.textContent = _T('Synthèse inventaire Lagord + Paris');
+  const d = I.syn = await API.get('/inventaires-synthese');
+  const lib = i => i ? `${libPeriode(i.periode)} — ${i.statut === 'en_cours' ? _T('en cours') : _T('validé le') + ' ' + dateFr(i.valide_at)}` : _T('aucun inventaire');
+  a.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+    <button class="btn" onclick="invSynthese(false)"><i class="ti ti-arrow-left"></i>${_T('Tous les inventaires')}</button>
+    <button class="btn" onclick="invSyntheseCSV()"><i class="ti ti-file-spreadsheet"></i>${_T('Export Excel (CSV)')}</button></div>`;
+  const L = d.lignes, S = k => L.filter(l => stSyn(l) === k);
+  const val = arr => arr.reduce((s, l) => s + ((l.compte_lagord || 0) + (l.compte_paris || 0) - l.stock_vf) * (l.pu || 0), 0);
+  const tot = k => L.reduce((s, l) => s + (l[k] || 0), 0);
+  const carte = (t, v, col) => `<div style="background:var(--bg);border-radius:10px;padding:10px 12px"><div style="font-size:12px;color:var(--text2)">${t}</div><div style="font-weight:700;font-size:17px;${col ? 'color:' + col : ''}">${v}</div></div>`;
+  c.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Lagord : <b>${lib(d.lagord)}</b> · Paris : <b>${lib(d.paris)}</b> · ${_T('Écart = Lagord + Paris comptés − stock VosFactures (total des deux sites).')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">
+      ${carte(_T('Compté Lagord'), tot('compte_lagord') + ' u.')}${carte(_T('Compté Paris'), tot('compte_paris') + ' u.')}
+      ${carte(_T('Conformes'), S('ok').length)}${carte(_T('En surplus'), S('plus').length + ' · +' + eur(val(S('plus'))), 'var(--success)')}
+      ${carte(_T('Manquantes'), S('moins').length + ' · ' + eur(val(S('moins'))), 'var(--danger)')}${carte(_T('Non comptées (stock VF > 0)'), S('non').length, '#b45309')}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <input id="syn-q" class="search-bar" style="max-width:300px" placeholder="${_T('Référence ou désignation…')}" value="${e_(I.sq || '')}">
+      <select id="syn-f" class="form-input" style="width:auto;padding:6px 8px">${[['tous', 'Toutes les pièces'], ['ecarts', 'Avec écart'], ['moins', 'Manquantes'], ['plus', 'En surplus'], ['non', 'Non comptées (stock VF > 0)'], ['ok', 'Conformes']].map(([v, l]) => `<option value="${v}" ${I.sf === v ? 'selected' : ''}>${_T(l)}</option>`).join('')}</select>
+      <span id="syn-n" style="font-size:13px;color:var(--text2);align-self:center"></span></div>
+    <div class="table-wrap"><table class="t"><thead><tr><th>${_T('Réf.')}</th><th>${_T('Désignation')}</th><th style="text-align:right">${_T('Stock VF')}</th>
+      <th style="text-align:right;background:rgba(37,99,235,.08)">Lagord</th><th style="text-align:right;background:rgba(124,58,237,.08)">Paris</th>
+      <th style="text-align:right">${_T('Total')}</th><th style="text-align:right">${_T('Écart')}</th><th style="text-align:right">${_T('Valeur')}</th><th>${_T('Remarque')}</th></tr></thead>
+      <tbody id="syn-body"></tbody></table></div>`;
+  $('syn-q').oninput = ev => { I.sq = ev.target.value; dessinerSynthese(); };
+  $('syn-f').onchange = ev => { I.sf = ev.target.value; dessinerSynthese(); };
+  dessinerSynthese();
+}
+function lignesSynthese(){
+  const mots = norm(I.sq || '').split(/\s+/).filter(Boolean);
+  return I.syn.lignes.filter(l => { const s = stSyn(l);
+    if (I.sf === 'ecarts' ? !(s === 'plus' || s === 'moins') : I.sf !== 'tous' && s !== I.sf) return false;
+    if (I.sf === 'tous' && s === 'vide') return false;
+    const t = norm(l.ref + ' ' + l.designation); return mots.every(m => t.includes(m)); });
+}
+function dessinerSynthese(){
+  const v = lignesSynthese(), b = $('syn-body'); if (!b) return;
+  const f = x => x == null ? '<span style="color:var(--text3)">—</span>' : x;
+  b.innerHTML = v.slice(0, 2000).map(l => { const s = stSyn(l), tot = (l.compte_lagord || 0) + (l.compte_paris || 0), e = s === 'non' ? null : tot - l.stock_vf;
+    return `<tr><td class="mono">${e_(l.ref)}</td><td>${e_(l.designation)}</td><td style="text-align:right">${l.stock_vf}</td>
+      <td style="text-align:right;font-weight:700;background:rgba(37,99,235,.05)">${f(l.compte_lagord)}${l.zone_lagord ? `<div style="font-size:11px;color:var(--text3);font-weight:400">${e_(l.zone_lagord)}</div>` : ''}</td>
+      <td style="text-align:right;font-weight:700;background:rgba(124,58,237,.05)">${f(l.compte_paris)}${l.zone_paris ? `<div style="font-size:11px;color:var(--text3);font-weight:400">${e_(l.zone_paris)}</div>` : ''}</td>
+      <td style="text-align:right">${s === 'non' ? f(null) : tot}</td>
+      <td style="text-align:right;font-weight:700;color:${e > 0 ? 'var(--success)' : e < 0 ? 'var(--danger)' : 'var(--text3)'}">${e == null ? `<span style="color:#b45309;font-weight:600;font-size:12px">${_T('non comptée')}</span>` : e > 0 ? '+' + e : e}</td>
+      <td style="text-align:right;font-size:12.5px">${e && l.pu ? eur(e * l.pu) : ''}</td><td style="font-size:12px;color:var(--text2)">${e_(l.note || '')}</td></tr>`; }).join('')
+    || `<tr><td colspan="9" style="color:var(--text3);padding:14px">${_T('Aucune pièce')}</td></tr>`;
+  $('syn-n').textContent = v.length + ' ' + _T('pièce(s)');
+}
+function invSyntheseCSV(){
+  const q = x => { const s = x == null ? '' : String(x); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const out = ['Référence;Réf. fournisseur (Suède);Désignation;Stock VF;Compté Lagord;Zone Lagord;Compté Paris;Zone Paris;Total compté;Écart;Prix achat Suède;Valeur écart;Statut;Remarque'];
+  const ST = { ok: 'Conforme', plus: 'Surplus', moins: 'Manquant', non: 'Non comptée', vide: 'Non comptée (stock 0)' };
+  for (const l of lignesSynthese()) { const s = stSyn(l), tot = (l.compte_lagord || 0) + (l.compte_paris || 0), e = s === 'non' || s === 'vide' ? '' : tot - l.stock_vf;
+    out.push([q(l.ref), q(l.ref_fournisseur), q(l.designation), l.stock_vf, l.compte_lagord ?? '', q(l.zone_lagord), l.compte_paris ?? '', q(l.zone_paris), s === 'non' || s === 'vide' ? '' : tot, e,
+      l.pu != null ? String(l.pu).replace('.', ',') : '', e !== '' && l.pu ? String(Math.round(e * l.pu * 100) / 100).replace('.', ',') : '', ST[s], q(l.note)].join(';')); }
+  const blob = new Blob(['\ufeff' + out.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Synthese_inventaire_Lagord_Paris_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+Object.assign(window, { invSynthese, invSyntheseCSV });
 Object.assign(window, { invZoneAuto, invZone, invGererZones, invZoneAjouter, invZoneRenommer, invZoneSupprimer, invZonesFermer, renderInventaire, invDemarrer, invOuvrir, invRetour, invSaisie, invNote, invTouche, invSupprimer, invControle, invOpt, invValider });
 })();
