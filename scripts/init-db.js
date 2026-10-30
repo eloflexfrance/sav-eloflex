@@ -660,6 +660,8 @@ async function initDB() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_ecl_vues_modele ON eclates_vues(modele_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_ecl_lignes_vue ON eclates_lignes(vue_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS idx_ecl_lignes_ref ON eclates_lignes(ref)`);
+      // Ligne de renvoi vers une autre vue (étiquettes « Page N » des vues d'ensemble)
+      await client.query(`ALTER TABLE eclates_lignes ADD COLUMN IF NOT EXISTS vue_cible TEXT`);
 
       // ── Fil d'équipe (discussions / annonces internes) ─────────────
       await client.query(`CREATE TABLE IF NOT EXISTS discussion_messages (

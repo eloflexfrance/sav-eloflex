@@ -42,9 +42,9 @@ async function importerEclate(pool, b) {
          JSON.stringify(v.clip || null), JSON.stringify(v.reperes || []), !!v.ocr])).rows[0];
       const all = [...(v.items || []).map(i => ({ ...i, cable: false })), ...(v.extras || []).map(i => ({ ...i, cable: true }))];
       for (const [j, i] of all.entries()) {
-        await pg.query(`INSERT INTO eclates_lignes (vue_id, ordre, pos, ref, desc_en, desc_fr_auto, qty, note, cable)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [vr.id, j, i.pos || null, i.ref || null, i.desc || null, i.fr_auto || null, i.qty || null, i.note || null, !!i.cable]);
+        await pg.query(`INSERT INTO eclates_lignes (vue_id, ordre, pos, ref, desc_en, desc_fr_auto, qty, note, cable, vue_cible)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [vr.id, j, i.pos || null, i.ref || null, i.desc || null, i.fr_auto || null, i.qty || null, i.note || null, !!i.cable, i.vue_cible || null]);
         nl++;
       }
     }
@@ -65,6 +65,7 @@ async function importerEclatesLivres(pool) {
   for (const f of fs.readdirSync(dir).filter(x => x.endsWith('.json'))) {
     try {
       const b = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      if (b.format === 'eclate-ajout-v1') { await ajouterVues(pool, b, f); continue; }
       const slug = b.meta && b.meta.slug; if (!slug) continue;
       const r = await pool.query(`SELECT m.id, (SELECT COUNT(*)::int FROM eclates_vues v WHERE v.modele_id=m.id) AS nb
         FROM eclates_modeles m WHERE m.slug=$1`, [slug]);
@@ -90,6 +91,47 @@ async function importerEclatesLivres(pool) {
       console.log(`✅ Éclaté ${slug} importé (${res.vues} vues, ${res.lignes} lignes)`);
     } catch (e) { console.error(`❌ Import éclaté ${f} :`, e.message); }
   }
+}
+
+// Ajout de vues à un éclaté déjà en base (ex. couverture + vue d'ensemble oubliées), sans toucher aux vues
+// existantes ni aux corrections faites dans l'appli. Idempotent : une vue dont le code existe déjà est ignorée.
+async function ajouterVues(pool, b, fichier) {
+  const m = (await pool.query('SELECT id FROM eclates_modeles WHERE slug=$1', [b.slug])).rows[0];
+  if (!m) return;
+  const existants = new Set((await pool.query('SELECT code FROM eclates_vues WHERE modele_id=$1', [m.id])).rows.map(r => r.code));
+  const nouvelles = (b.views || []).filter(v => v.code && !existants.has(v.code));
+  if (!nouvelles.length) return;
+  const pg = await pool.connect();
+  try {
+    await pg.query('BEGIN');
+    await pg.query('UPDATE eclates_vues SET ordre = ordre + $2 WHERE modele_id=$1', [m.id, nouvelles.length]);   // les nouvelles vues passent devant
+    for (const [page, svg] of Object.entries(b.pages || {})) {
+      const ex = await pg.query('SELECT 1 FROM eclates_pages WHERE modele_id=$1 AND page=$2', [m.id, parseInt(page)]);
+      if (!ex.rows.length) await pg.query('INSERT INTO eclates_pages (modele_id, page, svg) VALUES ($1,$2,$3)', [m.id, parseInt(page), svg]);
+    }
+    let nl = 0;
+    for (const [k, v] of nouvelles.entries()) {
+      const vr = (await pg.query(`INSERT INTO eclates_vues (modele_id, code, page, ordre, nom_en, nom_fr, assembly_ref, clip, reperes, ocr)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [m.id, v.code, v.page, k, v.nom_en || null, v.nom_fr || null, v.assembly_ref || null, JSON.stringify(v.clip || null), JSON.stringify(v.reperes || []), !!v.ocr])).rows[0];
+      for (const [j, i] of (v.items || []).entries()) {
+        await pg.query(`INSERT INTO eclates_lignes (vue_id, ordre, pos, ref, desc_en, desc_fr_auto, qty, note, cable, vue_cible)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,FALSE,$9)`, [vr.id, j, i.pos || null, i.ref || null, i.desc || null, i.fr_auto || null, i.qty || null, i.note || null, i.vue_cible || null]);
+        nl++;
+      }
+    }
+    // Vues encore nommées « Page N » : on leur donne un vrai nom (un nom corrigé dans l'appli est conservé)
+    for (const [code, n] of Object.entries(b.renommer || {})) {
+      await pg.query(`UPDATE eclates_vues SET nom_en = CASE WHEN nom_en ~ '^Page [0-9]+$' THEN $3 ELSE nom_en END,
+          nom_fr = CASE WHEN nom_fr IS NULL OR nom_fr ~ '^Page [0-9]+$' THEN $4 ELSE nom_fr END WHERE modele_id=$1 AND code=$2`, [m.id, code, n.en, n.fr]);
+    }
+    await pg.query('UPDATE eclates_modeles SET updated_at=NOW() WHERE id=$1', [m.id]);
+    await pg.query('COMMIT');
+    console.log(`✅ Éclaté ${b.slug} : ${nouvelles.length} vue(s) ajoutée(s), ${nl} ligne(s) (${fichier})`);
+  } catch (e) {
+    try { await pg.query('ROLLBACK'); } catch (_) {}
+    throw e;
+  } finally { pg.release(); }
 }
 
 module.exports = { importerEclate, importerEclatesLivres };

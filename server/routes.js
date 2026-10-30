@@ -1181,7 +1181,8 @@ router.get('/eclates/:id', async (req, res) => {
         (SELECT c.designation FROM catalogue c WHERE COALESCE(v.assembly_ref,'') <> ''
            AND regexp_replace(UPPER(c.ref),'[^A-Z0-9]','','g') = regexp_replace(UPPER(v.assembly_ref),'[^A-Z0-9]','','g') LIMIT 1) AS assembly_designation
       FROM eclates_vues v WHERE v.modele_id=$1 ORDER BY v.ordre, v.id`, [m.id]);
-    const lignes = await db.all(`SELECT l.id, l.vue_id, l.ordre, l.pos, l.ref, l.desc_en, l.desc_fr, l.desc_fr_auto, l.qty, l.note, l.cable,
+    if (!global._eclVueCibleOk) { try { await db.run('ALTER TABLE eclates_lignes ADD COLUMN IF NOT EXISTS vue_cible TEXT'); global._eclVueCibleOk = true; } catch (_) {} }
+    const lignes = await db.all(`SELECT l.id, l.vue_id, l.ordre, l.pos, l.ref, l.desc_en, l.desc_fr, l.desc_fr_auto, l.qty, l.note, l.cable, l.vue_cible,
         l.modifie_par, l.updated_at, cat.id AS cat_id, cat.designation AS cat_designation, cat.stock AS cat_stock,
         cat.stock_alerte AS cat_stock_alerte, cat.pxht AS cat_prix_distrib, cat.prix_public_ttc AS cat_prix_public,
         cat.tva_distributeur AS cat_tva

@@ -688,8 +688,14 @@ function drawOverlay(){
     if (b.deleted) return;
     const lead = b.px != null;
     let lx = b.cx, ly = b.cy;
-    if (lead){ const dx = b.px - b.cx, dy = b.py - b.cy, Ln = Math.hypot(dx, dy) || 1; lx = b.cx + dx / Ln * b.r; ly = b.cy + dy / Ln * b.r; }
-    h += `<g class="hs" data-k="${k}" data-num="${e_(b.num)}"><circle class="ring" cx="${b.cx}" cy="${b.cy}" r="${b.r + 2.5}"/></g>`;
+    // Repère rectangulaire (étiquette « Page N » d'une vue d'ensemble) ou bulle ronde
+    const rect = b.w && b.h;
+    if (lead){ const dx = b.px - b.cx, dy = b.py - b.cy, Ln = Math.hypot(dx, dy) || 1;
+      if (rect){ const k2 = Math.min(Math.abs(b.w / 2 / (dx || 1e-9)), Math.abs(b.h / 2 / (dy || 1e-9))); lx = b.cx + dx * k2; ly = b.cy + dy * k2; }
+      else { lx = b.cx + dx / Ln * b.r; ly = b.cy + dy / Ln * b.r; } }
+    h += `<g class="hs" data-k="${k}" data-num="${e_(b.num)}">${rect
+      ? `<rect class="ring" x="${b.cx - b.w / 2 - 2.5}" y="${b.cy - b.h / 2 - 2.5}" width="${b.w + 5}" height="${b.h + 5}" rx="5"/>`
+      : `<circle class="ring" cx="${b.cx}" cy="${b.cy}" r="${b.r + 2.5}"/>`}</g>`;
     if (lead) h += `<line class="lead" data-k="${k}" x1="${lx}" y1="${ly}" x2="${b.px}" y2="${b.py}"/><circle class="halo" data-k="${k}" cx="${b.px}" cy="${b.py}" r="4"/><circle class="dot" data-k="${k}" cx="${b.px}" cy="${b.py}" r="2.6"/>`;
   });
   ov.innerHTML = h; svg.appendChild(ov);
@@ -697,7 +703,12 @@ function drawOverlay(){
     el.addEventListener('mouseenter', ev => { hot(el.dataset.num, true); tipShow(el.dataset.num, ev); });
     el.addEventListener('mousemove', tipMove);
     el.addEventListener('mouseleave', () => { hot(el.dataset.num, false); tipHide(); });
-    el.addEventListener('click', ev => { ev.stopPropagation(); if (E.edit) return editerBulle(+el.dataset.k); select(el.dataset.num, true); });
+    el.addEventListener('click', ev => { ev.stopPropagation(); if (E.edit) return editerBulle(+el.dataset.k);
+      // Étiquette de renvoi (« Page 5 ») : on ouvre directement la vue correspondante
+      const lien = cur().items.find(i => i.vue_cible && i.nums.includes(el.dataset.num));
+      const vc = lien && E.data.vues.find(x => x.code === lien.vue_cible);
+      if (vc) { back = { v: cur(), pos: E.sel }; return show(vc.id, null, true); }
+      select(el.dataset.num, true); });
   });
 }
 
@@ -725,13 +736,14 @@ function list(){
           ${it.cat_id && !it.cat_masque && !it.cat_fiche_masquee ? `<button data-fiche="${it.cat_id}">${T('fiche')}</button>` : ''}
           <button class="ecl-pen" data-edit="${it.id}" title="${T('edit')}"><i class="ti ti-pencil"></i></button></div>
         ${sub && sub.id !== v.id ? `<span class="ecl-tag" data-go="${sub.id}">${T('detail')}</span>` : ''}
+        ${(() => { const vc = it.vue_cible && E.data.vues.find(x => x.code === it.vue_cible); return vc ? `<span class="ecl-tag" data-go="${vc.id}">${T('detail')}</span>` : ''; })()}
         ${oth.map(o => `<span class="ecl-tag" data-go="${o.v.id}" data-pos="${e_(o.pos)}">${e_(T('posOn')(o.pos, vname(o.v)))}</span>`).join('')}
         ${!isCable && !has && !oth.length ? `<span class="ecl-tag warn">${T('notMarked')}</span>` : ''}
         ${it.dup === 'dup' ? `<span class="ecl-tag warn">${T('dup')}</span>` : ''}
         ${it.horscat && L() === 'fr' && !it.cat_masque && !it.cat_fiche_masquee ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
         ${it.note ? `<span class="ecl-tag warn">${T('sold')}</span>` : ''}
       </div>
-      <div class="ecl-right">${T('qty')} ${e_(it.qty || '—')}${it.cat_id && L() === 'fr' && !it.cat_masque && it.cat_prix_distrib != null ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TV('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TV('Ajouter au devis')}</button>` : ''}</div>
+      <div class="ecl-right">${it.vue_cible ? '' : `${T('qty')} ${e_(it.qty || '—')}`}${it.cat_id && L() === 'fr' && !it.cat_masque && it.cat_prix_distrib != null ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && !it.vue_cible && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TV('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TV('Ajouter au devis')}</button>` : ''}</div>
     </div>`;
   };
   v.items.forEach(it => h += row(it, false));
@@ -784,7 +796,7 @@ function select(key, scroll, zoom){
 function tipShow(num, ev){
   const its = items(num), t = $('ecl-tip');
   t.innerHTML = !its.length ? `<b>${TR('Repère')} ${e_(num)}</b><div class="ecl-en">${T('noLine')}</div>`
-    : its.map(it => `<div style="margin-bottom:4px"><b>${e_(num)} · ${e_(label(it))}</b>${(L() === 'fr' || L() === 'sv') && it.desc_en && label(it) !== it.desc_en ? `<div class="ecl-en">${e_(it.desc_en)}</div>` : ''}<div class="ecl-ref">${e_(it.ref || '')} · ${T('qty')} ${e_(it.qty || '—')} ${stockBadge(it)}</div></div>`).join('');
+    : its.map(it => `<div style="margin-bottom:4px"><b>${e_(num)} · ${e_(label(it))}</b>${(L() === 'fr' || L() === 'sv') && it.desc_en && label(it) !== it.desc_en ? `<div class="ecl-en">${e_(it.desc_en)}</div>` : ''}${it.vue_cible ? `<div class="ecl-ref">${T('detail')}</div>` : `<div class="ecl-ref">${e_(it.ref || '')} · ${T('qty')} ${e_(it.qty || '—')} ${stockBadge(it)}</div>`}</div>`).join('');
   t.style.display = 'block'; tipMove(ev);
 }
 function tipMove(ev){ const t = $('ecl-tip'); if (!t) return; t.style.left = Math.min(ev.clientX + 16, innerWidth - t.offsetWidth - 10) + 'px'; t.style.top = Math.min(ev.clientY + 16, innerHeight - t.offsetHeight - 10) + 'px'; }
