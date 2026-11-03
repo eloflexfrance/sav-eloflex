@@ -88,14 +88,25 @@ async function resolvePennylaneCustomerName(api, customer) {
   if (direct) return direct;
   const id = customer.id || customer.source_id;
   if (!id) return '';
-  if (_plCustomerCache[id] !== undefined) return _plCustomerCache[id];
-  try {
-    const { data } = await api.get(`/customers/${id}`);
-    const c = data.customer || data || {};
-    _plCustomerCache[id] = c.name || c.company_name || c.label
-      || [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || '';
-  } catch (_) { _plCustomerCache[id] = ''; }
-  return _plCustomerCache[id];
+  if (_plCustomerCache[id]) return _plCustomerCache[id];
+  // Pennylane V2 : selon le type de client, la fiche n'est lisible que via
+  // /company_customers ou /individual_customers (/customers/{id} renvoie parfois 404).
+  let nom = '';
+  for (const ep of [`/customers/${id}`, `/company_customers/${id}`, `/individual_customers/${id}`]) {
+    try {
+      const { data } = await api.get(ep);
+      const c = data.customer || data.company_customer || data.individual_customer || data || {};
+      nom = (c.name || c.company_name || c.label
+        || [c.first_name, c.last_name].filter(Boolean).join(' ') || '').trim();
+      if (nom) break;
+    } catch (_) {}
+  }
+  // Dernier recours : la fiche distributeur locale liée à ce client Pennylane
+  if (!nom) {
+    try { const r = await db.get('SELECT nom FROM clients WHERE pl_customer_id=$1 AND COALESCE(nom,\'\')<>\'\' LIMIT 1', [String(id)]); if (r) nom = r.nom; } catch (_) {}
+  }
+  if (nom) _plCustomerCache[id] = nom;   // on ne mémorise pas un échec (429, réseau…)
+  return nom;
 }
 
 // Résout un produit Pennylane (pour récupérer la référence quand la ligne ne porte
@@ -504,7 +515,7 @@ async function lookupDocumentPennylane(numero) {
           vf_id: doc.id,
           numero: detail.invoice_number || detail.number || detail.label || numero,
           date_commande: dateCmd ? String(dateCmd).slice(0, 10) : null,
-          distributeur: distrib || null,
+          distributeur: distrib || (clientPL && clientPL.nom) || null,
           pl_customer_id: plCustomerId ? String(plCustomerId) : null,
           modele: (essai && essai.modele) || modele, quantite, lignes, essai, client: clientPL,
           num_serie: mSerie ? mSerie[0] : (lignes.find(l => l.num_serie) ? lignes.find(l => l.num_serie).num_serie : null),
@@ -798,7 +809,7 @@ function _statutDevisPL(st) {
 // Accepté / facturé → converti ; refusé / expiré → ignoré. Les devis signés dans l'appli ne bougent pas.
 async function majStatutsDevisPennylane() {
   const api = plApi();
-  const rows = await db.all(`SELECT id, numero, pennylane_id, doc_type FROM devis
+  const rows = await db.all(`SELECT id, numero, pennylane_id, doc_type, distributeur_nom FROM devis
     WHERE statut='ouvert' AND source='pennylane' AND pennylane_id IS NOT NULL AND signed_at IS NULL`);
   const bilan = { verifies: 0, converti: 0, ignore: 0, erreurs: 0, details: [] };
   for (const d of rows) {
@@ -809,7 +820,16 @@ async function majStatutsDevisPennylane() {
         const { data } = await api.get(ep + d.pennylane_id, { validateStatus: s => s < 500 });
         if (!data || data.error || data.message === 'Not Found') continue;
         const o = data.quote || data.commercial_document || data;
-        if (o && (o.id || o.status)) { st = String(o.status || o.state || '').toLowerCase(); trouve = true; break; }
+        if (o && (o.id || o.status)) {
+          st = String(o.status || o.state || '').toLowerCase(); trouve = true;
+          // Rattrapage : devis affiché sans nom de distributeur
+          if (!String(d.distributeur_nom || '').trim()) {
+            const nom = o.customer?.name || o.customer?.company_name || o.customer_name
+              || await resolvePennylaneCustomerName(api, o.customer || o.client || (o.customer_id ? { id: o.customer_id } : null));
+            if (nom) { await db.run('UPDATE devis SET distributeur_nom=$1 WHERE id=$2', [nom, d.id]); bilan.noms = (bilan.noms || 0) + 1; }
+          }
+          break;
+        }
       } catch (_) {}
     }
     if (!trouve) { bilan.erreurs++; continue; }
@@ -872,7 +892,7 @@ async function upsertDevisPennylane(api, doc, opts = {}) {
   if (ex) {
     await db.run(
       `UPDATE devis SET statut=CASE WHEN signed_at IS NOT NULL THEN statut WHEN $1 IN ('converti','ignoré') THEN $1 ELSE statut END,
-        numero=$2, distributeur_nom=$3, client_email=$4, date_devis=$5, date_expiration=$6, montant=$7, devise=$8,
+        numero=$2, distributeur_nom=COALESCE(NULLIF($3,''), distributeur_nom), client_email=COALESCE($4, client_email), date_devis=$5, date_expiration=$6, montant=$7, devise=$8,
         lignes=$9, doc_type=$10, vf_statut=$11, doc_url=COALESCE($12, doc_url), updated_at=NOW() WHERE id=$13`,
       [statut, numero, nom, email, date, dateExp, montant, detail.currency || 'EUR', JSON.stringify(lignes), docType, st, docUrl, ex.id]);
     return 'updated';

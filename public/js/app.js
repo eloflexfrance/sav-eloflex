@@ -1242,6 +1242,8 @@ function lienSuiviColis(transporteur, numero){
   switch(transporteur){
     case 'Chronopost':  return `https://www.chronopost.fr/tracking-no-cms/suivi-page?listeNumerosLT=${n}&langue=fr`;
     case 'Colissimo':   return `https://www.laposte.fr/outils/suivre-vos-envois?code=${n}`;
+    case 'La Poste':    return `https://www.laposte.fr/outils/suivre-vos-envois?code=${n}`;
+    case 'DSV':         return `https://www.dsv.com/mydsv/tracking-public/?refNumber=${n}&language_region=fr-FR_FR`;
     case 'DB Schenker': return `https://www.dbschenker.com/app/tracking-public/?refNumber=${n}&language_region=fr-FR_FR`;
     case 'UPS':          return `https://www.ups.com/track?loc=fr_FR&tracknum=${n}`;
     default: return null;
@@ -1908,6 +1910,8 @@ async function modalCommande(id, prefill){
               <option value="Colissimo" ${cm.transporteur==='Colissimo'?'selected':''}>Colissimo (La Poste)</option>
               <option value="DB Schenker" ${cm.transporteur==='DB Schenker'?'selected':''}>DB Schenker</option>
               <option value="UPS" ${cm.transporteur==='UPS'?'selected':''}>UPS</option>
+              <option value="DSV" ${cm.transporteur==='DSV'?'selected':''}>DSV</option>
+              <option value="La Poste" ${cm.transporteur==='La Poste'?'selected':''}>La Poste</option>
               <option value="Autre" ${cm.transporteur==='Autre'?'selected':''}>Autre</option>
             </select>
           </div>

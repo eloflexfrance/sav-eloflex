@@ -9479,7 +9479,9 @@ router.get('/demandes-info/distributeurs', requireAuth, async (req, res) => {
 });
 
 // ── « Test suivi commandes » : vue tableur (lecture ; écritures via /commandes) ──
-require('./commandes-tableur')(router, { db, statutCommande });
+require('./commandes-tableur')(router, { db, statutCommande, sendBrevoMail, mailCharte: _mailCharte,
+  signatureSav: () => SIGNATURE_EMAIL_HTML.replace('Service Commercial', 'Service Après-Vente')
+    .replace(/info@eloflex\.fr/g, 'sav@eloflex.fr').replace('06&nbsp;87&nbsp;04&nbsp;69&nbsp;19', '07&nbsp;54&nbsp;37&nbsp;47&nbsp;40') });
 
 // ── Inventaire mensuel par emplacement (Lagord / Paris / Stock SAV) → régularisation VosFactures ──
 require('./inventaires')(router, { db, addAlerte });

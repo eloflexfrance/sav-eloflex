@@ -16,6 +16,7 @@ const BANDES = {           // couleurs des colonnes du fichier Excel (teintes l�
 const GROUPES = ['De Base','Distri Club','Providom','Négocié','Bastide','Particulier','VYV','Facturation Eloflex AB'];
 const STATUTS = ['Auto','En attente confirmation','À préparer','En préparation','Expédié','Livré','Facturé','Problème','Annulé','Avoir'];
 const DOCS = ['', 'Oui', 'Non', 'Partielle'];
+const TRANSPORTEURS = ['', 'DSV', 'UPS', 'La Poste', 'Chronopost'];
 
 const COLS = [
   { k:'groupe',          l:'Groupe',       w:96,  type:'liste', options:GROUPES, libre:true },
@@ -30,11 +31,12 @@ const COLS = [
   { k:'date_commande',   l:'Date',         w:90,  bande:'bleu', type:'date' },
   { k:'vf_order_id',     l:'Order',        w:76,  bande:'bleu' },
   { k:'client_final',    l:'Client',       w:120, bande:'peche' },
-  { k:'num_suivi',       l:'N° Suivi',     w:165, bande:'peche', mono:true, aide:'En rouge : livraison en cours · en noir : livré' },
+  { k:'num_suivi',       l:'N° Suivi',     w:165, bande:'peche', mono:true, aide:'En rouge : livraison en cours · en noir : livré · ↗ = suivi chez le transporteur' },
+  { k:'transporteur',    l:'Transporteur', w:100, bande:'peche', type:'liste', options:TRANSPORTEURS, aide:'Transporteur du colis : donne le bon lien de suivi' },
   { k:'date_livraison',  l:'Livraison',    w:90,  bande:'peche', type:'date' },
   { k:'num_serie',       l:'N° de série',  w:150, bande:'peche', mono:true },
-  { k:'docs_fre',        l:'Docs FRE',     w:80,  bande:'peche', type:'liste', options:DOCS },
-  { k:'num_facture',     l:'Facture',      w:92,  bande:'bleu2', aide:'En vert : payée · en rouge : impayée' },
+  { k:'docs_fre',        l:'Docs FRE',     w:80,  bande:'peche', type:'liste', options:DOCS, aide:'Double-clic : envoyer la notice du modèle et les documents pour le transport aérien' },
+  { k:'num_facture',     l:'Facture',      w:92,  bande:'bleu2', aide:'En vert : payée · en rouge : impayée · ↗ = ouvrir dans Pennylane' },
   { k:'invoice_se',      l:'Invoice SE',   w:88,  bande:'jaune' },
   { k:'informations',    l:'Informations', w:320 },
   { k:'statut',          l:'Statut',       w:130, type:'statut', aide:'« Auto » = calculé par l’appli (bordereau, suivi, livraison, facture…)' },
@@ -84,7 +86,15 @@ function htmlCellule(r, c){
     const cls = (typeof cmdStatutClass === 'function') ? cmdStatutClass(s) : '';
     return `<span class="badge ${cls}" style="font-size:11px">${_e(s)}</span>${(r.statut && r.statut !== 'Auto') ? ' <i class="ti ti-hand-finger" title="' + _T('Statut forcé à la main') + '" style="font-size:11px;color:var(--text3)"></i>' : ''}`;
   }
-  if (c.k === 'docs_fre') { const v = r.docs_fre || ''; return v === 'Oui' ? '✔ Oui' : v === 'Non' ? '✘ Non' : _e(v); }
+  if (c.k === 'docs_fre') { const v = r.docs_fre || ''; return (v === 'Oui' ? '✔ Oui' : v === 'Non' ? '✘ Non' : _e(v)) + ` <a href="#" class="ct-lien" title="${_T('Envoyer les documents (notice, transport aérien)')}" onclick="event.preventDefault();event.stopPropagation();ctDocs(${r.id})"><i class="ti ti-mail-forward"></i></a>`; }
+  if (c.k === 'num_suivi' && r.num_suivi) {
+    const u = (typeof lienhSuiviInter === 'function') ? lienhSuiviInter(r.transporteur, r.num_suivi) : '#';
+    return `<a href="${_e(u)}" target="_blank" rel="noopener" class="ct-lien" title="${_T('Suivre le colis')}${r.transporteur ? ' (' + _e(r.transporteur) + ')' : ''}" onclick="event.stopPropagation()"><i class="ti ti-external-link"></i></a> ${_e(r.num_suivi)}`;
+  }
+  if (c.k === 'num_facture' && (r.num_facture || r.num_facture_pennylane)) {
+    const n = r.num_facture || r.num_facture_pennylane;
+    return `<a href="#" class="ct-lien" title="${_T('Ouvrir la facture dans Pennylane')}" onclick="event.preventDefault();event.stopPropagation();ouvrirPennylaneParNumero('${_e(String(n).replace(/'/g, ''))}','customer_invoices')"><i class="ti ti-external-link"></i></a> ${_e(n)}`;
+  }
   return _e(brut(r, c));
 }
 
@@ -132,6 +142,7 @@ async function renderCommandesTableur(ttl, c, a){
       @keyframes ctok{0%{box-shadow:inset 0 0 0 9999px rgba(0,160,64,.35)}100%{box-shadow:inset 0 0 0 9999px rgba(0,160,64,0)}}
       #ct-tbl td.ct-err{box-shadow:inset 0 0 0 9999px rgba(220,0,0,.18)}
       #ct-tbl td.ct-ro{color:var(--text2)}
+      #ct-tbl a.ct-lien{color:#1F5C8C;text-decoration:none;font-size:12px;padding:0 1px} #ct-tbl a.ct-lien:hover{color:#217346}
       #ct-tbl tr.ct-new td{background:rgba(33,115,70,.04);color:var(--text3);font-style:italic}
       #ct-tbl tr.ct-brouillon td{background:rgba(255,200,0,.12)}
       #ct-tbl td input.ct-ed,#ct-tbl td select.ct-ed{width:100%;height:24px;box-sizing:border-box;border:none;outline:none;font:inherit;padding:0 2px;background:#fff;color:#111}
@@ -305,6 +316,7 @@ document.addEventListener('keydown', ev => {
 function ctEditer(premiereTouche){
   const c = COLS[CT.sel.c], td = cellule(CT.sel.r, CT.sel.c); if (!td) return;
   const r = CT.vue[CT.sel.r];   // undefined = ligne « nouvelle commande »
+  if (c.k === 'docs_fre' && r && premiereTouche == null) return ctDocs(r.id);
   if (c.ro) {
     if (r && r.client_id && ['adresse', 'client_tel', 'client_email', 'edi'].includes(c.k))
       toast(_T('Information de la fiche distributeur : double-cliquez sur ↗ ou modifiez la fiche client.'), 'ti-lock');
@@ -314,7 +326,8 @@ function ctEditer(premiereTouche){
   let el;
   if (c.type === 'statut' || (c.type === 'liste' && !c.libre)) {
     el = document.createElement('select'); el.className = 'ct-ed';
-    const opts = c.type === 'statut' ? STATUTS : c.options;
+    let opts = c.type === 'statut' ? STATUTS : c.options;
+    if (val && !opts.includes(val)) opts = opts.concat([val]);   // ancienne valeur (ex. Colissimo, DB Schenker) conservée
     el.innerHTML = opts.map(o => `<option value="${_e(o)}" ${o === val ? 'selected' : ''}>${o === 'Auto' ? _T('Auto (calculé)') : (o || '—')}</option>`).join('');
   } else {
     el = document.createElement('input'); el.className = 'ct-ed'; el.type = 'text';
@@ -399,6 +412,7 @@ async function ctEnregistrer(iLigne, iCol, saisie, opts){
     const i = majLigne(frais);
     const td2 = cellule(i, iCol); if (td2) { td2.classList.add('ct-ok'); setTimeout(() => td2.classList.remove('ct-ok'), 1300); }
     ctMontrerSel(false);
+    if (c.k === 'bdc' && val && !opts.silencieux) ctBdcLigne(frais, val);
   } catch (e) {
     if (td) td.classList.add('ct-err');
     toast(_T('Non enregistré : ') + e.message, 'ti-alert-circle', 'var(--danger)');
@@ -419,6 +433,16 @@ async function ctBrouillon(c, val, opts){
   CT.brouillon = CT.brouillon || {};
   if (c.k === 'statut' && val === 'Auto') val = '';
   if (val === '') delete CT.brouillon[c.k]; else CT.brouillon[c.k] = val;
+  if (c.k === 'bdc' && val && !CT.brouillon.distributeur_nom && !(opts && opts.silencieux)) {
+    ctCorps();
+    const info = await ctBdcChercher(val); if (!info) { ctCorps(); return; }
+    const b = CT.brouillon;
+    b.distributeur_nom = (info.fiche && info.fiche.nom) || info.distributeur;
+    if (info.modele && !b.modele) b.modele = info.modele;
+    if (info.accessoire && !b.accessoire) b.accessoire = info.accessoire;
+    if (!b.date_commande) b.date_commande = new Date().toISOString().slice(0, 10);
+    b._pl = info;
+  }
   if (!CT.brouillon.distributeur_nom) { ctCorps(); return; }
   const r = await ctCreer(CT.brouillon, opts);
   if (r) { CT.brouillon = {}; ctCorps(); ctMontrerSel(); }
@@ -428,8 +452,12 @@ async function ctCreer(d, opts){
   opts = opts || {};
   const nom = String(d.distributeur_nom || '').trim();
   const cl = (window._DISTRIB_CLIENTS || []).find(x => (x.nom || '').trim().toLowerCase() === nom.toLowerCase());
-  if (!cl && !opts.silencieux && !confirm(_T('« ') + nom + _T(' » ne correspond à aucune fiche distributeur.') + '\n' + _T('Une nouvelle fiche distributeur sera créée (sav@eloflex.fr est prévenu). Continuer ?'))) return null;
-  const body = { ...d, distributeur_nom: cl ? cl.nom : nom, client_id: cl ? cl.id : undefined, annee_onglet: CT.annee };
+  if (!cl && !(d._pl && d._pl.fiche) && !opts.silencieux && !confirm(_T('« ') + nom + _T(' » ne correspond à aucune fiche distributeur.') + '\n' + _T('Une nouvelle fiche distributeur sera créée (sav@eloflex.fr est prévenu). Continuer ?'))) return null;
+  const pl = d._pl || null;
+  const body = { ...d, distributeur_nom: cl ? cl.nom : nom, client_id: cl ? cl.id : (pl && pl.fiche ? pl.fiche.id : undefined), annee_onglet: CT.annee };
+  delete body._pl;
+  if (pl) { body.pl_customer_id = pl.pl_customer_id || undefined; if (pl.client) { body.email = pl.client.email || undefined; body.tel = pl.client.tel || undefined; }
+    if (pl.demo) { body.modele_demo = true; body.type_fauteuil_demo = true; } else if (pl.fauteuil) body.type_fauteuil_neuf = true; }
   if (!body.date_commande) body.date_commande = new Date().toISOString().slice(0, 10);
   const docs = body.docs_fre; delete body.docs_fre;
   if (body.statut === '') delete body.statut;
@@ -439,6 +467,7 @@ async function ctCreer(d, opts){
     CT.miens[id] = Date.now();
     if (docs && id) await API.updateCommande(id, { docs_fre: docs });
     if (!cl) { try { window._DISTRIB_CLIENTS = await API.clients(); } catch (_) {} }
+    if (pl && pl.client) await ctCompleterFiche(id, pl);
     const frais = await API.get(`/commandes-tableur/ligne/${id}`);
     CT.rows.push(frais); ctCalculerVue();
     const i = CT.vue.findIndex(x => x.id === id);
@@ -543,5 +572,111 @@ function ctDemarrerRafraichissement(){
   }, 30000);
 }
 
-Object.assign(window, { renderCommandesTableur, ctAnnee, ctRecherche, ctFiltre, ctTrier, ctNouvelleLigne, ctFiche, ctRedim, ctLegende });
+// ── Bon de commande : récupération Pennylane ──────────────────────
+async function ctBdcChercher(numero){
+  toast(_T('Recherche du bon de commande dans Pennylane…'), 'ti-loader-2');
+  try {
+    const r = await API.get(`/commandes-tableur/bdc?numero=${encodeURIComponent(numero)}`);
+    if (r.configured === false) { toast(_T('Pennylane non configuré'), 'ti-alert-circle', 'var(--warning)'); return null; }
+    if (!r.found) { toast(_T('Bon de commande introuvable dans Pennylane : ') + numero, 'ti-alert-circle', 'var(--warning)'); return null; }
+    return r;
+  } catch (e) { toast(_T('Recherche Pennylane impossible : ') + e.message, 'ti-alert-circle', 'var(--danger)'); return null; }
+}
+// Complète la fiche distributeur (champs vides seulement) avec les coordonnées Pennylane
+async function ctCompleterFiche(commandeId, info){
+  try {
+    const r = await API.get(`/commandes-tableur/ligne/${commandeId}`);
+    if (!r.client_id || !info.client) return [];
+    const c = info.client;
+    const x = await API.post(`/commandes-tableur/completer-fiche/${r.client_id}`, { email: c.email, tel: c.tel, adresse: c.adresse, cp: c.cp, ville: c.ville, pl_customer_id: info.pl_customer_id });
+    return x.completes || [];
+  } catch (_) { return []; }
+}
+// N° de BDC saisi sur une ligne existante : on complète ce qui est vide (modèle, accessoires, date, fiche)
+async function ctBdcLigne(r, numero){
+  const info = await ctBdcChercher(numero); if (!info) return;
+  const corps = {}, faits = [];
+  const nomPL = (info.fiche && info.fiche.nom) || info.distributeur;
+  if (!r.client_id && info.fiche) { corps.client_id = info.fiche.id; corps.distributeur_nom = info.fiche.nom; faits.push(_T('distributeur')); }
+  if (info.modele && !r.modele) { corps.modele = info.modele; faits.push(_T('modèle')); }
+  if (info.accessoire && !r.accessoire) { corps.accessoire = info.accessoire; faits.push(_T('accessoires')); }
+  if (!r.date_commande) { corps.date_commande = new Date().toISOString().slice(0, 10); faits.push(_T('date')); }
+  if (info.demo && !r.modele_demo) { corps.modele_demo = true; corps.type_fauteuil_demo = true; }
+  try {
+    if (Object.keys(corps).length) { await API.updateCommande(r.id, corps); CT.miens[r.id] = Date.now(); }
+    const f = await ctCompleterFiche(r.id, info);
+    if (f.length) faits.push(_T('fiche distributeur') + ' (' + f.join(', ') + ')');
+    const frais = await API.get(`/commandes-tableur/ligne/${r.id}`); majLigne(frais); ctMontrerSel(false);
+    const autre = nomPL && r.distributeur_nom && nomPL.trim().toLowerCase() !== String(r.distributeur_nom).trim().toLowerCase();
+    toast(faits.length ? _T('Pennylane : ') + faits.join(', ') + (autre ? ' — ⚠ ' + _T('client Pennylane : ') + nomPL : '')
+      : _T('Bon de commande trouvé (cases déjà remplies conservées)') + (autre ? ' — ⚠ ' + _T('client Pennylane : ') + nomPL : ''), autre ? 'ti-alert-triangle' : 'ti-check', autre ? 'var(--warning)' : 'var(--success)');
+  } catch (e) { toast(_T('Non enregistré : ') + e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+
+// ── Docs FR : notice du modèle + documents transport aérien, envoyés par e-mail ──
+async function ctDocs(id){
+  const r = CT.rows.find(x => x.id === id); if (!r) return;
+  let d; try { d = await API.get('/commandes-docs'); } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); return; }
+  CT._docs = d;
+  const m0 = (d.modeles || []).find(m => { const n = String(m.nom || '').replace(/^Eloflex\s+/i, '').toLowerCase(); return n && new RegExp('(mod[eè]le\\s+|^)' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(String(r.modele || '')); });
+  showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="font-size:19px;color:var(--accent)"></i><h2>${_T('Envoyer les documents')} — ${_e(r.distributeur_nom || '')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">${_T('Modèle du fauteuil (notice d’utilisation)')}</label>
+        <select class="form-input" id="ctd-modele" onchange="ctDocsListe()"><option value="">${_T('— Aucune notice —')}</option>${(d.modeles || []).map(m => `<option value="${m.id}" ${m0 && m0.id === m.id ? 'selected' : ''}>${_e(m.nom)}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">${_T('Documents à envoyer')}</label><div id="ctd-liste"></div>
+        <a href="#" onclick="event.preventDefault();ctDocsGerer()" style="font-size:12.5px;color:var(--accent)"><i class="ti ti-settings"></i> ${_T('Gérer les documents pour le transport aérien')}</a></div>
+      <div class="form-group"><label class="form-label">${_T('Envoyer à')}</label><input class="form-input" id="ctd-email" value="${_e(String(r.client_email || '').split(/[,;\s]+/)[0] || '')}" placeholder="email@distributeur.fr"></div>
+      <div style="font-size:12.5px;color:var(--text2)">${_T('Après l’envoi, « Docs FRE » passe à « Oui » et une note est ajoutée à la commande.')} ${_T('Statut actuel')} : <b>${_e(r.docs_fre || '—')}</b>
+        · ${_T('Changer sans envoyer')} : ${['Oui', 'Non', 'Partielle', ''].map(v => `<a href="#" onclick="event.preventDefault();ctDocsStatut(${id},'${v}')">${v || _T('vide')}</a>`).join(' / ')}</div>
+      <div id="ctd-msg" style="font-size:13px;margin-top:6px"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${_T('Fermer')}</button>
+      <button class="btn primary" id="ctd-ok" onclick="ctDocsEnvoyer(${id})"><i class="ti ti-send"></i>${_T('Envoyer par e-mail')}</button></div>`);
+  ctDocsListe();
+}
+function ctDocsListe(){
+  const d = CT._docs || {}, box = $('ctd-liste'); if (!box) return;
+  const m = (d.modeles || []).find(x => String(x.id) === String(($('ctd-modele') || {}).value));
+  const items = [];
+  if (m && m.lien_notice) items.push({ nom: _T('Notice d’utilisation') + ' ' + m.nom, url: m.lien_notice });
+  (d.aerien || []).forEach(a => items.push({ nom: a.nom, url: a.url }));
+  CT._docsItems = items;
+  box.innerHTML = items.length ? items.map((it, i) => `<label style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13.5px"><input type="checkbox" class="ctd-chk" data-i="${i}" checked>
+      <span>${_e(it.nom)} <a href="${_e(it.url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--text3)"><i class="ti ti-external-link"></i></a></span></label>`).join('')
+    : `<div style="font-size:13px;color:var(--text3)">${_T('Aucun document : choisissez un modèle ou ajoutez les documents pour le transport aérien.')}</div>`;
+}
+async function ctDocsEnvoyer(id){
+  const docs = [...document.querySelectorAll('.ctd-chk')].filter(x => x.checked).map(x => CT._docsItems[+x.dataset.i]);
+  const email = (($('ctd-email') || {}).value || '').trim(), msg = $('ctd-msg');
+  if (!docs.length) { msg.innerHTML = `<span style="color:var(--danger)">${_T('Cochez au moins un document.')}</span>`; return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.split(/[,;\s]+/)[0] || '')) { msg.innerHTML = `<span style="color:var(--danger)">${_T('Adresse e-mail invalide.')}</span>`; return; }
+  const sel = $('ctd-modele'), modele_nom = sel && sel.value ? sel.options[sel.selectedIndex].text : '';
+  const b = $('ctd-ok'); b.disabled = true;
+  try {
+    const r = await API.post(`/commandes/${id}/envoyer-docs`, { email, docs, modele_nom });
+    closeModal(); toast(_T('Documents envoyés à ') + r.envoye_a.join(', '), 'ti-mail-check', 'var(--success)');
+    const f = await API.get(`/commandes-tableur/ligne/${id}`); majLigne(f); ctMontrerSel(false);
+  } catch (e) { b.disabled = false; msg.innerHTML = `<span style="color:var(--danger)">${_e(e.message)}</span>`; }
+}
+async function ctDocsStatut(id, v){
+  try { await API.updateCommande(id, { docs_fre: v }); CT.miens[id] = Date.now(); closeModal(); const f = await API.get(`/commandes-tableur/ligne/${id}`); majLigne(f); ctMontrerSel(false); }
+  catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+function ctDocsGerer(){
+  const l = ((CT._docs || {}).aerien || []).slice();
+  const ligne = (d, i) => `<div style="display:flex;gap:6px;margin-bottom:6px"><input class="form-input ctg-nom" placeholder="${_T('Nom du document')}" value="${_e(d.nom || '')}" style="flex:1">
+    <input class="form-input ctg-url" placeholder="https://…" value="${_e(d.url || '')}" style="flex:2"><button class="btn sm" onclick="this.parentElement.remove()" title="${_T('Retirer')}"><i class="ti ti-x"></i></button></div>`;
+  const box = $('ctd-liste'); if (!box) return;
+  box.innerHTML = `<div style="font-size:12.5px;color:var(--text2);margin-bottom:6px">${_T('Documents envoyés pour le transport aérien (attestation batteries, fiche de sécurité, certificat UN38.3…) : un nom et un lien (PDF en ligne).')}</div>
+    <div id="ctg-l">${(l.length ? l : [{}]).map(ligne).join('')}</div>
+    <button class="btn sm" onclick="document.getElementById('ctg-l').insertAdjacentHTML('beforeend', ${_e(JSON.stringify(ligne({}, 0)))})"><i class="ti ti-plus"></i>${_T('Ajouter')}</button>
+    <button class="btn sm primary" onclick="ctDocsSauver()"><i class="ti ti-check"></i>${_T('Enregistrer la liste')}</button>`;
+}
+async function ctDocsSauver(){
+  const docs = [...document.querySelectorAll('#ctg-l > div')].map(x => ({ nom: x.querySelector('.ctg-nom').value, url: x.querySelector('.ctg-url').value })).filter(d => d.nom.trim() && d.url.trim());
+  try { const r = await API.put('/commandes-docs/aerien', { docs }); CT._docs.aerien = r.aerien; toast(_T('Liste enregistrée'), 'ti-check', 'var(--success)'); ctDocsListe(); }
+  catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+
+Object.assign(window, { ctDocs, ctDocsListe, ctDocsEnvoyer, ctDocsStatut, ctDocsGerer, ctDocsSauver, renderCommandesTableur, ctAnnee, ctRecherche, ctFiltre, ctTrier, ctNouvelleLigne, ctFiche, ctRedim, ctLegende });
 })();
