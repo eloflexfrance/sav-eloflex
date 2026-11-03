@@ -2912,11 +2912,25 @@ async function basculerRelanceDemos(activer){
 }
 window.basculerRelanceDemos = basculerRelanceDemos;
 
+// Saisie d'une date dans un calendrier (affiché jj/mm/aaaa) ; renvoie AAAA-MM-JJ ou null si annulé
+function choisirDate(titre, iso){
+  return new Promise(ok=>{
+    const v = /^\d{4}-\d{2}-\d{2}/.test(String(iso||'')) ? String(iso).slice(0,10) : '';
+    window._choixDate = d => { closeModal(); window._choixDate = null; ok(d); };
+    showModal(`<div class="modal-header"><i class="ti ti-calendar" style="font-size:19px;color:var(--accent)"></i><h2>${esc(titre)}</h2><button class="btn sm" onclick="_choixDate(null)"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body"><input type="date" class="form-input" id="choix-date" value="${v}" style="max-width:220px"
+        onkeydown="if(event.key==='Enter'&&this.value)_choixDate(this.value)"></div>
+      <div class="modal-footer"><button class="btn" onclick="_choixDate(null)">${TR('Annuler')}</button>
+        <button class="btn primary" onclick="const x=document.getElementById('choix-date').value; if(!x){alert('${TR('Choisissez une date')}');return;} _choixDate(x)"><i class="ti ti-check"></i>${TR('Valider')}</button></div>`);
+    const m=document.querySelector('#modal-area .modal'); if(m) m.style.maxWidth='420px';
+    setTimeout(()=>{ const i=document.getElementById('choix-date'); if(i){ i.focus(); try{ i.showPicker && i.showPicker(); }catch(_){} } },60);
+  });
+}
+window.choisirDate = choisirDate;
 async function demoProlonger(id, cur){
-  const d = prompt(TR('Nouvelle date de rappel (AAAA-MM-JJ) :'), cur||'');
+  const d = await choisirDate(TR('Nouvelle date de rappel'), cur);
   if(!d) return;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(d.trim())){ alert('Format attendu : AAAA-MM-JJ'); return; }
-  try{ await API.demoProlonger(id, d.trim()); toast(TR('Rappel prolongé au ')+d.trim(),'ti-calendar-plus'); refreshBadges(); render(); }catch(e){ alert(e.message); }
+  try{ await API.demoProlonger(id, d); toast(TR('Rappel prolongé au ')+fd(d),'ti-calendar-plus'); refreshBadges(); render(); }catch(e){ alert(e.message); }
 }
 async function demoCloturer(id, resultat){
   const lbl = resultat==='facture' ? TR('vendue / facturée')
@@ -2930,10 +2944,9 @@ async function demoCloturer(id, resultat){
   let retourDate = null;
   if(resultat==='retour'){
     const today = new Date().toISOString().slice(0,10);
-    const d = prompt(TR('Date de retour à Éloflex France (AAAA-MM-JJ) :'), today);
-    if(d===null) return;                              // annulé
-    retourDate = (d.trim() || today);
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(retourDate)){ alert(TR('Format attendu : AAAA-MM-JJ')); return; }
+    const d = await choisirDate(TR('Date de retour à Éloflex France'), today);
+    if(!d) return;                                    // annulé
+    retourDate = d;
   }
   const okMsg = resultat==='facture' ? TR('Démo marquée vendue')
               : resultat==='avoir'   ? TR('Démo clôturée par avoir')
@@ -8962,7 +8975,7 @@ window.pretStatutIcons = pretStatutIcons;
 async function setPretStatutInline(id, statut){
   try{
     if(statut==='prolonge'){
-      const d = prompt(TR('Prorogation accordée jusqu\'au (AAAA-MM-JJ) :'));
+      const d = await choisirDate(TR('Prorogation accordée jusqu\'au'));
       if(!d) return;
       await API.setPretStatut(id, 'prolonge', {prorogation_date:d});
     } else if(statut==='signe'){
@@ -9588,7 +9601,7 @@ window.supprDocSigne = supprDocSigne;
 
 async function pretStatut(id, statut){
   let extra=null;
-  if(statut==='prolonge'){ const d = prompt(TR('Prorogation accordée jusqu\'au (AAAA-MM-JJ) :')); if(!d) return; extra={prorogation_date:d}; }
+  if(statut==='prolonge'){ const d = await choisirDate(TR('Prorogation accordée jusqu\'au')); if(!d) return; extra={prorogation_date:d}; }
   try{ await API.setPretStatut(id, statut, extra); closeModal(); toast(TR('Statut mis à jour'),'ti-check','var(--success)');
     if(STATE.view==='prets') render();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
