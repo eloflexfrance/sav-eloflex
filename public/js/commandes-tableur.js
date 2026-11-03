@@ -142,6 +142,8 @@ async function renderCommandesTableur(ttl, c, a){
       @keyframes ctok{0%{box-shadow:inset 0 0 0 9999px rgba(0,160,64,.35)}100%{box-shadow:inset 0 0 0 9999px rgba(0,160,64,0)}}
       #ct-tbl td.ct-err{box-shadow:inset 0 0 0 9999px rgba(220,0,0,.18)}
       #ct-tbl td.ct-ro{color:var(--text2)}
+      #ct-tbl button.ct-suppr{border:0;background:none;padding:1px 3px;margin-left:1px;font-size:12px;color:#c0c4cc;cursor:pointer;border-radius:4px;vertical-align:middle}
+      #ct-tbl button.ct-suppr:hover{color:#fff;background:var(--danger,#dc2626)} #ct-tbl button.ct-suppr.ct-dbl{color:#d97706}
       #ct-tbl a.ct-lien{color:#1F5C8C;text-decoration:none;font-size:12px;padding:0 1px} #ct-tbl a.ct-lien:hover{color:#217346}
       #ct-tbl tr.ct-new td{background:rgba(33,115,70,.04);color:var(--text3);font-style:italic}
       #ct-tbl tr.ct-brouillon td{background:rgba(255,200,0,.12)}
@@ -214,14 +216,15 @@ function ctTrier(k){
 }
 
 // ── Rendu de la grille ─────────────────────────────────────────────
-function _gauche(i){ let x = 34; for (let j = 0; j < i; j++) x += largeur(COLS[j]); return x; }
+const COL0 = 58;
+function _gauche(i){ let x = COL0; for (let j = 0; j < i; j++) x += largeur(COLS[j]); return x; }
 function ctConstruire(){
   const t = $('ct-tbl'); if (!t) return;
   ctCalculerVue();
-  const totalW = 34 + COLS.reduce((s, c) => s + largeur(c), 0);
+  const totalW = COL0 + COLS.reduce((s, c) => s + largeur(c), 0);
   t.style.width = totalW + 'px';
   const fig = i => i < NB_FIGEES ? ` ct-fig" style="left:${_gauche(i)}px;` : '" style="';
-  t.innerHTML = `<colgroup><col style="width:34px">${COLS.map(c => `<col style="width:${largeur(c)}px">`).join('')}</colgroup>
+  t.innerHTML = `<colgroup><col style="width:${COL0}px">${COLS.map(c => `<col style="width:${largeur(c)}px">`).join('')}</colgroup>
     <thead>
       <tr><th class="ct-fig" style="left:0;text-align:center" title="${_T('Fiche complète')}">↗</th>${COLS.map((c, i) => `<th class="${fig(i)}position:sticky;${c.bande ? 'background:' + BANDES[c.bande].replace(/[\d.]+\)$/, '1)') : ''}" title="${_e(c.aide || '')}">
         <div class="ct-h" onclick="ctTrier('${c.k}')">${_e(c.l)}${c.ro ? ' <i class="ti ti-lock" style="font-size:10px;opacity:.45"></i>' : ''}${CT.tri && CT.tri.k === c.k ? (CT.tri.sens === 1 ? ' ▲' : ' ▼') : ''}</div>
@@ -232,7 +235,7 @@ function ctConstruire(){
 }
 function ligneHtml(r, idx){
   const cls = [(r.modele_demo || r.type_fauteuil_demo) ? 'ct-demo' : '', ['Annulé', 'Avoir'].includes(r.statut_calc) ? 'ct-annule' : ''].join(' ');
-  return `<tr data-i="${idx}" data-id="${r.id}" class="${cls}"><td class="ct-fig" style="left:0;text-align:center;padding:0"><button class="btn sm" style="padding:1px 5px;font-size:11px" title="${_T('Ouvrir la fiche complète (Pennylane, expédition, notes…)')}${r.notes_count ? ' — ' + r.notes_count + ' note(s)' : ''}" onclick="ctFiche(${r.id})"><i class="ti ti-external-link"></i>${r.notes_count ? '<sup style="font-size:9px">' + r.notes_count + '</sup>' : ''}</button></td>${
+  return `<tr data-i="${idx}" data-id="${r.id}" class="${cls}"><td class="ct-fig" style="left:0;text-align:center;padding:0"><button class="btn sm" style="padding:1px 5px;font-size:11px" title="${_T('Ouvrir la fiche complète (Pennylane, expédition, notes…)')}${r.notes_count ? ' — ' + r.notes_count + ' note(s)' : ''}" onclick="ctFiche(${r.id})"><i class="ti ti-external-link"></i>${r.notes_count ? '<sup style="font-size:9px">' + r.notes_count + '</sup>' : ''}</button><button class="ct-suppr${CT._doublons && CT._doublons.has(r.id) ? ' ct-dbl' : ''}" title="${CT._doublons && CT._doublons.has(r.id) ? _T('Doublon possible (même Bdc) — ') : ''}${_T('Supprimer cette ligne')}" onclick="ctSupprimer(${r.id})"><i class="ti ti-trash"></i></button></td>${
     COLS.map((c, j) => `<td data-c="${j}" class="${j < NB_FIGEES ? 'ct-fig ' : ''}${c.ro ? 'ct-ro' : ''}" style="${j < NB_FIGEES ? 'left:' + _gauche(j) + 'px;' : ''}${styleCellule(r, c)}" title="${_e(brut(r, c))}">${htmlCellule(r, c)}</td>`).join('')}</tr>`;
 }
 function ctCorps(){
@@ -242,6 +245,7 @@ function ctCorps(){
   const nouvelle = `<tr data-i="${CT.vue.length}" class="${aBrouillon ? 'ct-brouillon' : 'ct-new'}"><td class="ct-fig" style="left:0;text-align:center"><i class="ti ti-plus" style="font-size:12px"></i></td>${
     COLS.map((c, j) => `<td data-c="${j}" class="${j < NB_FIGEES ? 'ct-fig' : ''}" style="${j < NB_FIGEES ? 'left:' + _gauche(j) + 'px;' : ''}">${
       br[c.k] != null ? _e(c.type === 'date' ? dateFr(br[c.k]) : br[c.k]) : (j === 2 && !aBrouillon ? _T('Nouvelle commande : tapez ici…') : (j === 2 ? '<span style="color:#b45309">' + _T('← distributeur requis') + '</span>' : ''))}</td>`).join('')}</tr>`;
+  CT._doublons = ctDoublons();
   b.innerHTML = CT.vue.map(ligneHtml).join('') + nouvelle;
   const n = CT.vue.length, tot = CT.rows.length;
   const ong = CT.annees.find(x => x.annee === CT.annee); if (ong && ong.n !== tot) { ong.n = tot; ctOnglets(); }
@@ -529,6 +533,30 @@ document.addEventListener('paste', async ev => {
 });
 
 // ── Fiche complète, redimensionnement, légende ─────────────────────
+// Doublons possibles : même n° de Bdc (hors vide) sur plusieurs lignes de l'onglet
+function ctDoublons(){
+  const par = {}, ids = new Set();
+  CT.rows.forEach(r => { const k = String(r.bdc || '').trim().toUpperCase(); if (k) (par[k] = par[k] || []).push(r.id); });
+  Object.values(par).forEach(l => { if (l.length > 1) l.forEach(id => ids.add(id)); });
+  return ids;
+}
+async function ctSupprimer(id){
+  const r = CT.rows.find(x => x.id === id); if (!r) return;
+  const dateTxt = r.date_commande ? dateFr(String(r.date_commande).slice(0, 10)) : '';
+  const desc = [r.distributeur_nom, r.bdc ? _T('Bdc ') + r.bdc : '', r.modele, dateTxt].filter(Boolean).join(' — ');
+  const autres = String(r.bdc || '').trim() ? CT.rows.filter(x => x.id !== id && String(x.bdc || '').trim().toUpperCase() === String(r.bdc).trim().toUpperCase()).length : 0;
+  if (!confirm(_T('Supprimer définitivement cette ligne ?') + '\n\n' + desc
+      + (autres ? '\n\n' + _T('Doublon : ') + autres + _T(' autre(s) ligne(s) avec ce même Bdc restent dans le tableau.') : '')
+      + (r.notes_count ? '\n\n' + _T('Attention : ') + r.notes_count + _T(' note(s) liée(s) seront aussi supprimées.') : ''))) return;
+  try {
+    await API.del(`/commandes/${id}`);
+    CT.rows = CT.rows.filter(x => x.id !== id);
+    ctCalculerVue();
+    if (CT.sel.r >= CT.vue.length) CT.sel.r = Math.max(0, CT.vue.length - 1);
+    ctCorps();
+    toast(_T('Ligne supprimée'), 'ti-trash', 'var(--success)');
+  } catch (e) { toast((e && e.message) || _T('Suppression impossible'), 'ti-alert-circle', 'var(--danger)'); }
+}
 function ctFiche(id){ const w = $('ct-wrap'); if (w) window._CT_SCROLL = { annee: CT.annee, top: w.scrollTop, left: w.scrollLeft }; modalCommande(id); }
 function ctRedim(ev, k){
   ev.preventDefault(); ev.stopPropagation();
@@ -678,5 +706,5 @@ async function ctDocsSauver(){
   catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
 
-Object.assign(window, { ctDocs, ctDocsListe, ctDocsEnvoyer, ctDocsStatut, ctDocsGerer, ctDocsSauver, renderCommandesTableur, ctAnnee, ctRecherche, ctFiltre, ctTrier, ctNouvelleLigne, ctFiche, ctRedim, ctLegende });
+Object.assign(window, { ctSupprimer, ctDocs, ctDocsListe, ctDocsEnvoyer, ctDocsStatut, ctDocsGerer, ctDocsSauver, renderCommandesTableur, ctAnnee, ctRecherche, ctFiltre, ctTrier, ctNouvelleLigne, ctFiche, ctRedim, ctLegende });
 })();
