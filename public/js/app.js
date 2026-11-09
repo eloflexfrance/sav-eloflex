@@ -2966,6 +2966,63 @@ async function reserverDemoRetour(id, prefill){
 }
 window.reserverDemoRetour=reserverDemoRetour;
 
+// ── Parc de démo : showroom de Paris ───────────────────────────────
+async function demoShowroom(id, on){
+  if(!confirm(on
+    ? TR('Mettre cette démo au showroom de Paris ?')+'\n'+TR('Elle reste prêtable à un distributeur et peut être vendue.')
+    : TR('Retirer cette démo du showroom ? Elle redevient « Disponible ».'))) return;
+  try{ await API.demoShowroom(id, on); toast(on?TR('Démo placée au showroom'):TR('Démo retirée du showroom'),'ti-building-store'); render(); }catch(e){ alert(e.message); }
+}
+window.demoShowroom = demoShowroom;
+
+// ── Parc de démo : date de prêt souhaitée par modèle (rappel par mail) ──
+function pretSouhaitModal(id, modele){
+  const sw = id ? (window._PARC_SOUHAITS||[]).find(x=>x.id===id) : null;
+  if(id && !sw) return;
+  const today = new Date().toISOString().slice(0,10);
+  const v = sw || { modele: modele||'', date_souhaitee:'', date_rappel:'', pour_qui:'', note:'', email: window._PARC_EMAIL_DEFAUT||'sav@eloflex.fr' };
+  const mods = (window._PARC_MODELES||[]);
+  window._psRappelManuel = !!sw;
+  showModal(`<div class="modal-header"><i class="ti ti-calendar-event" style="font-size:19px;color:#9333ea"></i><h2>${sw?TR('Prêt souhaité'):TR('Nouvelle date de prêt souhaitée')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">
+        <div class="form-group"><label class="form-label">${TR('Modèle')} *</label><input class="form-input" id="ps-modele" list="ps-mods" value="${esc(v.modele||'')}"><datalist id="ps-mods">${mods.map(m=>`<option value="${esc(m)}">`).join('')}</datalist></div>
+        <div class="form-group"><label class="form-label">${TR('Pour (distributeur / client)')}</label><input class="form-input" id="ps-pour" value="${esc(v.pour_qui||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Date de prêt souhaitée')} *</label><input type="date" class="form-input" id="ps-date" value="${esc((v.date_souhaitee||'').slice(0,10))}" onchange="pretSouhaitAutoRappel()"></div>
+        <div class="form-group"><label class="form-label">${TR('Date du rappel par mail')} *</label><input type="date" class="form-input" id="ps-rappel" value="${esc((v.date_rappel||'').slice(0,10))}" onchange="window._psRappelManuel=true"><div style="font-size:11.5px;color:var(--text3);margin-top:3px">${TR('Par défaut 7 jours avant la date souhaitée')}</div></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Envoyer le rappel à')} *</label><input class="form-input" id="ps-email" value="${esc(v.email||'')}" placeholder="sav@eloflex.fr">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);margin-top:5px;cursor:pointer"><input type="checkbox" id="ps-defaut"> ${TR('Utiliser cette adresse par défaut pour les prochains rappels')}</label></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Note')}</label><textarea class="form-input" id="ps-note" rows="2">${esc(v.note||'')}</textarea></div>
+      </div>
+      ${sw&&sw.rappel_envoye_at?`<div style="font-size:12.5px;color:#15803d;margin-top:6px"><i class="ti ti-bell-check"></i> ${TR('Rappel envoyé le')} ${fd(String(sw.rappel_envoye_at).slice(0,10))} ${TR('à')} ${esc(sw.email||'')} — ${TR('changer la date de rappel ou l’adresse le renverra.')}</div>`:''}
+    </div>
+    <div class="modal-footer">${sw?`<button class="btn danger" style="margin-right:auto" onclick="pretSouhaitSupprimer(${sw.id})"><i class="ti ti-trash"></i>${TR('Supprimer')}</button>`:''}
+      <button class="btn" onclick="closeModal()">${TR('Annuler')}</button>
+      <button class="btn primary" onclick="pretSouhaitEnregistrer(${sw?sw.id:'null'})"><i class="ti ti-check"></i>${TR('Enregistrer')}</button></div>`);
+  const m=document.querySelector('#modal-area .modal'); if(m) m.style.maxWidth='620px';
+}
+function pretSouhaitAutoRappel(){
+  if(window._psRappelManuel) return;
+  const d=document.getElementById('ps-date').value; if(!d) return;
+  const today=new Date().toISOString().slice(0,10);
+  const r=new Date(d+'T12:00:00'); r.setDate(r.getDate()-7);
+  let iso=r.toISOString().slice(0,10); if(iso<today) iso = today<=d ? today : d;
+  document.getElementById('ps-rappel').value=iso;
+}
+async function pretSouhaitEnregistrer(id){
+  const g=k=>(document.getElementById(k)||{}).value||'';
+  const b={ modele:g('ps-modele').trim(), date_souhaitee:g('ps-date'), date_rappel:g('ps-rappel')||g('ps-date'), pour_qui:g('ps-pour').trim(), note:g('ps-note').trim(), email:g('ps-email').trim(), email_par_defaut:document.getElementById('ps-defaut').checked };
+  if(!b.modele||!b.date_souhaitee||!b.email){ alert(TR('Modèle, date souhaitée et adresse e-mail sont obligatoires.')); return; }
+  try{ if(id) await API.pretSouhaitMaj(id,b); else await API.pretSouhaitCreer(b);
+    closeModal(); toast(TR('Prêt souhaité enregistré — rappel le ')+fd(b.date_rappel)+' → '+b.email,'ti-bell'); render();
+  }catch(e){ alert(e.message); }
+}
+async function pretSouhaitSupprimer(id){
+  if(!confirm(TR('Supprimer cette date de prêt souhaitée (et son rappel) ?'))) return;
+  try{ await API.pretSouhaitSuppr(id); closeModal(); toast(TR('Supprimé'),'ti-trash'); render(); }catch(e){ alert(e.message); }
+}
+Object.assign(window,{ pretSouhaitModal, pretSouhaitAutoRappel, pretSouhaitEnregistrer, pretSouhaitSupprimer });
+
 // ── PARAMÈTRES ────────────────────────────────────────────────────
 
 async function renderParametres(ttl,c,a){
@@ -5159,6 +5216,7 @@ window.parcToggleConclues = parcToggleConclues;
 function parcDemoStatut(d){
   if(d.demo_suivi_resultat==='facture') return {l:'Vendu',c:'#15803d',ic:'ti-cash'};
   if(d.demo_suivi_resultat==='avoir')   return {l:'Avoir',c:'#6b7280',ic:'ti-receipt-refund'};
+  if(d.demo_suivi_resultat==='retour' && d.demo_showroom) return {l:'Showroom',c:'#9333ea',ic:'ti-building-store'};
   if(d.demo_suivi_resultat==='retour')  return {l:'Disponible',c:'#2563eb',ic:'ti-home-check'};
   if(d.rappel_echu)                     return {l:'Rappel échu',c:'#dc2626',ic:'ti-clock-exclamation'};
   return {l:'En démo',c:'#0d9488',ic:'ti-wheelchair'};
@@ -5182,6 +5240,9 @@ async function renderParcDemo(ttl,c,a){
     demos = await API.demosParc();
     prets = await API.prets().catch(()=>[]);
     transferts = await API.transferts().catch(()=>[]);
+    const sh = await API.pretsSouhaits().catch(()=>null);
+    window._PARC_SOUHAITS = (sh && sh.souhaits) || [];
+    window._PARC_EMAIL_DEFAUT = (sh && sh.email_defaut) || 'sav@eloflex.fr';
   }catch(e){ c.innerHTML=`<div class="empty"><i class="ti ti-alert-circle"></i>Erreur : ${esc(e.message)}</div>`; return; }
 
   // Le statut de commande « Avoir » fait autorité : la démo est une annulation → résultat 'avoir'
@@ -5210,7 +5271,8 @@ async function renderParcDemo(ttl,c,a){
   const _TERMINAL = ['facture','avoir'];                       // états qui sortent l'unité du parc actif
   const parcActif   = unites.filter(u=>!_TERMINAL.includes(_stU(u)));  // en essai + disponibles
   const enEssai     = unites.filter(u=>!_stU(u));              // sorties chez un distributeur
-  const disponibles = unites.filter(u=>_stU(u)==='retour');   // revenues à Éloflex FR
+  const showroom    = unites.filter(u=>_stU(u)==='retour' && u.rep.demo_showroom);   // au showroom de Paris (prêtables / vendables)
+  const disponibles = unites.filter(u=>_stU(u)==='retour' && !u.rep.demo_showroom);  // revenues à Éloflex FR
   const echues      = enEssai.filter(u=>u.rep.rappel_echu);
   const vendues     = unites.filter(u=>_stU(u)==='facture');
   const avoirs      = unites.filter(u=>_stU(u)==='avoir');    // clôturées par avoir (annulation)
@@ -5243,7 +5305,7 @@ async function renderParcDemo(ttl,c,a){
     const pretLie = (!isHist && sn) ? pretParSerie.get(sn) : null;   // prêt actif rattaché (par n° de série)
     const pretHolder = pretLie ? (pretLie.client_nom_actuel || pretLie.distributeur_nom || '') : '';
     const detenteur = d.demo_suivi_resultat==='retour'
-      ? 'Éloflex France'
+      ? (d.demo_showroom && !isHist ? TR('Showroom Paris') : 'Éloflex France')
       : (pretHolder || d.demo_localisation_actuelle || d.client_nom || d.distributeur_nom || '—');
     const echeance = (!isHist && pretLie && pretLie.date_retour_prevue) ? (''+pretLie.date_retour_prevue).slice(0,10) : (isHist ? null : d.demo_rappel_date);
     const echEchue = echeance && (''+echeance).slice(0,10) <= _today && d.demo_suivi_resultat!=='facture';
@@ -5276,7 +5338,9 @@ async function renderParcDemo(ttl,c,a){
     const voirBtn = `<button class="btn sm" title="${TR('Voir dans le suivi commandes')}" onclick="setView('commandes',{q:'${esc((d.num_serie||d.bdc||d.modele||'').replace(/'/g,'&#39;'))}'})"><i class="ti ti-arrow-right"></i></button>`;
     const actions = isHist
       ? voirBtn
-      : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Clôturer en avoir (annulation — sort du parc)')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-receipt-refund"></i></button><button class="btn sm" title="${TR('Compte rendu de retour démo (photos, contrôle, pièces, forfaits)')}" onclick="rdNouveau({commande_id:${d.id}${pretLie?', pret_id:'+pretLie.id:''}})"><i class="ti ti-clipboard-check"></i></button>${voirBtn}`;
+      : `${!d.demo_suivi_resultat ? `<button class="btn sm" title="${TR('Retour à Éloflex France (redevient disponible)')}" onclick="demoCloturer(${d.id},'retour')"><i class="ti ti-truck-return"></i></button><button class="btn sm" title="${TR('Prolonger le rappel')}" onclick="demoProlonger(${d.id},'${d.demo_rappel_date||''}')"><i class="ti ti-calendar-plus"></i></button>` : ''}${d.demo_suivi_resultat==='retour' ? (d.demo_showroom
+        ? `<button class="btn sm" title="${TR('Retirer du showroom (redevient « Disponible »)')}" onclick="demoShowroom(${d.id},false)" style="color:#9333ea"><i class="ti ti-building-store"></i><i class="ti ti-arrow-back-up" style="font-size:11px"></i></button>`
+        : `<button class="btn sm" title="${TR('Mettre au showroom de Paris')}" onclick="demoShowroom(${d.id},true)"><i class="ti ti-building-store"></i></button>`) : ''}${d.demo_suivi_resultat!=='facture' ? `<button class="btn sm success" title="${TR('Marquer vendu / facturé')}" onclick="demoCloturer(${d.id},'facture')"><i class="ti ti-file-euro"></i></button>` : ''}<button class="btn sm" title="${TR('Clôturer en avoir (annulation — sort du parc)')}" onclick="demoCloturer(${d.id},'avoir')"><i class="ti ti-receipt-refund"></i></button><button class="btn sm" title="${TR('Compte rendu de retour démo (photos, contrôle, pièces, forfaits)')}" onclick="rdNouveau({commande_id:${d.id}${pretLie?', pret_id:'+pretLie.id:''}})"><i class="ti ti-clipboard-check"></i></button>${voirBtn}`;
     return `<tr data-k="${esc(cle.toLowerCase())}" data-echu="${(!isHist && d.rappel_echu)?1:0}" data-noserie="${(!isHist && !sn)?1:0}">
       <td><span class="badge" style="background:${s.c}22;color:${s.c};border:0.5px solid ${s.c}55"><i class="ti ${s.ic}" style="font-size:13px;margin-right:3px"></i>${s.l}</span>${enMvt?` <span class="badge ouvert" title="${TR('Un transfert est en cours pour ce n° de série')}"><i class="ti ti-arrows-exchange"></i></span>`:''}${avoirBadge}</td>
       <td style="font-weight:600">${esc(d.modele||'—')}${histBadge}</td>
@@ -5308,15 +5372,17 @@ async function renderParcDemo(ttl,c,a){
 
   const tabDemoHtml  = mkTable(enDemoUnits.map(u=>parcRow(u,u.rep,'actif')).join(''), TR('Aucun fauteuil en essai actuellement.'));
   const tabDispoHtml = mkTable(dispoUnits.map(u=>parcRow(u,u.rep,'actif')).join(''), TR('Aucun fauteuil disponible (revenu) pour le moment.'));
+  const tabShowHtml  = mkTable(showroom.map(u=>parcRow(u,u.rep,'actif')).join(''), TR('Aucun fauteuil au showroom. Depuis l’onglet « Disponibles », bouton')+' <i class="ti ti-building-store"></i>.');
   const tabHistHtml  = mkTable(histList.map(x=>parcRow(x.u,x.ep,'hist')).join(''), TR('Aucune démo dans l’historique.'));
 
-  const _TABS=[['demo','ti-wheelchair',TR('En démo'),enDemoUnits.length],['dispo','ti-home-check',TR('Disponibles'),dispoUnits.length],['hist','ti-history',TR('Historique'),histList.length]];
+  const _TABS=[['demo','ti-wheelchair',TR('En démo'),enDemoUnits.length],['dispo','ti-home-check',TR('Disponibles'),dispoUnits.length],['show','ti-building-store',TR('Showroom'),showroom.length],['hist','ti-history',TR('Historique'),histList.length]];
   const tabsBar = `<div style="display:flex;gap:2px;border-bottom:0.5px solid var(--border-s);margin-bottom:12px;flex-wrap:wrap">${_TABS.map(([k,ic,lbl,n])=>`<button class="parc-tab-btn" data-tab="${k}" onclick="parcSetTab('${k}')" style="cursor:pointer;border:none;border-bottom:2px solid ${PARC_TAB===k?'var(--accent)':'transparent'};background:none;color:${PARC_TAB===k?'var(--accent)':'var(--text2)'};font-weight:${PARC_TAB===k?'700':'500'};padding:9px 14px;font-size:14px"><i class="ti ${ic}" style="margin-right:5px"></i>${lbl} <span style="opacity:.6">(${n})</span></button>`).join('')}</div>`;
 
   const demoTable = `${tabsBar}
     <div style="margin-bottom:10px"><input class="form-input" id="parc-q" placeholder="${TR('Rechercher (modèle, série, distributeur…)')}" style="max-width:320px;padding:9px 12px" oninput="parcDemoFiltrer(this.value)"></div>
     <div class="parc-pane" data-tab="demo" style="${PARC_TAB==='demo'?'':'display:none'}">${tabDemoHtml}</div>
     <div class="parc-pane" data-tab="dispo" style="${PARC_TAB==='dispo'?'':'display:none'}">${tabDispoHtml}</div>
+    <div class="parc-pane" data-tab="show" style="${PARC_TAB==='show'?'':'display:none'}">${tabShowHtml}</div>
     <div class="parc-pane" data-tab="hist" style="${PARC_TAB==='hist'?'':'display:none'}">${tabHistHtml}</div>`;
 
   const scT={'En préparation':'attente','En transit':'ouvert','Arrivé':'g','Annulé':'urgent'};
@@ -5397,6 +5463,7 @@ async function renderParcDemo(ttl,c,a){
   const cockpit = `<div class="grid-2" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px">
     ${_kpi(TR('Parc actif'),parcActif.length,'var(--accent)',TR('unités possédées'))}
     ${_kpi(TR('Disponibles'),disponibles.length,'#2563eb',TR('prêtes à repartir'))}
+    ${_kpi(TR('Showroom'),showroom.length,'#9333ea',TR('à Paris'))}
     ${_kpi(TR('En essai'),enEssai.length,'#0d9488',TR('chez un distributeur'))}
     ${_kpi(TR('Retours < 30 j'),retoursProches,echues.length?'var(--danger)':'',echues.length?`${TR('dont')} ${echues.length} ${TR('échus')}`:TR('à venir'))}
     ${_kpi(TR('Sous tension'),tension.length,tension.length?'#b45309':'',TR('modèles à 0 dispo'))}
@@ -5432,12 +5499,14 @@ async function renderParcDemo(ttl,c,a){
   const inv={};
   parcActif.forEach(u=>{
     const k=demoModele(u.rep.modele); if(_isS1(k))return;
-    const g=inv[k]||(inv[k]={m:k,essai:0,dispo:0,units:[]});
-    const d=u.rep, enRetour=_stU(u)==='retour';
-    if(enRetour)g.dispo++; else g.essai++;
-    const distrib=enRetour?'Éloflex France':(d.demo_localisation_actuelle||d.client_nom||d.distributeur_nom||'—');
-    g.units.push({ id:d.id, serie:(u.sn||d.num_serie||''), distrib, dispo:enRetour, echeance:(!enRetour?(d.demo_rappel_date||''):'') });
+    const g=inv[k]||(inv[k]={m:k,essai:0,dispo:0,show:0,units:[]});
+    const d=u.rep, enRetour=_stU(u)==='retour', auShow=enRetour&&!!d.demo_showroom;
+    if(auShow)g.show++; else if(enRetour)g.dispo++; else g.essai++;
+    const distrib=auShow?TR('Showroom Paris'):enRetour?'Éloflex France':(d.demo_localisation_actuelle||d.client_nom||d.distributeur_nom||'—');
+    g.units.push({ id:d.id, serie:(u.sn||d.num_serie||''), distrib, dispo:enRetour, show:auShow, echeance:(!enRetour?(d.demo_rappel_date||''):'') });
   });
+  // Dates de prêt souhaitées, rattachées au modèle (même sans unité au parc)
+  (window._PARC_SOUHAITS||[]).forEach(sw=>{ const k=demoModele(sw.modele); if(_isS1(k))return; const g=inv[k]||(inv[k]={m:k,essai:0,dispo:0,show:0,units:[]}); (g.souhaits||(g.souhaits=[])).push(sw); });
   // Nombre de distributeurs distincts détenant le modèle (hors "Éloflex France" et inconnus)
   Object.values(inv).forEach(g=>{
     g.units.sort((a,b)=> (a.dispo-b.dispo) || String(a.distrib).localeCompare(String(b.distrib)));
@@ -5447,8 +5516,17 @@ async function renderParcDemo(ttl,c,a){
     // Distributeur → id de sa 1ʳᵉ commande (pour ouvrir la fiche au clic sur la pastille)
     g.distribCmd={}; enEssaiU.forEach(x=>{ if(g.distribCmd[x.distrib]==null && x.id) g.distribCmd[x.distrib]=x.id; });
   });
-  const invList=Object.values(inv).sort((a,b)=>(b.essai+b.dispo)-(a.essai+a.dispo)||a.m.localeCompare(b.m));
-  const invTot=invList.reduce((t,g)=>({e:t.e+g.essai,d:t.d+g.dispo,p:t.p+g.essai+g.dispo}),{e:0,d:0,p:0});
+  const invList=Object.values(inv).sort((a,b)=>(b.essai+b.dispo+b.show)-(a.essai+a.dispo+a.show)||a.m.localeCompare(b.m));
+  window._PARC_MODELES = invList.map(g=>g.m);
+  const invTot=invList.reduce((t,g)=>({e:t.e+g.essai,d:t.d+g.dispo,s:t.s+g.show,p:t.p+g.essai+g.dispo+g.show}),{e:0,d:0,s:0,p:0});
+  // Pastilles « prêt souhaité » (clic = modifier) + bouton d'ajout
+  const _souhaitCell=(g)=>{
+    const l=(g.souhaits||[]).slice().sort((a,b)=>String(a.date_souhaitee).localeCompare(String(b.date_souhaitee)));
+    const chips=l.map(sw=>{ const passe=String(sw.date_souhaitee)<_today; const env=!!sw.rappel_envoye_at;
+      const tip=TR('Prêt souhaité le')+' '+fdate(sw.date_souhaitee)+(sw.pour_qui?' — '+sw.pour_qui:'')+'\n'+(env?TR('Rappel envoyé à')+' '+(sw.email||''):TR('Rappel le')+' '+fdate(sw.date_rappel)+' → '+(sw.email||''))+(sw.note?'\n'+sw.note:'');
+      return `<span onclick="event.stopPropagation();pretSouhaitModal(${sw.id})" title="${esc(tip)}" style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;font-size:11.5px;padding:2px 7px;border-radius:10px;white-space:nowrap;background:${passe?'#6b728014':'#9333ea14'};color:${passe?'var(--text3)':'#7e22ce'};border:0.5px solid ${passe?'#6b728044':'#9333ea44'}"><i class="ti ${env?'ti-bell-check':'ti-bell'}" style="font-size:12px"></i>${fdate(sw.date_souhaitee)}${sw.pour_qui?' · '+esc(String(sw.pour_qui).slice(0,22)):''}</span>`; }).join('');
+    return `<div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">${chips}<button class="btn sm" style="padding:1px 6px;font-size:11px" title="${TR('Ajouter une date de prêt souhaitée (avec rappel par mail)')}" onclick="event.stopPropagation();pretSouhaitModal(null,'${esc(g.m).replace(/'/g,'&#39;')}')"><i class="ti ti-calendar-plus"></i></button></div>`;
+  };
   const nbReco=invList.filter(g=>g.dispo===0&&(g.essai+g.dispo)>0).length;
   const _okBadge=`<span class="badge" style="background:#0d948818;color:#0d9488;border:0.5px solid #0d948844;font-size:11px">OK</span>`;
   const _recoBadge=`<span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${TR('à recommander ?')}</span>`;
@@ -5459,21 +5537,23 @@ async function renderParcDemo(ttl,c,a){
       <tbody>${g.units.map(x=>`<tr style="border-top:0.5px solid var(--border-s)">
         <td style="padding:22px 8px;font-family:monospace">${x.serie?esc(x.serie):'<span style=\"color:var(--text3)\">—</span>'}</td>
         <td style="padding:22px 8px;font-weight:600">${x.id?`<span onclick="event.stopPropagation();modalCommande(${x.id})" title="${TR('Ouvrir la commande (compléter le n° de série)')}" style="cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px">${esc(x.distrib)}</span>`:esc(x.distrib)}</td>
-        <td style="padding:22px 8px">${x.dispo?`<span class="badge g" style="font-size:11px">${TR('Disponible')}</span>`:`<span class="badge ouvert" style="font-size:11px">${TR('En essai')}</span>`}</td>
+        <td style="padding:22px 8px">${x.show?`<span class="badge" style="font-size:11px;background:#9333ea18;color:#9333ea;border:0.5px solid #9333ea44">${TR('Showroom')}</span>`:x.dispo?`<span class="badge g" style="font-size:11px">${TR('Disponible')}</span>`:`<span class="badge ouvert" style="font-size:11px">${TR('En essai')}</span>`}</td>
         <td style="padding:22px 8px;color:var(--text2)">${x.echeance?fdate(x.echeance):'—'}</td></tr>`).join('')}</tbody>
     </table></div>`;
   const inventaireCard = `<div class="card" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-list-numbers"></i>${TR('Inventaire par modèle')} <span style="font-size:12px;font-weight:400;color:var(--text3)">· ${TR('hors S1')} · ${TR('cliquez un modèle pour le détail')}</span>${nbReco?`<span style="margin-left:auto"><span class="badge" style="background:#f59e0b18;color:#b45309;border:0.5px solid #f59e0b44;font-size:11px">${nbReco} ${TR('à recommander')}</span></span>`:''}</div>
     <div class="table-wrap"><table class="t">
-      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center">${TR('Total parc')}</th><th>${TR('Distributeurs')}</th><th>${TR('Statut')}</th></tr></thead>
-      <tbody>${invList.length?invList.map((g,i)=>{const tot=g.essai+g.dispo;const reco=g.dispo===0&&tot>0;return `<tr onclick="parcInvToggle(${i})" style="cursor:pointer">
+      <thead><tr><th>${TR('Modèle')}</th><th style="text-align:center">${TR('En essai')}</th><th style="text-align:center">${TR('Disponibles')}</th><th style="text-align:center" title="${TR('Démos au showroom de Paris (prêtables ou vendables)')}">${TR('Showroom')}</th><th style="text-align:center">${TR('Total parc')}</th><th>${TR('Prêt souhaité')}</th><th>${TR('Distributeurs')}</th><th>${TR('Statut')}</th></tr></thead>
+      <tbody>${invList.length?invList.map((g,i)=>{const tot=g.essai+g.dispo+g.show;const reco=g.dispo===0&&tot>0;return `<tr onclick="parcInvToggle(${i})" style="cursor:pointer">
         <td style="font-weight:600"><i class="ti ti-chevron-right" id="inv-chev-${i}" style="font-size:13px;color:var(--text3);margin-right:4px"></i>${esc(g.m)}</td>
         <td style="text-align:center">${g.essai}</td>
         <td style="text-align:center;font-weight:600;color:${g.dispo===0?'var(--danger)':'#2563eb'}">${g.dispo}</td>
+        <td style="text-align:center;font-weight:600;color:${g.show?'#9333ea':'var(--text3)'}">${g.show}</td>
         <td style="text-align:center;font-weight:700">${tot}</td>
+        <td>${_souhaitCell(g)}</td>
         <td>${g.distribNoms.length?`<div style="display:flex;flex-wrap:wrap;gap:3px">${g.distribNoms.map(n=>_pastilleDistrib(n,g.distribCmd[n])).join('')}</div>`:'<span style="color:var(--text3)">—</span>'}</td>
         <td>${reco?_recoBadge:(tot>0?_okBadge:'<span style="color:var(--text3);font-size:12px">—</span>')}</td></tr>
-        <tr id="inv-det-${i}" style="display:none"><td colspan="6" style="padding:0;background:var(--bg)">${_invDetail(g)}</td></tr>`;}).join(''):`<tr><td colspan="6" style="color:var(--text3);font-size:13px">${TR('Aucun fauteuil de démo actif.')}</td></tr>`}
-      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td><td style="text-align:center;font-weight:700">${invTot.e}</td><td style="text-align:center;font-weight:700">${invTot.d}</td><td style="text-align:center;font-weight:700">${invTot.p}</td><td></td><td></td></tr>
+        <tr id="inv-det-${i}" style="display:none"><td colspan="8" style="padding:0;background:var(--bg)">${_invDetail(g)}</td></tr>`;}).join(''):`<tr><td colspan="8" style="color:var(--text3);font-size:13px">${TR('Aucun fauteuil de démo actif.')}</td></tr>`}
+      <tr style="border-top:2px solid var(--border)"><td style="font-weight:700">${TR('Total')}</td><td style="text-align:center;font-weight:700">${invTot.e}</td><td style="text-align:center;font-weight:700">${invTot.d}</td><td style="text-align:center;font-weight:700;color:#9333ea">${invTot.s}</td><td style="text-align:center;font-weight:700">${invTot.p}</td><td></td><td></td><td></td></tr>
       </tbody></table></div></div>`;
 
   // Zone 4 — Unités : liste OU planning sur les mêmes données
@@ -5535,7 +5615,7 @@ function parcFocus(kind){
   const sel = kind==='noserie' ? 'tr[data-noserie="1"]' : 'tr[data-echu="1"]';
   // On cherche l'onglet (En démo / Disponibles / Historique) qui contient les lignes visées.
   let targetTab='demo', rows=[];
-  for(const t of ['demo','dispo','hist']){
+  for(const t of ['demo','dispo','show','hist']){
     const pane=document.querySelector('.parc-pane[data-tab="'+t+'"]');
     if(!pane) continue;
     const r=pane.querySelectorAll(sel);

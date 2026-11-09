@@ -293,6 +293,12 @@ function startCron() {
     catch (e) { console.error('[CRON] Statuts devis Pennylane :', e.message); }
   }, { timezone: 'Europe/Paris' });
 
+  // Parc de démo : rappels « date de prêt souhaitée » (toutes les heures, de 7h à 20h)
+  cron.schedule('35 7-20 * * *', async () => {
+    try { const r = await require('./demo-showroom').envoyerRappelsPretsSouhaites(); if (r.envoyes) console.log('[CRON] Prêts souhaités :', r.envoyes, 'rappel(s) envoyé(s)'); }
+    catch (e) { console.error('[CRON] Prêts souhaités :', e.message); }
+  }, { timezone: 'Europe/Paris' });
+
   console.log('⏰ Tâches automatiques activées (8h checks, 6h VF sync, ping /10min)');
 }
 

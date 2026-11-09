@@ -5017,6 +5017,7 @@ router.get('/demos/parc', async (req, res) => {
               c.nom AS client_nom, c.ville AS client_ville,
               cmd.date_commande, cmd.date_livraison,
               cmd.demo_origine_nom, cmd.demo_localisation_actuelle, cmd.demo_reservation, cmd.demo_retour_date, cmd.updated_at,
+              COALESCE(cmd.demo_showroom, FALSE) AS demo_showroom,
               cmd.demo_rappel_date, cmd.demo_suivi_resultat,
               cmd.num_facture, cmd.facture_paiement_statut,
               cmd.num_avoir,
@@ -9480,6 +9481,11 @@ router.get('/demandes-info/distributeurs', requireAuth, async (req, res) => {
 
 // ── « Test suivi commandes » : vue tableur (lecture ; écritures via /commandes) ──
 require('./commandes-tableur')(router, { db, statutCommande, sendBrevoMail, mailCharte: _mailCharte,
+  signatureSav: () => SIGNATURE_EMAIL_HTML.replace('Service Commercial', 'Service Après-Vente')
+    .replace(/info@eloflex\.fr/g, 'sav@eloflex.fr').replace('06&nbsp;87&nbsp;04&nbsp;69&nbsp;19', '07&nbsp;54&nbsp;37&nbsp;47&nbsp;40') });
+
+// ── Parc de démo : showroom de Paris + dates de prêt souhaitées (rappel par mail) ──
+require('./demo-showroom')(router, { db, sendBrevoMail, mailCharte: _mailCharte,
   signatureSav: () => SIGNATURE_EMAIL_HTML.replace('Service Commercial', 'Service Après-Vente')
     .replace(/info@eloflex\.fr/g, 'sav@eloflex.fr').replace('06&nbsp;87&nbsp;04&nbsp;69&nbsp;19', '07&nbsp;54&nbsp;37&nbsp;47&nbsp;40') });
 
