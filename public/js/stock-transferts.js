@@ -99,32 +99,45 @@ function dessinerResultats(){
   const el = $('trs-res'); if (!el) return;
   const q = T.q.toLowerCase().trim();
   const dans = new Set(T.panier.map(l => l.id));
-  let l = (T.pieces || []).filter(p => p.lagord > 0);
-  if (q) l = l.filter(p => (p.ref + ' ' + p.designation).toLowerCase().includes(q));
+  // Toutes les pièces du catalogue ; sans recherche, seulement celles en stock à Lagord
+  let l = (T.pieces || []);
+  if (q) l = l.filter(p => (p.ref + ' ' + p.designation).toLowerCase().includes(q)).sort((a, b) => (b.lagord > 0) - (a.lagord > 0));
+  else l = l.filter(p => p.lagord > 0);
   const n = l.length; l = l.slice(0, 150);
+  const libre = `<div style="border-top:0.5px solid var(--border-s);margin-top:8px;padding-top:8px;font-size:12.5px">
+    <div style="color:var(--text2);margin-bottom:5px"><i class="ti ti-pencil-plus"></i> ${_T('Pièce absente du catalogue ? Ajoutez-la à la main (imprimée sur le bon, sans mouvement de stock) :')}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><input class="form-input" id="trs-l-ref" placeholder="${_T('Réf.')}" value="${e_(/\s/.test(T.q) ? '' : T.q)}" style="width:130px;padding:6px 8px">
+      <input class="form-input" id="trs-l-des" placeholder="${_T('Désignation')}" style="flex:1;min-width:160px;padding:6px 8px">
+      <button class="btn sm" onclick="trsAjouterLibre()"><i class="ti ti-plus"></i>${_T('Ajouter')}</button></div></div>`;
   el.innerHTML = l.length ? `<table class="t" style="font-size:13px"><thead><tr><th>${_T('Réf.')}</th><th>${_T('Désignation')}</th><th style="text-align:right" title="Lagord">L</th><th style="text-align:right" title="Paris">P</th><th></th></tr></thead><tbody>
-    ${l.map(p => `<tr style="cursor:pointer" onclick="trsAjouter(${p.id})"><td class="mono">${e_(p.ref)}</td><td>${e_(p.designation)}</td>
-      <td style="text-align:right;font-weight:600">${p.lagord}</td><td style="text-align:right;color:var(--text3)">${p.paris}</td>
+    ${l.map(p => `<tr style="cursor:pointer;${p.lagord > 0 ? '' : 'opacity:.6'}" onclick="trsAjouter(${p.id})" title="${p.lagord > 0 ? '' : _T('Stock Lagord à 0 dans l’appli : la pièce sera imprimée sur le bon, le stock sera régularisé par l’inventaire de Paris')}"><td class="mono">${e_(p.ref)}</td><td>${e_(p.designation)}</td>
+      <td style="text-align:right;font-weight:600;${p.lagord > 0 ? '' : 'color:var(--danger)'}">${p.lagord}</td><td style="text-align:right;color:var(--text3)">${p.paris}</td>
       <td style="text-align:right">${dans.has(p.id) ? '<i class="ti ti-check" style="color:var(--success)"></i>' : '<i class="ti ti-plus" style="color:var(--accent)"></i>'}</td></tr>`).join('')}</tbody></table>
-    ${n > l.length ? `<div style="font-size:12px;color:var(--text3);padding:6px">${n - l.length} ${_T('autre(s) — affinez la recherche')}</div>` : ''}`
-    : `<div style="color:var(--text3);font-size:13px;padding:8px">${_T('Aucune pièce trouvée avec du stock à Lagord.')}</div>`;
+    ${n > l.length ? `<div style="font-size:12px;color:var(--text3);padding:6px">${n - l.length} ${_T('autre(s) — affinez la recherche')}</div>` : ''}${libre}`
+    : `<div style="color:var(--text3);font-size:13px;padding:8px">${q ? _T('Aucune pièce du catalogue ne correspond.') : _T('Tapez une référence ou une désignation pour chercher dans tout le catalogue.')}</div>${libre}`;
 }
 function trsAjouter(id){
   const p = (T.pieces || []).find(x => x.id === id); if (!p) return;
   const ex = T.panier.find(l => l.id === id);
-  if (ex) { if (ex.qte < p.lagord) ex.qte++; }
+  if (ex) ex.qte++;
   else T.panier.push({ id, ref: p.ref, designation: p.designation, max: p.lagord, qte: 1, colis: '' });
   dessinerPanier(); dessinerResultats();
 }
-function trsQte(id, v){ const l = T.panier.find(x => x.id === id); if (!l) return; l.qte = Math.max(0, parseInt(v) || 0); majTotaux(); const i = $('trs-q-' + id); if (i) i.style.borderColor = l.qte > l.max ? 'var(--danger)' : ''; }
+function trsAjouterLibre(){
+  const ref = (($('trs-l-ref') || {}).value || '').trim(), des = (($('trs-l-des') || {}).value || '').trim();
+  if (!ref && !des) { alert(_T('Indiquez au moins une référence ou une désignation.')); return; }
+  T.panier.push({ id: -Date.now(), libre: true, ref, designation: des || ref, max: null, qte: 1, colis: '' });
+  dessinerPanier();
+}
+function trsQte(id, v){ const l = T.panier.find(x => x.id === id); if (!l) return; l.qte = Math.max(0, parseInt(v) || 0); majTotaux(); const i = $('trs-q-' + id); if (i) i.style.borderColor = (l.max != null && l.qte > l.max) ? 'var(--warning)' : ''; }
 function trsColis(id, v){ const l = T.panier.find(x => x.id === id); if (l) l.colis = v; }
 function trsRetirer(id){ T.panier = T.panier.filter(l => l.id !== id); dessinerPanier(); dessinerResultats(); }
 function majTotaux(){ const el = $('trs-tot'); if (el) el.textContent = `${T.panier.length} ${_T('réf.')} · ${T.panier.reduce((s, l) => s + (l.qte || 0), 0)} ${_T('pièce(s)')}`; }
 function dessinerPanier(){
   const el = $('trs-panier'); if (!el) return;
   el.innerHTML = T.panier.length ? `<table class="t" style="font-size:13px"><thead><tr><th>${_T('Réf.')}</th><th>${_T('Désignation')}</th><th style="width:78px">${_T('Qté')}</th><th style="width:70px">${_T('Colis n°')}</th><th></th></tr></thead><tbody>
-    ${T.panier.map(l => `<tr><td class="mono">${e_(l.ref)}</td><td>${e_(l.designation)}<div style="font-size:11px;color:var(--text3)">${_T('Lagord')} : ${l.max}</div></td>
-      <td><input class="form-input" id="trs-q-${l.id}" type="number" min="1" max="${l.max}" value="${l.qte}" style="padding:5px 7px${l.qte > l.max ? ';border-color:var(--danger)' : ''}" oninput="trsQte(${l.id},this.value)"></td>
+    ${T.panier.map(l => `<tr><td class="mono">${e_(l.ref)}</td><td>${e_(l.designation)}<div style="font-size:11px;color:${l.libre || !l.max ? '#b45309' : 'var(--text3)'}">${l.libre ? _T('hors catalogue — sans mouvement de stock') : _T('Lagord') + ' : ' + l.max}</div></td>
+      <td><input class="form-input" id="trs-q-${l.id}" type="number" min="1" value="${l.qte}" style="padding:5px 7px${l.max != null && l.qte > l.max ? ';border-color:var(--warning)' : ''}" oninput="trsQte(${l.id},this.value)"></td>
       <td><input class="form-input" value="${e_(l.colis)}" style="padding:5px 7px" oninput="trsColis(${l.id},this.value)"></td>
       <td><button class="btn sm" onclick="trsRetirer(${l.id})"><i class="ti ti-x"></i></button></td></tr>`).join('')}</tbody></table>`
     : `<div style="color:var(--text3);font-size:13px;padding:14px 4px">${_T('Cliquez sur une pièce à gauche pour l’ajouter.')}</div>`;
@@ -137,17 +150,18 @@ function trsAnnuler(){
 async function trsEnregistrer(forcer){
   const lignes = T.panier.filter(l => l.qte > 0);
   if (!lignes.length) { alert(_T('Ajoutez au moins une pièce avec une quantité.')); return; }
-  const trop = lignes.filter(l => l.qte > l.max);
-  if (trop.length && !forcer && !confirm(_T('Quantité supérieure au stock Lagord connu pour :') + '\n' + trop.map(l => `${l.ref} (${l.qte} / ${l.max})`).join('\n') + '\n\n' + _T('Enregistrer quand même ?'))) return;
+  const trop = lignes.filter(l => !l.libre && l.qte > l.max);
+  if (trop.length && !forcer && !confirm(_T('Stock Lagord insuffisant dans l’appli pour :') + '\n' + trop.map(l => `${l.ref} (${_T('envoyé')} ${l.qte}, ${_T('Lagord')} ${l.max})`).join('\n') + '\n\n'
+      + _T('Ces pièces seront bien imprimées sur le bon, mais seule la quantité connue passera au stock Paris. Le reste sera régularisé par l’inventaire de Paris (et VosFactures). Continuer ?'))) return;
   const h = T.entete;
   const body = { ...h, adresse_origine: ($('trs-adr-o') || {}).value, adresse_destination: ($('trs-adr-d') || {}).value,
-    contact_destination: ($('trs-contact') || {}).value, lignes: lignes.map(l => ({ catalogue_id: l.id, qte: l.qte, colis: l.colis })), forcer: !!(forcer || trop.length) };
+    contact_destination: ($('trs-contact') || {}).value, lignes: lignes.map(l => l.libre ? { ref: l.ref, designation: l.designation, qte: l.qte, colis: l.colis } : { catalogue_id: l.id, qte: l.qte, colis: l.colis }) };
   const b = $('trs-ok'); if (b) { b.disabled = true; }
   // Fenêtre ouverte tout de suite (sinon bloquée par le navigateur), remplie après l'enregistrement
   const w = window.open('', '_blank');
   try {
     const r = await API.post('/inventaires-transferts', body);
-    _toast(_T('Transfert enregistré :') + ' ' + r.numero, 'ti-check', 'var(--success)');
+    _toast(_T('Transfert enregistré :') + ' ' + r.numero + (r.hors_stock ? ' — ' + r.hors_stock + ' ' + _T('pièce(s) hors stock connu : à régulariser par l’inventaire de Paris') : ''), 'ti-check', r.hors_stock ? 'var(--warning)' : 'var(--success)');
     T.vue = 'liste'; T.panier = []; T.pieces = null; T.adresses = null;
     await trsImprimer(r.id, w);
     render();
@@ -237,6 +251,6 @@ async function trsSupprimer(id, num){
   try { await API.del(`/inventaires-transferts/${id}`); _toast(_T('Transfert supprimé'), 'ti-trash'); render(); } catch (e) { alert(e.message); }
 }
 
-Object.assign(window, { renderTransfertsStock, trsQuitter: quitter, trsNouveau, trsEntete, trsChercher, trsAjouter, trsQte, trsColis, trsRetirer,
+Object.assign(window, { trsAjouterLibre, renderTransfertsStock, trsQuitter: quitter, trsNouveau, trsEntete, trsChercher, trsAjouter, trsQte, trsColis, trsRetirer,
   trsAnnuler, trsEnregistrer, trsImprimer, trsReception, trsRetour, trsValiderReception, trsSupprimer });
 })();

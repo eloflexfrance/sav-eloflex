@@ -28,6 +28,9 @@ async function assurer(db) {
   await db.run(`CREATE TABLE IF NOT EXISTS stock_transferts_lignes (
     id SERIAL PRIMARY KEY, transfert_id INTEGER REFERENCES stock_transferts(id) ON DELETE CASCADE,
     catalogue_id INTEGER, ref TEXT, designation TEXT, qte_envoyee INTEGER NOT NULL, qte_recue INTEGER, colis TEXT, pu NUMERIC)`);
+  // Quantité réellement passée de Lagord à Paris dans l'appli (≤ envoyée : on ne déplace pas plus que le stock Lagord connu ;
+  // 0 pour une pièce hors catalogue). NULL sur les anciens transferts = tout l'envoyé.
+  await db.run(`ALTER TABLE stock_transferts_lignes ADD COLUMN IF NOT EXISTS qte_stock INTEGER`);
   _ok = true;
 }
 
@@ -70,8 +73,7 @@ module.exports = function monterTransferts(router, { db }) {
       await assurer(db);
       const rows = await db.all(`SELECT c.id, c.ref, c.designation, c.prix_achat_suede AS pu, COALESCE(c.stock,0)::int AS total,
           COALESCE((SELECT quantite FROM catalogue_emplacements e WHERE e.catalogue_id=c.id AND e.emplacement='paris'),0)::int AS paris
-        FROM catalogue c WHERE COALESCE(c.stock_actif, TRUE) AND NOT COALESCE(c.en_sommeil, FALSE)
-        ORDER BY c.ref`);
+        FROM catalogue c ORDER BY c.ref`);
       res.json(rows.map(r => ({ ...r, lagord: r.total - r.paris })));
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -91,9 +93,12 @@ module.exports = function monterTransferts(router, { db }) {
     const b = req.body || {};
     try {
       await assurer(db);
-      const brutes = (Array.isArray(b.lignes) ? b.lignes : []).map(l => ({ cid: parseInt(l.catalogue_id), qte: parseInt(l.qte), colis: String(l.colis || '').trim() || null }))
-        .filter(l => l.cid && l.qte > 0);
-      if (!brutes.length) return res.status(400).json({ error: 'Aucune pièce à transférer' });
+      const toutes = (Array.isArray(b.lignes) ? b.lignes : []).map(l => ({ cid: parseInt(l.catalogue_id) || null, qte: parseInt(l.qte), colis: String(l.colis || '').trim() || null,
+        ref: String(l.ref || '').trim(), designation: String(l.designation || '').trim() })).filter(l => l.qte > 0);
+      const brutes = toutes.filter(l => l.cid);
+      // Pièces hors catalogue : imprimées sur le bon, sans mouvement de stock
+      const libres = toutes.filter(l => !l.cid && (l.ref || l.designation));
+      if (!brutes.length && !libres.length) return res.status(400).json({ error: 'Aucune pièce à transférer' });
       // Regroupe une même pièce saisie deux fois
       const parId = new Map();
       brutes.forEach(l => { const x = parId.get(l.cid); if (x) x.qte += l.qte; else parId.set(l.cid, { ...l }); });
@@ -102,11 +107,9 @@ module.exports = function monterTransferts(router, { db }) {
           COALESCE((SELECT quantite FROM catalogue_emplacements e WHERE e.catalogue_id=c.id AND e.emplacement='paris'),0)::int AS paris
         FROM catalogue c WHERE c.id = ANY($1::int[])`, [lignes.map(l => l.cid)]);
       const P = new Map(pieces.map(p => [p.id, p]));
-      const trop = lignes.filter(l => !P.has(l.cid) || l.qte > (P.get(l.cid).total - P.get(l.cid).paris));
-      if (trop.length && !b.forcer) {
-        return res.status(409).json({ error: 'Quantité supérieure au stock Lagord pour : ' + trop.map(l => {
-          const p = P.get(l.cid); return p ? `${p.ref} (demandé ${l.qte}, Lagord ${p.total - p.paris})` : `#${l.cid}`; }).join(', '), trop: true });
-      }
+      // Au-delà du stock Lagord connu de l'appli, la pièce est imprimée sur le bon mais seule la partie
+      // connue passe à Paris (le reste sera régularisé par l'inventaire de Paris).
+      let horsStock = 0;
       const date = /^\d{4}-\d{2}-\d{2}$/.test(String(b.date_envoi || '')) ? b.date_envoi : new Date().toISOString().slice(0, 10);
       const pref = `BT-${date.slice(0, 7)}-`;
       const pg = await db.pool.connect();
@@ -122,16 +125,24 @@ module.exports = function monterTransferts(router, { db }) {
            String(b.contact_destination || '').trim() || null, nomU(res.locals.user)]);
         for (const l of lignes) {
           const p = P.get(l.cid); if (!p) continue;
-          await pg.query(`INSERT INTO stock_transferts_lignes (transfert_id, catalogue_id, ref, designation, qte_envoyee, colis, pu) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [t.id, l.cid, p.ref, p.designation, l.qte, l.colis, p.pu]);
-          await ajouterParis(pg, l.cid, l.qte);
+          const dispo = Math.max(0, p.total - p.paris);
+          const deplace = Math.min(l.qte, dispo);
+          horsStock += l.qte - deplace;
+          await pg.query(`INSERT INTO stock_transferts_lignes (transfert_id, catalogue_id, ref, designation, qte_envoyee, colis, pu, qte_stock) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [t.id, l.cid, p.ref, p.designation, l.qte, l.colis, p.pu, deplace]);
+          if (deplace) await ajouterParis(pg, l.cid, deplace);
+        }
+        for (const l of libres) {
+          horsStock += l.qte;
+          await pg.query(`INSERT INTO stock_transferts_lignes (transfert_id, catalogue_id, ref, designation, qte_envoyee, colis, qte_stock) VALUES ($1,NULL,$2,$3,$4,$5,0)`,
+            [t.id, l.ref || null, l.designation || l.ref, l.qte, l.colis]);
         }
         await pg.query('COMMIT');
         // Adresses mémorisées pour les prochains bons
         await setParam(db, 'transfert_adresse_lagord', String(b.adresse_origine || '').trim() || null);
         await setParam(db, 'transfert_adresse_paris', String(b.adresse_destination || '').trim() || null);
         await setParam(db, 'transfert_contact_paris', b.contact_destination != null ? String(b.contact_destination).trim() : null);
-        res.json({ ok: true, id: t.id, numero });
+        res.json({ ok: true, id: t.id, numero, hors_stock: horsStock });
       } catch (e) { await pg.query('ROLLBACK').catch(() => {}); throw e; }
       finally { pg.release(); }
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -166,8 +177,12 @@ module.exports = function monterTransferts(router, { db }) {
         for (const l of lignes) {
           let q = recu.has(l.id) ? recu.get(l.id) : l.qte_envoyee;
           if (!(q >= 0)) q = l.qte_envoyee;
+          if (q !== l.qte_envoyee) ecarts++;
+          // Seul un manquant sur la partie réellement passée à Paris est retiré du stock Paris
+          const deplace = l.qte_stock == null ? l.qte_envoyee : l.qte_stock;
           const diff = q - l.qte_envoyee;
-          if (diff) { ecarts++; if (l.catalogue_id) await ajouterParis(pg, l.catalogue_id, diff); }
+          const corr = diff < 0 ? Math.max(diff, -deplace) : diff;   // surplus reçu : ajouté à Paris
+          if (corr && l.catalogue_id) await ajouterParis(pg, l.catalogue_id, corr);
           await pg.query('UPDATE stock_transferts_lignes SET qte_recue=$1 WHERE id=$2', [q, l.id]);
         }
         const jour = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.date || '')) ? req.body.date : new Date().toISOString().slice(0, 10);
@@ -191,7 +206,7 @@ module.exports = function monterTransferts(router, { db }) {
       const pg = await db.pool.connect();
       try {
         await pg.query('BEGIN');
-        for (const l of lignes) if (l.catalogue_id) await ajouterParis(pg, l.catalogue_id, -l.qte_envoyee);
+        for (const l of lignes) { const d = l.qte_stock == null ? l.qte_envoyee : l.qte_stock; if (l.catalogue_id && d) await ajouterParis(pg, l.catalogue_id, -d); }
         await pg.query('DELETE FROM stock_transferts WHERE id=$1', [t.id]);
         await pg.query('COMMIT');
       } catch (e) { await pg.query('ROLLBACK').catch(() => {}); throw e; }
