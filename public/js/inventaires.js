@@ -24,6 +24,7 @@ async function renderInventaire(ttl, c, a){
   ttl.textContent = _T('Inventaire');
   if (I.id) return renderFeuille(ttl, c, a);
   if (I.synthese) return renderSynthese(ttl, c, a);
+  if (I.transferts && window.renderTransfertsStock) return window.renderTransfertsStock(ttl, c, a);
   a.innerHTML = '';
   const d = await API.get('/inventaires');
   _compteVF = d.compte_vf;
@@ -45,7 +46,7 @@ async function renderInventaire(ttl, c, a){
             : (peutEcrire() ? `<button class="btn primary" onclick="invDemarrer('${e.code}')"><i class="ti ti-plus"></i>${_T('Démarrer l’inventaire')} ${libPeriode(d.periode)}</button>` : '')}
         </div>`; }).join('')}
     </div>
-    <div style="margin:-8px 0 20px"><button class="btn" onclick="invSynthese(true)"><i class="ti ti-columns"></i>${_T('Synthèse Lagord + Paris')}</button></div>
+    <div style="margin:-8px 0 20px"><button class="btn" onclick="invSynthese(true)"><i class="ti ti-columns"></i>${_T('Synthèse Lagord + Paris')}</button> <button class="btn" onclick="window._INV.transferts=true;window._INV.id=null;render()"><i class="ti ti-truck"></i>${_T('Transferts Lagord → Paris')}</button></div>
     <h3 style="font-size:15px;margin-bottom:8px">${_T('Historique')}</h3>
     ${d.historique.length ? `<div class="table-wrap"><table class="t"><thead><tr>
         <th>${_T('Mois')}</th><th>${_T('Emplacement')}</th><th>${_T('Validé le')}</th><th>${_T('Par')}</th><th style="text-align:right">${_T('Écarts')}</th><th style="text-align:right">${_T('Valeur achat')}</th><th>VosFactures</th><th></th></tr></thead>

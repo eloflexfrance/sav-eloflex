@@ -9491,6 +9491,8 @@ require('./demo-showroom')(router, { db, sendBrevoMail, mailCharte: _mailCharte,
 
 // ── Inventaire mensuel par emplacement (Lagord / Paris / Stock SAV) → régularisation VosFactures ──
 require('./inventaires')(router, { db, addAlerte });
+// ── Transferts de stock Lagord → Paris (bon de transfert + stock Paris) ──
+require('./stock-transferts')(router, { db });
 
 // ── Espace distributeurs : lien magique, bon de commande de pièces depuis les éclatés ──
 require('./espace-distributeurs').monterApi(router, {
