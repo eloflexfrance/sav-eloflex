@@ -1992,6 +1992,7 @@ const EN_STR = {
   "Actions requises": "Required actions",
   "Compléter": "Complete",
   "Inventaire par modèle": "Inventory by model",
+  "Cliquer pour agrandir": "Click to enlarge",
   "Showroom": "Showroom",
   "Showroom Paris": "Paris showroom",
   "à Paris": "in Paris",

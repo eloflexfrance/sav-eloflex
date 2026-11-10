@@ -2729,7 +2729,7 @@ async function chargerListeCatalogue(){
   el.innerHTML=`<div class="table-wrap"><table id="cat-table" class="t ${localStorage.getItem('sav_show_prix_achat')==='1'?'show-prix':''}">
     <thead><tr><th style="width:46px"></th><th>${t('col_ref')}</th><th>${t('col_designation')}</th><th>${t('col_ref_fou')}</th><th class="col-prix" style="width:96px">${TR('Achat Suède HT')}</th><th style="width:110px">${TR('Distributeur HT')}</th><th style="width:66px">${TR('TVA distrib.')}</th><th style="width:118px">${TR('Public TTC conseillé')}</th><th title="${TR('Stock VosFactures (synchronisé chaque nuit)')}">${TR('Stock principal')}</th><th style="width:118px" title="${TR('Stock SAV : saisi à la main, jamais synchronisé avec VosFactures')}">${TR('Stock SAV')}</th><th>${t('col_seuil')}</th><th style="width:40px">PL</th><th style="width:40px">VF</th></tr></thead>
     <tbody>${list.map(p=>`<tr onclick="modalPiece(${p.id})" style="${p.en_sommeil?'opacity:.55':''}">
-      <td>${p.has_image?`<img src="/api/catalogue/${p.id}/image" class="cat-mini" onmouseenter="catZoom(event,${p.id})" onmousemove="catZoomMove(event)" onmouseleave="catZoomHide()">`:`<span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:5px;background:var(--bg);border:1px solid var(--border-s);color:var(--text3)"><i class="ti ti-photo" style="font-size:14px"></i></span>`}</td>
+      <td>${p.has_image?`<img src="/api/catalogue/${p.id}/image" class="cat-mini" style="cursor:zoom-in" title="${TR('Cliquer pour agrandir')}" onclick="event.stopPropagation();catVoirImage(${p.id},'${esc(((p.ref||'')+' — '+(p.designation||'')).replace(/'/g,'&#39;'))}')" onmouseenter="catZoom(event,${p.id})" onmousemove="catZoomMove(event)" onmouseleave="catZoomHide()">`:`<span style="display:inline-grid;place-items:center;width:34px;height:34px;border-radius:5px;background:var(--bg);border:1px solid var(--border-s);color:var(--text3)"><i class="ti ti-photo" style="font-size:14px"></i></span>`}</td>
       <td class="mono">${esc(p.ref)}</td><td>${esc(p.designation)}${p.en_sommeil?` <span style="font-size:11px;font-weight:600;color:#6b7280;background:#e5e7eb;border-radius:99px;padding:1px 7px;white-space:nowrap"><i class="ti ti-moon"></i> ${TR('En sommeil')}</span>`:''}
         <button class="btn sm" style="padding:1px 6px;margin-left:4px;opacity:.6" title="${p.en_sommeil?TR('Réveiller (remettre dans le catalogue)'):TR('Mettre en sommeil (retirer du catalogue)')}" onclick="event.stopPropagation();basculerSommeil(${p.id},${p.en_sommeil?'false':'true'})"><i class="ti ${p.en_sommeil?'ti-sun':'ti-moon'}"></i></button></td>
       <td>${esc(p.ref_fournisseur||'')}</td>
@@ -4828,7 +4828,7 @@ async function modalPiece(id){
   showModal(`<div class="modal-header"><i class="ti ti-box" style="font-size:19px;color:var(--accent)"></i><h2>${id?'Modifier pièce':'Nouvelle pièce'}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px">
-        <div id="f-img-preview" style="width:74px;height:74px;flex:none;border:1px solid var(--border-s);border-radius:8px;overflow:hidden;background:var(--bg);display:grid;place-items:center">${(id&&p?.has_image)?`<img src="/api/catalogue/${id}/image?ts=${Date.now()}" style="width:100%;height:100%;object-fit:cover">`:'<i class="ti ti-photo" style="color:var(--text3);font-size:20px"></i>'}</div>
+        <div id="f-img-preview" style="width:74px;height:74px;flex:none;border:1px solid var(--border-s);border-radius:8px;overflow:hidden;background:var(--bg);display:grid;place-items:center">${(id&&p?.has_image)?`<img src="/api/catalogue/${id}/image?ts=${Date.now()}" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in" title="${TR('Cliquer pour agrandir')}" onclick="catVoirImage(${id},'${esc(((p.ref||'')+' — '+(p.designation||'')).replace(/'/g,'&#39;'))}')">`:'<i class="ti ti-photo" style="color:var(--text3);font-size:20px"></i>'}</div>
         <div style="flex:1">
           <label class="form-label">${TR('Image')}</label>
           <input type="file" accept="image/*" id="f-img-input" onchange="onPieceImage(event)" style="font-size:12px;display:block;margin-bottom:6px">
@@ -4985,6 +4985,23 @@ function catZoomMove(e){
 }
 function catZoomHide(){ const z=document.getElementById('cat-zoom'); if(z) z.style.display='none'; }
 window.catZoom=catZoom; window.catZoomMove=catZoomMove; window.catZoomHide=catZoomHide;
+
+// Clic sur une vignette : image en grand (plein écran). Clic, Échap ou ✕ pour fermer.
+function catVoirImage(id, titre){
+  catZoomHide();
+  catFermerImage();
+  const o=document.createElement('div'); o.id='cat-lightbox';
+  o.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,.86);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;cursor:zoom-out';
+  o.innerHTML=`<button title="${TR('Fermer')}" style="position:absolute;top:14px;right:18px;border:0;background:rgba(255,255,255,.15);color:#fff;width:38px;height:38px;border-radius:50%;font-size:20px;cursor:pointer"><i class="ti ti-x"></i></button>
+    <img src="/api/catalogue/${id}/image?ts=${Date.now()}" alt="" style="max-width:min(92vw,1400px);max-height:84vh;object-fit:contain;border-radius:8px;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.4)">
+    ${titre?`<div style="color:#fff;margin-top:12px;font-size:14px;font-weight:600;text-align:center;max-width:90vw">${esc(titre)}</div>`:''}`;
+  o.addEventListener('click', catFermerImage);
+  document.body.appendChild(o);
+  document.addEventListener('keydown', _catEchap);
+}
+function _catEchap(e){ if(e.key==='Escape') catFermerImage(); }
+function catFermerImage(){ const o=document.getElementById('cat-lightbox'); if(o) o.remove(); document.removeEventListener('keydown', _catEchap); }
+window.catVoirImage=catVoirImage; window.catFermerImage=catFermerImage;
 
 // Réduit une image (fichier) en data URL JPEG compacte pour stockage en base.
 function _downscaleImage(file, maxSize, cb){
