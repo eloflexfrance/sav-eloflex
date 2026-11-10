@@ -330,8 +330,23 @@ module.exports = function monterInventaires(router, { db, addAlerte }) {
         try { const { data } = await vf.get('/warehouses.json'); const w = (data || []).find(x => x.kind === 'main') || (data || [])[0]; warehouseId = w && w.id; } catch (_) {}
         const jour = new Date().toISOString().slice(0, 10);
         const base = `INV-${empl.code.toUpperCase()}-${inv.periode}`;
-        const plus = r.lignes.filter(l => l.vf_product_id && l.ecart > 0).map(l => ({ product_id: Number(l.vf_product_id), quantity: l.ecart }));
-        const moins = r.lignes.filter(l => l.vf_product_id && l.ecart < 0).map(l => ({ product_id: Number(l.vf_product_id), quantity: -l.ecart }));
+        // VosFactures exige un prix d'achat HT sur chaque ligne de bon de stock (purchase_price_net) :
+        // prix d'achat de l'appli, sinon celui de la fiche produit VosFactures, sinon 0.
+        const _paVF = {};
+        const prixAchat = async l => {
+          if (l.pu > 0) return Math.round(l.pu * 100) / 100;
+          if (_paVF[l.vf_product_id] === undefined) {
+            _paVF[l.vf_product_id] = 0;
+            try { const { data } = await vf.get(`/products/${l.vf_product_id}.json`); const pa = parseFloat(data && data.purchase_price_net); if (pa > 0) _paVF[l.vf_product_id] = pa; } catch (_) {}
+          }
+          return _paVF[l.vf_product_id];
+        };
+        const action = async (l, q) => { const pa = await prixAchat(l); return { product_id: Number(l.vf_product_id), quantity: q, purchase_price_net: pa }; };
+        const plus = [], moins = [];
+        for (const l of r.lignes) {
+          if (!l.vf_product_id || !l.ecart) continue;
+          if (l.ecart > 0) plus.push(await action(l, l.ecart)); else moins.push(await action(l, -l.ecart));
+        }
         const creer = async (kind, actions, suffixe, texte) => {
           const { data } = await vf.post('/warehouse_documents.json', { warehouse_document: {
             kind, ...(warehouseId ? { warehouse_id: warehouseId } : {}), issue_date: jour, number: `${base}-${suffixe}`,
