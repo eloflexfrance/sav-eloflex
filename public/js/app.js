@@ -1429,7 +1429,7 @@ async function renderCommandesTable(page=1){
         <td style="text-align:center">${estCmdFauteuil(cm)
           ? `<span class="cmd-fauteuil-ic" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"><i class="ti ti-wheelchair"></i></span>`
           : `<i class="ti ti-box" style="color:var(--text3);font-size:14px" title="${TR("Pièces détachées")}"></i>`}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:11px" title="${cm.demo_rappel_date&&!cm.demo_suivi_resultat?TR('Retour prévu le')+' '+fd(String(cm.demo_rappel_date).slice(0,10)):''}">🔄 ${t('cmd_demo_badge')||'Démo'} ${+cm.demo_duree_mois||1} ${TR('mois')}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:11px" title="${cm.demo_rappel_date&&!cm.demo_suivi_resultat?TR('Retour prévu le')+' '+fd(String(cm.demo_rappel_date).slice(0,10)):''}">🔄 ${t('cmd_demo_badge')||'Démo'} ${+cm.demo_duree_mois||1} ${TR('mois')}</span>`:''}${cm.nb_confirmations?` <span title="${TR('Confirmation du distributeur archivée')}" style="font-size:12px">📎</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
           if(isRealTracking(cm.num_suivi)){
@@ -1797,6 +1797,7 @@ async function modalCommande(id, prefill){
             </div>
           </div>
           <div id="cmd-type-section-pieces" style="${cm.type_pieces||(cm.commande_type==='pieces')?'':'display:none'}"></div>
+          ${id?`<div id="cmd-conf-zone" style="margin:4px 0 10px"></div>`:''}
           <div id="cmd-bdc-confirme-section" style="${cm.type_fauteuil_neuf||cm.type_fauteuil_demo||cm.type_pieces||cm.commande_type?'':'display:none'}">
             <div style="border-top:0.5px solid var(--border-s);margin-top:8px;padding-top:8px">
               <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">${t('cmd_bdc_confirme_par')||'BDC confirmé par :'}</div>
@@ -2079,8 +2080,86 @@ async function modalCommande(id, prefill){
   window._CMD_CONF_DATE = cm.date_confirmation || null;
   TMP_CMD_LIGNES = (cm.lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
   TMP_RETOUR_LIGNES = (cm.retour_lignes||[]).map(l=>({designation:l.designation||'',reference:l.reference||'',quantite:l.quantite||1}));
-  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majLienReliquat(); majZonePreuveLivraison(); majZoneReliquatBL(); majSerieDemoHint(); if(!id && cm.distributeur_nom) prefillGroupeDepuisDistrib(); }, 60);
+  setTimeout(()=>{ renderCmdLignes(); renderRetourLignes(); majLienSuiviModal(); majLienReliquat(); majZonePreuveLivraison(); majZoneReliquatBL(); majSerieDemoHint(); if(id) cmdConfZone(id); if(!id && cm.distributeur_nom) prefillGroupeDepuisDistrib(); }, 60);
 }
+
+// ── Confirmation du distributeur : mail glissé depuis Outlook (.msg), .eml, PDF, capture ou texte collé ──
+async function cmdConfZone(id){
+  const z=document.getElementById('cmd-conf-zone'); if(!z) return;
+  let docs=[]; try{ docs=await API.get(`/commandes/${id}/confirmations`); }catch(_){}
+  const fdt=iso=>{ if(!iso) return ''; const d=new Date(iso); return isNaN(d)?'':d.toLocaleDateString('fr-FR')+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); };
+  const ico=m=>/outlook|rfc822/.test(m||'')?'ti-mail':/pdf/.test(m||'')?'ti-file-type-pdf':/image/.test(m||'')?'ti-photo':'ti-file-text';
+  z.innerHTML=`<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px"><i class="ti ti-mail-check"></i> ${TR('Confirmation du distributeur')}${docs.length?` <span class="badge g" style="font-size:11px">${docs.length}</span>`:''}</div>
+    ${docs.map(d=>{ const a=d.apercu||{}; return `<div style="border:0.5px solid var(--border-s);border-radius:8px;padding:8px 10px;margin-bottom:6px;background:var(--surface)">
+      <div style="display:flex;align-items:center;gap:8px"><i class="ti ${ico(d.mime)}" style="color:var(--accent)"></i>
+        <a href="/api/documents-signes/fichier/${d.id}" target="_blank" rel="noopener" style="font-weight:600;color:var(--accent);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.objet||d.nom||'')}</a>
+        <span style="font-size:11.5px;color:var(--text3);white-space:nowrap">${esc(a.date?fdt(a.date):fdt(d.created_at))}</span>
+        <button class="btn sm" type="button" title="${TR('Supprimer')}" onclick="cmdConfSupprimer(${id},${d.id})"><i class="ti ti-trash"></i></button></div>
+      ${a.de?`<div style="font-size:12px;color:var(--text2);margin-top:3px">${TR('De')} : ${esc(a.de)}</div>`:''}
+      ${a.texte?`<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12px;color:var(--text2)">${esc(a.texte.replace(/\s+/g,' ').slice(0,110))}${a.texte.length>110?'…':''}</summary><div style="white-space:pre-wrap;font-size:12.5px;max-height:260px;overflow:auto;margin-top:4px;padding:6px 8px;background:var(--bg);border-radius:6px">${esc(a.texte)}</div></details>`:''}
+      ${a.erreur?`<div style="font-size:12px;color:var(--warning)">${esc(a.erreur)} — ${TR('le fichier reste téléchargeable')}</div>`:''}
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">${TR('Ajouté le')} ${fdt(d.created_at)}${d.ajoute_par_nom?' · '+esc(d.ajoute_par_nom):''}</div></div>`; }).join('')}
+    <div id="cmd-conf-drop" tabindex="0" style="border:1.5px dashed var(--border);border-radius:8px;padding:12px;text-align:center;font-size:13px;color:var(--text2);cursor:pointer;outline:none"
+      ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='var(--accent-bg,#eef6f1)'"
+      ondragleave="this.style.borderColor='';this.style.background=''"
+      ondrop="event.preventDefault();this.style.borderColor='';this.style.background='';cmdConfDepot(${id},event.dataTransfer)"
+      onpaste="cmdConfDepot(${id},event.clipboardData,event)"
+      onclick="if(event.target===this||event.target.tagName==='SPAN'||event.target.tagName==='I')document.getElementById('cmd-conf-file').click()">
+      <i class="ti ti-mail-down" style="font-size:20px;color:var(--accent)"></i><br>
+      <span>${TR('Glissez ici le mail de confirmation depuis Outlook')}</span><br>
+      <span style="font-size:11.5px;color:var(--text3)">${TR('ou cliquez pour choisir un fichier (.msg, .eml, PDF, image) · ou cliquez ici puis Ctrl+V pour coller une capture')}</span>
+      <input type="file" id="cmd-conf-file" accept=".msg,.eml,.pdf,.png,.jpg,.jpeg,.webp,.txt,message/rfc822,application/pdf,image/*" multiple style="display:none" onchange="cmdConfDepot(${id},{files:this.files});this.value=''">
+    </div>
+    <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--text2)">${TR('…ou coller le texte de la réponse du distributeur')}</summary>
+      <textarea class="form-input" id="cmd-conf-texte" rows="4" style="margin-top:6px" placeholder="${TR('Collez ici le texte du mail (expéditeur, date, message)…')}"></textarea>
+      <button class="btn sm" type="button" style="margin-top:6px" onclick="cmdConfTexte(${id})"><i class="ti ti-device-floppy"></i>${TR('Enregistrer le texte')}</button></details>
+    <div id="cmd-conf-msg" style="font-size:12px;margin-top:4px"></div>`;
+}
+function _lireDataURL(f){ return new Promise((ok,ko)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=()=>ko(r.error); r.readAsDataURL(f); }); }
+async function cmdConfDepot(id, dt, ev){
+  const fichiers=[...((dt&&dt.files)||[])];
+  const msg=document.getElementById('cmd-conf-msg');
+  if(!fichiers.length){
+    // Collage de texte (Ctrl+V) dans la zone
+    const t=dt && dt.getData ? (dt.getData('text/plain')||'') : '';
+    if(ev && t.trim()){ ev.preventDefault(); const ta=document.getElementById('cmd-conf-texte'); if(ta){ ta.value=t; ta.closest('details').open=true; ta.focus(); } return; }
+    if(ev) return;
+    if(msg) msg.innerHTML=`<span style="color:var(--warning)">${TR("Outlook n'a pas transmis le mail au navigateur. Glissez-le d'abord sur le bureau, puis déposez le fichier ici.")}</span>`;
+    return;
+  }
+  if(ev) ev.preventDefault();
+  for(const f of fichiers){
+    if(f.size>15*1024*1024){ toast(TR('Fichier trop lourd (15 Mo max)')+' : '+f.name,'ti-alert-circle','var(--danger)'); continue; }
+    if(msg) msg.innerHTML=`<i class="ti ti-loader-2"></i> ${TR('Enregistrement de')} ${esc(f.name||TR('la capture'))}…`;
+    try{
+      const data=await _lireDataURL(f);
+      const nom=f.name || ('capture-'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.png');
+      const r=await API.post(`/commandes/${id}/confirmation`,{ fichier:{ nom, data } });
+      cmdConfMajModal(r);
+    }catch(e){ if(msg) msg.innerHTML=`<span style="color:var(--danger)">${esc(e.message)}</span>`; return; }
+  }
+ toast(TR('Confirmation enregistrée'),'ti-mail-check','var(--success)'); cmdConfZone(id);
+}
+async function cmdConfTexte(id){
+  const t=(document.getElementById('cmd-conf-texte')||{}).value||'';
+  if(!t.trim()){ alert(TR('Collez d’abord le texte du mail.')); return; }
+  try{ const r=await API.post(`/commandes/${id}/confirmation`,{ texte:t }); cmdConfMajModal(r); toast(TR('Confirmation enregistrée'),'ti-mail-check','var(--success)'); cmdConfZone(id); }
+  catch(e){ alert(e.message); }
+}
+// Le serveur a coché « confirmé par mail » : on aligne le formulaire ouvert pour que « Enregistrer » ne l'efface pas.
+function cmdConfMajModal(r){
+  const radios=[...document.querySelectorAll('input[name="cmd-confirmation-mode"]')];
+  if(radios.length && !radios.some(x=>x.checked && x.value)){
+    const m=radios.find(x=>x.value===((r&&r.confirmation_mode)||'mail')); if(m){ m.checked=true; toggleDateConfirmation(m); }
+    const inp=document.getElementById('cmd-date-confirmation');
+    if(inp && r && /^\d{4}-\d{2}-\d{2}/.test(String(r.date_confirmation||''))) inp.value=String(r.date_confirmation).slice(0,10);
+  }
+}
+async function cmdConfSupprimer(id, docId){
+  if(!confirm(TR('Supprimer ce document de confirmation ?'))) return;
+  try{ await API.del(`/commandes/${id}/confirmations/${docId}`); cmdConfZone(id); }catch(e){ alert(e.message); }
+}
+Object.assign(window,{ cmdConfZone, cmdConfDepot, cmdConfTexte, cmdConfSupprimer });
 
 function toggleDateConfirmation(el){
   const wrap=document.getElementById('cmd-date-confirmation-wrap');

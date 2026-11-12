@@ -95,6 +95,7 @@ function htmlCellule(r, c){
     const fin = r.demo_suivi_resultat ? ({ retour: _T('revenu'), facture: _T('vendu'), avoir: _T('avoir') }[r.demo_suivi_resultat] || '') : (r.demo_rappel_date ? '→ ' + dateFr(r.demo_rappel_date).slice(0, 5) : '');
     return `<span style="color:#b45309;font-weight:600">${_e(brut(r, c))}</span>${fin ? ` <span style="font-size:10.5px;color:var(--text3)" title="${_T('Échéance de retour de la démo')}">${_e(fin)}</span>` : ''}`;
   }
+  if (c.k === 'bdc' && r.nb_confirmations) return `<a href="#" class="ct-lien" title="${_T('Confirmation du distributeur archivée — ouvrir la fiche')}" onclick="event.preventDefault();event.stopPropagation();ctFiche(${r.id})">📎</a> ${_e(brut(r, c))}`;
   if (c.k === 'docs_fre') { const v = r.docs_fre || ''; return (v === 'Oui' ? '✔ Oui' : v === 'Non' ? '✘ Non' : _e(v)) + ` <a href="#" class="ct-lien" title="${_T('Envoyer les documents (notice, transport aérien)')}" onclick="event.preventDefault();event.stopPropagation();ctDocs(${r.id})"><i class="ti ti-mail-forward"></i></a>`; }
   if (c.k === 'num_suivi' && r.num_suivi) {
     const u = (typeof lienhSuiviInter === 'function') ? lienhSuiviInter(r.transporteur, r.num_suivi) : '#';

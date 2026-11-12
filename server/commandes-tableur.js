@@ -9,7 +9,8 @@ module.exports = function monterCommandesTableur(router, { db, statutCommande, s
     cmd.bdc, cmd.date_commande, cmd.vf_order_id, cmd.client_final, cmd.client_final_type, cmd.cf_adresse, cmd.cf_ville,
     cmd.num_suivi, cmd.transporteur, cmd.date_livraison, cmd.num_serie, cmd.docs_fre, cmd.num_facture, cmd.num_facture_pennylane,
     cmd.invoice_se, cmd.informations, cmd.statut, cmd.num_bordereau, cmd.facture_paiement_statut, cmd.proforma, cmd.proforma_payee,
-    cmd.modele_demo, cmd.type_fauteuil_demo, cmd.demo_duree_mois, cmd.demo_rappel_date, cmd.demo_suivi_resultat, cmd.num_commande_distrib, cmd.pays, cmd.updated_at,
+    cmd.modele_demo, cmd.type_fauteuil_demo, cmd.demo_duree_mois,
+    (SELECT COUNT(*) FROM documents_signes ds WHERE ds.objet='commande' AND ds.objet_id=cmd.id)::int AS nb_confirmations, cmd.demo_rappel_date, cmd.demo_suivi_resultat, cmd.num_commande_distrib, cmd.pays, cmd.updated_at,
     c.nom AS client_nom, c.edi AS client_edi, c.tel AS client_tel, c.portable AS client_portable, c.email AS client_email,
     TRIM(CONCAT_WS(' - ', NULLIF(c.adresse,''), NULLIF(TRIM(CONCAT_WS(' ', c.cp, c.ville)),''))) AS client_adresse,
     (SELECT COUNT(*) FROM commande_notes n WHERE n.commande_id=cmd.id)::int AS notes_count`;

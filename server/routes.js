@@ -3126,7 +3126,8 @@ router.get('/commandes', async (req, res) => {
          cmd.statut, cmd.num_suivi, cmd.num_bordereau, cmd.transporteur, cmd.date_livraison, cmd.num_serie,
          cmd.num_facture, cmd.num_facture_pennylane, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
-         cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.demo_duree_mois, cmd.demo_rappel_date, cmd.demo_suivi_resultat, cmd.annee_onglet, cmd.groupe,
+         cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.confirmation_mode,
+         (SELECT COUNT(*) FROM documents_signes ds WHERE ds.objet='commande' AND ds.objet_id=cmd.id)::int AS nb_confirmations, cmd.demo_duree_mois, cmd.demo_rappel_date, cmd.demo_suivi_resultat, cmd.annee_onglet, cmd.groupe,
          cmd.proforma, cmd.num_proforma, cmd.proforma_payee, cmd.informations,
          cmd.commande_type, cmd.type_fauteuil_neuf, cmd.type_fauteuil_demo, cmd.type_pieces,
          (cmd.informations ILIKE '%avoir%') AS est_avoir,
@@ -3138,6 +3139,7 @@ router.get('/commandes', async (req, res) => {
            ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
          ) AS num_annuel`
       : `cmd.*, c.nom AS client_nom, c.ville AS client_ville,
+         (SELECT COUNT(*) FROM documents_signes ds WHERE ds.objet='commande' AND ds.objet_id=cmd.id)::int AS nb_confirmations,
          c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
          ROW_NUMBER() OVER (
            PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
@@ -9532,6 +9534,8 @@ require('./demo-showroom')(router, { db, sendBrevoMail, mailCharte: _mailCharte,
 
 // ── Inventaire mensuel par emplacement (Lagord / Paris / Stock SAV) → régularisation VosFactures ──
 require('./inventaires')(router, { db, addAlerte });
+// ── Confirmation de commande du distributeur (mail Outlook .msg / .eml, PDF, capture, texte) ──
+require('./commande-confirmations')(router, { db });
 // ── Transferts de stock Lagord → Paris (bon de transfert + stock Paris) ──
 require('./stock-transferts')(router, { db });
 
