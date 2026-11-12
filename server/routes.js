@@ -578,6 +578,18 @@ router.get('/clients/:id', async (req, res) => {
        FROM fauteuils f WHERE f.client_id=$1 ORDER BY f.annee DESC`,
       [cl.id]
     );
+    // Ordre d'achat : le plus récent en premier. date_achat est du texte (AAAA-MM-JJ ou JJ/MM/AAAA selon l'origine) ;
+    // à défaut on prend l'année, puis la date de création de la fiche.
+    const _cleAchat = f => {
+      const d = String(f.date_achat || '').trim();
+      let m = d.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      m = d.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/); if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      if (f.annee) return `${f.annee}-00-00`;
+      return '';
+    };
+    fauts.sort((a, b) => _cleAchat(b).localeCompare(_cleAchat(a))
+      || String(b.created_at ? new Date(b.created_at).toISOString() : '').localeCompare(String(a.created_at ? new Date(a.created_at).toISOString() : ''))
+      || (b.id - a.id));
     cl.fauteuils = fauts.map(f => ({ ...f, garantie_active: garantieActive(f.date_achat, f.duree_garantie_mois) }));
     cl.stats = await db.get(
       `SELECT COUNT(*)::int AS total,
