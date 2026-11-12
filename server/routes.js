@@ -3126,7 +3126,7 @@ router.get('/commandes', async (req, res) => {
          cmd.statut, cmd.num_suivi, cmd.num_bordereau, cmd.transporteur, cmd.date_livraison, cmd.num_serie,
          cmd.num_facture, cmd.num_facture_pennylane, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
-         cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.annee_onglet, cmd.groupe,
+         cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.demo_duree_mois, cmd.demo_rappel_date, cmd.demo_suivi_resultat, cmd.annee_onglet, cmd.groupe,
          cmd.proforma, cmd.num_proforma, cmd.proforma_payee, cmd.informations,
          cmd.commande_type, cmd.type_fauteuil_neuf, cmd.type_fauteuil_demo, cmd.type_pieces,
          (cmd.informations ILIKE '%avoir%') AS est_avoir,
@@ -4714,18 +4714,39 @@ async function majFauteuilVente(row) {
   } catch (_) { /* best-effort, ne bloque jamais la commande */ }
 }
 
-// ── Démo : au 1er marquage "fauteuil démo", programme un rappel à J+30 (date de livraison) ──
-async function majRappelDemo(row) {
+// ── Démo : durée de prêt 1 / 3 / 6 mois (défaut 1 mois) → date de rappel de retour ──
+// Point de départ : date de livraison, sinon date de commande, sinon aujourd'hui.
+// 1 mois = 30 jours (comme l'essai court des prêts) ; 3 et 6 mois = mois calendaires.
+const DUREES_DEMO = [1, 3, 6];
+const _dureeDemo = row => DUREES_DEMO.includes(parseInt(row && row.demo_duree_mois)) ? parseInt(row.demo_duree_mois) : 1;
+function calculRappelDemo(row) {
+  const iso = s => (/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(String(s || '')) ? String(s).slice(0, 10) : null);
+  const base = iso(row.date_livraison) || iso(row.date_commande) || new Date().toISOString().slice(0, 10);
+  const d = new Date(base + 'T00:00:00Z');
+  const mois = _dureeDemo(row);
+  if (mois === 1) d.setUTCDate(d.getUTCDate() + 30);
+  else { const j = d.getUTCDate(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + mois);
+    const fin = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate(); d.setUTCDate(Math.min(j, fin)); }
+  return d.toISOString().slice(0, 10);
+}
+// avant = la ligne avant modification (PUT) : si la durée change, ou si la date de départ change alors que
+// le rappel n'avait pas été prolongé à la main, l'échéance est recalculée.
+async function majRappelDemo(row, avant) {
   try {
     if (!row) return;
     const estDemo = row.modele_demo === true || row.type_fauteuil_demo === true;
-    if (!estDemo) return;
-    if (row.demo_rappel_date || row.demo_suivi_resultat) return; // déjà suivi ou clôturé
-    const iso = s => (/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(String(s || '')) ? String(s).slice(0, 10) : null);
-    const base = iso(row.date_livraison) || iso(row.date_commande) || new Date().toISOString().slice(0, 10);
-    const d = new Date(base + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 30);
-    const rappel = d.toISOString().slice(0, 10);
-    await db.run('UPDATE commandes SET demo_rappel_date=$1 WHERE id=$2 AND demo_rappel_date IS NULL AND demo_suivi_resultat IS NULL', [rappel, row.id]);
+    if (!estDemo || row.demo_suivi_resultat) return;   // pas une démo, ou déjà clôturée
+    let recalcul = !row.demo_rappel_date;
+    if (!recalcul && avant) {
+      const dureeChangee = _dureeDemo(avant) !== _dureeDemo(row);
+      const departChange = String(avant.date_livraison || '') !== String(row.date_livraison || '') || String(avant.date_commande || '') !== String(row.date_commande || '');
+      const rappelAuto = String(avant.demo_rappel_date || '') === calculRappelDemo(avant);   // pas de prolongation manuelle
+      recalcul = dureeChangee || (departChange && rappelAuto);
+    }
+    if (!recalcul) return;
+    const rappel = calculRappelDemo(row);
+    await db.run('UPDATE commandes SET demo_rappel_date=$1 WHERE id=$2 AND demo_suivi_resultat IS NULL', [rappel, row.id]);
+    row.demo_rappel_date = rappel;
   } catch (_) { /* best-effort */ }
 }
 
@@ -4810,6 +4831,7 @@ router.post('/commandes', async (req, res) => {
        d.type_fauteuil_neuf ? true : false, d.type_fauteuil_demo ? true : false, d.type_pieces ? true : false, d.confirmation_mode || null]
     );
     if (d.date_depart) { const r2 = await db.run('UPDATE commandes SET date_depart=$1 WHERE id=$2 RETURNING *', [d.date_depart, row.id]); if (r2) Object.assign(row, r2); }
+    if (DUREES_DEMO.includes(parseInt(d.demo_duree_mois))) { const r3 = await db.run('UPDATE commandes SET demo_duree_mois=$1 WHERE id=$2 RETURNING *', [parseInt(d.demo_duree_mois), row.id]); if (r3) Object.assign(row, r3); }
     await majFauteuilVente(row);
     await majRappelDemo(row);
     await majOrigineDemo(row);
@@ -4833,7 +4855,10 @@ router.put('/commandes/:id', async (req, res) => {
       'commande_type', 'type_fauteuil_neuf', 'type_fauteuil_demo', 'type_pieces', 'confirmation_mode',
       'ref_suede', 'date_envoi_suede', 'confirmation_recue', 'date_confirmation',
       'num_avoir', 'vf_avoir_id', 'num_facture_pennylane', 'facture_vf_id', 'bdc_source', 'bdc_doc_id', 'pays',
-      'proforma', 'num_proforma', 'proforma_date', 'proforma_payee', 'docs_fre'];
+      'proforma', 'num_proforma', 'proforma_date', 'proforma_payee', 'docs_fre', 'demo_duree_mois'];
+    if (d.demo_duree_mois !== undefined && d.demo_duree_mois !== null && d.demo_duree_mois !== '' && !DUREES_DEMO.includes(parseInt(d.demo_duree_mois)))
+      return res.status(400).json({ error: 'Durée de démo : 1, 3 ou 6 mois' });
+    const avant = await db.get('SELECT * FROM commandes WHERE id=$1', [req.params.id]);
     const sets = [], p = [];
     let idx = 0;
     for (const champ of champs) {
@@ -4846,8 +4871,12 @@ router.put('/commandes/:id', async (req, res) => {
     p.push(req.params.id);
     const row = await db.run(`UPDATE commandes SET ${sets.join(', ')} WHERE id=$${++idx} RETURNING *`, p);
     if (!row) return res.status(404).json({ error: 'Commande introuvable' });
+    // Démo retirée (case décochée) : plus de rappel de retour en attente
+    if (avant && (avant.modele_demo || avant.type_fauteuil_demo) && !row.modele_demo && !row.type_fauteuil_demo && !row.demo_suivi_resultat && row.demo_rappel_date) {
+      await db.run('UPDATE commandes SET demo_rappel_date=NULL WHERE id=$1', [row.id]); row.demo_rappel_date = null;
+    }
     await majFauteuilVente(row);
-    await majRappelDemo(row);
+    await majRappelDemo(row, avant);
     await majOrigineDemo(row);
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -5029,7 +5058,7 @@ router.get('/demos/parc', async (req, res) => {
               c.nom AS client_nom, c.ville AS client_ville,
               cmd.date_commande, cmd.date_livraison,
               cmd.demo_origine_nom, cmd.demo_localisation_actuelle, cmd.demo_reservation, cmd.demo_retour_date, cmd.updated_at,
-              COALESCE(cmd.demo_showroom, FALSE) AS demo_showroom,
+              COALESCE(cmd.demo_showroom, FALSE) AS demo_showroom, cmd.demo_duree_mois,
               cmd.demo_rappel_date, cmd.demo_suivi_resultat,
               cmd.num_facture, cmd.facture_paiement_statut,
               cmd.num_avoir,

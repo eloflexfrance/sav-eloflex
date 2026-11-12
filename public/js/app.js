@@ -1429,7 +1429,7 @@ async function renderCommandesTable(page=1){
         <td style="text-align:center">${estCmdFauteuil(cm)
           ? `<span class="cmd-fauteuil-ic" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"><i class="ti ti-wheelchair"></i></span>`
           : `<i class="ti ti-box" style="color:var(--text3);font-size:14px" title="${TR("Pièces détachées")}"></i>`}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:11px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
+        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:11px" title="${cm.demo_rappel_date&&!cm.demo_suivi_resultat?TR('Retour prévu le')+' '+fd(String(cm.demo_rappel_date).slice(0,10)):''}">🔄 ${t('cmd_demo_badge')||'Démo'} ${+cm.demo_duree_mois||1} ${TR('mois')}</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
           if(isRealTracking(cm.num_suivi)){
@@ -1781,8 +1781,11 @@ async function modalCommande(id, prefill){
               <input type="checkbox" id="cmd-type-fauteuil-neuf" ${cm.type_fauteuil_neuf?'checked':''} style="width:15px;height:15px;accent-color:var(--accent)" onchange="majTypeSuede();majBdcConfirme()">${t('cmd_type_fauteuil_neuf')||'Fauteuil Neuf'}
             </label>
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
-              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede();majBdcConfirme();majSerieDemoHint()">${t('cmd_type_fauteuil_demo')||'Fauteuil Démo'}
+              <input type="checkbox" id="cmd-type-fauteuil-demo" ${cm.type_fauteuil_demo||cm.modele_demo?'checked':''} style="width:15px;height:15px;accent-color:var(--warning)" onchange="majTypeSuede();majBdcConfirme();majSerieDemoHint();const s=document.getElementById('cmd-demo-duree-wrap');if(s)s.style.display=this.checked?'inline-flex':'none'">${t('cmd_type_fauteuil_demo')||'Fauteuil Démo'}
             </label>
+            <span id="cmd-demo-duree-wrap" style="display:${cm.type_fauteuil_demo||cm.modele_demo?'inline-flex':'none'};align-items:center;gap:6px;font-size:13px;color:var(--text2)" title="${TR('Durée du prêt de démo : fixe la date de rappel de retour (depuis la livraison)')}">${TR('Durée')} :
+              <select class="form-input" id="cmd-demo-duree" style="padding:4px 8px;width:auto">${[1,3,6].map(n=>`<option value="${n}" ${(+cm.demo_duree_mois||1)===n?'selected':''}>${n} ${TR('mois')}</option>`).join('')}</select>
+              ${cm.demo_rappel_date&&!cm.demo_suivi_resultat?`<span style="font-size:12px;color:var(--text3)">${TR('retour prévu le')} ${fd(String(cm.demo_rappel_date).slice(0,10))}</span>`:''}</span>
             <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:14px">
               <input type="checkbox" id="cmd-type-pieces" ${cm.type_pieces||(cm.commande_type==='pieces')?'checked':''} style="width:15px;height:15px;accent-color:var(--text2)" onchange="majBdcConfirme()">${t('cmd_type_pieces')||'Pièces détachées'}
             </label>
@@ -2634,6 +2637,7 @@ async function enregistrerCommande(id){
     type_fauteuil_demo: !!document.getElementById('cmd-type-fauteuil-demo')?.checked,
     type_pieces:        !!document.getElementById('cmd-type-pieces')?.checked,
     modele_demo:        !!document.getElementById('cmd-type-fauteuil-demo')?.checked,
+    demo_duree_mois:    document.getElementById('cmd-type-fauteuil-demo')?.checked ? (parseInt(gv('cmd-demo-duree'))||1) : null,
     confirmation_mode: document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value||null,
     confirmation_recue: !!(document.querySelector('input[name="cmd-confirmation-mode"]:checked')?.value),
     invoice_se: gv('cmd-invoice-se')||null,

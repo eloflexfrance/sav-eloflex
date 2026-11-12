@@ -400,7 +400,8 @@ async function initDB() {
       // Suivi des fauteuils de démonstration : rappel à J+30 (dépôt-vente)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_rappel_date TEXT`);      // prochaine date de rappel (NULL = pas de suivi actif)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_suivi_resultat TEXT`);   // NULL=en cours, 'retour', 'facture', 'avoir'
-      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_showroom BOOLEAN DEFAULT FALSE`);   // démo présente au showroom de Paris
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_showroom BOOLEAN DEFAULT FALSE`);
+      await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_duree_mois INTEGER`);   // durée de la démo : 1, 3 ou 6 mois (NULL = 1 mois)   // démo présente au showroom de Paris
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_reservation TEXT`);      // distributeur en attente de cette unité à son retour (NULL = pas de réservation)
       await client.query(`ALTER TABLE commandes ADD COLUMN IF NOT EXISTS demo_retour_date TEXT`);      // date réelle de retour à Éloflex France (saisie à la clôture 'retour')
       await client.query(`ALTER TABLE interventions ADD COLUMN IF NOT EXISTS commande_id INTEGER REFERENCES commandes(id) ON DELETE SET NULL`);

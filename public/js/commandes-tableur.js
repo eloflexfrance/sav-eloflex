@@ -17,6 +17,8 @@ const GROUPES = ['De Base','Distri Club','Providom','Négocié','Bastide','Parti
 const STATUTS = ['Auto','En attente confirmation','À préparer','En préparation','Expédié','Livré','Facturé','Problème','Annulé','Avoir'];
 const DOCS = ['', 'Oui', 'Non', 'Partielle'];
 const TRANSPORTEURS = ['', 'DSV', 'UPS', 'La Poste', 'Chronopost'];
+const DUREES_DEMO = ['', '1 mois', '3 mois', '6 mois'];   // '' = pas une démo
+const estDemo = r => !!(r && (r.modele_demo || r.type_fauteuil_demo));
 
 const COLS = [
   { k:'groupe',          l:'Groupe',       w:96,  type:'liste', options:GROUPES, libre:true },
@@ -40,6 +42,7 @@ const COLS = [
   { k:'invoice_se',      l:'Invoice SE',   w:88,  bande:'jaune' },
   { k:'informations',    l:'Informations', w:320 },
   { k:'statut',          l:'Statut',       w:130, type:'statut', aide:'« Auto » = calculé par l’appli (bordereau, suivi, livraison, facture…)' },
+  { k:'demo_duree',      l:'Démo',         w:110, bande:'jaune', type:'liste', options:DUREES_DEMO, aide:'Fauteuil de démonstration : durée du prêt (1, 3 ou 6 mois) → date de rappel de retour (depuis la livraison). Vide = pas une démo.' },
 ];
 const NB_FIGEES = 3;   // Groupe, EDI, Distributeur restent visibles en défilant à droite
 
@@ -63,6 +66,7 @@ function brut(r, c){
     case 'num_facture': return r.num_facture || r.num_facture_pennylane || '';
     case 'statut': return r.statut_calc || r.statut || '';
     case 'date_commande': case 'date_livraison': return dateFr(r[c.k]);
+    case 'demo_duree': return estDemo(r) ? `${[1, 3, 6].includes(+r.demo_duree_mois) ? +r.demo_duree_mois : 1} mois` : '';
     default: return r[c.k] == null ? '' : String(r[c.k]);
   }
 }
@@ -85,6 +89,11 @@ function htmlCellule(r, c){
     const s = r.statut_calc || '';
     const cls = (typeof cmdStatutClass === 'function') ? cmdStatutClass(s) : '';
     return `<span class="badge ${cls}" style="font-size:11px">${_e(s)}</span>${(r.statut && r.statut !== 'Auto') ? ' <i class="ti ti-hand-finger" title="' + _T('Statut forcé à la main') + '" style="font-size:11px;color:var(--text3)"></i>' : ''}`;
+  }
+  if (c.k === 'demo_duree') {
+    if (!estDemo(r)) return '';
+    const fin = r.demo_suivi_resultat ? ({ retour: _T('revenu'), facture: _T('vendu'), avoir: _T('avoir') }[r.demo_suivi_resultat] || '') : (r.demo_rappel_date ? '→ ' + dateFr(r.demo_rappel_date).slice(0, 5) : '');
+    return `<span style="color:#b45309;font-weight:600">${_e(brut(r, c))}</span>${fin ? ` <span style="font-size:10.5px;color:var(--text3)" title="${_T('Échéance de retour de la démo')}">${_e(fin)}</span>` : ''}`;
   }
   if (c.k === 'docs_fre') { const v = r.docs_fre || ''; return (v === 'Oui' ? '✔ Oui' : v === 'Non' ? '✘ Non' : _e(v)) + ` <a href="#" class="ct-lien" title="${_T('Envoyer les documents (notice, transport aérien)')}" onclick="event.preventDefault();event.stopPropagation();ctDocs(${r.id})"><i class="ti ti-mail-forward"></i></a>`; }
   if (c.k === 'num_suivi' && r.num_suivi) {
@@ -326,7 +335,7 @@ function ctEditer(premiereTouche){
       toast(_T('Information de la fiche distributeur : double-cliquez sur ↗ ou modifiez la fiche client.'), 'ti-lock');
     return;
   }
-  let val = r ? (c.type === 'date' ? dateFr(r[c.k]) : (c.k === 'statut' ? (r.statut || 'Auto') : (c.k === 'num_facture' ? (r.num_facture || '') : (r[c.k] == null ? '' : String(r[c.k]))))) : ((CT.brouillon || {})[c.k] != null ? (c.type === 'date' ? dateFr(CT.brouillon[c.k]) : CT.brouillon[c.k]) : '');
+  let val = r ? (c.k === 'demo_duree' ? brut(r, c) : c.type === 'date' ? dateFr(r[c.k]) : (c.k === 'statut' ? (r.statut || 'Auto') : (c.k === 'num_facture' ? (r.num_facture || '') : (r[c.k] == null ? '' : String(r[c.k]))))) : ((CT.brouillon || {})[c.k] != null ? (c.type === 'date' ? dateFr(CT.brouillon[c.k]) : CT.brouillon[c.k]) : '');
   let el;
   if (c.type === 'statut' || (c.type === 'liste' && !c.libre)) {
     el = document.createElement('select'); el.className = 'ct-ed';
@@ -386,6 +395,8 @@ function convertir(c, v){
   if (c.k === 'docs_fre') { if (/^(vrai|true|oui|x|1|ok)$/i.test(v)) return 'Oui'; if (/^(faux|false|non|0)$/i.test(v)) return 'Non'; if (/^part/i.test(v)) return 'Partielle'; return v ? v : ''; }
   if (c.k === 'statut') { const s = STATUTS.find(x => x.toLowerCase() === v.toLowerCase()); return s || 'Auto'; }
   if (c.k === 'groupe') { const g = GROUPES.find(x => x.toLowerCase() === v.toLowerCase()); return g || v; }
+  if (c.k === 'demo_duree') { if (!v || /^(non|0|-)$/i.test(v)) return ''; const n = parseInt(v); if ([1, 3, 6].includes(n)) return n + ' mois';
+    if (/^(oui|x|d[ée]mo)$/i.test(v)) return '1 mois'; throw new Error(_T('Durée de démo : 1, 3 ou 6 mois')); }
   return v;
 }
 
@@ -405,8 +416,16 @@ async function ctEnregistrer(iLigne, iCol, saisie, opts){
       if (!opts.silencieux && !confirm(_T('« ') + val + _T(' » ne correspond à aucune fiche distributeur.') + '\n' + _T('Enregistrer quand même (la commande ne sera plus rattachée à une fiche) ?'))) return;
       corps.distributeur_nom = val; corps.client_id = '';
     }
+  } else if (c.k === 'demo_duree') {
+    const n = parseInt(val) || null;
+    if (n && !estDemo(r) && !opts.silencieux && !confirm(_T('Marquer cette commande comme fauteuil de démonstration (') + val + ') ?')) return;
+    if (!n && estDemo(r) && !opts.silencieux && !confirm(_T('Retirer le statut « démo » de cette commande ? (son rappel de retour est supprimé)'))) return;
+    if (n) Object.assign(corps, { demo_duree_mois: n, modele_demo: true, type_fauteuil_demo: true });
+    else Object.assign(corps, { modele_demo: false, type_fauteuil_demo: false, demo_duree_mois: '' });
   } else corps[c.k] = val;
-  const avant = c.k === 'distributeur_nom' ? { distributeur_nom: r.distributeur_nom, client_id: r.client_id || '' } : { [c.k]: r[c.k] == null ? '' : r[c.k] };
+  const avant = c.k === 'distributeur_nom' ? { distributeur_nom: r.distributeur_nom, client_id: r.client_id || '' }
+    : c.k === 'demo_duree' ? { modele_demo: !!r.modele_demo, type_fauteuil_demo: !!r.type_fauteuil_demo, demo_duree_mois: r.demo_duree_mois || '' }
+    : { [c.k]: r[c.k] == null ? '' : r[c.k] };
   const td = cellule(iLigne, iCol);
   try {
     await API.updateCommande(r.id, corps);
@@ -460,6 +479,7 @@ async function ctCreer(d, opts){
   const pl = d._pl || null;
   const body = { ...d, distributeur_nom: cl ? cl.nom : nom, client_id: cl ? cl.id : (pl && pl.fiche ? pl.fiche.id : undefined), annee_onglet: CT.annee };
   delete body._pl;
+  if (body.demo_duree !== undefined) { const n = parseInt(body.demo_duree); if (n) Object.assign(body, { demo_duree_mois: n, modele_demo: true, type_fauteuil_demo: true }); delete body.demo_duree; }
   if (pl) { body.pl_customer_id = pl.pl_customer_id || undefined; if (pl.client) { body.email = pl.client.email || undefined; body.tel = pl.client.tel || undefined; }
     if (pl.demo) { body.modele_demo = true; body.type_fauteuil_demo = true; } else if (pl.fauteuil) body.type_fauteuil_neuf = true; }
   if (!body.date_commande) body.date_commande = new Date().toISOString().slice(0, 10);
