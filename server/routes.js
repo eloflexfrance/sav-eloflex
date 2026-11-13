@@ -3127,6 +3127,7 @@ router.get('/commandes', async (req, res) => {
          cmd.num_facture, cmd.num_facture_pennylane, cmd.num_commande_distrib, cmd.pays, cmd.client_final, cmd.client_final_type,
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
          cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.confirmation_mode,
+         (SELECT json_agg(json_build_object('d', l.designation, 'q', l.quantite) ORDER BY l.ordre, l.id) FROM commandes_lignes l WHERE l.commande_id=cmd.id) AS lignes_resume,
          (SELECT COUNT(*) FROM documents_signes ds WHERE ds.objet='commande' AND ds.objet_id=cmd.id)::int AS nb_confirmations, cmd.demo_duree_mois, cmd.demo_rappel_date, cmd.demo_suivi_resultat, cmd.annee_onglet, cmd.groupe,
          cmd.proforma, cmd.num_proforma, cmd.proforma_payee, cmd.informations,
          cmd.commande_type, cmd.type_fauteuil_neuf, cmd.type_fauteuil_demo, cmd.type_pieces,
@@ -3139,6 +3140,7 @@ router.get('/commandes', async (req, res) => {
            ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
          ) AS num_annuel`
       : `cmd.*, c.nom AS client_nom, c.ville AS client_ville,
+         (SELECT json_agg(json_build_object('d', l.designation, 'q', l.quantite) ORDER BY l.ordre, l.id) FROM commandes_lignes l WHERE l.commande_id=cmd.id) AS lignes_resume,
          (SELECT COUNT(*) FROM documents_signes ds WHERE ds.objet='commande' AND ds.objet_id=cmd.id)::int AS nb_confirmations,
          c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
          ROW_NUMBER() OVER (

@@ -1117,6 +1117,18 @@ async function renderExpeditions(ttl,c,a){
 // ── COMMANDES (suivi distributeurs) ─────────────────────────────────
 const cmdStatutClass = s => s==='Payé'?'g':s==='Livré'?'g':s==='Facturé'?'facture':s==='Impayé'?'urgent':s==='Expédié'?'attente':s==='Problème'?'urgent':s==='Annulé'?'hg':s==='Avoir'?'hg':s==='En attente confirmation'?'ouvert':s==='À préparer'?'urgent':'ouvert';
 // Commande contenant un fauteuil roulant (vs pièces détachées uniquement)
+// Colonne « Articles » : toutes les lignes de la commande avec leur quantité exacte (x1, x2…),
+// frais d'envoi exclus ; à défaut (ancienne commande sans lignes) le modèle / les accessoires saisis.
+const _FRAIS_ART = /frais|\bport\b|livraison|exp[ée]dition|transport|shipping|\benvoi\b|colissimo|chronopost|remise|offert/i;
+function articlesCmd(cm){
+  const l = (Array.isArray(cm.lignes_resume) ? cm.lignes_resume : []).filter(x => x && String(x.d||'').trim() && !_FRAIS_ART.test(x.d));
+  if(l.length){
+    const items = l.map(x => `${esc(String(x.d).trim())} <b style="color:var(--accent);white-space:nowrap">x${parseInt(x.q)||1}</b>`);
+    const titre = l.map(x => `${String(x.d).trim()} x${parseInt(x.q)||1}`).join('\n');
+    return `<span title="${esc(titre)}">${items.join('<span style="color:var(--text3)"> · </span>')}</span>`;
+  }
+  return esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · ')) + (cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:'');
+}
 const estCmdFauteuil = cm => !!(cm.type_fauteuil_neuf || cm.type_fauteuil_demo || cm.commande_type==='fauteuil' || /eloflex/i.test(cm.modele||''));
 
 const STATUTS_CMD = ['Auto','En attente confirmation','À préparer','En préparation','Expédié','Livré','Facturé','Problème','Annulé'];
@@ -1429,7 +1441,7 @@ async function renderCommandesTable(page=1){
         <td style="text-align:center">${estCmdFauteuil(cm)
           ? `<span class="cmd-fauteuil-ic" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"><i class="ti ti-wheelchair"></i></span>`
           : `<i class="ti ti-box" style="color:var(--text3);font-size:14px" title="${TR("Pièces détachées")}"></i>`}</td>
-        <td>${esc(cm.modele || (cm.accessoire||'').replace(/\n/g,' · '))}${cm.quantite&&cm.quantite>1?` <span style="color:var(--text3)">×${cm.quantite}</span>`:''}${cm.modele_demo?` <span class="badge hg" style="font-size:11px" title="${cm.demo_rappel_date&&!cm.demo_suivi_resultat?TR('Retour prévu le')+' '+fd(String(cm.demo_rappel_date).slice(0,10)):''}">🔄 ${t('cmd_demo_badge')||'Démo'} ${+cm.demo_duree_mois||1} ${TR('mois')}</span>`:''}${cm.nb_confirmations?` <span title="${TR('Confirmation du distributeur archivée')}" style="font-size:12px">📎</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
+        <td>${articlesCmd(cm)}${cm.modele_demo?` <span class="badge hg" style="font-size:11px" title="${cm.demo_rappel_date&&!cm.demo_suivi_resultat?TR('Retour prévu le')+' '+fd(String(cm.demo_rappel_date).slice(0,10)):''}">🔄 ${t('cmd_demo_badge')||'Démo'} ${+cm.demo_duree_mois||1} ${TR('mois')}</span>`:''}${cm.nb_confirmations?` <span title="${TR('Confirmation du distributeur archivée')}" style="font-size:12px">📎</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
           if(isRealTracking(cm.num_suivi)){
