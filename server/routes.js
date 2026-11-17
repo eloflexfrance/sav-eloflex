@@ -1372,20 +1372,28 @@ router.delete('/eclates/lignes/:id', async (req, res) => {
 // ── CATALOGUE ─────────────────────────────────────────────────────
 router.get('/catalogue', async (req, res) => {
   try {
-    const q = `%${req.query.q || ''}%`;
+    // Recherche tolérante aux copier-coller (Excel, PDF) : espaces insécables / invisibles, tabulations
+    // et retours à la ligne retirés ; la référence fournisseur (EAN 7350…) est aussi cherchée, et une
+    // référence est retrouvée même saisie sans ses espaces, points ou tirets.
+    const brute = String(req.query.q || '').replace(/[\u00a0\u2007\u202f\u200b-\u200d\u2060\ufeff\t\r\n]+/g, ' ').trim();
+    const q = `%${brute}%`;
+    const compact = brute.replace(/[\s.\-_/]+/g, '');
+    const qc = compact ? `%${compact}%` : '%';
     try { await require('./inventaires').ensureTables(db); } catch (_) {}
     // On exclut image_data (volumineux) de la liste ; un drapeau has_image suffit pour l'affichage.
     let sql = `SELECT id, ref, designation, fournisseur, ref_fournisseur, pxht, stock, COALESCE(stock_sav,0) AS stock_sav,
                  COALESCE((SELECT quantite FROM catalogue_emplacements e WHERE e.catalogue_id=catalogue.id AND e.emplacement='paris'),0) AS stock_paris, COALESCE(en_sommeil,false) AS en_sommeil, stock_alerte, stock_actif,
                  vf_product_id, pl_product_id, taux_tva, prix_ttc_public, poids, prix_achat_suede, prix_public_ttc, tva_distributeur,
                  (image_data IS NOT NULL) AS has_image, created_at, updated_at
-               FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1)`;
+               FROM catalogue WHERE (ref ILIKE $1 OR designation ILIKE $1 OR fournisseur ILIKE $1 OR ref_fournisseur ILIKE $1
+                 OR regexp_replace(COALESCE(ref,''), '[\\s.\\-_/]', '', 'g') ILIKE $2
+                 OR regexp_replace(COALESCE(ref_fournisseur,''), '[\\s.\\-_/]', '', 'g') ILIKE $2)`;
     if (req.query.alerte === '1') sql += ' AND stock<=stock_alerte AND stock_actif IS NOT FALSE';
     if (req.query.sav === '1') sql += ' AND COALESCE(stock_sav,0) <> 0';
     if (req.query.sommeil === 'seul') sql += ' AND en_sommeil = true';
     else if (req.query.sommeil !== '1') sql += ' AND COALESCE(en_sommeil,false) = false';
     sql += ' ORDER BY ref';
-    res.json(await db.all(sql, [q]));
+    res.json(await db.all(sql, [q, qc]));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 const _num = v => (v === '' || v == null) ? null : v;
