@@ -8651,7 +8651,7 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
            <tr><td style="padding:8px 10px;border:1px solid #e5e7eb;background:#f8fafc;width:34px;text-align:center;font-weight:700;color:#1F5C8C">1</td>
                <td style="padding:8px 10px;border:1px solid #e5e7eb"><b>Le contrat-cadre de prêt</b> : il fixe une fois pour toutes les règles communes à tous les prêts (durée, responsabilités, assurance, retour). <b>Il ne sera à signer qu'une seule fois</b> : vos prochains prêts ne comporteront plus que le bon de prêt.</td></tr>
            <tr><td style="padding:8px 10px;border:1px solid #e5e7eb;background:#f8fafc;text-align:center;font-weight:700;color:#1F5C8C">2</td>
-               <td style="padding:8px 10px;border:1px solid #e5e7eb"><b>Le bon de prêt</b> : il décrit le fauteuil prêté, les dates de remise et de retour.</td></tr>
+               <td style="padding:8px 10px;border:1px solid #e5e7eb"><b>Le bon de prêt</b> : il décrit le fauteuil prêté, la formule et la durée du prêt.</td></tr>
          </table>
          <p>Pour vous simplifier la démarche, <b>les deux documents sont réunis sur une seule page</b> : vous les relisez, complétez si besoin les informations manquantes de votre société, puis <b>vous signez une seule fois</b>. Cette signature unique vaut acceptation du contrat-cadre et du bon de prêt.</p>
          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer (une seule signature)</a></p>
@@ -8660,6 +8660,14 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
          <p>Vous trouverez ci-dessous votre bon de prêt de fauteuil roulant électrique${fauteuil ? ' (<b>' + fauteuil + '</b>)' : ''}. Votre contrat-cadre de prêt étant déjà signé, seul ce bon est à valider. Merci de le relire et de le <b>signer en ligne</b> :</p>
          <p style="text-align:center;margin:22px 0"><a href="${lien}" style="background:#1F5C8C;color:#fff;text-decoration:none;padding:11px 22px;border-radius:6px;font-weight:600">Ouvrir et signer le bon de prêt</a></p>
          <p style="font-size:12px;color:#666">Si le bouton ne fonctionne pas, copiez ce lien : <br>${lien}</p>`;
+    // Information importante : le prêt démarre à la livraison effective (et non à la signature)
+    const _duree = p.formule === 'long_terme' ? (([3, 6].includes(+p.duree_mois) ? +p.duree_mois : 3) + ' mois') : ((+p.duree_essai ? Math.min(30, +p.duree_essai) : 30) + ' jours');
+    const blocLivraison = `<div style="border-left:4px solid #1F5C8C;background:#f2f5f8;border-radius:6px;padding:12px 16px;margin:16px 0 0;font-size:14px;line-height:1.55">
+        <b style="color:#1F5C8C">Livraison et début du prêt</b><br>
+        Livraison en moyenne sous <b>7 à 10 jours ouvrés après signature</b> du bon de prêt.<br>
+        La durée du prêt (<b>${_duree}</b>) court à compter de la <b>date de livraison effective</b>, qui vous sera confirmée par e-mail avec la date de retour correspondante.<br>
+        Le numéro de suivi vous sera envoyé dès confirmation par le transporteur, avec sa date de livraison estimée.
+      </div>`;
     await envoyerEmailPret({
       to: dest, bcc: BCC_PRETS,
       subject: (relance ? 'Relance — ' : '') + (cc ? `Contrat-cadre et bon de prêt Eloflex — une seule signature en ligne` : `Bon de prêt Eloflex — à signer en ligne`),
@@ -8669,6 +8677,7 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
         <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;padding:22px">
           ${blocRelance}
           ${corps}
+          ${blocLivraison}
           ${blocManuel}
         </div>
         <div style="margin-top:24px">${SIGNATURE_EMAIL_HTML}</div>
