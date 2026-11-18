@@ -8388,6 +8388,11 @@ async function _alerteSansFiche(p) {
 // Offre d'essai : conditions particulières (description Pennylane de la référence ESSAI-…) + durée (ESSAI-15 → 15 j, 30 j max)
 async function _majEssaiPret(row, d) {
   if (!row || !d) return;
+  if (d.duree_mois !== undefined) {
+    const m = [3, 6].includes(parseInt(d.duree_mois, 10)) ? parseInt(d.duree_mois, 10) : null;
+    const r2 = await db.run('UPDATE prets SET duree_mois=$1 WHERE id=$2 RETURNING duree_mois', [m, row.id]);
+    if (r2) Object.assign(row, r2);
+  }
   if (d.conditions_essai === undefined && d.duree_essai === undefined) return;
   let duree = d.duree_essai === '' || d.duree_essai == null ? null : parseInt(d.duree_essai, 10);
   if (duree != null && (isNaN(duree) || duree < 1)) duree = null;
@@ -8550,14 +8555,14 @@ router.put('/prets/:id', requireAuth, async (req, res) => {
       `UPDATE prets SET client_id=$1, distributeur_nom=$2, contact=$3, email=$4, tel=$5, adresse=$6,
         formule=$7, designation=$8, num_serie=$9, valeur_ht=$10, bdc_vf=$11, bdc_vf_id=$12, articles=$13,
         livraison_autre=$14, livraison_client_id=$15, livraison_nom=$16, livraison_adresse=$17,
-        date_remise=$18, date_retour_prevue=$19, prorogation_date=$20, observations=$21, statut=$22,
+        date_remise=$18, date_retour_prevue=$19, prorogation_date=$20, observations=$21, statut=COALESCE($22, statut),
         updated_at=NOW() WHERE id=$23 RETURNING *`,
       [d.client_id || null, d.distributeur_nom || null, d.contact || null, d.email || null, fmtTel(d.tel) || null,
        d.adresse || null, d.formule || 'essai_court', d.designation || null, d.num_serie || null,
        d.valeur_ht || null, d.bdc_vf || null, d.bdc_vf_id || null, d.articles ? JSON.stringify(d.articles) : null,
        !!d.livraison_autre, d.livraison_client_id || null, d.livraison_nom || null, d.livraison_adresse || null,
        d.date_remise || null, d.date_retour_prevue || null, d.prorogation_date || null,
-       d.observations || null, d.statut || 'brouillon', req.params.id]);
+       d.observations || null, d.statut || null, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Prêt introuvable' });
     await _majEssaiPret(row, d);
     await _alerteSansFiche(row);
@@ -8680,6 +8685,9 @@ router.post('/prets/:id/envoyer', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Prêt : envoi du n° de suivi au distributeur + livraison effective (début du prêt) ──
+require('./prets-livraison')(router, { db, requireAuth, envoyerEmailPret, BCC_PRETS, SIGNATURE_EMAIL_HTML: () => SIGNATURE_EMAIL_HTML });
+
 // ── Public (sans authentification) : consultation + signature du bon ──
 router.get('/pret-public/:token', async (req, res) => {
   try {
@@ -8695,7 +8703,8 @@ router.get('/pret-public/:token', async (req, res) => {
       livraison_autre: p.livraison_autre, livraison_nom: p.livraison_nom, livraison_adresse: p.livraison_adresse,
       date_remise: p.date_remise, date_retour_prevue: p.date_retour_prevue,
       prorogation_date: p.prorogation_date, observations: p.observations, statut: p.statut,
-      conditions_essai: p.conditions_essai || null, duree_essai: p.duree_essai || null,
+      conditions_essai: p.conditions_essai || null, duree_essai: p.duree_essai || null, duree_mois: p.duree_mois || null,
+      date_livraison_estimee: p.date_livraison_estimee || null, date_livraison_effective: p.date_livraison_effective || null,
       signataire_nom: p.signataire_nom, signed_at: p.signed_at,
       signataire_eloflex: p.signataire_eloflex || null, eloflex_date: p.created_at || null,
       contrat: await (async () => {

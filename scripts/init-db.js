@@ -222,6 +222,13 @@ async function initDB() {
     // Offre d'essai Pennylane (références ESSAI-…) : conditions particulières + durée de l'essai en jours
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS conditions_essai TEXT`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS duree_essai INTEGER`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS duree_mois INTEGER`);                 // prêt long terme : 3 ou 6 mois
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS transporteur TEXT`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS num_suivi TEXT`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS date_livraison_estimee DATE`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS date_livraison_effective DATE`);   // = début réel du prêt
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS suivi_envoye_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS livraison_confirmee_at TIMESTAMPTZ`);
     // Historique des envois / relances du lien de signature
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS envois JSONB DEFAULT '[]'::jsonb`);
     await client.query(`ALTER TABLE prets ADD COLUMN IF NOT EXISTS nb_relances INTEGER DEFAULT 0`);

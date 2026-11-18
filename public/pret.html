@@ -112,8 +112,8 @@ function bonHTML(p){
       '<td style="border:1px solid #ccc;padding:7px;background:#F2F5F8;font-weight:bold;color:#1F5C8C;width:50%">FORMULE : '+esc(FORM[p.formule]||p.formule||'')+'</td>'+
       '<td style="border:1px solid #ccc;padding:7px;background:#F2F5F8;font-weight:bold;color:#1F5C8C">DURÉE</td></tr>'+
     '<tr><td style="border:1px solid #ccc;padding:7px;vertical-align:top">'+(p.formule==='long_terme'?bx+' Prêt Long Terme (≥ 3 mois, renouvelable)':bx+' Essai Court (15 à 30 j) — essai patient : 7 jours maximum')+'</td>'+
-      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top">'+(p.duree_essai?'<b>'+esc(pretDureeTxt(p))+'</b><br>':'')+'Mise à disposition sous 15 j (21 j max)<br>Date de remise : '+fd(p.date_remise)+'<br>Retour prévu : '+fd(p.date_retour_prevue)+'</td></tr></table>'+
-    '<div style="border:1px solid #ccc;border-left:4px solid #1F5C8C;padding:7px 10px;margin:0 0 8px;font-size:13px;line-height:1.5"><b style="color:#1F5C8C">LIVRAISON :</b> Livraison en moyenne sous 7 à 10 jours ouvrés après signature du bon de prêt.<br>Le numéro de suivi sera envoyé dès confirmation par le transporteur et sa date de livraison estimée y sera indiquée.</div>'+
+      '<td style="border:1px solid #ccc;padding:7px;vertical-align:top">'+'<b>'+esc(pretDureeTxt(p))+'</b><br>Livraison sous 7 à 10 jours ouvrés après signature<br>Début du prêt : '+esc(pretDebutTxt(p, fd))+'<br>Retour prévu : '+esc(pretRetourTxt(p, fd))+'</td></tr></table>'+
+    '<div style="border:1px solid #ccc;border-left:4px solid #1F5C8C;padding:7px 10px;margin:0 0 8px;font-size:13px;line-height:1.5"><b style="color:#1F5C8C">LIVRAISON ET DÉBUT DU PRÊT :</b> '+pretTexteLivraison(p).map(esc).join('<br>')+'</div>'+
     '<table style="width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px"><tr>'+
       '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">Désignation / Modèle</td>'+
       '<td style="border:1px solid #ccc;padding:6px;background:#F2F5F8;font-weight:bold">N° de série</td>'+

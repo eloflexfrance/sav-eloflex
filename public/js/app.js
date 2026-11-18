@@ -9304,12 +9304,14 @@ async function modalPret(id, prefillClientId){
         <div class="form-group"><label class="form-label">${TR('Email')}</label><input class="form-input" id="pret-email" type="email" value="${esc(p.email||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="pret-tel" value="${esc(fmtTel(p.tel||''))}"></div>
         <div class="form-group"><label class="form-label">${TR('Formule')}</label>
-          <select class="form-input" id="pret-formule" onchange="pretMajRetour()">
+          <select class="form-input" id="pret-formule" onchange="pretFormuleChange()">
             <option value="essai_court" ${p.formule!=='long_terme'?'selected':''}>${PRET_FORMULES.essai_court}</option>
             <option value="long_terme" ${p.formule==='long_terme'?'selected':''}>${PRET_FORMULES.long_terme}</option>
           </select></div>
-        <div class="form-group"><label class="form-label">${TR("Durée de l'essai (jours, 30 max)")}</label>
+        <div class="form-group" id="pret-duree-jours-wrap" style="${p.formule==='long_terme'?'display:none':''}"><label class="form-label">${TR("Durée de l'essai (jours, 30 max)")}</label>
           <input class="form-input" id="pret-duree" type="number" min="1" max="30" placeholder="30" value="${p.duree_essai||''}" oninput="if(+this.value>30)this.value=30;pretMajRetour(true)"></div>
+        <div class="form-group" id="pret-duree-mois-wrap" style="${p.formule==='long_terme'?'':'display:none'}"><label class="form-label">${TR('Durée du prêt long terme')}</label>
+          <select class="form-input" id="pret-duree-mois" onchange="pretMajRetour(true)">${[3,6].map(m=>`<option value="${m}" ${(+p.duree_mois||3)===m?'selected':''}>${m} ${TR('mois')}</option>`).join('')}</select></div>
       </div>
       <div class="form-group"><label class="form-label">${TR('Adresse du distributeur')}</label><input class="form-input" id="pret-adresse" value="${esc(p.adresse||'')}"></div>
       <div class="form-group" style="margin-bottom:6px">
@@ -9340,9 +9342,29 @@ async function modalPret(id, prefillClientId){
         <div style="text-align:right;font-size:14px;margin-top:6px">${TR('Total HT')} : <b id="pret-total">0,00 €</b></div>
       </div>
       <div class="grid-2">
-        <div class="form-group"><label class="form-label">${TR('Date de remise')}</label><input class="form-input" id="pret-remise" type="date" value="${(p.date_remise||'').slice(0,10)||today}" onchange="pretMajRetour(true)"></div>
-        <div class="form-group"><label class="form-label">${TR('Date de retour prévue')}</label><input class="form-input" id="pret-retour" type="date" value="${(p.date_retour_prevue||'').slice(0,10)}"></div>
+        <div class="form-group"><label class="form-label">${p.date_livraison_effective?TR('Début du prêt (livraison effective)'):TR('Début du prêt prévisionnel (≈ livraison)')}</label><input class="form-input" id="pret-remise" type="date" value="${(p.date_remise||'').slice(0,10)||today}" onchange="pretMajRetour(true)"></div>
+        <div class="form-group"><label class="form-label">${p.date_livraison_effective?TR('Date de retour prévue'):TR('Retour prévu (prévisionnel)')}</label><input class="form-input" id="pret-retour" type="date" value="${(p.date_retour_prevue||'').slice(0,10)}"></div>
       </div>
+      <div style="font-size:12px;color:var(--text3);margin:-6px 0 10px"><i class="ti ti-info-circle" style="color:var(--accent)"></i> ${TR('Le prêt démarre à la livraison effective (7 à 10 jours ouvrés après signature) : confirmez-la ci-dessous, les dates seront recalculées.')}</div>
+      ${id?`<div class="card" style="padding:12px 14px;margin:0 0 12px;border:1px solid var(--border-s)">
+        <div style="font-weight:700;margin-bottom:8px"><i class="ti ti-truck-delivery" style="color:var(--accent)"></i> ${TR('Expédition et livraison')}</div>
+        <div style="display:grid;grid-template-columns:140px 1fr 160px;gap:8px">
+          <div class="form-group" style="margin:0"><label class="form-label">${TR('Transporteur')}</label><select class="form-input" id="pret-transp">${['UPS','DSV','La Poste','Chronopost'].map(t=>`<option ${(p.transporteur||'UPS')===t?'selected':''}>${t}</option>`).join('')}</select></div>
+          <div class="form-group" style="margin:0"><label class="form-label">${TR('N° de suivi')}</label><input class="form-input mono" id="pret-suivi" value="${esc(p.num_suivi||'')}"></div>
+          <div class="form-group" style="margin:0"><label class="form-label">${TR('Livraison estimée')}</label><input class="form-input" id="pret-liv-est" type="date" value="${(p.date_livraison_estimee||'').slice(0,10)}"></div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+          <button type="button" class="btn sm" onclick="pretSuiviMail(${id},true)"><i class="ti ti-eye"></i>${TR('Aperçu du mail')}</button>
+          <button type="button" class="btn sm primary" onclick="pretSuiviMail(${id},false)"><i class="ti ti-mail-forward"></i>${TR('Envoyer le suivi au distributeur')}</button>
+          <span style="font-size:12px;color:var(--text3)">${p.suivi_envoye_at?TR('Dernier envoi le')+' '+fd(String(p.suivi_envoye_at).slice(0,10)):TR('copie à sav@eloflex.fr')}</span>
+        </div>
+        <div style="border-top:0.5px solid var(--border-s);margin-top:10px;padding-top:10px;display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0"><label class="form-label">${TR('Livraison effective (début du prêt)')}</label><input class="form-input" id="pret-liv-eff" type="date" value="${(p.date_livraison_effective||'').slice(0,10)}"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-bottom:8px"><input type="checkbox" id="pret-liv-mail" checked> ${TR('Prévenir le distributeur par e-mail')}</label>
+          <button type="button" class="btn sm success" style="margin-bottom:4px" onclick="pretLivraisonEffective(${id})"><i class="ti ti-package-import"></i>${TR('Confirmer la livraison')}</button>
+        </div>
+        ${p.date_livraison_effective?`<div style="font-size:12px;color:#15803d;margin-top:6px"><i class="ti ti-check"></i> ${TR('Prêt démarré le')} ${fd(String(p.date_livraison_effective).slice(0,10))} — ${TR('retour prévu le')} ${fd(String(p.date_retour_prevue||'').slice(0,10))}</div>`:''}
+      </div>`:''}
       <div class="form-group"><label class="form-label">${TR('Observations sur l\'état initial')}</label><textarea class="form-input" id="pret-obs" rows="2">${esc(p.observations||'')}</textarea></div>
       <div class="form-group"><label class="form-label">${TR("Conditions particulières de l'essai")} <span style="font-weight:400;color:var(--text3)">(${TR('reprises de la description Pennylane de la référence ESSAI-… — une condition par ligne')})</span></label>
         <textarea class="form-input" id="pret-conditions" rows="5" style="font-size:13px">${esc(p.conditions_essai||'')}</textarea></div>
@@ -9390,13 +9412,49 @@ window.pretMajTotal = pretMajTotal;
 // force=true (changement de date de remise) recalcule ; sinon ne remplit que si vide.
 function pretMajRetour(force){
   const f = gv('pret-formule'); const remise = gv('pret-remise'); const ret = $('pret-retour');
-  if(!ret) return;
-  if(f==='essai_court' && remise && (force || !ret.value)){
-    const jours = Math.min(30, parseInt(gv('pret-duree'),10) || 30);
-    const d = new Date(remise+'T00:00:00'); if(!isNaN(d)){ d.setDate(d.getDate()+jours); ret.value = d.toISOString().slice(0,10); }
-  }
+  if(!ret || !remise || !(force || !ret.value)) return;
+  const d = new Date(remise+'T12:00:00'); if(isNaN(d)) return;
+  if(f==='long_terme'){
+    const m = parseInt(gv('pret-duree-mois'),10) || 3, j = d.getDate();
+    d.setDate(1); d.setMonth(d.getMonth()+m); d.setDate(Math.min(j, new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()));
+  } else d.setDate(d.getDate() + (Math.min(30, parseInt(gv('pret-duree'),10) || 30)));
+  ret.value = d.toISOString().slice(0,10);
 }
 window.pretMajRetour = pretMajRetour;
+function pretFormuleChange(){
+  const lt = gv('pret-formule')==='long_terme';
+  const a=$('pret-duree-jours-wrap'), b=$('pret-duree-mois-wrap'); if(a) a.style.display=lt?'none':''; if(b) b.style.display=lt?'':'none';
+  pretMajRetour(true);
+}
+window.pretFormuleChange = pretFormuleChange;
+// Expédition : envoi du n° de suivi au distributeur (copie sav@eloflex.fr), avec aperçu
+async function pretSuiviMail(id, apercu){
+  const body = { transporteur: gv('pret-transp'), num_suivi: (gv('pret-suivi')||'').trim(), date_estimee: gv('pret-liv-est')||null, email: gv('pret-email')||null, apercu: !!apercu };
+  if(!body.num_suivi){ alert(TR('Indiquez d’abord le n° de suivi.')); return; }
+  if(!apercu && !confirm(TR('Envoyer le suivi')+' '+body.transporteur+' '+body.num_suivi+' '+TR('à')+' '+(body.email||'?')+'\n('+TR('copie à')+' sav@eloflex.fr) ?')) return;
+  try{
+    const r = await API.post(`/prets/${id}/envoyer-suivi`, body);
+    if(apercu){
+      const w = window.open('', '_blank');
+      if(w){ w.document.write(`<title>${esc(r.sujet)}</title><div style="font-family:Arial;font-size:13px;color:#555;max-width:600px;margin:10px auto"><b>${TR('À')} :</b> ${esc(r.to||'—')} · <b>Cc :</b> ${esc(r.cc)}<br><b>${TR('Objet')} :</b> ${esc(r.sujet)}</div><hr>`+r.html); w.document.close(); }
+      return;
+    }
+    toast(TR('Suivi envoyé à ')+r.to+' (cc sav@eloflex.fr)','ti-mail-check','var(--success)');
+  }catch(e){ alert(e.message); }
+}
+// Livraison effective : début réel du prêt, retour recalculé (+ e-mail au distributeur)
+async function pretLivraisonEffective(id){
+  const date = gv('pret-liv-eff'); if(!date){ alert(TR('Indiquez la date de livraison effective.')); return; }
+  const envoyer = !!($('pret-liv-mail')||{}).checked;
+  if(!confirm(TR('Le prêt démarre le')+' '+fd(date)+'. '+TR('La date de retour sera recalculée selon la durée du prêt.')+(envoyer?'\n'+TR('Un e-mail de confirmation sera envoyé au distributeur (copie sav@eloflex.fr).'):'')+'\n'+TR('Continuer ?'))) return;
+  try{
+    const r = await API.post(`/prets/${id}/livraison-effective`, { date, envoyer, email: gv('pret-email')||null });
+    const rt = $('pret-retour'); if(rt) rt.value = r.retour; const rm = $('pret-remise'); if(rm) rm.value = r.debut;
+    toast(TR('Prêt démarré le')+' '+fd(r.debut)+' — '+TR('retour le')+' '+fd(r.retour)+(r.mail?' · '+TR('e-mail envoyé'):''),'ti-check','var(--success)');
+    if(r.avertissement) alert(r.avertissement);
+  }catch(e){ alert(e.message); }
+}
+Object.assign(window, { pretSuiviMail, pretLivraisonEffective });
 
 // ── Autocomplétion distributeur (même composant déroulant que le reste de l'app) ──
 // prefix = 'pret-client' (emprunteur) ou 'pret-liv' (livraison)
@@ -9575,7 +9633,8 @@ async function savePret(){
     date_remise: gv('pret-remise')||null, date_retour_prevue: gv('pret-retour')||null,
     observations: gv('pret-obs')||null,
     conditions_essai: gv('pret-conditions')||null,
-    duree_essai: gv('pret-duree')||null
+    duree_essai: gv('pret-duree')||null,
+    duree_mois: gv('pret-formule')==='long_terme' ? (parseInt(gv('pret-duree-mois'))||3) : null
   };
   const id = gv('pret-id');
   try{
@@ -9879,9 +9938,9 @@ function pretBonHTML(p){
       <td style="border:1px solid #CCC;padding:6px 9px;background:#F2F5F8;color:#1F5C8C;font-weight:bold;width:50%">DURÉE</td>
     </tr><tr>
       <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.formule==='long_terme'?bx+' Prêt Long Terme (&ge; 3 mois, renouvelable)':bx+' Essai Court (15 à 30 j) — essai patient : 7 jours maximum'}</td>
-      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.duree_essai?`<b>${esc(pretDureeTxt(p))}</b><br>`:''}Mise à disposition sous 15 j (21 j max)<br>Date de remise : ${fdi(p.date_remise)}<br>Date de retour prévue : ${fdi(p.date_retour_prevue)}<br>Prorogation jusqu'au : ${fdi(p.prorogation_date)}</td>
+      <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top"><b>${esc(pretDureeTxt(p))}</b><br>Livraison sous 7 à 10 jours ouvrés après signature<br>Début du prêt : ${esc(pretDebutTxt(p, d=>fd(d)))}<br>Retour prévu : ${esc(pretRetourTxt(p, d=>fd(d)))}<br>Prorogation jusqu'au : ${fdi(p.prorogation_date)}</td>
     </tr></table>
-    <div style="border:1px solid #CCC;border-left:4px solid #1F5C8C;padding:6px 10px;margin:0 0 8px;font-size:11px;line-height:1.5"><b style="color:#1F5C8C">LIVRAISON :</b> Livraison en moyenne sous 7 à 10 jours ouvrés après signature du bon de prêt.<br>Le numéro de suivi sera envoyé dès confirmation par le transporteur et sa date de livraison estimée y sera indiquée.</div>
+    <div style="border:1px solid #CCC;border-left:4px solid #1F5C8C;padding:6px 10px;margin:0 0 8px;font-size:11px;line-height:1.5"><b style="color:#1F5C8C">LIVRAISON ET DÉBUT DU PRÊT :</b> ${pretTexteLivraison(p).map(esc).join('<br>')}</div>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
       <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Désignation / Modèle</td>
       <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">N° de série</td>

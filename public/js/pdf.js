@@ -173,13 +173,13 @@ const PDF = {
 
     band('2 · FORMULE & DURÉE');
     line2('Formule', FORM[p.formule] || p.formule || '—');
-    if (p.duree_essai) line2("Durée de l'essai", p.duree_essai + ' jours (30 jours maximum)');
-    line2('Mise à disposition', 'sous 15 j (21 j max)');
-    line2('Date de remise', this.fd((p.date_remise||'').slice(0,10)));
-    line2('Retour prévu', this.fd((p.date_retour_prevue||'').slice(0,10)));
+    line2('Durée du prêt', pretDureeCourte(p) + (p.formule === 'long_terme' ? ' (renouvelable)' : ''));
+    line2('Livraison', 'sous 7 à 10 jours ouvrés après signature');
+    line2('Début du prêt', pretDebutTxt(p, d => this.fd(d)));
+    line2('Retour prévu', pretRetourTxt(p, d => this.fd(d)));
     if (p.prorogation_date) line2('Prorogation', this.fd((p.prorogation_date||'').slice(0,10)));
-    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Livraison', L, y); doc.setFont('helvetica','normal');
-    doc.splitTextToSize('Livraison en moyenne sous 7 à 10 jours ouvrés après signature du bon de prêt. Le numéro de suivi sera envoyé dès confirmation par le transporteur et sa date de livraison estimée y sera indiquée.', W - 52).forEach(t => { doc.text(t, L+52, y); y += 4.5; }); y += 1;
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Important', L, y); doc.setFont('helvetica','normal');
+    doc.splitTextToSize(pretTexteLivraison(p).join(' '), W - 52).forEach(t => { doc.text(t, L+52, y); y += 4.5; }); y += 1;
     y += 2;
 
     band('3 · MATÉRIEL PRÊTÉ');
@@ -433,5 +433,28 @@ const PDF = {
 
 // Offre d'essai : conditions particulières (une par ligne) et durée de l'essai
 function pretConditionsLignes(t){ return String(t || '').split(/\n+/).map(function(x){ return x.replace(/^\s*[-•*]\s*/, '').trim(); }).filter(Boolean); }
-function pretDureeTxt(p){ return p && p.duree_essai ? ('Durée de l\'essai : ' + p.duree_essai + ' jours (30 jours maximum)') : ''; }
-if (typeof window !== 'undefined') { window.pretConditionsLignes = pretConditionsLignes; window.pretDureeTxt = pretDureeTxt; }
+// Durée de l'offre de prêt : essai court = N jours (30 max), prêt long terme = 3 ou 6 mois.
+function pretDureeCourte(p){
+  if (p && p.formule === 'long_terme') return ([3, 6].includes(+p.duree_mois) ? +p.duree_mois : 3) + ' mois';
+  return ((p && +p.duree_essai) ? Math.min(30, +p.duree_essai) : 30) + ' jours';
+}
+function pretDureeTxt(p){ return p ? ('Durée du prêt : ' + pretDureeCourte(p) + (p.formule === 'long_terme' ? ' (renouvelable)' : '')) : ''; }
+// Le prêt démarre à la livraison effective (et non à la signature) : dates prévisionnelles tant qu'elle n'est pas confirmée.
+function _pretIso(d){ return d ? String(d).slice(0, 10) : ''; }
+function pretDebutTxt(p, fd){
+  const eff = _pretIso(p && p.date_livraison_effective);
+  if (eff) return fd(eff) + ' (livraison effective)';
+  const est = _pretIso(p && p.date_livraison_estimee);
+  return 'à la livraison effective' + (est ? ' — prévue vers le ' + fd(est) : '');
+}
+function pretRetourTxt(p, fd){
+  const r = _pretIso(p && p.date_retour_prevue);
+  if (p && p.date_livraison_effective && r) return fd(r);
+  return pretDureeCourte(p) + ' après la livraison effective';
+}
+function pretTexteLivraison(p){
+  return ['Livraison en moyenne sous 7 à 10 jours ouvrés après signature du bon de prêt.',
+    'La durée du prêt (' + pretDureeCourte(p) + ') court à compter de la date de livraison effective, qui vous sera confirmée par e-mail avec la date de retour correspondante.',
+    'Le numéro de suivi vous sera envoyé dès confirmation par le transporteur, avec sa date de livraison estimée.'];
+}
+if (typeof window !== 'undefined') { Object.assign(window, { pretConditionsLignes, pretDureeTxt, pretDureeCourte, pretDebutTxt, pretRetourTxt, pretTexteLivraison }); }
