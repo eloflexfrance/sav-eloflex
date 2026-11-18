@@ -9881,6 +9881,7 @@ function pretBonHTML(p){
       <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.formule==='long_terme'?bx+' Prêt Long Terme (&ge; 3 mois, renouvelable)':bx+' Essai Court (15 à 30 j) — essai patient : 7 jours maximum'}</td>
       <td style="border:1px solid #CCC;padding:6px 9px;vertical-align:top">${p.duree_essai?`<b>${esc(pretDureeTxt(p))}</b><br>`:''}Mise à disposition sous 15 j (21 j max)<br>Date de remise : ${fdi(p.date_remise)}<br>Date de retour prévue : ${fdi(p.date_retour_prevue)}<br>Prorogation jusqu'au : ${fdi(p.prorogation_date)}</td>
     </tr></table>
+    <div style="border:1px solid #CCC;border-left:4px solid #1F5C8C;padding:6px 10px;margin:0 0 8px;font-size:11px;line-height:1.5"><b style="color:#1F5C8C">LIVRAISON :</b> Livraison en moyenne sous 7 à 10 jours ouvrés après signature du bon de prêt.<br>Le numéro de suivi sera envoyé dès confirmation par le transporteur et sa date de livraison estimée y sera indiquée.</div>
     <table style="width:100%;border-collapse:collapse;margin:0 0 8px"><tr>
       <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">Désignation / Modèle</td>
       <td style="border:1px solid #CCC;padding:5px 7px;background:#F2F5F8;font-weight:bold;font-size:11px">N° de série</td>

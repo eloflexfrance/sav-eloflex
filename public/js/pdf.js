@@ -178,6 +178,8 @@ const PDF = {
     line2('Date de remise', this.fd((p.date_remise||'').slice(0,10)));
     line2('Retour prévu', this.fd((p.date_retour_prevue||'').slice(0,10)));
     if (p.prorogation_date) line2('Prorogation', this.fd((p.prorogation_date||'').slice(0,10)));
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Livraison', L, y); doc.setFont('helvetica','normal');
+    doc.splitTextToSize('Livraison en moyenne sous 7 à 10 jours ouvrés après signature du bon de prêt. Le numéro de suivi sera envoyé dès confirmation par le transporteur et sa date de livraison estimée y sera indiquée.', W - 52).forEach(t => { doc.text(t, L+52, y); y += 4.5; }); y += 1;
     y += 2;
 
     band('3 · MATÉRIEL PRÊTÉ');
