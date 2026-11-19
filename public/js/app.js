@@ -518,7 +518,7 @@ async function chargerCommandesDashboard(){
         <td>${fd(cm.date_commande)}</td>
             <td><span style="font-size:12px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
             <td>${esc(cm.distributeur_nom)}</td>
-            <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
+            <td class="mono">${poSuedeLigne(cm)}${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
             <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}</td>
             <td class="mono" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
             <td><span class="badge ${cmdStatutClass(cm.statut_calc)}">${esc(tStatut(cm.statut_calc))}</span></td>
@@ -979,7 +979,7 @@ async function chargerCommandesClient(clientId){
         return `<tr onclick="modalCommande(${cm.id})" style="cursor:pointer">
           ${CMD_COLS.num_annuel?`<td style="text-align:center;font-size:12px;color:var(--text3);font-weight:600">${cm.num_annuel||''}</td>`:''}
         <td>${fd(cm.date_commande)}</td>
-          <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
+          <td class="mono">${poSuedeLigne(cm)}${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
           <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(cm.modele||(cm.accessoire||'').split('\n')[0]||'')}${cm.modele_demo?` <span class="badge hg" style="font-size:11px">🔄 ${t('cmd_demo_badge')||'Démo'}</span>`:''}</td>
           <td class="mono">${esc(cm.num_suivi||'')}${lien?` <a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><i class="ti ti-external-link" style="color:var(--accent)"></i></a>`:''}</td>
           <td class="mono">${esc(cm.num_serie||'')}</td>
@@ -1249,6 +1249,21 @@ function removeCmdLigne(i){ TMP_CMD_LIGNES.splice(i,1); renderCmdLignes(); }
 
 // Génère le lien de suivi officiel du transporteur à partir du n° de suivi.
 // Renvoie null si transporteur inconnu/"Autre" ou n° vide (pas de lien à générer dans ce cas).
+// Bon(s) de commande Suède générés depuis le devis de la commande (même n° de devis Pennylane) : ligne grisée au-dessus du BDC
+function poSuedeLigne(cm){
+  let po = cm && cm.po_suede; if (typeof po === 'string') { try { po = JSON.parse(po); } catch(_) { po = null; } }
+  if (!Array.isArray(po) || !po.length) return '';
+  return `<div style="font-size:11px;line-height:1.2;color:var(--text3);margin-bottom:2px;white-space:nowrap">${po.map(x =>
+    `<a href="#" onclick="event.preventDefault();event.stopPropagation();ouvrirPoSuede(${+x.id})" title="${TR('Bon de commande Suède — ouvrir')}" style="color:var(--text3);text-decoration:none"><i class="ti ti-truck-delivery"></i> ${esc(x.n)}</a>`).join(' · ')}</div>`;
+}
+function ouvrirPoSuede(id){
+  try { closeModal(); } catch(_) {}
+  window._CSPO = Object.assign(window._CSPO || {}, { vue: 'edition', id: id, cs: null, modifie: false });
+  setView('commande-suede', { garderPO: true });
+}
+window.poSuedeLigne = poSuedeLigne;
+window.ouvrirPoSuede = ouvrirPoSuede;
+
 function lienSuiviColis(transporteur, numero){
   if(!transporteur || !numero) return null;
   const n = encodeURIComponent(numero.trim());
@@ -1438,7 +1453,7 @@ async function renderCommandesTable(page=1){
         <td><span style="font-size:12px;color:var(--text2)">${esc(cm.groupe||'')}</span></td>
         ${CMD_COLS.pays&&!CURRENT_USER.pays?`<td><span style="font-size:12px;color:var(--text2)">${esc(cm.pays||'')}</span></td>`:''}
         <td><span style="cursor:pointer;color:var(--accent)" onclick="event.stopPropagation();CMD_FILTERS.distributeur='${esc(cm.distributeur_nom)}';render()" title="${TR("Filtrer par ce distributeur")}">${esc(cm.distributeur_nom)}</span> ${cm.client_id?`<button onclick="event.stopPropagation();setView('client',{clientId:${cm.client_id}})" title="${TR("Ouvrir la fiche client")}" style="background:none;border:none;cursor:pointer;padding:1px 3px;color:var(--text3);vertical-align:middle" class="btn-fiche-client"><i class="ti ti-user" style="font-size:12px"></i></button>`:`<span title="${TR("Commande non rattachée à une fiche client")}" style="color:var(--border-s);padding:1px 3px;font-size:12px"><i class="ti ti-user-off"></i></span>`}</td>
-        <td class="mono">${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
+        <td class="mono">${poSuedeLigne(cm)}${esc(cm.bdc||'')}${cm.num_commande_distrib?` <span style="color:var(--text3);font-size:12px">(${esc(cm.num_commande_distrib)})</span>`:''}</td>
         <td style="text-align:center">${estCmdFauteuil(cm)
           ? `<span class="cmd-fauteuil-ic" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"><i class="ti ti-wheelchair"></i></span>`
           : `<i class="ti ti-box" style="color:var(--text3);font-size:14px" title="${TR("Pièces détachées")}"></i>`}</td>
@@ -1782,6 +1797,8 @@ async function modalCommande(id, prefill){
               <button class="btn sm" type="button" title="${TR("Ouvrir dans VosFactures")}" onclick="ouvrirBdcDans('vf')"><i class="ti ti-file-invoice"></i></button>
               <button class="btn sm" type="button" title="${TR("Ouvrir dans Pennylane")}" onclick="ouvrirBdcDans('pennylane')"><i class="ti ti-brand-stripe"></i></button>
             </div>
+            ${(()=>{ let po = cm.po_suede; if (typeof po === 'string') { try { po = JSON.parse(po); } catch(_) { po = null; } }
+              return Array.isArray(po) && po.length ? `<div style="font-size:12px;color:var(--text3);margin-top:5px"><i class="ti ti-truck-delivery"></i> ${TR('Bon de commande Suède')} : ${po.map(x => `<a href="#" onclick="event.preventDefault();ouvrirPoSuede(${+x.id})" class="mono" style="color:var(--accent);white-space:nowrap">${esc(x.n)}</a>`).join(', ')}</div>` : ''; })()}
           </div>
           <div class="form-group" style="margin:0"><label class="form-label">${TR("N° commande distributeur")}</label>
             <input class="form-input mono" id="cmd-num-distrib" value="${esc(cm.num_commande_distrib||'')}" placeholder="${t('cmd_ref_interne')||'Réf. interne'}">

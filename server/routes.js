@@ -3129,6 +3129,7 @@ function statutCommande(cmd) {
 
 router.get('/commandes', async (req, res) => {
   try {
+    await require('./commandes-suede-po').assurer(db).catch(() => {});
     const { distributeur, client_id, statut, annee, groupe, q, date_from, date_to, page = 1, per_page = 100 } = req.query;
     const slim = req.query.slim === '1';
     const fields = slim
@@ -3138,6 +3139,9 @@ router.get('/commandes', async (req, res) => {
          cmd.facture_paiement_statut, cmd.facture_date_echeance, cmd.num_retour,
          cmd.reliquat, cmd.reliquat_suivi, cmd.reliquat_transporteur, cmd.demo_origine_nom, cmd.modele_demo, cmd.confirmation_mode,
          (SELECT json_agg(json_build_object('d', l.designation, 'q', l.quantite) ORDER BY l.ordre, l.id) FROM commandes_lignes l WHERE l.commande_id=cmd.id) AS lignes_resume,
+         (SELECT json_agg(json_build_object('id', cs.id, 'n', cs.numero_bc, 'e', cs.etape) ORDER BY cs.id) FROM commandes_suede cs
+           WHERE cs.devis_pennylane IS NOT NULL AND NULLIF(cmd.bdc,'') IS NOT NULL
+             AND upper(regexp_replace(cs.devis_pennylane, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace(cmd.bdc, '[^A-Za-z0-9]', '', 'g'))) AS po_suede,
          (SELECT COUNT(*) FROM documents_signes ds WHERE ds.objet='commande' AND ds.objet_id=cmd.id)::int AS nb_confirmations, cmd.demo_duree_mois, cmd.demo_rappel_date, cmd.demo_suivi_resultat, cmd.annee_onglet, cmd.groupe,
          cmd.proforma, cmd.num_proforma, cmd.proforma_payee, cmd.informations,
          cmd.commande_type, cmd.type_fauteuil_neuf, cmd.type_fauteuil_demo, cmd.type_pieces,
@@ -3151,6 +3155,9 @@ router.get('/commandes', async (req, res) => {
          ) AS num_annuel`
       : `cmd.*, c.nom AS client_nom, c.ville AS client_ville,
          (SELECT json_agg(json_build_object('d', l.designation, 'q', l.quantite) ORDER BY l.ordre, l.id) FROM commandes_lignes l WHERE l.commande_id=cmd.id) AS lignes_resume,
+         (SELECT json_agg(json_build_object('id', cs.id, 'n', cs.numero_bc, 'e', cs.etape) ORDER BY cs.id) FROM commandes_suede cs
+           WHERE cs.devis_pennylane IS NOT NULL AND NULLIF(cmd.bdc,'') IS NOT NULL
+             AND upper(regexp_replace(cs.devis_pennylane, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace(cmd.bdc, '[^A-Za-z0-9]', '', 'g'))) AS po_suede,
          (SELECT COUNT(*) FROM documents_signes ds WHERE ds.objet='commande' AND ds.objet_id=cmd.id)::int AS nb_confirmations,
          c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
          ROW_NUMBER() OVER (
@@ -4637,9 +4644,13 @@ router.get('/commandes/alertes-blocage', async (req, res) => {
 
 router.get('/commandes/:id', async (req, res) => {
   try {
+    await require('./commandes-suede-po').assurer(db).catch(() => {});
     const row = await db.get(
       `SELECT cmd.*, c.nom AS client_nom, c.ville AS client_ville, c.email AS client_email, c.tel AS client_tel,
-              c.entite_facturation_id AS client_entite_id, ef.nom AS facturation_nom
+              c.entite_facturation_id AS client_entite_id, ef.nom AS facturation_nom,
+              (SELECT json_agg(json_build_object('id', cs.id, 'n', cs.numero_bc, 'e', cs.etape) ORDER BY cs.id) FROM commandes_suede cs
+           WHERE cs.devis_pennylane IS NOT NULL AND NULLIF(cmd.bdc,'') IS NOT NULL
+             AND upper(regexp_replace(cs.devis_pennylane, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace(cmd.bdc, '[^A-Za-z0-9]', '', 'g'))) AS po_suede
        FROM commandes cmd
        LEFT JOIN clients c ON c.id = cmd.client_id
        LEFT JOIN clients ef ON ef.id = c.entite_facturation_id
