@@ -9564,6 +9564,7 @@ require('./demo-showroom')(router, { db, sendBrevoMail, mailCharte: _mailCharte,
 require('./inventaires')(router, { db, addAlerte });
 // ── Confirmation de commande du distributeur (mail Outlook .msg / .eml, PDF, capture, texte) ──
 require('./commande-confirmations')(router, { db });
+require('./commandes-suede-po')(router, { db, adminOrOp, envoyerEmailPret, SIGNATURE_EMAIL_HTML: () => SIGNATURE_EMAIL_HTML });
 // ── Transferts de stock Lagord → Paris (bon de transfert + stock Paris) ──
 require('./stock-transferts')(router, { db });
 

@@ -234,6 +234,7 @@ function setView(v, extra={}){
   // Réinitialiser les recherches locales quand on change de vue
   if(v !== 'clients')   window._clientsQ = '';
   if(v !== 'catalogue') { STATE.q = ''; }
+  if(v !== 'commande-suede' && window._CSPO) { window._CSPO.vue = 'liste'; window._CSPO.id = null; window._CSPO.cs = null; }
   // Suivi commandes : on repart d'une recherche vierge à chaque entrée dans la vue.
   // Un appelant peut pré-remplir un filtre via extra (ex. depuis le Parc de démo).
   if(v === 'commandes'){
@@ -6526,8 +6527,11 @@ window.syncPaiementsPennylane = syncPaiementsPennylane;
 // VUE COMMANDE SUÈDE : réappro pièces auprès d'Eloflex AB
 // ══════════════════════════════════════════════════════════════════
 async function renderCommandeSuede(ttl, c, a) {
+  if (window._CSPO && window._CSPO.vue === 'edition' && typeof csRenderEdition === 'function') return csRenderEdition(ttl, c, a);
   ttl.textContent = t('nav_commande_suede') || 'Commande Suède';
-  a.innerHTML = `<button class="btn primary" onclick="modalNouvelleCommandeSuede()"><i class="ti ti-plus"></i>${TR('Nouvelle commande')}</button>`;
+  a.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+    <button class="btn" onclick="modalNouvelleCommandeSuede()" title="${TR('Ancien circuit : bon de commande saisi dans VosFactures')}"><i class="ti ti-download"></i>${TR('Importer de VosFactures')}</button>
+    ${typeof csNouveau === 'function' ? `<button class="btn primary" onclick="csNouveau()"><i class="ti ti-plus"></i>${TR('Nouveau bon de commande')}</button>` : ''}</div>`;
   c.innerHTML = `<div id="cs-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')||'Chargement…'}</div></div>`;
   chargerCommandesSuede();
 }
@@ -6542,7 +6546,7 @@ async function chargerCommandesSuede() {
       return;
     }
     el.innerHTML = `<div class="table-wrap"><table class="t">
-      <thead><tr><th>${TR('Référence')}</th><th>Date</th><th>Transporteur</th><th>Suivi</th><th>${TR('Livraison')}</th><th>Lignes</th><th>Stock</th><th></th></tr></thead>
+      <thead><tr><th>${TR('Référence')}</th><th>${TR('Étape')}</th><th>${TR('Livrer à')}</th><th>Date</th><th>Transporteur</th><th>Suivi</th><th>${TR('Livraison')}</th><th>Lignes</th><th>Stock</th><th></th></tr></thead>
       <tbody>${list.map(cs => {
         const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
         const badgeStock = cs.stock_integre
@@ -6550,7 +6554,9 @@ async function chargerCommandesSuede() {
           : (cs.date_livraison ? '<span class="badge hg">'+TR("À intégrer")+'</span>' : '<span class="badge" style="opacity:.6">En attente</span>');
         const reliquat = cs.total_reliquat > 0 ? ` <span class="badge hg" title="Reliquat">R:${cs.total_reliquat}</span>` : '';
         return `<tr onclick="ouvrirCommandeSuede(${cs.id})" style="cursor:pointer">
-          <td style="font-weight:600" class="mono">${esc(cs.numero_bc)}</td>
+          <td style="font-weight:600" class="mono">${esc(cs.numero_bc)}${cs.reference_client ? `<div style="font-size:11.5px;font-weight:400;color:var(--text3)">${TR('Réf. client')} ${esc(cs.reference_client)}</div>` : ''}</td>
+          <td>${typeof csBadgeEtape === 'function' ? csBadgeEtape(cs) : esc(cs.statut || '')}${cs.valide_par ? `<div style="font-size:11.5px;color:var(--text3)">${TR('validée par')} ${esc(cs.valide_par)}</div>` : ''}</td>
+          <td style="font-size:13px">${esc(cs.livraison_nom || '—')}</td>
           <td>${cs.date_commande ? fd(cs.date_commande) : '—'}</td>
           <td>${esc(cs.transporteur || '—')}</td>
           <td>${lien ? `<a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="mono" style="color:var(--accent)">${esc(cs.num_suivi)}</a>` : (cs.num_suivi ? `<span class="mono">${esc(cs.num_suivi)}</span>` : '—')}</td>
@@ -6604,6 +6610,7 @@ function modalNouvelleCommandeSuede() {
           <select class="form-input" id="cs-transporteur">
             <option value="">—</option>
             <option value="UPS">UPS</option>
+            <option value="DSV">DSV</option>
             <option value="DB Schenker">DB Schenker</option>
           </select></div>
         <div class="form-group"><label class="form-label">N° de suivi</label>
@@ -6772,6 +6779,8 @@ async function enregistrerCommandeSuede() {
 async function ouvrirCommandeSuede(id) {
   try {
     const cs = await API.commandeSuede(id);
+    // Bon de commande créé dans l'appli → page d'édition dédiée
+    if (cs.etape && typeof csOuvrir === 'function') return csOuvrir(id);
     window._csNumeroBc = cs.numero_bc;
     const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
     const peutIntegrer = cs.date_livraison && !cs.stock_integre;
@@ -6788,6 +6797,7 @@ async function ouvrirCommandeSuede(id) {
             <select class="form-input" id="cs-e-transporteur">
               <option value="" ${!cs.transporteur?'selected':''}>—</option>
               <option value="UPS" ${cs.transporteur==='UPS'?'selected':''}>UPS</option>
+              <option value="DSV" ${cs.transporteur==='DSV'?'selected':''}>DSV</option>
               <option value="DB Schenker" ${cs.transporteur==='DB Schenker'?'selected':''}>DB Schenker</option>
             </select></div>
           <div class="form-group"><label class="form-label">N° de suivi</label>
@@ -6928,7 +6938,7 @@ async function confirmerIntegrationStock(id) {
     await API.integrerStockSuede(id, lignes, (document.getElementById('cs-int-empl')||{}).value || 'lagord');
     closeModal();
     toast(TR('Stock mis à jour'), 'ti-check', 'var(--success)');
-    chargerCommandesSuede();
+    if (window._CSPO && window._CSPO.vue === 'edition') { window._CSPO.cs = null; render(); } else chargerCommandesSuede();
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
 

@@ -281,6 +281,119 @@ const PDF = {
     doc.setDrawColor(200,200,200); doc.rect(L, yTop, colW, 40); doc.rect(L+colW+6, yTop, colW, 40);
     return doc;
   },
+  // ── Bon de commande (Purchase Order) vers Eloflex AB — en anglais ──
+  commandeSuedeDoc(cs, opts) {
+    cs = cs || {}; opts = opts || {};
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const L = 15, R = 195, W = R - L, BLEU = [31,92,140];
+    // Polices standard : on remplace les caractères hors Latin-1 (tirets longs, guillemets, flèches…)
+    const T = v => String(v == null ? '' : v).replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-')
+      .replace(/…/g, '...').replace(/[  ]/g, ' ').replace(/[^\x00-\xff€]/g, '');
+    const prix = opts.afficher_prix != null ? !!opts.afficher_prix : !!cs.afficher_prix;
+    const dEN = d => { if (!d) return ''; const x = new Date(String(d).slice(0,10) + 'T12:00:00'); return isNaN(x) ? String(d) : x.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); };
+    const eur = n => (Math.round(n * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' EUR';
+    const piedDePage = () => {
+      const n = doc.getNumberOfPages();
+      for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(130,130,130);
+        doc.text(T(`ELOFLEX France - 41 rue des Maraichers - 17140 Lagord - France - sav@eloflex.fr`), L, 288);
+        doc.text(`${T(cs.numero_bc || '')} - page ${i}/${n}`, R, 288, { align:'right' }); }
+      doc.setTextColor(0,0,0);
+    };
+    let y = 18;
+    doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(...BLEU); doc.text('PURCHASE ORDER', L, y);
+    doc.setFontSize(12); doc.text(T(cs.numero_bc || ''), R, y, { align:'right' });
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(90,90,90);
+    doc.text('Date: ' + dEN(cs.date_commande || new Date().toISOString().slice(0,10)), R, y + 5.5, { align:'right' });
+    doc.setDrawColor(...BLEU); doc.setLineWidth(0.6); doc.line(L, y + 9, R, y + 9); doc.setTextColor(0,0,0);
+    y += 17;
+
+    // Acheteur / fournisseur
+    const bloc = (x, titre, lignes, w) => {
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...BLEU); doc.text(titre, x, y); doc.setTextColor(0,0,0);
+      let yy = y + 5; doc.setFontSize(9.5);
+      lignes.filter(Boolean).forEach((t, i) => { doc.setFont('helvetica', i === 0 ? 'bold' : 'normal');
+        doc.splitTextToSize(T(t), w).forEach(tt => { doc.text(tt, x, yy); yy += 4.6; }); });
+      return yy;
+    };
+    const y1 = bloc(L, 'BUYER', ['ELOFLEX France (ELOFLEX SAS)', '41 rue des Maraichers', '17140 Lagord', 'France', 'sav@eloflex.fr'], 85);
+    const y2 = bloc(110, 'SUPPLIER', ['Eloflex AB', 'Sweden', 'order@eloflex.se'], 85);
+    y = Math.max(y1, y2) + 4;
+
+    // Infos commande
+    const infos = [['PO number', cs.numero_bc], ['Customer order ref.', cs.reference_client], ['Order date', dEN(cs.date_commande)],
+      ['Issued by', cs.cree_par], ['Approved by', cs.valide_par ? cs.valide_par + (cs.valide_le ? ' (' + dEN(cs.valide_le) + ')' : '') : '']].filter(x => x[1]);
+    doc.setFillColor(242,245,248); doc.rect(L, y - 4, W, infos.length * 5.4 + 3, 'F');
+    infos.forEach(([k, v], i) => {
+      doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.text(k, L + 3, y + i * 5.4);
+      doc.setFont('helvetica', k === 'Customer order ref.' ? 'bold' : 'normal');
+      if (k === 'Customer order ref.') doc.setTextColor(180,40,40);
+      doc.text(T(v), L + 45, y + i * 5.4); doc.setTextColor(0,0,0);
+    });
+    y += infos.length * 5.4 + 6;
+
+    // Adresse de livraison
+    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...BLEU); doc.text('DELIVERY ADDRESS', L, y); doc.setTextColor(0,0,0); y += 5;
+    const adr = [cs.livraison_nom, cs.livraison_contact ? 'Attn: ' + cs.livraison_contact : '', ...String(cs.livraison_adresse || '').split('\n'), cs.livraison_pays,
+      cs.livraison_tel ? 'Phone: ' + cs.livraison_tel : '', cs.livraison_email ? 'E-mail: ' + cs.livraison_email : ''].map(x => String(x || '').trim()).filter(Boolean);
+    const hAdr = adr.length * 4.8 + 4;
+    doc.setDrawColor(...BLEU); doc.setLineWidth(0.4); doc.rect(L, y - 4, 100, hAdr);
+    adr.forEach((t, i) => { doc.setFontSize(9.5); doc.setFont('helvetica', i === 0 ? 'bold' : 'normal'); doc.text(T(t), L + 3, y + i * 4.8); });
+    y += hAdr + 5;
+
+    // Lignes
+    const C = prix ? { n: L + 1, ref: L + 9, sup: L + 33, des: L + 62, qte: 150, pu: 172, tot: R - 1, desW: 76 }
+                   : { n: L + 1, ref: L + 9, sup: L + 38, des: L + 70, qte: R - 1, desW: 108 };
+    const entete = () => {
+      doc.setFillColor(...BLEU); doc.rect(L, y - 4.2, W, 6.5, 'F'); doc.setTextColor(255,255,255); doc.setFontSize(8.5); doc.setFont('helvetica','bold');
+      doc.text('#', C.n, y); doc.text('Our ref.', C.ref, y); doc.text('Supplier ref.', C.sup, y); doc.text('Description', C.des, y);
+      doc.text('Qty', C.qte, y, { align:'right' });
+      if (prix) { doc.text('Unit price', C.pu, y, { align:'right' }); doc.text('Total', C.tot, y, { align:'right' }); }
+      doc.setTextColor(0,0,0); y += 6.5;
+    };
+    entete();
+    let total = 0, qteTot = 0, sansPrix = 0;
+    (cs.lignes || []).forEach((l, i) => {
+      const q = +l.quantite_commandee || +l.quantite || 0, pu = l.prix_unitaire === '' || l.prix_unitaire == null ? null : +l.prix_unitaire;
+      qteTot += q; if (pu == null) sansPrix++; else total += pu * q;
+      doc.setFontSize(8.8);
+      const des = doc.splitTextToSize(T(l.designation || ''), C.desW);
+      const note = l.note ? doc.splitTextToSize(T(l.note), C.desW) : [];
+      const h = Math.max(1, des.length) * 4.2 + note.length * 3.8 + 2.5;
+      if (y + h > 270) { doc.addPage(); y = 20; entete(); }
+      doc.setFont('helvetica','normal'); doc.text(String(i + 1), C.n, y);
+      doc.setFont('helvetica','bold'); doc.text(T(l.reference || ''), C.ref, y);
+      doc.setFont('helvetica','normal'); doc.text(doc.splitTextToSize(T(l.ref_fournisseur || ''), C.des - C.sup - 2)[0] || '', C.sup, y);
+      des.forEach((t, k) => doc.text(t, C.des, y + k * 4.2));
+      if (note.length) { doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(90,90,90);
+        note.forEach((t, k) => doc.text(t, C.des, y + des.length * 4.2 + k * 3.8)); doc.setTextColor(0,0,0); doc.setFontSize(8.8); }
+      doc.setFont('helvetica','bold'); doc.text(String(q), C.qte, y, { align:'right' }); doc.setFont('helvetica','normal');
+      if (prix) { doc.text(pu == null ? '-' : eur(pu), C.pu, y, { align:'right' }); doc.text(pu == null ? '-' : eur(pu * q), C.tot, y, { align:'right' }); }
+      y += h; doc.setDrawColor(225,225,225); doc.setLineWidth(0.2); doc.line(L, y - 3.2, R, y - 3.2); y += 1.2;
+    });
+    if (y > 262) { doc.addPage(); y = 20; }
+    y += 2; doc.setFontSize(9.5); doc.setFont('helvetica','bold');
+    doc.text(`${(cs.lignes || []).length} line(s) - ${qteTot} item(s)`, L, y);
+    if (prix) { doc.text('Total (excl. VAT): ' + eur(total) + (sansPrix ? ' *' : ''), R, y, { align:'right' });
+      if (sansPrix) { y += 4.5; doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.text('* lines without price not included', R, y, { align:'right' }); } }
+    y += 9;
+
+    if (cs.notes) {
+      if (y > 250) { doc.addPage(); y = 20; }
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(...BLEU); doc.text('COMMENTS', L, y); doc.setTextColor(0,0,0); y += 5;
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.splitTextToSize(T(cs.notes), W).forEach(t => { if (y > 278) { doc.addPage(); y = 20; } doc.text(t, L, y); y += 4.5; });
+      y += 4;
+    }
+    if (y > 268) { doc.addPage(); y = 20; }
+    doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text('Please confirm the shipping date and the tracking number (UPS / DSV) by e-mail to sav@eloflex.fr.', L, y); y += 4.6;
+    doc.setFont('helvetica','normal');
+    doc.text(T('Please quote our PO number' + (cs.reference_client ? ' and the customer order reference' : '') + ' on the delivery note and the invoice.'), L, y);
+    piedDePage();
+    return doc;
+  },
+  commandeSuede(cs, opts) { this.commandeSuedeDoc(cs, opts).save(`${String((cs && cs.numero_bc) || 'PO').replace(/[^\w.\-]+/g,'_')}.pdf`); },
   pret(p) { this.pretDoc(p).save(`Bon_de_pret_${(p.distributeur_nom||'distributeur').replace(/[^a-zA-Z0-9]/g,'_')}.pdf`); },
 
   // ── Contrat-cadre de prêt à usage (commodat) ──
