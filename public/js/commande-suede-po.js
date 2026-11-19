@@ -227,21 +227,26 @@ function dessinerLignes() {
   const prix = $('cs-prix') ? $('cs-prix').checked : !!cs.afficher_prix;
   if (!cs.lignes.length) { z.innerHTML = `<div style="font-size:13px;color:var(--text3);padding:8px 0">${_T('Aucun article pour l’instant.')}</div>`; return; }
   const dis = editable ? '' : 'disabled';
-  const inp = (k, i, v, st, extra = '') => `<input class="form-input${k === 'ref' || k === 'sup' ? ' mono' : ''}" id="cs-l-${k}-${i}" value="${e_(v ?? '')}" ${dis} oninput="csModif();${k === 'q' || k === 'px' ? 'csTotaux()' : ''}" style="padding:4px 6px;font-size:13px;${st}" ${extra}>`;
-  z.innerHTML = `<div class="table-wrap"><table class="t">
-    <thead><tr><th style="width:130px">${_T('Réf.')}</th><th style="width:120px">${_T('Réf. fournisseur')}</th><th>${_T('Désignation')} / ${_T('configuration')}</th>
-      <th style="width:70px">${_T('Qté')}</th><th style="width:100px">${_T('Prix U. HT')}${prix ? '' : ` <span title="${_T('Non imprimé sur le bon')}" style="opacity:.6">(${_T('masqué')})</span>`}</th><th style="width:95px;text-align:right">${_T('Total')}</th><th style="width:40px"></th></tr></thead>
+  const H = 'height:34px;box-sizing:border-box;padding:0 8px;';
+  const inp = (k, i, v, st, extra = '') => `<input class="form-input${k === 'ref' || k === 'sup' ? ' mono' : ''}" id="cs-l-${k}-${i}" value="${e_(v ?? '')}" title="${e_(v ?? '')}" ${dis} oninput="csModif();${k === 'q' || k === 'px' ? 'csTotaux()' : ''}" style="${H}font-size:13px;width:100%;${st}" ${extra}>`;
+  const td = (st = '') => `<td style="vertical-align:top;padding-top:10px;padding-bottom:10px;${st}">`;
+  const sous = (txt, coul) => `<div style="font-size:11px;color:${coul};margin-top:3px;height:14px">${txt}</div>`;
+  z.innerHTML = `<div class="table-wrap"><table class="t" style="table-layout:fixed;width:100%">
+    <colgroup><col style="width:300px"><col><col style="width:80px"><col style="width:110px"><col style="width:105px"><col style="width:46px"></colgroup>
+    <thead><tr><th>${_T('Réf.')} / ${_T('Réf. fournisseur')}</th><th>${_T('Désignation')} / ${_T('configuration')}</th>
+      <th>${_T('Qté')}</th><th>${_T('Prix U. HT')}${prix ? '' : ` <span title="${_T('Non imprimé sur le bon')}" style="opacity:.6">(${_T('masqué')})</span>`}</th><th style="text-align:right">${_T('Total')}</th><th></th></tr></thead>
     <tbody>${cs.lignes.map((l, i) => `<tr>
-      <td>${inp('ref', i, l.reference, 'width:100%')}${l.catalogue_id ? `<div style="font-size:11px;color:var(--success)"><i class="ti ti-link"></i> ${_T('catalogue')}</div>` : `<div style="font-size:11px;color:var(--text3)">${_T('hors catalogue')}</div>`}</td>
-      <td>${inp('sup', i, l.ref_fournisseur, 'width:100%')}</td>
-      <td>${inp('des', i, l.designation, 'width:100%;font-weight:600')}
-        ${inp('note', i, l.note, 'width:100%;margin-top:4px;font-style:italic', `placeholder="${_T('Configuration / options / accessoires (facultatif)')}"`)}</td>
-      <td>${inp('q', i, l.quantite, 'width:60px', 'type="number" min="1"')}</td>
-      <td>${inp('px', i, l.prix_unitaire, 'width:90px', 'inputmode="decimal"')}</td>
-      <td id="cs-l-tot-${i}" style="text-align:right;white-space:nowrap"></td>
-      <td>${editable ? `<button class="btn sm" onclick="csRetirerLigne(${i})" title="${_T('Retirer')}"><i class="ti ti-x"></i></button>` : ''}</td>
+      ${td()}${inp('ref', i, l.reference, 'font-weight:700;font-size:14px')}
+        ${inp('sup', i, l.ref_fournisseur, 'font-size:12px;color:var(--text2);margin-top:4px', `placeholder="${_T('Réf. fournisseur')}"`)}
+        ${sous(l.catalogue_id ? `<i class="ti ti-link"></i> ${_T('catalogue')}` : _T('hors catalogue'), l.catalogue_id ? 'var(--success)' : 'var(--text3)')}</td>
+      ${td()}${inp('des', i, l.designation, 'font-weight:600')}
+        ${inp('note', i, l.note, 'font-style:italic;margin-top:4px', `placeholder="${_T('Configuration / options / accessoires (facultatif)')}"`)}</td>
+      ${td()}${inp('q', i, l.quantite, 'text-align:center', 'type="number" min="1"')}</td>
+      ${td()}${inp('px', i, l.prix_unitaire, 'text-align:right', 'inputmode="decimal"')}</td>
+      ${td('text-align:right;white-space:nowrap;line-height:34px;font-weight:600')}<span id="cs-l-tot-${i}"></span></td>
+      ${td('text-align:center')}${editable ? `<button class="btn sm" style="height:34px" onclick="csRetirerLigne(${i})" title="${_T('Retirer')}"><i class="ti ti-x"></i></button>` : ''}</td>
     </tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="3" style="text-align:right;font-weight:600">${_T('Total')}</td><td id="cs-tot-q" style="font-weight:700"></td><td></td><td id="cs-tot-px" style="text-align:right;font-weight:700;white-space:nowrap"></td><td></td></tr></tfoot>
+    <tfoot><tr><td colspan="2" style="text-align:right;font-weight:600">${_T('Total')}</td><td id="cs-tot-q" style="font-weight:700;text-align:center"></td><td></td><td id="cs-tot-px" style="text-align:right;font-weight:700;white-space:nowrap"></td><td></td></tr></tfoot>
   </table></div>`;
   totaux();
 }
