@@ -231,6 +231,9 @@ window.inviterEspaceDistributeur = inviterEspaceDistributeur;
 
 function setView(v, extra={}){
   if(!hasAccess(v)) return;
+  // Bon de commande Suède en cours de saisie, pas enregistré : on prévient avant de quitter
+  if(!extra.garderPO && typeof csNonEnregistre === 'function' && csNonEnregistre() && document.getElementById('cs-lignes')
+     && !confirm(TR('Le bon de commande Suède n’est pas enregistré : quitter quand même ? (il sera perdu)'))) return;
   // Réinitialiser les recherches locales quand on change de vue
   if(v !== 'clients')   window._clientsQ = '';
   if(v !== 'catalogue') { STATE.q = ''; }
@@ -6558,6 +6561,9 @@ async function renderCommandeSuede(ttl, c, a) {
     ${typeof csNouveau === 'function' ? `<button class="btn primary" onclick="csNouveau()"><i class="ti ti-plus"></i>${TR('Nouveau bon de commande')}</button>` : ''}</div>`;
   c.innerHTML = `<div id="cs-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')||'Chargement…'}</div></div>`;
   chargerCommandesSuede();
+  // Liste rafraîchie toutes les 30 s (bons créés par les collègues)
+  clearInterval(window._csListeTimer);
+  window._csListeTimer = setInterval(() => { if (!document.getElementById('cs-body')) { clearInterval(window._csListeTimer); return; } if (!document.hidden && !document.querySelector('.modal-overlay')) chargerCommandesSuede(); }, 30000);
 }
 
 async function chargerCommandesSuede() {
@@ -6579,7 +6585,7 @@ async function chargerCommandesSuede() {
         const reliquat = cs.total_reliquat > 0 ? ` <span class="badge hg" title="Reliquat">R:${cs.total_reliquat}</span>` : '';
         return `<tr onclick="ouvrirCommandeSuede(${cs.id})" style="cursor:pointer">
           <td style="font-weight:600" class="mono">${esc(cs.numero_bc)}${cs.reference_client ? `<div style="font-size:11.5px;font-weight:400;color:var(--text3)">${TR('Réf. client')} ${esc(cs.reference_client)}</div>` : ''}${cs.devis_pennylane ? `<div style="font-size:11.5px;font-weight:400;color:var(--text3)">${TR('Devis')} ${esc(cs.devis_pennylane)}</div>` : ''}</td>
-          <td>${typeof csBadgeEtape === 'function' ? csBadgeEtape(cs) : esc(cs.statut || '')}${cs.valide_par ? `<div style="font-size:11.5px;color:var(--text3)">${TR('validée par')} ${esc(cs.valide_par)}</div>` : ''}</td>
+          <td>${typeof csBadgeEtape === 'function' ? csBadgeEtape(cs) : esc(cs.statut || '')}${cs.valide_par ? `<div style="font-size:11.5px;color:var(--text3)">${TR('validée par')} ${esc(cs.valide_par)}</div>` : (cs.cree_par ? `<div style="font-size:11.5px;color:var(--text3)">${TR('créée par')} ${esc(cs.cree_par)}</div>` : '')}</td>
           <td style="font-size:13px">${esc(cs.livraison_nom || '—')}</td>
           <td>${cs.date_commande ? fd(cs.date_commande) : '—'}</td>
           <td>${esc(cs.transporteur || '—')}</td>

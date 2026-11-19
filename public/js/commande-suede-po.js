@@ -47,6 +47,7 @@ function etapeVue(cs) {
   return cs.etape || null;
 }
 function badgeEtape(cs) {
+  if (cs && cs.id === null) return `<span class="badge" style="background:#fff4e0;color:#9a5b00;font-weight:600"><i class="ti ti-alert-triangle"></i> ${_T('Non enregistré')}</span>`;
   const k = etapeVue(cs);
   if (!k) return `<span class="badge" style="opacity:.7" title="${_T('Commande importée de VosFactures')}">VosFactures</span>`;
   const [l, st] = ETAPES[k];
@@ -64,8 +65,13 @@ async function catalogue() {
 }
 
 // ── Navigation ─────────────────────────────────────────────────────
+function nonEnregistre() {
+  return S.vue === 'edition' && S.cs && (S.modifie || (S.cs.id === null && (S.cs.lignes || []).length > 0));
+}
+window.csNonEnregistre = nonEnregistre;
+window.addEventListener('beforeunload', ev => { if (nonEnregistre() && document.getElementById('cs-lignes')) { ev.preventDefault(); ev.returnValue = ''; } });
 function quitter(sansConfirm) {
-  if (!sansConfirm && S.modifie && !confirm(_T('Modifications non enregistrées : quitter quand même ?'))) return;
+  if (!sansConfirm && nonEnregistre() && !confirm(_T('Modifications non enregistrées : quitter quand même ?'))) return;
   fermerDevis();
   S.vue = 'liste'; S.id = null; S.cs = null; S.modifie = false;
   if (typeof render === 'function') render();
@@ -110,6 +116,7 @@ async function renderEdition(ttl, c, a) {
 
   c.innerHTML = `
   <div style="max-width:1100px">
+    ${!cs.id && !cs.devis_pennylane ? `<div style="background:#fff4e0;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-alert-triangle"></i> ${_T('Ce bon n’est pas encore enregistré : il n’existe que sur cet écran. Cliquez sur « Enregistrer » pour le créer ; il apparaîtra alors dans la liste pour tout le monde.')}</div>` : ''}
     ${!cs.id && cs.devis_pennylane ? `<div style="background:#fff4e0;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-file-import"></i> ${_T('Bon pré-rempli depuis le devis Pennylane')} <b class="mono">${e_(cs.devis_pennylane)}</b>${cs.distributeur_devis ? ' (' + e_(cs.distributeur_devis) + ')' : ''}. ${_T('Vérifiez les articles, l’adresse et la référence commande client, puis cliquez sur « Enregistrer ».')}</div>` : ''}
     ${cs.etape === 'annulee' ? `<div style="background:#fdecec;color:#b42828;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-ban"></i> ${_T('Commande annulée')}${cs.annule_par ? ' ' + _T('par') + ' <b>' + e_(cs.annule_par) + '</b>' : ''}${cs.annule_le ? ' — ' + dhFr(cs.annule_le) : ''}${cs.annule_motif ? '<br>' + _T('Motif') + ' : ' + e_(cs.annule_motif) : ''}</div>` : ''}
     ${cs.etape === 'validee' && editable ? `<div style="background:#e6f0fb;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-info-circle"></i> ${_T('Commande validée : toute modification enregistrée la repasse en brouillon (nouvelle validation nécessaire).')}</div>` : ''}
