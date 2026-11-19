@@ -141,6 +141,8 @@ router.use((req, res, next) => {
   perm = perm || 'none';
   // Envoi des éclatés par e-mail : la lecture suffit (rien n'est modifié)
   if (req.method === 'POST' && req.path === '/eclates/envoyer-mail' && perm === 'read') return next();
+  // Ajout d'un fauteuil / d'une pièce à un bon de commande Suède depuis les éclatés : la route vérifie elle-même la liste des personnes autorisées
+  if (req.method === 'POST' && req.path === '/eclates-bc-suede/ajouter' && perm === 'read') return next();
   // Méthodes en écriture : exiger 'write'
   if (['POST','PUT','DELETE','PATCH'].includes(req.method) && perm !== 'write') {
     return res.status(403).json({ error: `Accès en écriture refusé sur le module "${module}".` });

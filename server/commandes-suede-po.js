@@ -12,6 +12,7 @@
 const TO_SUEDE = 'order@eloflex.se';
 const CC_SAV = 'sav@eloflex.fr';
 const VALIDATEURS_DEFAUT = 'brice, lyes, frederic, olivier';
+const ACCES_ECLATES_DEFAUT = 'brice, frederic, lyes, linnea, olivier';
 const ADR_LAGORD = 'Éloflex France\n41 rue des Maraichers\n17140 LAGORD';
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const esc = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -142,6 +143,75 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
         },
       });
     } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // ── Depuis les éclatés : ajouter un fauteuil ou une pièce à un bon de commande Suède ──
+  // Réservé aux personnes de la liste « acces_bc_eclates » (Brice, Frédéric, Lyes, Linnea, Olivier par défaut).
+  const listeEclates = async () => String(await param(db, 'acces_bc_eclates', ACCES_ECLATES_DEFAUT)).split(/[,;\n]+/).map(norm).filter(Boolean);
+  router.get('/eclates-bc-suede', async (req, res) => {
+    try {
+      await assurer(db);
+      if (!estValidateur(res.locals.user, await listeEclates())) return res.json({ autorise: false });
+      const en_attente = await db.all(`SELECT cs.id, cs.numero_bc, cs.etape, cs.reference_client, cs.livraison_nom, cs.cree_par, cs.created_at,
+          (SELECT COUNT(*)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS nb_lignes,
+          (SELECT COALESCE(SUM(quantite_commandee),0)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS nb_articles
+        FROM commandes_suede cs WHERE cs.etape IN ('brouillon','validee') ORDER BY cs.updated_at DESC NULLS LAST, cs.id DESC LIMIT 15`);
+      res.json({ autorise: true, en_attente, prochain_numero: await prochainNumero(db) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  // { commande_id (vide = nouveau bon), lignes:[{ catalogue_id, reference, designation, note, quantite }] }
+  router.post('/eclates-bc-suede/ajouter', async (req, res) => {
+    await assurer(db);
+    const u = res.locals.user, b = req.body || {};
+    if (!estValidateur(u, await listeEclates())) return res.status(403).json({ error: 'Réservé à Brice, Frédéric, Lyes, Linnea et Olivier.' });
+    const lignes = (Array.isArray(b.lignes) ? b.lignes : []).filter(l => (parseInt(l.quantite) || 0) > 0 && (txt(l.designation) || txt(l.reference)));
+    if (!lignes.length) return res.status(400).json({ error: 'Rien à ajouter' });
+    const pg = await db.pool.connect();
+    try {
+      await pg.query('BEGIN');
+      let id = parseInt(b.commande_id) || null, numero, nouveau = false, revalider = false;
+      if (id) {
+        const { rows: [cs] } = await pg.query('SELECT id, numero_bc, etape FROM commandes_suede WHERE id=$1 FOR UPDATE', [id]);
+        if (!cs) { await pg.query('ROLLBACK'); return res.status(404).json({ error: 'Bon de commande introuvable' }); }
+        if (!['brouillon', 'validee'].includes(cs.etape)) { await pg.query('ROLLBACK'); return res.status(409).json({ error: `Le bon ${cs.numero_bc} est déjà envoyé : choisissez-en un autre ou créez-en un nouveau.` }); }
+        numero = cs.numero_bc;
+        if (cs.etape === 'validee') { revalider = true; await pg.query(`UPDATE commandes_suede SET etape='brouillon', valide_par=NULL, valide_le=NULL WHERE id=$1`, [id]); }
+      } else {
+        numero = await prochainNumero(db); nouveau = true;
+        let p = {}; try { p = JSON.parse(await param(db, 'po_suede_livraison_lagord', '{}')) || {}; } catch (_) { p = {}; }
+        const adr = String(p.adresse ? (p.nom || '') + '\n' + p.adresse : await param(db, 'transfert_adresse_lagord', ADR_LAGORD)).split('\n');
+        const { rows: [cs] } = await pg.query(`INSERT INTO commandes_suede (numero_bc, fournisseur, statut, etape, cree_par, date_commande, livraison_type,
+            livraison_nom, livraison_contact, livraison_adresse, livraison_pays, livraison_tel, livraison_email)
+          VALUES ($1,'Eloflex AB','En cours','brouillon',$2,CURRENT_DATE,'lagord',$3,$4,$5,$6,$7,$8) RETURNING id`,
+          [numero, nomU(u), adr[0] || 'Éloflex France', p.contact || null, adr.slice(1).join('\n') || null, p.pays || 'France', p.tel || null, p.email || CC_SAV]);
+        id = cs.id;
+      }
+      const { rows: [mx] } = await pg.query('SELECT COALESCE(MAX(ordre),-1)+1 AS o FROM commandes_suede_lignes WHERE commande_id=$1', [id]);
+      let ordre = mx.o;
+      for (const l of lignes) {
+        const q = parseInt(l.quantite) || 1, note = txt(l.note, 600);
+        // Rattachement au catalogue (id fourni, sinon référence identique sans espaces ni tirets)
+        let cat = null;
+        if (parseInt(l.catalogue_id)) cat = (await pg.query('SELECT id, ref, designation, ref_fournisseur, prix_achat_suede FROM catalogue WHERE id=$1', [parseInt(l.catalogue_id)])).rows[0] || null;
+        if (!cat && txt(l.reference)) cat = (await pg.query(`SELECT id, ref, designation, ref_fournisseur, prix_achat_suede FROM catalogue
+            WHERE upper(regexp_replace(ref, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace($1, '[^A-Za-z0-9]', '', 'g')) LIMIT 1`, [txt(l.reference)])).rows[0] || null;
+        const ref = cat ? cat.ref : txt(l.reference, 80);
+        // Même article déjà présent sans configuration particulière → on augmente la quantité
+        const ex = !note && (await pg.query(`SELECT id FROM commandes_suede_lignes WHERE commande_id=$1 AND COALESCE(note,'')='' AND
+            ${cat ? 'catalogue_id=$2' : "catalogue_id IS NULL AND upper(COALESCE(reference,''))=upper($2)"} LIMIT 1`, [id, cat ? cat.id : (ref || '')])).rows[0];
+        if (ex && (cat || ref)) await pg.query('UPDATE commandes_suede_lignes SET quantite_commandee=quantite_commandee+$1 WHERE id=$2', [q, ex.id]);
+        else await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [id, cat ? cat.id : null, ref, cat ? cat.ref_fournisseur : null, txt(l.designation, 300) || (cat && cat.designation) || ref, note, q,
+            cat && cat.prix_achat_suede != null ? cat.prix_achat_suede : null, ordre++]);
+      }
+      await pg.query('UPDATE commandes_suede SET updated_at=NOW() WHERE id=$1', [id]);
+      await pg.query('COMMIT');
+      await histo(id, u, nouveau ? 'création depuis les éclatés' : 'ajout depuis les éclatés' + (revalider ? ' (validation annulée)' : ''),
+        lignes.map(l => `${parseInt(l.quantite) || 1} × ${txt(l.reference) || txt(l.designation)}`).join(', ').slice(0, 300));
+      res.json({ ok: true, id, numero_bc: numero, nouveau, revalider });
+    } catch (e) { await pg.query('ROLLBACK').catch(() => {}); res.status(500).json({ error: e.message }); }
+    finally { pg.release(); }
   });
 
   router.get('/commandes-suede-po/:id', async (req, res) => {

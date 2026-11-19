@@ -66,7 +66,7 @@ async function nouveau() {
     reference_client: '', livraison_type: 'lagord', livraison_nom: p.nom, livraison_contact: p.contact, livraison_adresse: p.adresse,
     livraison_pays: p.pays || 'France', livraison_tel: p.tel, livraison_email: p.email, afficher_prix: false, notes: '', lignes: [] };
   S.vue = 'edition'; S.id = null; S.modifie = false;
-  if (typeof setView === 'function' && typeof STATE !== 'undefined' && STATE.view !== 'commande-suede') setView('commande-suede'); else render();
+  if (typeof setView === 'function' && typeof STATE !== 'undefined' && STATE.view !== 'commande-suede') setView('commande-suede', { garderPO: true }); else render();
 }
 async function ouvrir(id) {
   try { if (typeof closeModal === 'function') closeModal(); } catch (_) {}
@@ -139,7 +139,7 @@ async function renderEdition(ttl, c, a) {
       ${editable ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <div style="position:relative;flex:1;min-width:260px">
           <input class="form-input" id="cs-art-q" placeholder="${_T('Ajouter une pièce ou un fauteuil du catalogue (réf., réf. fournisseur, désignation)…')}" oninput="csChercherArticle(this.value)" autocomplete="off">
-          <div id="cs-art-sug" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:260px;overflow:auto;display:none"></div>
+          <div id="cs-art-sug" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;max-height:420px;overflow:auto;display:none"></div>
         </div>
         <button class="btn" onclick="csLigneLibre()"><i class="ti ti-plus"></i>${_T('Ligne libre (fauteuil, configuration…)')}</button>
       </div>` : ''}
@@ -265,9 +265,10 @@ async function chercherArticle(q) {
   const res = cat.filter(c => n(c.ref).includes(q) || n(c.designation).includes(q) || n(c.ref_fournisseur).includes(q)
     || (qc && String(c.ref || '').toLowerCase().replace(/[\s.\-_/]+/g, '').includes(qc))).slice(0, 12);
   if (!res.length) { box.innerHTML = `<div style="padding:8px 10px;font-size:13px;color:var(--text3)">${_T('Aucun résultat — utilisez « Ligne libre ».')}</div>`; box.style.display = ''; return; }
-  box.innerHTML = res.map(c => `<div onclick="csAjouterArticle(${c.id})" style="padding:7px 10px;cursor:pointer;border-bottom:0.5px solid rgba(0,0,0,.05);font-size:13px" onmouseover="this.style.background='rgba(46,124,246,.08)'" onmouseout="this.style.background=''">
-    <span class="mono" style="font-weight:600">${e_(c.ref)}</span>${c.ref_fournisseur ? ` <span class="mono" style="color:var(--text3)">· ${e_(c.ref_fournisseur)}</span>` : ''} — ${e_(c.designation)}
-    <span style="float:right;color:var(--text3)">${c.prix_achat_suede != null ? eur(c.prix_achat_suede) : ''} · ${_T('stock')} ${c.stock ?? 0}</span></div>`).join('');
+  box.innerHTML = res.map(c => `<div onclick="csAjouterArticle(${c.id})" style="display:flex;align-items:center;gap:14px;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--border)" onmouseover="this.style.background='rgba(46,124,246,.08)'" onmouseout="this.style.background=''">
+    <span class="mono" style="font-weight:800;font-size:14.5px;color:var(--text);min-width:130px;flex-shrink:0">${e_(c.ref)}</span>
+    <span style="flex:1;font-size:13.5px;line-height:1.35">${e_(c.designation)}</span>
+    <span style="flex-shrink:0;text-align:right;font-size:12.5px;color:var(--text3);white-space:nowrap">${c.prix_achat_suede != null ? eur(c.prix_achat_suede) + '<br>' : ''}${_T('stock')} <b style="color:${(+c.stock || 0) > 0 ? 'var(--text2)' : 'var(--danger)'}">${c.stock ?? 0}</b></span></div>`).join('');
   box.style.display = '';
 }
 function ajouterArticle(id) {
@@ -393,7 +394,7 @@ async function envoyer(renvoi) {
   let ap = null;
   try { ap = await API.post(`/commandes-suede-po/${cs.id}/envoyer`, { apercu: true }); } catch (e) { _toast(e.message, 'ti-alert-circle', 'var(--danger)'); return; }
   showModal(`
-    <div class="modal-head"><h3><i class="ti ti-send"></i>${renvoi ? _T('Renvoyer') : _T('Envoyer')} ${e_(cs.numero_bc)} ${_T('à la Suède')}</h3>
+    <div class="modal-header"><h3><i class="ti ti-send"></i>${renvoi ? _T('Renvoyer') : _T('Envoyer')} ${e_(cs.numero_bc)} ${_T('à la Suède')}</h3>
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <div style="font-size:13.5px;margin-bottom:8px">${_T('À')} : <b>${e_(cfg.to)}</b> · ${_T('Copie')} : <b>${e_(cfg.cc)}</b><br>
@@ -404,7 +405,7 @@ async function envoyer(renvoi) {
       <details><summary style="cursor:pointer;font-size:13px;color:var(--text2)">${_T('Aperçu du mail')}</summary>
         <div style="border:0.5px solid var(--border);border-radius:8px;padding:10px;margin-top:6px;max-height:300px;overflow:auto;font-size:12px">${ap.html}</div></details>
     </div>
-    <div class="modal-foot">
+    <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${_T('Annuler')}</button>
       <button class="btn primary" id="cs-env-btn" onclick="csConfirmerEnvoi()"><i class="ti ti-send"></i>${_T('Envoyer')}</button>
     </div>`);

@@ -234,7 +234,7 @@ function setView(v, extra={}){
   // Réinitialiser les recherches locales quand on change de vue
   if(v !== 'clients')   window._clientsQ = '';
   if(v !== 'catalogue') { STATE.q = ''; }
-  if(v !== 'commande-suede' && window._CSPO) { window._CSPO.vue = 'liste'; window._CSPO.id = null; window._CSPO.cs = null; }
+  if(!extra.garderPO && window._CSPO) { window._CSPO.vue = 'liste'; window._CSPO.id = null; window._CSPO.cs = null; }
   // Suivi commandes : on repart d'une recherche vierge à chaque entrée dans la vue.
   // Un appelant peut pré-remplir un filtre via extra (ex. depuis le Parc de démo).
   if(v === 'commandes'){
@@ -6580,7 +6580,7 @@ let _csCatalogue = null;
 function modalNouvelleCommandeSuede() {
   _csLignes = [];
   showModal(`
-    <div class="modal-head"><h3><i class="ti ti-truck-delivery"></i>${TR('Nouvelle commande Suède')}</h3>
+    <div class="modal-header"><h3><i class="ti ti-truck-delivery"></i>${TR('Nouvelle commande Suède')}</h3>
       <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label">${TR('Référence de la commande')}</label>
@@ -6623,7 +6623,7 @@ function modalNouvelleCommandeSuede() {
           <input class="form-input" id="cs-livraison" type="date"></div>
       </div>
     </div>
-    <div class="modal-foot">
+    <div class="modal-footer">
       <button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button>
       <button class="btn primary" onclick="enregistrerCommandeSuede()"><i class="ti ti-check"></i>${TR('Créer')}</button>
     </div>`);
@@ -6785,7 +6785,7 @@ async function ouvrirCommandeSuede(id) {
     const lien = lienSuiviColis(cs.transporteur, cs.num_suivi);
     const peutIntegrer = cs.date_livraison && !cs.stock_integre;
     showModal(`
-      <div class="modal-head"><h3><i class="ti ti-truck-delivery"></i>${esc(cs.numero_bc)}</h3>
+      <div class="modal-header"><h3><i class="ti ti-truck-delivery"></i>${esc(cs.numero_bc)}</h3>
         <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
         <div class="grid-2">
@@ -6817,7 +6817,7 @@ async function ouvrirCommandeSuede(id) {
           </tr>`).join('')}</tbody></table></div>
         ${cs.stock_integre ? `<div style="font-size:13px;color:var(--success);margin-top:8px"><i class="ti ti-check"></i> Stock intégré${cs.integre_le?' le '+fd(String(cs.integre_le).slice(0,10)):''}</div>` : ''}
       </div>
-      <div class="modal-foot" style="justify-content:space-between">
+      <div class="modal-footer" style="justify-content:space-between">
         <div>${cs.stock_integre ? '' : `<button class="btn sm danger" onclick="supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i>${TR('Supprimer')}</button>`}</div>
         <div style="display:flex;gap:6px">
           ${cs.stock_integre ? '' : `<button class="btn" onclick="sauverCommandeSuede(${cs.id})"><i class="ti ti-device-floppy"></i>${TR('Enregistrer')}</button>`}
@@ -6852,7 +6852,7 @@ async function modalIntegrerStock(id) {
       catalogue_id: l.catalogue_id, quantite_commandee: l.quantite_commandee
     }));
     showModal(`
-      <div class="modal-head"><h3><i class="ti ti-package-import"></i>Réception ${esc(cs.numero_bc)}</h3>
+      <div class="modal-header"><h3><i class="ti ti-package-import"></i>Réception ${esc(cs.numero_bc)}</h3>
         <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
         <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Vérifiez la livraison. Ajustez la quantité reçue (un reliquat est calculé si elle est inférieure à la commande) et, au besoin, corrigez la référence ou reliez une ligne au catalogue pour que le stock soit mis à jour.')}</div>
@@ -6860,7 +6860,7 @@ async function modalIntegrerStock(id) {
         <div class="form-group" style="margin-top:12px;max-width:340px"><label class="form-label">${TR('Emplacement de réception')}</label>
           <select class="form-input" id="cs-int-empl"><option value="lagord">Lagord</option><option value="paris">Paris</option></select></div>
       </div>
-      <div class="modal-foot">
+      <div class="modal-footer">
         <button class="btn" onclick="ouvrirCommandeSuede(${id})">${t('btn_annuler')||'Annuler'}</button>
         <button class="btn primary" onclick="confirmerIntegrationStock(${id})"><i class="ti ti-check"></i>${TR('Valider et mettre à jour le stock')}</button>
       </div>`);

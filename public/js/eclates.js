@@ -156,7 +156,27 @@ if (typeof EN_STR !== 'undefined') Object.assign(EN_STR, {
   "Société / demandeur": "Company / requester",
   "Réf.": "Ref.",
   "Chargement…": "Loading…",
-  "Erreur": "Error"
+  "Erreur": "Error",
+  "Bon de commande Suède": "Purchase order (Sweden)",
+  "BC Suède": "PO Sweden",
+  "Commander ce fauteuil": "Order this wheelchair",
+  "Ajouter à un bon de commande Suède": "Add to a purchase order to Sweden",
+  "Quantité": "Quantity",
+  "Configuration / options / accessoires (facultatif)": "Configuration / options / accessories (optional)",
+  "Nouveau bon de commande": "New purchase order",
+  "Bons en attente (non envoyés)": "Pending orders (not sent yet)",
+  "Aucun bon en attente.": "No pending order.",
+  "Brouillon": "Draft",
+  "Validée": "Approved",
+  "article(s)": "item(s)",
+  "Livrer à": "Deliver to",
+  "Ajouter": "Add",
+  "Annuler": "Cancel",
+  "ajouté au bon": "added to order",
+  "Ouvrir le bon de commande": "Open the purchase order",
+  "Continuer": "Continue",
+  "Ce bon était validé : il repasse en brouillon et devra être revalidé.": "This order was approved: it goes back to draft and must be approved again.",
+  "livraison Lagord par défaut, modifiable dans le bon": "delivery to Lagord by default, can be changed in the order"
 });
 // Libellés suédois : traduction automatique depuis l'anglais (public/js/trad-sv.js)
 const SV = s => (typeof tradSV === 'function') ? tradSV(s) : s;
@@ -365,6 +385,10 @@ function css(){
 // ── Point d'entrée (appelé par render() de app.js) ─────────────────
 async function renderEclates(ttl, c, a){
   css();
+  if (E.bcSuede === undefined) {
+    E.bcSuede = false;
+    if (!estDistrib()) { try { E.bcSuede = !!(await API.get('/eclates-bc-suede')).autorise; } catch (_) { E.bcSuede = false; } }
+  }
   if (!E.modeleId) return renderListe(ttl, c, a);
   try {
     if (!E.data || E.data.id !== E.modeleId) E.data = prepare(await API.get(`/eclates/${E.modeleId}`));
@@ -489,13 +513,14 @@ async function renderListe(ttl, c, a){
         ${lienM(m,'lien_web') ? `<a href="${e_(lienM(m,'lien_web'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_web'))}"><i class="ti ti-world"></i> ${TR('Site web')}</a>` : ''}
         ${lienM(m,'lien_notice') ? `<a href="${e_(lienM(m,'lien_notice'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_notice'))}"><i class="ti ti-book"></i> ${TR('Notice')}</a>` : ''}
         ${lienM(m,'lien_fiche') ? `<a href="${e_(lienM(m,'lien_fiche'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_fiche'))}"><i class="ti ti-file-description"></i> ${TR('Fiche technique')}</a>` : ''}
+        ${E.bcSuede ? `<span class="ecl-act" data-bcm="${m.id}" style="color:#1F5C8C" title="${TV('Ajouter à un bon de commande Suède')}"><i class="ti ti-truck-delivery"></i> ${TV('Commander ce fauteuil')}</span>` : ''}
         ${edit ? `<span class="ecl-act" data-liens="${m.id}" style="color:var(--text2)" title="${TR('Modifier les liens (site, notice, fiche technique)')}"><i class="ti ti-link"></i> ${TR('Liens')}</span>` : ''}
       </div>
       ${admin ? `<small style="margin-top:8px"><span class="ecl-mini" data-del="${m.id}" data-nom="${e_(m.nom)}"><i class="ti ti-trash"></i> ${TR('Supprimer')}</span></small>` : ''}
     </div>`).join('')}</div>`
     : `<div class="empty"><i class="ti ti-schema"></i>${TR('Aucun éclaté importé pour le moment.')}${admin ? '<br>' + TR('Utilisez « Importer des éclatés » avec les fichiers .json fournis.') : ''}</div>`;
   c.querySelectorAll('.ecl-card').forEach(el => el.addEventListener('click', ev => {
-    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-liens]') || ev.target.closest('[data-pdf]') || ev.target.closest('.ecl-web') || ev.target.closest('[data-carac]')) return;
+    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-liens]') || ev.target.closest('[data-pdf]') || ev.target.closest('.ecl-web') || ev.target.closest('[data-carac]') || ev.target.closest('[data-bcm]')) return;
     const mm = list.find(x => x.id === +el.dataset.id);
     if (mm && !mm.nb_vues) { if (SITE_SE() && lienM(mm, 'lien_web')) window.open(lienM(mm, 'lien_web'), '_blank', 'noopener'); else if (mm.caracteristiques && !SITE_SE()) ficheCaracteristiques(mm); else if (typeof toast === 'function') toast(TR('L’éclaté de ce modèle sera bientôt disponible.'), 'ti-clock'); return; }
     E.modeleId = +el.dataset.id; E.vueId = null; E.data = null; back = null; render();
@@ -508,6 +533,9 @@ async function renderListe(ttl, c, a){
   c.querySelectorAll('[data-liens]').forEach(el => el.addEventListener('click', ev => {
     ev.stopPropagation();
     const m = list.find(x => x.id === +el.dataset.liens); if (m) modifierLiens(m, () => render());
+  }));
+  c.querySelectorAll('[data-bcm]').forEach(el => el.addEventListener('click', ev => {
+    ev.stopPropagation(); const m = list.find(x => x.id === +el.dataset.bcm); if (m) bcSuedeFauteuil(m);
   }));
   c.querySelectorAll('[data-carac]').forEach(el => el.addEventListener('click', ev => {
     ev.stopPropagation(); const m = list.find(x => x.id === +el.dataset.carac); if (m) ficheCaracteristiques(m);
@@ -583,6 +611,7 @@ function renderViewer(ttl, c, a){
     <div style="position:relative"><input id="ecl-q" class="search-bar" placeholder="${T('search')}" autocomplete="off" style="width:260px"><div class="ecl-res" id="ecl-res"></div></div>
     <div class="ecl-seg"><button data-lg="fr" class="${L()==='fr'?'on':''}">FR</button><button data-lg="en" class="${L()==='en'?'on':''}">EN</button><button data-lg="sv" class="${L()==='sv'?'on':''}">SV</button></div>
     ${peutCommander() ? boutonPanier() : ''}
+    ${E.bcSuede ? `<button class="btn" id="ecl-bcm" title="${TV('Ajouter à un bon de commande Suède')}"><i class="ti ti-truck-delivery"></i> ${TV('Commander ce fauteuil')}</button>` : ''}
     <button class="btn primary" id="ecl-pdf"><i class="ti ti-file-type-pdf"></i> ${({fr:'Télécharger PDF',en:'Download PDF',sv:'Ladda ner PDF'})[L()]}</button>
     ${lienM(d,'lien_web') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_web'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_web'))}"><i class="ti ti-world"></i> ${({fr:'Site web',en:'Website',sv:'Webbplats'})[L()]}</a>` : ''}
     ${lienM(d,'lien_notice') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_notice'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_notice'))}"><i class="ti ti-book"></i> ${({fr:'Notice',en:'User manual',sv:'Bruksanvisning'})[L()]}</a>` : ''}
@@ -616,6 +645,7 @@ function renderViewer(ttl, c, a){
   if ($('ecl-vedit')) $('ecl-vedit').onclick = editerVue;
   if ($('ecl-lien')) $('ecl-lien').onclick = () => modifierLiens(d, r => { Object.assign(d, r); renderViewer(ttl, c, a); });
   $('ecl-pdf').onclick = choisirPDF;
+  if ($('ecl-bcm')) $('ecl-bcm').onclick = () => bcSuedeFauteuil(d);
   if ($('ecl-addb')) $('ecl-addb').onclick = () => { addMode = { step: 1 }; hint(TR('Cliquez à l’endroit de la nouvelle bulle (Échap pour annuler)')); $('ecl-paper').classList.add('adding'); };
   bindZoom(); bindSearch();
   const pend = E._pendingSel; E._pendingSel = null;
@@ -743,7 +773,7 @@ function list(){
         ${it.horscat && L() === 'fr' && !it.cat_masque && !it.cat_fiche_masquee ? `<span class="ecl-tag warn">${T('horscat')}</span>${canCat ? ` <span class="ecl-tag btn" data-creer="${it.id}">+ ${T('creer')}</span>` : ''}` : ''}
         ${it.note ? `<span class="ecl-tag warn">${T('sold')}</span>` : ''}
       </div>
-      <div class="ecl-right">${it.vue_cible ? '' : `${T('qty')} ${e_(it.qty || '—')}`}${it.cat_id && L() === 'fr' && !it.cat_masque && it.cat_prix_distrib != null ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && !it.vue_cible && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TV('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TV('Ajouter au devis')}</button>` : ''}</div>
+      <div class="ecl-right">${it.vue_cible ? '' : `${T('qty')} ${e_(it.qty || '—')}`}${it.cat_id && L() === 'fr' && !it.cat_masque && it.cat_prix_distrib != null ? `<br>${(+it.cat_prix_distrib || 0).toFixed(2)} € HT` : ''}${it.cat_prix_public != null && L() === 'fr' ? `<br><span title="${TR('Prix public conseillé TTC')}">${(+it.cat_prix_public).toFixed(2)} € TTC</span>` : ''}<br>${stockBadge(it)}${peutCommander() && !it.vue_cible && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-cmd="${it.id}" title="${TV('Ajouter à la demande de devis')}"><i class="ti ti-file-plus"></i> ${TV('Ajouter au devis')}</button>` : ''}${E.bcSuede && !it.vue_cible && (it.ref || label(it)) ? `<br><button class="ecl-cmd" data-bc="${it.id}" title="${TV('Ajouter à un bon de commande Suède')}"><i class="ti ti-truck-delivery"></i> ${TV('BC Suède')}</button>` : ''}</div>
     </div>`;
   };
   v.items.forEach(it => h += row(it, false));
@@ -761,6 +791,11 @@ function list(){
   el.querySelectorAll('[data-edit]').forEach(b => b.onclick = ev => { ev.stopPropagation(); editerLigne(+b.dataset.edit); });
   el.querySelectorAll('[data-creer]').forEach(b => b.onclick = ev => { ev.stopPropagation(); creerArticle(+b.dataset.creer); });
   if ($('ecl-addl')) $('ecl-addl').onclick = () => editerLigne(null);
+  el.querySelectorAll('[data-bc]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    const it = v.items.concat(v.extras).find(x => x.id === +b.dataset.bc); if (!it) return;
+    bcSuedePiece(it);
+  });
   el.querySelectorAll('[data-cmd]').forEach(b => b.onclick = ev => {
     ev.stopPropagation();
     const it = v.items.concat(v.extras).find(x => x.id === +b.dataset.cmd); if (!it) return;
@@ -1177,6 +1212,79 @@ async function exporterPDF(lang, vues, prog, opts){
 // ══════════════════════════════════════════════════════════════════
 const estDistrib = () => typeof window.estDistributeur === 'function' && window.estDistributeur();
 // Demande de devis : ouverte à tout utilisateur qui a accès aux éclatés (distributeurs, équipe, comptes étrangers)
+// ── Bon de commande Suède depuis les éclatés (Brice, Frédéric, Lyes, Linnea, Olivier) ──
+function bcSuedeFauteuil(m){
+  bcSuedeChoisir({ catalogue_id: null, reference: m.ref_modele || '', designation: m.nom || '', fauteuil: true });
+}
+function bcSuedePiece(it){
+  bcSuedeChoisir({ catalogue_id: it.cat_id || null, reference: it.ref || '',
+    designation: (it.cat_designation || it.fr || it.desc_en || label(it) || '') });
+}
+async function bcSuedeChoisir(art){
+  let d;
+  try { d = await API.get('/eclates-bc-suede'); } catch (err) { if (typeof toast === 'function') toast(err.message, 'ti-alert-circle', 'var(--danger)'); return; }
+  if (!d.autorise) return;
+  E._bcArt = art;
+  const dernier = E._bcDernier && d.en_attente.some(x => x.id === E._bcDernier) ? E._bcDernier : '';
+  const dFr = x => x ? new Date(x).toLocaleDateString('fr-FR') : '';
+  const opt = (val, coche, html) => `<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer">
+    <input type="radio" name="bc-cible" value="${val}" ${coche ? 'checked' : ''} style="margin-top:3px"><div style="flex:1;font-size:13.5px">${html}</div></label>`;
+  showModal(`
+    <div class="modal-header"><h3><i class="ti ti-truck-delivery"></i>${TV('Ajouter à un bon de commande Suède')}</h3>
+      <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:14px">
+        ${art.reference ? `<span class="mono" style="font-weight:700">${e_(art.reference)}</span> — ` : ''}<b>${e_(art.designation)}</b></div>
+      <div style="display:grid;grid-template-columns:110px 1fr;gap:10px">
+        <div class="form-group"><label class="form-label">${TV('Quantité')}</label><input class="form-input" type="number" min="1" max="999" id="bc-qte" value="1"></div>
+        <div class="form-group"><label class="form-label">${TV('Configuration / options / accessoires (facultatif)')}</label>
+          <input class="form-input" id="bc-note" placeholder="${art.fauteuil ? 'e.g. black, joystick right, headrest, bag' : ''}"></div>
+      </div>
+      ${opt('', !dernier, `<b><i class="ti ti-plus"></i> ${TV('Nouveau bon de commande')}</b> <span class="mono" style="color:var(--text3)">${e_(d.prochain_numero)}</span>
+        <div style="font-size:12px;color:var(--text3)">${TV('livraison Lagord par défaut, modifiable dans le bon')}</div>`)}
+      <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin:10px 0 6px">${TV('Bons en attente (non envoyés)')}</div>
+      ${d.en_attente.length ? d.en_attente.map(b => opt(b.id, b.id === dernier, `<span class="mono" style="font-weight:700">${e_(b.numero_bc)}</span>
+          <span class="badge" style="${b.etape === 'validee' ? 'background:#e6f0fb;color:#1F5C8C' : 'background:#eef0f3;color:#555'}">${TV(b.etape === 'validee' ? 'Validée' : 'Brouillon')}</span>
+          ${b.reference_client ? `<span style="color:var(--text3)"> · ${TR('Réf.')} ${e_(b.reference_client)}</span>` : ''}
+          <div style="font-size:12px;color:var(--text3)">${TV('Livrer à')} ${e_(b.livraison_nom || '—')} · ${b.nb_articles} ${TV('article(s)')} · ${e_(b.cree_par || '')} ${dFr(b.created_at)}</div>`)).join('')
+        : `<div style="font-size:13px;color:var(--text3);padding:4px 0 8px">${TV('Aucun bon en attente.')}</div>`}
+      <div id="bc-avert" style="display:none;font-size:12.5px;color:#9a5b00;margin-top:4px"><i class="ti ti-alert-triangle"></i> ${TV('Ce bon était validé : il repasse en brouillon et devra être revalidé.')}</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">${TV('Annuler')}</button>
+      <button class="btn primary" id="bc-ok" onclick="bcSuedeValider()"><i class="ti ti-check"></i>${TV('Ajouter')}</button>
+    </div>`);
+  const majAvert = () => { const v = (document.querySelector('input[name=bc-cible]:checked') || {}).value; const b = d.en_attente.find(x => String(x.id) === v); $('bc-avert').style.display = b && b.etape === 'validee' ? '' : 'none'; };
+  document.querySelectorAll('input[name=bc-cible]').forEach(r => r.addEventListener('change', majAvert)); majAvert();
+  const q = $('bc-qte'); if (q) { q.focus(); q.select(); }
+}
+async function bcSuedeValider(){
+  const art = E._bcArt; if (!art) return;
+  const cible = (document.querySelector('input[name=bc-cible]:checked') || {}).value || '';
+  const btn = $('bc-ok'); if (btn) btn.disabled = true;
+  try {
+    const r = await API.post('/eclates-bc-suede/ajouter', { commande_id: cible ? +cible : null, lignes: [{ catalogue_id: art.catalogue_id, reference: art.reference,
+      designation: art.designation, note: ($('bc-note') || {}).value || '', quantite: Math.max(1, parseInt(($('bc-qte') || {}).value) || 1) }] });
+    E._bcDernier = r.id;
+    const ouvrir = typeof hasAccess !== 'function' || hasAccess('commande-suede');
+    showModal(`
+      <div class="modal-header"><h3><i class="ti ti-circle-check" style="color:var(--success)"></i>${e_(art.reference || art.designation)} ${TV('ajouté au bon')} ${e_(r.numero_bc)}</h3>
+        <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+      ${r.revalider ? `<div class="modal-body"><div style="font-size:13px;color:#9a5b00"><i class="ti ti-alert-triangle"></i> ${TV('Ce bon était validé : il repasse en brouillon et devra être revalidé.')}</div></div>` : ''}
+      <div class="modal-footer">
+        <button class="btn" onclick="closeModal()">${TV('Continuer')}</button>
+        ${ouvrir ? `<button class="btn primary" onclick="bcSuedeOuvrir(${r.id})"><i class="ti ti-arrow-right"></i>${TV('Ouvrir le bon de commande')}</button>` : ''}
+      </div>`);
+  } catch (err) { if (btn) btn.disabled = false; if (typeof toast === 'function') toast(err.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+function bcSuedeOuvrir(id){
+  if (typeof closeModal === 'function') closeModal();
+  window._CSPO = Object.assign(window._CSPO || {}, { vue: 'edition', id, cs: null, modifie: false });
+  if (typeof setView === 'function') setView('commande-suede', { garderPO: true });
+}
+window.bcSuedeValider = bcSuedeValider;
+window.bcSuedeOuvrir = bcSuedeOuvrir;
+
 function peutCommander(){
   if (estDistrib()) return true;
   if (typeof isAdmin === 'function' && isAdmin()) return true;
