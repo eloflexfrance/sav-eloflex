@@ -107,7 +107,7 @@ async function renderEdition(ttl, c, a) {
         <div class="section-title"><i class="ti ti-file-invoice"></i>${_T('Commande')}</div>
         <div class="grid-2">
           <div class="form-group"><label class="form-label">${_T('N° bon de commande')}</label>
-            <input class="form-input mono" value="${e_(cs.numero_bc)}" disabled></div>
+            <input class="form-input mono" id="cs-num" value="${e_(cs.numero_bc)}" ${dis} oninput="csModif()" title="${_T('Modifiable tant que le bon n’est pas envoyé')}"></div>
           <div class="form-group"><label class="form-label">${_T('Date de commande')}</label>
             <input class="form-input" id="cs-date" type="date" value="${e_(cs.date_commande || '')}" ${dis} oninput="csModif()"></div>
         </div>
@@ -348,6 +348,7 @@ function donnees() {
   return {
     date_commande: v('cs-date') || cs.date_commande, reference_client: v('cs-refclient').trim(), client_id: cs.client_id || null,
     devis_pennylane: $('cs-devis') ? v('cs-devis').trim() : (cs.devis_pennylane || null),
+    numero_bc: (v('cs-num') || '').trim() || cs.numero_bc,
     livraison_type: cs.livraison_type, livraison_nom: v('cs-liv-nom').trim(), livraison_contact: v('cs-liv-contact').trim(),
     livraison_adresse: v('cs-liv-adr').trim(), livraison_pays: v('cs-liv-pays').trim(), livraison_tel: v('cs-liv-tel').trim(),
     livraison_email: v('cs-liv-email').trim(), afficher_prix: $('cs-prix') ? $('cs-prix').checked : !!cs.afficher_prix, notes: v('cs-notes'),
@@ -361,7 +362,7 @@ async function enregistrer(silencieux) {
   if (!d.lignes.length && !silencieux) { if (!confirm(_T('Aucun article : enregistrer quand même le brouillon ?'))) return false; }
   try {
     if (!S.cs.id) {
-      const r = await API.post('/commandes-suede-po', { ...d, numero_bc: S.cs.numero_bc });
+      const r = await API.post('/commandes-suede-po', d);
       S.id = r.id;
     } else {
       const r = await API.put(`/commandes-suede-po/${S.cs.id}`, d);
@@ -549,7 +550,17 @@ async function creerDepuisDevisPL() {
       }
     } catch (_) {}
   } else adr = cfg.presets[liv] || {};
-  S.cs = { id: null, etape: 'brouillon', numero_bc: cfg.prochain_numero, date_commande: new Date().toISOString().slice(0, 10),
+  // N° du bon = n° du devis avec « BC- » à la place de « D- » (suffixe -2, -3… s'il existe déjà) ; modifiable dans le bon
+  let numBc = cfg.prochain_numero;
+  const base = String(pl.r.numero || '').trim();
+  if (base) {
+    numBc = /^D[-_ ]?/i.test(base) ? base.replace(/^D[-_ ]?/i, 'BC-') : 'BC-' + base;
+    try {
+      const pris = new Set((await API.commandesSuede()).map(x => String(x.numero_bc || '').toUpperCase()));
+      if (pris.has(numBc.toUpperCase())) { let k = 2; while (pris.has((numBc + '-' + k).toUpperCase())) k++; numBc = numBc + '-' + k; }
+    } catch (_) {}
+  }
+  S.cs = { id: null, etape: 'brouillon', numero_bc: numBc, date_commande: new Date().toISOString().slice(0, 10),
     reference_client: '', client_id: liv === 'distributeur' ? (S._plClientId || null) : null, livraison_type: liv,
     livraison_nom: adr.nom, livraison_contact: adr.contact, livraison_adresse: adr.adresse, livraison_pays: adr.pays || 'France',
     livraison_tel: adr.tel, livraison_email: adr.email, afficher_prix: false, notes: '', lignes,

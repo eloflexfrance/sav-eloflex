@@ -282,7 +282,7 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
     try {
       await pg.query('BEGIN');
       const numero = txt(b.numero_bc, 60) || await prochainNumero(db);
-      const existe = await pg.query('SELECT 1 FROM commandes_suede WHERE numero_bc=$1', [numero]);
+      const existe = await pg.query('SELECT 1 FROM commandes_suede WHERE upper(numero_bc)=upper($1)', [numero]);
       if (existe.rows.length) { await pg.query('ROLLBACK'); return res.status(409).json({ error: `Le numéro ${numero} existe déjà.` }); }
       const { rows: [cs] } = await pg.query(`INSERT INTO commandes_suede (numero_bc, fournisseur, statut, etape, cree_par, date_commande)
         VALUES ($1,'Eloflex AB','En cours','brouillon',$2,CURRENT_DATE) RETURNING id`, [numero, nomU(res.locals.user)]);
@@ -309,6 +309,13 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
       if (!['brouillon', 'validee'].includes(cs.etape)) { await pg.query('ROLLBACK'); return res.status(409).json({ error: 'Commande déjà envoyée : elle ne peut plus être modifiée.' }); }
       await ecrire(pg, cs.id, b);
       if (b.devis_pennylane !== undefined) await pg.query('UPDATE commandes_suede SET devis_pennylane=$2 WHERE id=$1', [cs.id, txt(b.devis_pennylane, 60)]);
+      // N° du bon modifiable tant qu'il n'est pas envoyé (unique)
+      const nouveauNum = txt(b.numero_bc, 60);
+      if (nouveauNum) {
+        const ex = await pg.query('SELECT 1 FROM commandes_suede WHERE upper(numero_bc)=upper($1) AND id<>$2', [nouveauNum, cs.id]);
+        if (ex.rows.length) { await pg.query('ROLLBACK'); return res.status(409).json({ error: `Le numéro ${nouveauNum} est déjà utilisé par un autre bon.` }); }
+        await pg.query('UPDATE commandes_suede SET numero_bc=$2 WHERE id=$1', [cs.id, nouveauNum]);
+      }
       if (cs.etape === 'validee') await pg.query(`UPDATE commandes_suede SET etape='brouillon', valide_par=NULL, valide_le=NULL WHERE id=$1`, [cs.id]);
       await pg.query('COMMIT');
       await histo(cs.id, res.locals.user, cs.etape === 'validee' ? 'modification (validation annulée)' : 'modification');
