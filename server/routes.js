@@ -1947,6 +1947,7 @@ router.post('/commandes-suede/:id/integrer-stock', adminOrOp, async (req, res) =
     const { rows: [cs] } = await pgClient.query('SELECT * FROM commandes_suede WHERE id=$1 FOR UPDATE', [req.params.id]);
     if (!cs) { await pgClient.query('ROLLBACK'); return res.status(404).json({ error: 'Introuvable' }); }
     if (cs.stock_integre) { await pgClient.query('ROLLBACK'); return res.status(409).json({ error: 'Cette commande a déjà été intégrée au stock.' }); }
+    if (cs.etape === 'annulee') { await pgClient.query('ROLLBACK'); return res.status(409).json({ error: 'Commande annulée : réception impossible.' }); }
     if (!cs.date_livraison) { await pgClient.query('ROLLBACK'); return res.status(400).json({ error: "Renseigne d'abord la date de livraison." }); }
 
     const { rows: lignesDb } = await pgClient.query('SELECT * FROM commandes_suede_lignes WHERE commande_id=$1', [req.params.id]);

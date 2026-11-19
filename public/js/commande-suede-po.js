@@ -29,9 +29,19 @@ const ETAPES = {
   livree:    ['Livrée — à réceptionner', 'background:#fff4e0;color:#9a5b00'],
   recue:     ['Réceptionnée', 'background:#e5f5ea;color:#1d7a3e'],
   reliquat:  ['Réceptionnée (reliquat)', 'background:#fdecec;color:#b42828'],
+  annulee:   ['Annulée', 'background:#fdecec;color:#b42828;text-decoration:line-through'],
 };
+// Fauteuils Eloflex : EAN de base par modèle (lignes « fauteuil » → choix du joystick)
+const EAN_MODELES = { L: '7350006080067', P: '7350006080531', D2: '7350006080616', X: '7350006080623', F: '7350006080685', H: '7350006080852',
+  K: '7350006084737', C3: '7350006085994', R: '7350006086007', H2: '7350006088162' };
+const EANS = Object.values(EAN_MODELES);
+function estFauteuil(l) {
+  const r = String(l.reference || '').replace(/\s+/g, '');
+  return EANS.some(e => r === e || r.startsWith(e + '-')) || /fauteuil (roulant |électrique )?eloflex|wheelchair|^ESSAI-[A-Z0-9]+-\d{2}\s*CM$/i.test(String(l.designation || '') + ' ' + String(l.reference || ''));
+}
 // Étape affichée (tient compte de la livraison et de la réception)
 function etapeVue(cs) {
+  if (cs.etape === 'annulee') return 'annulee';
   if (cs.stock_integre) return (+cs.total_reliquat > 0 || /reliquat/i.test(cs.statut || '')) ? 'reliquat' : 'recue';
   if (cs.date_livraison && cs.etape && !['brouillon', 'validee'].includes(cs.etape)) return 'livree';
   return cs.etape || null;
@@ -84,7 +94,7 @@ async function renderEdition(ttl, c, a) {
   }
   const cs = S.cs;
   const editable = peutEcrire() && ['brouillon', 'validee'].includes(cs.etape);
-  const envoye = !['brouillon', 'validee'].includes(cs.etape);
+  const envoye = !['brouillon', 'validee', 'annulee'].includes(cs.etape);
   ttl.innerHTML = `${_T('Bon de commande Suède')} <span class="mono" style="font-size:.8em;color:var(--text2)">${e_(cs.numero_bc)}</span> ${badgeEtape(cs)}`;
   a.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
     <button class="btn" onclick="csQuitter()"><i class="ti ti-arrow-left"></i>${_T('Commandes Suède')}</button>
@@ -101,6 +111,7 @@ async function renderEdition(ttl, c, a) {
   c.innerHTML = `
   <div style="max-width:1100px">
     ${!cs.id && cs.devis_pennylane ? `<div style="background:#fff4e0;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-file-import"></i> ${_T('Bon pré-rempli depuis le devis Pennylane')} <b class="mono">${e_(cs.devis_pennylane)}</b>${cs.distributeur_devis ? ' (' + e_(cs.distributeur_devis) + ')' : ''}. ${_T('Vérifiez les articles, l’adresse et la référence commande client, puis cliquez sur « Enregistrer ».')}</div>` : ''}
+    ${cs.etape === 'annulee' ? `<div style="background:#fdecec;color:#b42828;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-ban"></i> ${_T('Commande annulée')}${cs.annule_par ? ' ' + _T('par') + ' <b>' + e_(cs.annule_par) + '</b>' : ''}${cs.annule_le ? ' — ' + dhFr(cs.annule_le) : ''}${cs.annule_motif ? '<br>' + _T('Motif') + ' : ' + e_(cs.annule_motif) : ''}</div>` : ''}
     ${cs.etape === 'validee' && editable ? `<div style="background:#e6f0fb;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-info-circle"></i> ${_T('Commande validée : toute modification enregistrée la repasse en brouillon (nouvelle validation nécessaire).')}</div>` : ''}
     <div class="grid-2" style="gap:16px;align-items:start">
       <div class="card" style="padding:14px 16px">
@@ -157,7 +168,10 @@ async function renderEdition(ttl, c, a) {
     ${blocArchives(cs)}
 
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin:16px 0 30px">
-      ${cs.id && peutEcrire() && !cs.stock_integre && (typeof isAdmin === 'function' && isAdmin()) && ['brouillon', 'validee'].includes(cs.etape) ? `<button class="btn danger" style="margin-right:auto" onclick="csSupprimer()"><i class="ti ti-trash"></i>${_T('Supprimer')}</button>` : ''}
+      <div style="margin-right:auto;display:flex;gap:8px">
+        ${cs.id && !cs.stock_integre && (typeof isAdmin === 'function' && isAdmin()) ? `<button class="btn danger" onclick="csSupprimer()" title="${_T('Suppression définitive (administrateur)')}"><i class="ti ti-trash"></i>${_T('Supprimer')}</button>` : ''}
+        ${cs.id && !cs.stock_integre && cs.etape !== 'annulee' && (cfg.peut_valider || (typeof isAdmin === 'function' && isAdmin())) ? `<button class="btn" onclick="csAnnuler()" style="color:var(--danger)"><i class="ti ti-ban"></i>${_T('Annuler la commande')}</button>` : ''}
+      </div>
       ${editable ? `<button class="btn" onclick="csEnregistrer()"><i class="ti ti-device-floppy"></i>${_T('Enregistrer')}</button>` : ''}
       ${cs.etape === 'brouillon' && cfg.peut_valider && peutEcrire() ? `<button class="btn primary" onclick="csValider()"><i class="ti ti-circle-check"></i>${_T('Valider la commande')}</button>` : ''}
       ${cs.etape === 'brouillon' && !cfg.peut_valider ? `<span style="font-size:12.5px;color:var(--text3);align-self:center">${_T('Validation par')} ${e_((cfg.validateurs.length ? cfg.validateurs : ['Brice', 'Lyes', 'Frédéric', 'Olivier']).join(', '))}</span>` : ''}
@@ -225,6 +239,7 @@ function lireLignesDuDom() {
     if (v('note') !== undefined) l.note = v('note');
     if (v('q') !== undefined) l.quantite = Math.max(0, parseInt(v('q')) || 0);
     if (v('px') !== undefined) l.prix_unitaire = v('px') === '' ? null : v('px').replace(',', '.');
+    if (v('joy') !== undefined) l.joystick = v('joy') || 'none';
   });
 }
 function dessinerLignes() {
@@ -246,7 +261,12 @@ function dessinerLignes() {
         ${inp('sup', i, l.ref_fournisseur, 'font-size:12px;color:var(--text2);margin-top:4px', `placeholder="${_T('Réf. fournisseur')}"`)}
         ${sous(l.catalogue_id ? `<i class="ti ti-link"></i> ${_T('catalogue')}` : _T('hors catalogue'), l.catalogue_id ? 'var(--success)' : 'var(--text3)')}</td>
       ${td()}${inp('des', i, l.designation, 'font-weight:600')}
-        ${inp('note', i, l.note, 'font-style:italic;margin-top:4px', `placeholder="${_T('Configuration / options / accessoires (facultatif)')}"`)}</td>
+        ${inp('note', i, l.note, 'font-style:italic;margin-top:4px', `placeholder="${_T('Configuration / options / accessoires (facultatif)')}"`)}
+        ${l.joystick || estFauteuil(l) ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:12.5px;color:var(--text2)"><i class="ti ti-steering-wheel"></i> Joystick
+          <select class="form-input" id="cs-l-joy-${i}" ${dis} onchange="csModif()" style="height:30px;padding:0 6px;font-size:12.5px;width:auto">
+            <option value="right" ${(l.joystick || 'right') === 'right' ? 'selected' : ''}>on the right (${_T('à droite')})</option>
+            <option value="left" ${l.joystick === 'left' ? 'selected' : ''}>on the left (${_T('à gauche')})</option>
+            <option value="none" ${l.joystick === 'none' ? 'selected' : ''}>${_T('sans objet')}</option></select></div>` : ''}</td>
       ${td()}${inp('q', i, l.quantite, 'text-align:center', 'type="number" min="1"')}</td>
       ${td()}${inp('px', i, l.prix_unitaire, 'text-align:right', 'inputmode="decimal"')}</td>
       ${td('text-align:right;white-space:nowrap;line-height:34px;font-weight:600')}<span id="cs-l-tot-${i}"></span></td>
@@ -288,16 +308,18 @@ function ajouterArticle(id) {
   lireLignesDuDom();
   const art = (S.cat || []).find(c => c.id === id); if (!art) return;
   const ex = S.cs.lignes.find(l => l.catalogue_id === id && !l.note);
-  if (ex) ex.quantite = (+ex.quantite || 0) + 1;
-  else S.cs.lignes.push({ catalogue_id: art.id, reference: art.ref, ref_fournisseur: art.ref_fournisseur || '', designation: art.designation,
-    note: '', quantite: 1, prix_unitaire: art.prix_achat_suede != null ? String(art.prix_achat_suede) : null });
+  const nl = { catalogue_id: art.id, reference: art.ref, ref_fournisseur: art.ref_fournisseur || '', designation: art.designation,
+    note: '', quantite: 1, prix_unitaire: art.prix_achat_suede != null ? String(art.prix_achat_suede) : null };
+  if (estFauteuil(nl)) nl.joystick = 'right';
+  if (ex && !nl.joystick) ex.quantite = (+ex.quantite || 0) + 1;
+  else S.cs.lignes.push(nl);
   if ($('cs-art-q')) $('cs-art-q').value = '';
   if ($('cs-art-sug')) $('cs-art-sug').style.display = 'none';
   S.modifie = true; dessinerLignes();
 }
 function ligneLibre() {
   lireLignesDuDom();
-  S.cs.lignes.push({ catalogue_id: null, reference: '', ref_fournisseur: '', designation: '', note: '', quantite: 1, prix_unitaire: null });
+  S.cs.lignes.push({ catalogue_id: null, reference: '', ref_fournisseur: '', designation: '', note: '', quantite: 1, prix_unitaire: null, joystick: 'right' });
   S.modifie = true; dessinerLignes();
   const i = S.cs.lignes.length - 1; const el = $(`cs-l-des-${i}`); if (el) el.focus();
 }
@@ -354,7 +376,7 @@ function donnees() {
     livraison_email: v('cs-liv-email').trim(), afficher_prix: $('cs-prix') ? $('cs-prix').checked : !!cs.afficher_prix, notes: v('cs-notes'),
     lignes: cs.lignes.filter(l => (+l.quantite > 0) && (String(l.designation || '').trim() || String(l.reference || '').trim()))
       .map(l => ({ catalogue_id: l.catalogue_id || null, reference: l.reference, ref_fournisseur: l.ref_fournisseur, designation: l.designation,
-        note: l.note, quantite: l.quantite, prix_unitaire: l.prix_unitaire })),
+        note: l.note, quantite: l.quantite, prix_unitaire: l.prix_unitaire, joystick: ['right', 'left', 'none'].includes(l.joystick) ? l.joystick : (estFauteuil(l) ? 'right' : null) })),
   };
 }
 async function enregistrer(silencieux) {
@@ -417,6 +439,8 @@ async function envoyer(renvoi) {
         · <a href="#" onclick="event.preventDefault();csApercuPDF()" style="color:var(--accent)">${_T('voir')}</a></div>
       <div class="form-group"><label class="form-label">${_T('Message complémentaire (facultatif, en anglais)')}</label>
         <textarea class="form-input" id="cs-env-msg" rows="3" placeholder="e.g. Urgent — please ship as soon as possible."></textarea></div>
+      <div class="form-group"><label class="form-label">${_T('Copie cachée (facultatif)')} <span style="font-weight:400;color:var(--text3)">(${_T('une ou plusieurs adresses, séparées par une virgule')})</span></label>
+        <input class="form-input" id="cs-env-bcc" type="text" placeholder="ex. prenom@eloflex.fr" autocomplete="off"></div>
       <details><summary style="cursor:pointer;font-size:13px;color:var(--text2)">${_T('Aperçu du mail')}</summary>
         <div style="border:0.5px solid var(--border);border-radius:8px;padding:10px;margin-top:6px;max-height:300px;overflow:auto;font-size:12px">${ap.html}</div></details>
     </div>
@@ -429,7 +453,7 @@ async function confirmerEnvoi() {
   const btn = $('cs-env-btn'); if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader"></i>' + _T('Envoi…'); }
   try {
     const pdf = pdfDoc(S.cs).output('datauristring');
-    const r = await API.post(`/commandes-suede-po/${S.cs.id}/envoyer`, { pdf, message: ($('cs-env-msg') || {}).value || '' });
+    const r = await API.post(`/commandes-suede-po/${S.cs.id}/envoyer`, { pdf, message: ($('cs-env-msg') || {}).value || '', bcc: ($('cs-env-bcc') || {}).value || '' });
     closeModal(); S.cs = null;
     _toast(_T('Bon de commande envoyé à ') + r.to, 'ti-mail', 'var(--success)');
     render();
@@ -451,9 +475,36 @@ function reception() {
 }
 async function supprimer() {
   if (!confirm(_T('Supprimer définitivement ce bon de commande ?'))) return;
-  try { await API.deleteCommandeSuede(S.cs.id); quitter(true); _toast(_T('Supprimé'), 'ti-check'); }
+  try { await API.del(`/commandes-suede-po/${S.cs.id}`); quitter(true); _toast(_T('Supprimé'), 'ti-check'); }
   catch (e) { _toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
+
+function annuler() {
+  const cs = S.cs; if (!cs) return;
+  showModal(`
+    <div class="modal-header"><h3><i class="ti ti-ban"></i>${_T('Annuler la commande')} ${e_(cs.numero_bc)}</h3>
+      <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${_T('Le bon reste visible dans la liste, marqué « Annulée », mais ne peut plus être modifié ni envoyé.')}</div>
+      <div class="form-group"><label class="form-label">${_T('Motif')} <span style="font-weight:400;color:var(--text3)">(${_T('facultatif — repris dans le mail à la Suède, en anglais de préférence')})</span></label>
+        <textarea class="form-input" id="cs-ann-motif" rows="3"></textarea></div>
+      ${cs.envoye_le ? `<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer"><input type="checkbox" id="cs-ann-prev" checked> ${_T('Prévenir la Suède par e-mail')} (order@eloflex.se, ${_T('copie')} sav@eloflex.fr)</label>`
+        : `<div style="font-size:12.5px;color:var(--text3)">${_T('Ce bon n’a pas été envoyé à la Suède : aucun mail ne part.')}</div>`}
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${_T('Retour')}</button>
+      <button class="btn danger" id="cs-ann-ok" onclick="csConfirmerAnnulation()"><i class="ti ti-ban"></i>${_T('Annuler la commande')}</button></div>`);
+}
+async function confirmerAnnulation() {
+  const btn = $('cs-ann-ok'); if (btn) btn.disabled = true;
+  try {
+    const r = await API.post(`/commandes-suede-po/${S.cs.id}/annuler`, { motif: ($('cs-ann-motif') || {}).value || '', prevenir: !!($('cs-ann-prev') && $('cs-ann-prev').checked) });
+    closeModal(); S.cs = null; S.modifie = false;
+    _toast(_T('Commande annulée') + (r.suede_prevenue ? ' — ' + _T('la Suède a été prévenue') : ''), 'ti-ban');
+    render();
+  } catch (e) { if (btn) btn.disabled = false; _toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+window.csAnnuler = annuler;
+window.csConfirmerAnnulation = confirmerAnnulation;
 
 // ── Import d'un devis Pennylane → bon de commande Suède pré-rempli ──
 const nRef = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -494,13 +545,28 @@ async function chercherDevisPL() {
   const cat = await catalogue();
   const parRef = new Map();
   cat.forEach(c => { [c.ref, c.ref_fournisseur].forEach(k => { const n = nRef(k); if (n && !parRef.has(n)) parRef.set(n, c); }); });
+  // Fauteuils d'essai : ESSAI-D2-50CM → 7350006080616-E 50 (modèles ayant une référence « -E » au catalogue)
+  const eanE = {};
+  cat.forEach(c => { const m = /^(7350006\d{6})-E$/.exec(String(c.ref || '').trim()), mm = /mod[eè]le\s+([A-Z0-9]+)/i.exec(c.designation || '');
+    if (m && mm) eanE[mm[1].toUpperCase()] = { ean: m[1], designation: c.designation }; });
+  for (const [k, e] of Object.entries({ L: '7350006080067', P: '7350006080531', D2: '7350006080616', F: '7350006080685', R: '7350006086007' }))
+    if (!eanE[k]) eanE[k] = { ean: e, designation: `Fauteuil Eloflex Modèle ${k} - NM - Equipements de série` };
   S._pl = { r, lignes: (r.lignes || []).map(l => {
+    const ess = /^ESSAI-([A-Z0-9]+)-(\d{2})\s*CM$/i.exec(String(l.reference || '').trim());
+    if (ess) {
+      const mod = ess[1].toUpperCase(), taille = ess[2], e = eanE[mod];
+      const des = e ? String(e.designation).replace(/\s*-\s*DEMONSTRATION\s*$/i, '').replace(/\d{2}\s*cm/i, taille + ' cm') : (l.designation || '');
+      return { garder: (+l.quantite || 0) > 0, catalogue_id: null, reference: e ? `${e.ean}-E ${taille}` : (l.reference || ''), ref_fournisseur: '',
+        designation: !e || /\d{2}\s*cm/i.test(des) ? des : des + ' - ' + taille + ' cm', note: '', quantite: Math.max(1, parseInt(l.quantite) || 1),
+        prix_unitaire: null, joystick: 'right', frais: false, essai: e ? 'ok' : 'inconnu', refOrigine: l.reference };
+    }
     const c = parRef.get(nRef(l.reference)) || null;
     const frais = estFrais(l.designation) || /^ESSAI/i.test(String(l.reference || '')) || /offre d.essai/i.test(String(l.designation || ''));
     return { garder: !frais && (+l.quantite || 0) > 0, catalogue_id: c ? c.id : null, reference: c ? c.ref : (l.reference || ''),
       ref_fournisseur: c ? (c.ref_fournisseur || '') : '', designation: c ? c.designation : (l.designation || ''),
       note: c ? '' : sansHtml(l.description).slice(0, 300), quantite: Math.max(1, parseInt(l.quantite) || 1),
-      prix_unitaire: c && c.prix_achat_suede != null ? String(c.prix_achat_suede) : null, frais };
+      prix_unitaire: c && c.prix_achat_suede != null ? String(c.prix_achat_suede) : null, frais,
+      joystick: (c && estFauteuil(c.ref ? { reference: c.ref, designation: c.designation } : {})) || (!c && estFauteuil(l)) ? 'right' : undefined };
   }) };
   const cl = r.client || {};
   const adrDist = [cl.adresse, [cl.cp, cl.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
@@ -510,7 +576,7 @@ async function chercherDevisPL() {
     <div class="table-wrap"><table class="t"><thead><tr><th style="width:30px"></th><th>${_T('Réf.')}</th><th>${_T('Désignation')}</th><th style="width:70px">${_T('Qté')}</th></tr></thead>
       <tbody>${S._pl.lignes.map((l, i) => `<tr style="${l.frais ? 'opacity:.55' : ''}">
         <td><input type="checkbox" ${l.garder ? 'checked' : ''} onchange="csPlLigne(${i},'garder',this.checked)"></td>
-        <td class="mono" style="font-weight:700">${e_(l.reference || '—')}${l.catalogue_id ? `<div style="font-size:11px;font-weight:400;color:var(--success)"><i class="ti ti-link"></i> ${_T('catalogue')}</div>` : `<div style="font-size:11px;font-weight:400;color:var(--text3)">${_T('hors catalogue')}</div>`}</td>
+        <td class="mono" style="font-weight:700">${e_(l.reference || '—')}${l.essai ? `<div style="font-size:11px;font-weight:400;color:${l.essai === 'ok' ? 'var(--success)' : 'var(--warning)'}">${l.essai === 'ok' ? '<i class="ti ti-arrows-exchange"></i> ' + _T('remplace') + ' ' + e_(l.refOrigine) : _T('modèle d’essai sans référence « -E » : à vérifier')}</div>` : l.catalogue_id ? `<div style="font-size:11px;font-weight:400;color:var(--success)"><i class="ti ti-link"></i> ${_T('catalogue')}</div>` : `<div style="font-size:11px;font-weight:400;color:var(--text3)">${_T('hors catalogue')}</div>`}</td>
         <td>${e_(l.designation)}${l.note ? `<div style="font-size:11.5px;color:var(--text3);font-style:italic">${e_(l.note.slice(0, 140))}${l.note.length > 140 ? '…' : ''}</div>` : ''}${l.frais ? `<div style="font-size:11.5px;color:var(--text3)">${_T('frais ou offre d’essai — non repris par défaut')}</div>` : ''}</td>
         <td><input class="form-input" type="number" min="1" value="${l.quantite}" style="width:60px;padding:3px 6px" onchange="csPlLigne(${i},'quantite',this.value)"></td></tr>`).join('')}</tbody></table></div>
     <div class="section-title" style="margin-top:12px"><i class="ti ti-map-pin"></i>${_T('Livraison')}</div>
@@ -525,7 +591,7 @@ function plLigne(i, k, v) {
 }
 async function creerDepuisDevisPL() {
   const pl = S._pl; if (!pl) return;
-  const lignes = pl.lignes.filter(l => l.garder).map(({ garder, frais, ...l }) => l);
+  const lignes = pl.lignes.filter(l => l.garder).map(({ garder, frais, essai, refOrigine, ...l }) => l);
   if (!lignes.length) { _toast(_T('Cochez au moins un article.'), 'ti-alert-circle', 'var(--danger)'); return; }
   const liv = (document.querySelector('input[name=cs-pl-liv]:checked') || {}).value || 'lagord';
   const cfg = await config(true);

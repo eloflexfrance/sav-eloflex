@@ -296,7 +296,7 @@ const PDF = {
     const piedDePage = () => {
       const n = doc.getNumberOfPages();
       for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(130,130,130);
-        doc.text(T(`ELOFLEX France - 41 rue des Maraichers - 17140 Lagord - France - sav@eloflex.fr`), L, 288);
+        doc.text(T(`ELOFLEX FRANCE - 102 avenue des Champs Elysees - 75008 Paris - France - info@eloflex.fr - +33 9 67 66 51 29`), L, 288);
         doc.text(`${T(cs.numero_bc || '')} - page ${i}/${n}`, R, 288, { align:'right' }); }
       doc.setTextColor(0,0,0);
     };
@@ -316,7 +316,7 @@ const PDF = {
         doc.splitTextToSize(T(t), w).forEach(tt => { doc.text(tt, x, yy); yy += 4.6; }); });
       return yy;
     };
-    const y1 = bloc(L, 'BUYER', ['ELOFLEX France (ELOFLEX SAS)', '41 rue des Maraichers', '17140 Lagord', 'France', 'sav@eloflex.fr'], 85);
+    const y1 = bloc(L, 'BUYER', ['ELOFLEX FRANCE', '102 AVENUE DES CHAMPS ELYSEES', '75008 PARIS - France', 'info@eloflex.fr', '+33 9 67 66 51 29'], 85);
     const y2 = bloc(110, 'SUPPLIER', ['Eloflex AB', 'Sweden', 'order@eloflex.se'], 85);
     y = Math.max(y1, y2) + 4;
 
@@ -358,7 +358,8 @@ const PDF = {
       qteTot += q; if (pu == null) sansPrix++; else total += pu * q;
       doc.setFontSize(8.8);
       const des = doc.splitTextToSize(T(l.designation || ''), C.desW);
-      const note = l.note ? doc.splitTextToSize(T(l.note), C.desW) : [];
+      const cfgTxt = [l.joystick === 'left' ? 'Joystick on the left' : l.joystick === 'right' ? 'Joystick on the right' : '', l.note || ''].filter(Boolean).join(' - ');
+      const note = cfgTxt ? doc.splitTextToSize(T(cfgTxt), C.desW) : [];
       const h = Math.max(1, des.length) * 4.2 + note.length * 3.8 + 2.5;
       if (y + h > 270) { doc.addPage(); y = 20; entete(); }
       doc.setFont('helvetica','normal'); doc.text(String(i + 1), C.n, y);

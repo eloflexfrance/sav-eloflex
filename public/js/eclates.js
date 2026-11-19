@@ -1292,8 +1292,10 @@ async function bcSuedeChoisir(art){
       <div style="display:grid;grid-template-columns:110px 1fr;gap:10px">
         <div class="form-group"><label class="form-label">${TV('Quantité')}</label><input class="form-input" type="number" min="1" max="999" id="bc-qte" value="1"></div>
         <div class="form-group"><label class="form-label">${TV('Configuration / options / accessoires (facultatif)')}</label>
-          <input class="form-input" id="bc-note" value="${e_(art.note || '')}" placeholder="${art.fauteuil ? 'e.g. black, joystick right, headrest, bag' : ''}"></div>
+          <input class="form-input" id="bc-note" value="${e_(art.note || '')}" placeholder="${art.fauteuil ? 'e.g. black, headrest, bag' : ''}"></div>
       </div>
+      ${art.fauteuil ? `<div class="form-group"><label class="form-label">Joystick</label>
+        <select class="form-input" id="bc-joy" style="max-width:260px"><option value="right" selected>on the right (${TV('à droite')})</option><option value="left">on the left (${TV('à gauche')})</option></select></div>` : ''}
       ${opt('', !dernier, `<b><i class="ti ti-plus"></i> ${TV('Nouveau bon de commande')}</b> <span class="mono" style="color:var(--text3)">${e_(d.prochain_numero)}</span>
         <div style="font-size:12px;color:var(--text3)">${TV('livraison Lagord par défaut, modifiable dans le bon')}</div>`)}
       <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin:10px 0 6px">${TV('Bons en attente (non envoyés)')}</div>
@@ -1318,7 +1320,7 @@ async function bcSuedeValider(){
   const btn = $('bc-ok'); if (btn) btn.disabled = true;
   try {
     const r = await API.post('/eclates-bc-suede/ajouter', { commande_id: cible ? +cible : null, lignes: [{ catalogue_id: art.catalogue_id, reference: art.reference,
-      designation: art.designation, note: ($('bc-note') || {}).value || '', quantite: Math.max(1, parseInt(($('bc-qte') || {}).value) || 1) }] });
+      designation: art.designation, note: ($('bc-note') || {}).value || '', joystick: $('bc-joy') ? $('bc-joy').value : null, quantite: Math.max(1, parseInt(($('bc-qte') || {}).value) || 1) }] });
     E._bcDernier = r.id;
     const ouvrir = typeof hasAccess !== 'function' || hasAccess('commande-suede');
     showModal(`

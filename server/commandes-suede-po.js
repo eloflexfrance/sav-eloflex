@@ -27,9 +27,9 @@ async function assurer(db) {
   for (const c of ['etape TEXT', 'reference_client TEXT', 'client_id INTEGER', 'livraison_type TEXT', 'livraison_nom TEXT',
     'livraison_contact TEXT', 'livraison_adresse TEXT', 'livraison_pays TEXT', 'livraison_tel TEXT', 'livraison_email TEXT',
     'afficher_prix BOOLEAN DEFAULT FALSE', 'notes TEXT', 'cree_par TEXT', 'valide_par TEXT', 'valide_le TIMESTAMPTZ',
-    'envoye_par TEXT', 'envoye_le TIMESTAMPTZ', 'envoye_a TEXT', 'date_expedition DATE', 'historique JSONB', 'devis_pennylane TEXT'])
+    'envoye_par TEXT', 'envoye_le TIMESTAMPTZ', 'envoye_a TEXT', 'date_expedition DATE', 'historique JSONB', 'devis_pennylane TEXT', 'annule_par TEXT', 'annule_le TIMESTAMPTZ', 'annule_motif TEXT'])
     await db.run(`ALTER TABLE commandes_suede ADD COLUMN IF NOT EXISTS ${c}`);
-  for (const c of ['prix_unitaire NUMERIC(12,2)', 'ref_fournisseur TEXT', 'note TEXT'])
+  for (const c of ['prix_unitaire NUMERIC(12,2)', 'ref_fournisseur TEXT', 'note TEXT', 'joystick TEXT'])
     await db.run(`ALTER TABLE commandes_suede_lignes ADD COLUMN IF NOT EXISTS ${c}`);
   // Éclatés : article commandé par « Commander ce fauteuil » (réglé par l'administrateur)
   for (const c of ['cmd_catalogue_id INTEGER', 'cmd_reference TEXT', 'cmd_designation TEXT', 'cmd_note TEXT'])
@@ -109,10 +109,10 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
       const q = parseInt(l.quantite) || 0;
       if (q <= 0 || !(txt(l.designation) || txt(l.reference))) continue;
       const px = l.prix_unitaire === '' || l.prix_unitaire == null ? null : Number(String(l.prix_unitaire).replace(',', '.'));
-      await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre, joystick)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [id, parseInt(l.catalogue_id) || null, txt(l.reference, 80), txt(l.ref_fournisseur, 80), txt(l.designation, 300) || txt(l.reference, 80),
-          txt(l.note, 600), q, isFinite(px) ? px : null, ordre++]);
+          txt(l.note, 600), q, isFinite(px) ? px : null, ordre++, ['right', 'left', 'none'].includes(l.joystick) ? l.joystick : null]);
     }
   }
   // Mémorise les coordonnées de livraison Lagord / Paris pour les prochaines commandes
@@ -220,13 +220,13 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
             WHERE upper(regexp_replace(ref, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace($1, '[^A-Za-z0-9]', '', 'g')) LIMIT 1`, [txt(l.reference)])).rows[0] || null;
         const ref = cat ? cat.ref : txt(l.reference, 80);
         // Même article déjà présent sans configuration particulière → on augmente la quantité
-        const ex = !note && (await pg.query(`SELECT id FROM commandes_suede_lignes WHERE commande_id=$1 AND COALESCE(note,'')='' AND
+        const ex = !note && !['right', 'left'].includes(l.joystick) && (await pg.query(`SELECT id FROM commandes_suede_lignes WHERE commande_id=$1 AND COALESCE(note,'')='' AND
             ${cat ? 'catalogue_id=$2' : "catalogue_id IS NULL AND upper(COALESCE(reference,''))=upper($2)"} LIMIT 1`, [id, cat ? cat.id : (ref || '')])).rows[0];
         if (ex && (cat || ref)) await pg.query('UPDATE commandes_suede_lignes SET quantite_commandee=quantite_commandee+$1 WHERE id=$2', [q, ex.id]);
-        else await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        else await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre, joystick)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
           [id, cat ? cat.id : null, ref, cat ? cat.ref_fournisseur : null, txt(l.designation, 300) || (cat && cat.designation) || ref, note, q,
-            cat && cat.prix_achat_suede != null ? cat.prix_achat_suede : null, ordre++]);
+            cat && cat.prix_achat_suede != null ? cat.prix_achat_suede : null, ordre++, ['right', 'left', 'none'].includes(l.joystick) ? l.joystick : null]);
       }
       await pg.query('UPDATE commandes_suede SET updated_at=NOW() WHERE id=$1', [id]);
       await pg.query('COMMIT');
@@ -341,6 +341,44 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  // Annulation (validateurs ou administrateur) : le bon reste visible, en lecture seule. Option : prévenir la Suède.
+  router.post('/commandes-suede-po/:id/annuler', async (req, res) => {
+    try {
+      await assurer(db);
+      const u = res.locals.user, b = req.body || {};
+      if (u.role !== 'admin' && !estValidateur(u, await listeValidateurs(db))) return res.status(403).json({ error: 'Annulation réservée à Brice, Lyes, Frédéric ou Olivier.' });
+      const cs = await db.get('SELECT * FROM commandes_suede WHERE id=$1', [req.params.id]);
+      if (!cs) return res.status(404).json({ error: 'Introuvable' });
+      if (cs.stock_integre) return res.status(409).json({ error: 'Commande déjà réceptionnée et intégrée au stock : elle ne peut plus être annulée.' });
+      if (cs.etape === 'annulee') return res.status(409).json({ error: 'Commande déjà annulée.' });
+      const motif = txt(b.motif, 500);
+      const envoyee = !!cs.envoye_le;
+      if (b.prevenir && envoyee) {
+        await envoyerEmailPret({ to: TO_SUEDE, cc: CC_SAV, subject: `CANCELLED — Purchase order ${cs.numero_bc} — Eloflex France`,
+          html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222;max-width:620px"><p>Hello,</p>
+            <p>Please <b>cancel</b> our purchase order <b>${esc(cs.numero_bc)}</b>${cs.reference_client ? ' (customer ref. ' + esc(cs.reference_client) + ')' : ''}.</p>
+            ${motif ? `<p style="white-space:pre-wrap;border-left:4px solid #b42828;background:#fdf2f2;padding:10px 14px;border-radius:6px">${esc(motif)}</p>` : ''}
+            <p>Could you please confirm the cancellation by e-mail?</p><p>Best regards,<br>${esc(nomU(u) || 'Eloflex France')}</p>
+            <div style="margin-top:20px">${SIGNATURE_EMAIL_HTML()}</div></div>` });
+      }
+      await db.run(`UPDATE commandes_suede SET etape='annulee', statut='Annulée', annule_par=$2, annule_le=NOW(), annule_motif=$3, updated_at=NOW() WHERE id=$1`, [cs.id, nomU(u), motif]);
+      await histo(cs.id, u, 'annulation' + (b.prevenir && envoyee ? ' (Suède prévenue)' : ''), motif);
+      res.json({ ok: true, suede_prevenue: !!(b.prevenir && envoyee) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+  // Suppression définitive : administrateur uniquement (sauf commande déjà intégrée au stock)
+  router.delete('/commandes-suede-po/:id', async (req, res) => {
+    try {
+      if ((res.locals.user || {}).role !== 'admin') return res.status(403).json({ error: 'Suppression réservée à l’administrateur.' });
+      const cs = await db.get('SELECT id, stock_integre FROM commandes_suede WHERE id=$1', [req.params.id]);
+      if (!cs) return res.status(404).json({ error: 'Introuvable' });
+      if (cs.stock_integre) return res.status(409).json({ error: 'Impossible de supprimer : le stock a déjà été intégré pour cette commande.' });
+      await db.run(`DELETE FROM documents_signes WHERE objet='commande_suede' AND objet_id=$1`, [cs.id]);
+      await db.run('DELETE FROM commandes_suede WHERE id=$1', [cs.id]);
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   router.post('/commandes-suede-po/:id/devalider', async (req, res) => {
     try {
       await assurer(db);
@@ -386,12 +424,16 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
       const pdf = String(b.pdf || '');
       if (!/^data:application\/pdf/.test(pdf)) return res.status(400).json({ error: 'PDF du bon de commande manquant' });
       const nomPdf = `${cs.numero_bc.replace(/[^\w.\-]+/g, '_')}.pdf`;
-      await envoyerEmailPret({ to: TO_SUEDE, cc: CC_SAV, subject: sujet, html, attachments: [{ name: nomPdf, content: pdf }] });
+      // Copie cachée facultative (saisie à la main)
+      const bccs = String(b.bcc || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+      const mauvais = bccs.filter(x => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+      if (mauvais.length) return res.status(400).json({ error: 'Adresse de copie cachée invalide : ' + mauvais.join(', ') });
+      await envoyerEmailPret({ to: TO_SUEDE, cc: CC_SAV, bcc: bccs.join(',') || undefined, subject: sujet, html, attachments: [{ name: nomPdf, content: pdf }] });
       await db.run(`UPDATE commandes_suede SET etape=CASE WHEN etape='validee' THEN 'envoyee' ELSE etape END, envoye_par=$2, envoye_le=NOW(), envoye_a=$3,
-          date_commande=COALESCE(date_commande, CURRENT_DATE), updated_at=NOW() WHERE id=$1`, [cs.id, nomU(u), `${TO_SUEDE} (cc ${CC_SAV})`]);
+          date_commande=COALESCE(date_commande, CURRENT_DATE), updated_at=NOW() WHERE id=$1`, [cs.id, nomU(u), `${TO_SUEDE} (cc ${CC_SAV}${bccs.length ? ', cci ' + bccs.join(', ') : ''})`]);
       await db.run(`INSERT INTO documents_signes (objet, objet_id, nom, mime, taille, data, ajoute_par) VALUES ('commande_suede',$1,$2,'application/pdf',$3,$4,$5)`,
         [cs.id, nomPdf, Math.round(pdf.length * 0.75), pdf, (u && u.id) || null]);
-      await histo(cs.id, u, renvoi ? 'renvoi à la Suède' : 'envoi à la Suède', TO_SUEDE);
+      await histo(cs.id, u, renvoi ? 'renvoi à la Suède' : 'envoi à la Suède', TO_SUEDE + (bccs.length ? ' · cci ' + bccs.join(', ') : ''));
       res.json({ ok: true, to: TO_SUEDE, cc: CC_SAV });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
@@ -404,6 +446,7 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
       const cs = await db.get('SELECT id, etape, stock_integre FROM commandes_suede WHERE id=$1', [req.params.id]);
       if (!cs) return res.status(404).json({ error: 'Introuvable' });
       if (cs.stock_integre) return res.status(409).json({ error: 'Commande déjà réceptionnée.' });
+      if (cs.etape === 'annulee') return res.status(409).json({ error: 'Commande annulée.' });
       const dExp = ISO.test(String(b.date_expedition || '')) ? b.date_expedition : null;
       const dLiv = ISO.test(String(b.date_livraison || '')) ? b.date_livraison : null;
       const transp = txt(b.transporteur, 40), suivi = txt(b.num_suivi, 80);
