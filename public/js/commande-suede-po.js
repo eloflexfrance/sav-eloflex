@@ -56,6 +56,7 @@ async function catalogue() {
 // ── Navigation ─────────────────────────────────────────────────────
 function quitter(sansConfirm) {
   if (!sansConfirm && S.modifie && !confirm(_T('Modifications non enregistrées : quitter quand même ?'))) return;
+  fermerDevis();
   S.vue = 'liste'; S.id = null; S.cs = null; S.modifie = false;
   if (typeof render === 'function') render();
 }
@@ -87,7 +88,9 @@ async function renderEdition(ttl, c, a) {
   ttl.innerHTML = `${_T('Bon de commande Suède')} <span class="mono" style="font-size:.8em;color:var(--text2)">${e_(cs.numero_bc)}</span> ${badgeEtape(cs)}`;
   a.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
     <button class="btn" onclick="csQuitter()"><i class="ti ti-arrow-left"></i>${_T('Commandes Suède')}</button>
+    ${cs.devis_pennylane ? `<button class="btn" onclick="csVoirDevis()"><i class="ti ti-file-search"></i>${_T('Voir le devis')}</button>` : ''}
     <button class="btn" onclick="csApercuPDF()"><i class="ti ti-file-type-pdf"></i>${_T('Aperçu PDF')}</button></div>`;
+  S._c = c;
   const dis = editable ? '' : 'disabled';
   const champ = (id, lab, val, extra = '') => `<div class="form-group"><label class="form-label">${lab}</label>
     <input class="form-input" id="${id}" value="${e_(val || '')}" ${dis} oninput="csModif()" ${extra}></div>`;
@@ -110,6 +113,9 @@ async function renderEdition(ttl, c, a) {
         </div>
         <div class="form-group"><label class="form-label">${_T('Référence commande client')} <span style="font-weight:400;color:var(--text3)">(${_T('facultatif — n° imposé par un distributeur')})</span></label>
           <input class="form-input mono" id="cs-refclient" value="${e_(cs.reference_client || '')}" ${dis} oninput="csModif()" placeholder="${_T('ex. CDE-2026-0457')}"></div>
+        <div class="form-group"><label class="form-label">${_T('Devis Pennylane lié')} <span style="font-weight:400;color:var(--text3)">(${_T('facultatif — aperçu à côté du bon, lien avec le suivi commandes')})</span></label>
+          <div style="display:flex;gap:6px"><input class="form-input mono" id="cs-devis" value="${e_(cs.devis_pennylane || '')}" ${dis} oninput="csModif()" placeholder="${_T('ex. D-2026-11-240')}" style="flex:1">
+          <button class="btn" type="button" onclick="csVoirDevis()" title="${_T('Afficher le devis à côté du bon de commande')}"><i class="ti ti-file-search"></i>${_T('Aperçu')}</button></div></div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin:6px 0 10px;cursor:pointer">
           <input type="checkbox" id="cs-prix" ${cs.afficher_prix ? 'checked' : ''} ${dis} onchange="csModif();csDessinerLignes()"> ${_T('Afficher les prix sur le bon de commande (EUR HT)')}</label>
         <div class="form-group"><label class="form-label">${_T('Commentaires pour la Suède')} <span style="font-weight:400;color:var(--text3)">(${_T('en anglais, imprimés sur le bon')})</span></label>
@@ -231,8 +237,8 @@ function dessinerLignes() {
   const inp = (k, i, v, st, extra = '') => `<input class="form-input${k === 'ref' || k === 'sup' ? ' mono' : ''}" id="cs-l-${k}-${i}" value="${e_(v ?? '')}" title="${e_(v ?? '')}" ${dis} oninput="csModif();${k === 'q' || k === 'px' ? 'csTotaux()' : ''}" style="${H}font-size:13px;width:100%;${st}" ${extra}>`;
   const td = (st = '') => `<td style="vertical-align:top;padding-top:10px;padding-bottom:10px;${st}">`;
   const sous = (txt, coul) => `<div style="font-size:11px;color:${coul};margin-top:3px;height:14px">${txt}</div>`;
-  z.innerHTML = `<div class="table-wrap"><table class="t" style="table-layout:fixed;width:100%">
-    <colgroup><col style="width:300px"><col><col style="width:80px"><col style="width:110px"><col style="width:105px"><col style="width:46px"></colgroup>
+  z.innerHTML = `<div class="table-wrap"><table class="t" style="table-layout:fixed;width:100%;min-width:780px">
+    <colgroup><col style="width:${$('cs-devis-panel') ? 230 : 300}px"><col><col style="width:80px"><col style="width:110px"><col style="width:105px"><col style="width:46px"></colgroup>
     <thead><tr><th>${_T('Réf.')} / ${_T('Réf. fournisseur')}</th><th>${_T('Désignation')} / ${_T('configuration')}</th>
       <th>${_T('Qté')}</th><th>${_T('Prix U. HT')}${prix ? '' : ` <span title="${_T('Non imprimé sur le bon')}" style="opacity:.6">(${_T('masqué')})</span>`}</th><th style="text-align:right">${_T('Total')}</th><th></th></tr></thead>
     <tbody>${cs.lignes.map((l, i) => `<tr>
@@ -341,6 +347,7 @@ function donnees() {
   const cs = S.cs;
   return {
     date_commande: v('cs-date') || cs.date_commande, reference_client: v('cs-refclient').trim(), client_id: cs.client_id || null,
+    devis_pennylane: $('cs-devis') ? v('cs-devis').trim() : (cs.devis_pennylane || null),
     livraison_type: cs.livraison_type, livraison_nom: v('cs-liv-nom').trim(), livraison_contact: v('cs-liv-contact').trim(),
     livraison_adresse: v('cs-liv-adr').trim(), livraison_pays: v('cs-liv-pays').trim(), livraison_tel: v('cs-liv-tel').trim(),
     livraison_email: v('cs-liv-email').trim(), afficher_prix: $('cs-prix') ? $('cs-prix').checked : !!cs.afficher_prix, notes: v('cs-notes'),
@@ -354,7 +361,7 @@ async function enregistrer(silencieux) {
   if (!d.lignes.length && !silencieux) { if (!confirm(_T('Aucun article : enregistrer quand même le brouillon ?'))) return false; }
   try {
     if (!S.cs.id) {
-      const r = await API.post('/commandes-suede-po', { ...d, numero_bc: S.cs.numero_bc, devis_pennylane: S.cs.devis_pennylane || null });
+      const r = await API.post('/commandes-suede-po', { ...d, numero_bc: S.cs.numero_bc });
       S.id = r.id;
     } else {
       const r = await API.put(`/commandes-suede-po/${S.cs.id}`, d);
@@ -556,6 +563,38 @@ window.csChercherDevisPL = chercherDevisPL;
 window.csPlLigne = plLigne;
 window.csCreerDepuisDevisPL = creerDepuisDevisPL;
 
+// ── Aperçu du devis Pennylane dans un volet à droite (le bon reste modifiable à gauche) ──
+function voirDevis() {
+  const num = (($('cs-devis') || {}).value || (S.cs && S.cs.devis_pennylane) || '').trim();
+  if (!num) { _toast(_T('Indiquez d’abord le n° du devis Pennylane.'), 'ti-alert-circle', 'var(--danger)'); const i = $('cs-devis'); if (i) i.focus(); return; }
+  let p = $('cs-devis-panel');
+  const L = 'min(42vw, 680px)';
+  const tb = document.querySelector('.topbar'), haut = tb ? Math.max(0, Math.round(tb.getBoundingClientRect().bottom)) : 0;
+  if (!p) {
+    p = document.createElement('div'); p.id = 'cs-devis-panel';
+    p.style.cssText = `position:fixed;top:${haut}px;right:0;bottom:0;width:${L};background:var(--bg,#fff);border-left:1px solid var(--border);box-shadow:-6px 0 24px rgba(0,0,0,.12);z-index:900;display:flex;flex-direction:column`;
+    document.body.appendChild(p);
+    S._devisAbs = 0; S._devisTimer = setInterval(() => { S._devisAbs = $('cs-lignes') ? 0 : S._devisAbs + 1; if (S._devisAbs >= 3) fermerDevis(); }, 1000);
+  }
+  p.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--card,#fff)">
+      <i class="ti ti-file-search"></i><b>${_T('Devis Pennylane')}</b> <span class="mono">${e_(num)}</span>
+      <a class="btn sm" style="margin-left:auto;text-decoration:none" href="/api/commandes-suede-po/devis-pdf?numero=${encodeURIComponent(num)}" target="_blank" rel="noopener" title="${_T('Ouvrir dans un onglet')}"><i class="ti ti-external-link"></i></a>
+      <button class="btn sm" onclick="csFermerDevis()" title="${_T('Fermer')}"><i class="ti ti-x"></i></button></div>
+    <div style="position:relative;flex:1">
+      <div id="cs-devis-chg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:13.5px"><i class="ti ti-loader"></i>&nbsp;${_T('Chargement du devis depuis Pennylane…')}</div>
+      <iframe id="cs-devis-frame" style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff" src="/api/commandes-suede-po/devis-pdf?numero=${encodeURIComponent(num)}" onload="var c=document.getElementById('cs-devis-chg'); if(c) c.remove()"></iframe>
+    </div>`;
+  if (S._c) S._c.style.paddingRight = `calc(${L} + 12px)`;
+  if ($('cs-lignes') && S.cs) { lireLignesDuDom(); dessinerLignes(); }
+}
+function fermerDevis() {
+  const p = $('cs-devis-panel'); if (p) p.remove();
+  clearInterval(S._devisTimer); S._devisTimer = null;
+  if (S._c) S._c.style.paddingRight = '';
+  if ($('cs-lignes') && S.cs) { lireLignesDuDom(); dessinerLignes(); }
+}
+window.csVoirDevis = voirDevis;
+window.csFermerDevis = fermerDevis;
 window.csNouveau = nouveau;
 window.csOuvrir = ouvrir;
 window.csQuitter = () => quitter(false);

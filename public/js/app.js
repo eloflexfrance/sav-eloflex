@@ -3393,11 +3393,17 @@ async function renderParametres(ttl,c,a){
   loadPennylaneStatus();
 }
 
+async function debloquerUtilisateur(id){
+  try{ await API.post(`/admin/securite/debloquer/${id}`, {}); toast(TR('Suspension levée'),'ti-check','var(--success)'); chargerListeUtilisateurs(); }
+  catch(e){ toast(e.message,'ti-alert-circle','var(--danger)'); }
+}
+window.debloquerUtilisateur = debloquerUtilisateur;
 async function chargerListeUtilisateurs(){
   const wrap = $('users-list-wrap'); if(!wrap) return;
   wrap.innerHTML = `<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader-2"></i> ${TR("Chargement…")}</div>`;
   try{
     const users = await API.users();
+    let susp = []; try{ susp = (await API.get('/admin/securite')).suspendus || []; }catch(_){}
     if(!users.length){ wrap.innerHTML=`<div style="font-size:13px;color:var(--text2)">${TR('Aucun utilisateur.')}</div>`; return; }
     wrap.innerHTML=`<div class="table-wrap"><table class="t">
       <thead><tr><th>Nom</th><th>E-mail</th><th>Pays</th><th>Type</th><th>${TR('Statut')}</th><th>${TR('Dernière connexion')}</th><th></th></tr></thead>
@@ -3406,7 +3412,7 @@ async function chargerListeUtilisateurs(){
         <td style="font-size:13px">${esc(u.email)}</td>
         <td><span style="font-size:13px">${u.pays||'<span style="color:var(--text3)">🌍 Tous</span>'}</span></td>
         <td><span class="badge ${u.role==='admin'?'urgent':'attente'}">${u.role==='admin'?'Administrateur':'Utilisateur'}</span></td>
-        <td><span class="badge ${u.actif?'g':'hg'}">${u.actif?'Actif':'Désactivé'}</span></td>
+        <td><span class="badge ${u.actif?'g':'hg'}">${u.actif?'Actif':'Désactivé'}</span>${(()=>{ const b = susp.find(x => x.user_id === u.id); return b ? `<div style="margin-top:4px"><span class="badge urgent" title="${esc(b.raison)}">${TR('Suspendu jusqu’à')} ${new Date(b.jusqua).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span> <button class="btn sm" onclick="debloquerUtilisateur(${u.id})">${TR('Lever')}</button><div style="font-size:11.5px;color:var(--text3)">${esc(b.raison)}</div></div>` : ''; })()}</td>
         <td style="font-size:12px;color:var(--text2)">${u.last_login?fd(u.last_login.slice(0,10)):'—'}</td>
         <td style="display:flex;gap:6px;justify-content:flex-end">
           <button class="btn sm" onclick="modalEditerUtilisateur(${u.id})" title="${TR("Modifier")}"><i class="ti ti-edit"></i></button>

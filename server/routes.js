@@ -85,6 +85,10 @@ router.use((req, res, next) => {
   next();
 });
 
+// ── Garde anti-aspiration : volume de lectures / balayage de fiches → suspension + alerte e-mail aux admins ──
+const _secu = require('./securite-acces');
+router.use(_secu.garde({ db, alerter: _secu.fabriquerAlerte({ db, sendBrevoMail: (o) => sendBrevoMail(o) }) }));
+
 // ── Formatage universel des numéros de téléphone → « 09 67 66 51 29 » ──────
 // Appliqué à l'enregistrement pour que toutes les bases stockent le même format.
 function fmtTel(v) {
@@ -118,7 +122,33 @@ function moduleFromPath(p) {
   if (p.startsWith('/retours'))                     return 'retours_suede';
   if (p.startsWith('/transferts'))                  return 'transferts';
   if (p.startsWith('/parametres'))                  return 'parametres';
+  // Routes qui n'étaient rattachées à aucun module (lisibles par tout compte connecté) :
+  // désormais soumises aux droits du module concerné.
+  if (p.startsWith('/devis'))                       return 'devis';
+  if (p.startsWith('/contrats-cadre'))              return 'prets';
+  if (p.startsWith('/documents-signes/fichier'))    return null;         // contrôlé dans la route, selon le document (prêt ou commande)
+  if (p.startsWith('/documents-signes'))            return 'prets';
+  if (p.startsWith('/demos'))                       return 'parc-demo';
+  if (p.startsWith('/discussions'))                 return 'discussions';
+  if (p.startsWith('/notes'))                       return 'commandes';
+  if (p.startsWith('/stats') || p.startsWith('/logs')) return 'dashboard';
+  if (p.startsWith('/pennylane') || p.startsWith('/vosfactures') || p.startsWith('/paiement-vf') || p.startsWith('/tracking')) return 'commandes';
+  if (p.startsWith('/stock'))                       return 'catalogue';
+  if (p.startsWith('/doublons-vf') || p.startsWith('/espace/demandes')) return 'clients';
   return null;
+}
+// Droit effectif d'un compte sur un module : 'write' | 'read' | 'none'.
+// « Masqué » (hidden) = aucun accès, y compris par l'API. Modules sans réglage : module parent.
+const _PERM_PARENT = { carte: 'clients', eclates: 'catalogue', devis: 'commandes', dashboard: 'commandes', 'parc-demo': 'commandes',
+  discussions: 'commandes', 'commande-suede': 'commandes', inventaire: 'catalogue' };
+function permModule(user, module) {
+  if (!user) return 'none';
+  if (user.role === 'admin') return 'write';
+  const perms = user.permissions || {};
+  let p = perms[module];
+  if (p === undefined && module === 'retours-demo') p = perms['retours_demo'] !== undefined ? perms['retours_demo'] : perms['commandes'];
+  if (p === undefined && _PERM_PARENT[module]) p = perms[_PERM_PARENT[module]];
+  return p === 'write' || p === 'read' ? p : 'none';
 }
 
 // Middleware de protection en écriture par module (s'applique aux non-admins)
@@ -129,16 +159,8 @@ router.use((req, res, next) => {
 
   const module = moduleFromPath(req.path);
   if (!module) return next(); // Route système (auth, VF sync...) : déjà protégée
-  const perms = user.permissions || {};
-  // Fallback : la carte hérite de 'clients' si sa permission n'est pas définie
-  // (utilisateurs créés avant l'ajout du module carte)
-  let perm = perms[module];
-  if (perm === undefined && module === 'carte') perm = perms['clients'];
-  // Éclatés : hérite du catalogue pièces tant que la permission n'est pas réglée
-  if (perm === undefined && module === 'eclates') perm = perms['catalogue'];
-  // Retours démo : suivent le suivi commandes tant que la permission n'est pas réglée
-  if (perm === undefined && module === 'retours-demo') perm = perms['retours_demo'] !== undefined ? perms['retours_demo'] : perms['commandes'];
-  perm = perm || 'none';
+  // 'hidden' (« Masqué » dans l'écran des droits) = 'none' : plus de lecture possible par l'API
+  const perm = permModule(user, module);
   // Envoi des éclatés par e-mail : la lecture suffit (rien n'est modifié)
   if (req.method === 'POST' && req.path === '/eclates/envoyer-mail' && perm === 'read') return next();
   // Ajout d'un fauteuil / d'une pièce à un bon de commande Suède depuis les éclatés : la route vérifie elle-même la liste des personnes autorisées
@@ -2660,7 +2682,9 @@ router.get('/recherche', async (req, res) => {
       ORDER BY cmd.date_commande DESC LIMIT 50
     `, [`%${q}%`]);
 
-    res.json({ fauteuils, clients, commandes });
+    const u = res.locals.user;
+    res.json({ fauteuils: permModule(u, 'clients') !== 'none' || permModule(u, 'interventions') !== 'none' ? fauteuils : [],
+      clients: permModule(u, 'clients') !== 'none' ? clients : [], commandes: permModule(u, 'commandes') !== 'none' ? commandes : [] });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -8480,8 +8504,10 @@ router.post('/prets/:id/lier-client', adminOnly, async (req, res) => {
 const DOC_OBJETS = { pret: 'prets', contrat: 'contrats_cadre' };
 router.get('/documents-signes/fichier/:docId', requireAuth, async (req, res) => {
   try {
-    const d = await db.get('SELECT nom, mime, data FROM documents_signes WHERE id=$1', [req.params.docId]);
+    const d = await db.get('SELECT nom, mime, data, objet FROM documents_signes WHERE id=$1', [req.params.docId]);
     if (!d) return res.status(404).send('Document introuvable');
+    const modDoc = ['commande', 'commande_suede'].includes(d.objet) ? 'commandes' : 'prets';
+    if (permModule(res.locals.user, modDoc) === 'none') return res.status(403).send('Accès refusé');
     const b64 = String(d.data).replace(/^data:[^;]+;base64,/, '');
     res.setHeader('Content-Type', d.mime || 'application/octet-stream');
     res.setHeader('Content-Disposition', `inline; filename="${String(d.nom || 'document').replace(/[^\w.\- ]+/g, '_')}"`);
@@ -8489,7 +8515,10 @@ router.get('/documents-signes/fichier/:docId', requireAuth, async (req, res) => 
   } catch (e) { res.status(500).send(e.message); }
 });
 router.delete('/documents-signes/fichier/:docId', requireAuth, async (req, res) => {
-  try { await db.run('DELETE FROM documents_signes WHERE id=$1', [req.params.docId]); res.json({ ok: true }); }
+  try {
+    const d = await db.get('SELECT objet FROM documents_signes WHERE id=$1', [req.params.docId]);
+    if (d && permModule(res.locals.user, ['commande', 'commande_suede'].includes(d.objet) ? 'commandes' : 'prets') !== 'write') return res.status(403).json({ error: 'Accès refusé' });
+    await db.run('DELETE FROM documents_signes WHERE id=$1', [req.params.docId]); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.get('/documents-signes/:objet/:id', requireAuth, async (req, res) => {
@@ -9577,6 +9606,7 @@ require('./demo-showroom')(router, { db, sendBrevoMail, mailCharte: _mailCharte,
 require('./inventaires')(router, { db, addAlerte });
 // ── Confirmation de commande du distributeur (mail Outlook .msg / .eml, PDF, capture, texte) ──
 require('./commande-confirmations')(router, { db });
+_secu.monterAdmin(router, { adminOnly });
 require('./commandes-suede-po')(router, { db, adminOrOp, envoyerEmailPret, SIGNATURE_EMAIL_HTML: () => SIGNATURE_EMAIL_HTML });
 // ── Transferts de stock Lagord → Paris (bon de transfert + stock Paris) ──
 require('./stock-transferts')(router, { db });

@@ -31,6 +31,9 @@ async function assurer(db) {
     await db.run(`ALTER TABLE commandes_suede ADD COLUMN IF NOT EXISTS ${c}`);
   for (const c of ['prix_unitaire NUMERIC(12,2)', 'ref_fournisseur TEXT', 'note TEXT'])
     await db.run(`ALTER TABLE commandes_suede_lignes ADD COLUMN IF NOT EXISTS ${c}`);
+  // Éclatés : article commandé par « Commander ce fauteuil » (réglé par l'administrateur)
+  for (const c of ['cmd_catalogue_id INTEGER', 'cmd_reference TEXT', 'cmd_designation TEXT', 'cmd_note TEXT'])
+    await db.run(`ALTER TABLE eclates_modeles ADD COLUMN IF NOT EXISTS ${c}`).catch(() => {});
   await db.run(`CREATE TABLE IF NOT EXISTS documents_signes (
     id SERIAL PRIMARY KEY, objet TEXT NOT NULL, objet_id INTEGER NOT NULL,
     nom TEXT, mime TEXT, taille INTEGER, data TEXT NOT NULL, ajoute_par INTEGER, created_at TIMESTAMPTZ DEFAULT NOW())`);
@@ -156,9 +159,29 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
           (SELECT COUNT(*)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS nb_lignes,
           (SELECT COALESCE(SUM(quantite_commandee),0)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS nb_articles
         FROM commandes_suede cs WHERE cs.etape IN ('brouillon','validee') ORDER BY cs.updated_at DESC NULLS LAST, cs.id DESC LIMIT 15`);
-      res.json({ autorise: true, en_attente, prochain_numero: await prochainNumero(db) });
+      const modeles = {};
+      try {
+        for (const m of await db.all(`SELECT m.id, m.cmd_catalogue_id, m.cmd_reference, m.cmd_designation, m.cmd_note, c.ref AS cat_ref, c.designation AS cat_designation
+            FROM eclates_modeles m LEFT JOIN catalogue c ON c.id=m.cmd_catalogue_id
+            WHERE m.cmd_catalogue_id IS NOT NULL OR COALESCE(m.cmd_reference,'')<>'' OR COALESCE(m.cmd_designation,'')<>'' OR COALESCE(m.cmd_note,'')<>''`))
+          modeles[m.id] = { catalogue_id: m.cmd_catalogue_id, reference: m.cmd_reference || m.cat_ref || '', designation: m.cmd_designation || m.cat_designation || '', note: m.cmd_note || '' };
+      } catch (_) {}
+      res.json({ autorise: true, admin: (res.locals.user || {}).role === 'admin', modeles, en_attente, prochain_numero: await prochainNumero(db) });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
+  // Article commandé par « Commander ce fauteuil » pour un modèle d'éclaté — administrateur uniquement
+  router.put('/eclates-bc-suede/modele/:id', async (req, res) => {
+    try {
+      await assurer(db);
+      if ((res.locals.user || {}).role !== 'admin') return res.status(403).json({ error: 'Réservé à l’administrateur' });
+      const b = req.body || {};
+      const r = await db.get(`UPDATE eclates_modeles SET cmd_catalogue_id=$2, cmd_reference=$3, cmd_designation=$4, cmd_note=$5, updated_at=NOW() WHERE id=$1 RETURNING id`,
+        [req.params.id, parseInt(b.catalogue_id) || null, txt(b.reference, 80), txt(b.designation, 300), txt(b.note, 600)]);
+      if (!r) return res.status(404).json({ error: 'Modèle introuvable' });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   // { commande_id (vide = nouveau bon), lignes:[{ catalogue_id, reference, designation, note, quantite }] }
   router.post('/eclates-bc-suede/ajouter', async (req, res) => {
     await assurer(db);
@@ -214,6 +237,33 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
     finally { pg.release(); }
   });
 
+  // Aperçu du devis Pennylane (PDF relayé par le serveur, pour l'afficher à côté du bon de commande)
+  const _pdfCache = new Map();
+  router.get('/commandes-suede-po/devis-pdf', async (req, res) => {
+    try {
+      const numero = String(req.query.numero || '').trim();
+      if (!numero) return res.status(400).send('Numéro de devis manquant');
+      if (!(process.env.PENNYLANE_API_KEY || process.env.PENNYLANE_TOKEN)) return res.status(400).send('Pennylane non configuré');
+      const c = _pdfCache.get(numero.toUpperCase());
+      let buf = c && Date.now() - c.t < 10 * 60 * 1000 ? c.buf : null;
+      if (!buf) {
+        const r = await require('../scripts/sync-pennylane').lookupDocumentPennylane(numero);
+        if (!r || !r.found) return res.status(404).send(`Devis ${numero} introuvable dans Pennylane`);
+        if (!r.url_doc) return res.status(404).send('Pennylane ne fournit pas de PDF pour ce devis');
+        const axios = require('axios');
+        const d = await axios.get(r.url_doc, { responseType: 'arraybuffer', timeout: 25000, maxRedirects: 5, validateStatus: () => true,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; EloflexSAV/1.0)', Accept: 'application/pdf,*/*' } });
+        buf = Buffer.from(d.data);
+        if (buf.slice(0, 5).toString('latin1') !== '%PDF-') return res.status(502).send('Le document renvoyé par Pennylane n’est pas un PDF');
+        _pdfCache.set(numero.toUpperCase(), { t: Date.now(), buf });
+        if (_pdfCache.size > 30) _pdfCache.delete(_pdfCache.keys().next().value);
+      }
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${numero.replace(/[^\w.\-]+/g, '_')}.pdf"`);
+      res.send(buf);
+    } catch (e) { res.status(500).send(e.message); }
+  });
+
   router.get('/commandes-suede-po/:id', async (req, res) => {
     try {
       await assurer(db);
@@ -258,6 +308,7 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
       if (!cs) { await pg.query('ROLLBACK'); return res.status(404).json({ error: 'Introuvable' }); }
       if (!['brouillon', 'validee'].includes(cs.etape)) { await pg.query('ROLLBACK'); return res.status(409).json({ error: 'Commande déjà envoyée : elle ne peut plus être modifiée.' }); }
       await ecrire(pg, cs.id, b);
+      if (b.devis_pennylane !== undefined) await pg.query('UPDATE commandes_suede SET devis_pennylane=$2 WHERE id=$1', [cs.id, txt(b.devis_pennylane, 60)]);
       if (cs.etape === 'validee') await pg.query(`UPDATE commandes_suede SET etape='brouillon', valide_par=NULL, valide_le=NULL WHERE id=$1`, [cs.id]);
       await pg.query('COMMIT');
       await histo(cs.id, res.locals.user, cs.etape === 'validee' ? 'modification (validation annulée)' : 'modification');

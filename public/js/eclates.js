@@ -387,7 +387,7 @@ async function renderEclates(ttl, c, a){
   css();
   if (E.bcSuede === undefined) {
     E.bcSuede = false;
-    if (!estDistrib()) { try { E.bcSuede = !!(await API.get('/eclates-bc-suede')).autorise; } catch (_) { E.bcSuede = false; } }
+    if (!estDistrib()) { try { const r = await API.get('/eclates-bc-suede'); E.bcSuede = !!r.autorise; E.bcAdmin = !!r.admin; E.bcCfg = r.modeles || {}; } catch (_) { E.bcSuede = false; } }
   }
   if (!E.modeleId) return renderListe(ttl, c, a);
   try {
@@ -513,14 +513,14 @@ async function renderListe(ttl, c, a){
         ${lienM(m,'lien_web') ? `<a href="${e_(lienM(m,'lien_web'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_web'))}"><i class="ti ti-world"></i> ${TR('Site web')}</a>` : ''}
         ${lienM(m,'lien_notice') ? `<a href="${e_(lienM(m,'lien_notice'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_notice'))}"><i class="ti ti-book"></i> ${TR('Notice')}</a>` : ''}
         ${lienM(m,'lien_fiche') ? `<a href="${e_(lienM(m,'lien_fiche'))}" target="_blank" rel="noopener" class="ecl-act ecl-web" title="${e_(lienM(m,'lien_fiche'))}"><i class="ti ti-file-description"></i> ${TR('Fiche technique')}</a>` : ''}
-        ${E.bcSuede ? `<span class="ecl-act" data-bcm="${m.id}" style="color:#1F5C8C" title="${TV('Ajouter à un bon de commande Suède')}"><i class="ti ti-truck-delivery"></i> ${TV('Commander ce fauteuil')}</span>` : ''}
+        ${E.bcSuede ? `<span class="ecl-act" data-bcm="${m.id}" style="color:#1F5C8C" title="${TV('Ajouter à un bon de commande Suède')}"><i class="ti ti-truck-delivery"></i> ${TV('Commander ce fauteuil')}</span>${E.bcAdmin ? `<span class="ecl-act" data-bcl="${m.id}" style="color:var(--text3)" title="${TR('Régler l’article commandé (administrateur)')}"><i class="ti ti-settings"></i></span>` : ''}` : ''}
         ${edit ? `<span class="ecl-act" data-liens="${m.id}" style="color:var(--text2)" title="${TR('Modifier les liens (site, notice, fiche technique)')}"><i class="ti ti-link"></i> ${TR('Liens')}</span>` : ''}
       </div>
       ${admin ? `<small style="margin-top:8px"><span class="ecl-mini" data-del="${m.id}" data-nom="${e_(m.nom)}"><i class="ti ti-trash"></i> ${TR('Supprimer')}</span></small>` : ''}
     </div>`).join('')}</div>`
     : `<div class="empty"><i class="ti ti-schema"></i>${TR('Aucun éclaté importé pour le moment.')}${admin ? '<br>' + TR('Utilisez « Importer des éclatés » avec les fichiers .json fournis.') : ''}</div>`;
   c.querySelectorAll('.ecl-card').forEach(el => el.addEventListener('click', ev => {
-    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-liens]') || ev.target.closest('[data-pdf]') || ev.target.closest('.ecl-web') || ev.target.closest('[data-carac]') || ev.target.closest('[data-bcm]')) return;
+    if (ev.target.closest('[data-del]') || ev.target.closest('[data-photo]') || ev.target.closest('[data-liens]') || ev.target.closest('[data-pdf]') || ev.target.closest('.ecl-web') || ev.target.closest('[data-carac]') || ev.target.closest('[data-bcm]') || ev.target.closest('[data-bcl]')) return;
     const mm = list.find(x => x.id === +el.dataset.id);
     if (mm && !mm.nb_vues) { if (SITE_SE() && lienM(mm, 'lien_web')) window.open(lienM(mm, 'lien_web'), '_blank', 'noopener'); else if (mm.caracteristiques && !SITE_SE()) ficheCaracteristiques(mm); else if (typeof toast === 'function') toast(TR('L’éclaté de ce modèle sera bientôt disponible.'), 'ti-clock'); return; }
     E.modeleId = +el.dataset.id; E.vueId = null; E.data = null; back = null; render();
@@ -536,6 +536,9 @@ async function renderListe(ttl, c, a){
   }));
   c.querySelectorAll('[data-bcm]').forEach(el => el.addEventListener('click', ev => {
     ev.stopPropagation(); const m = list.find(x => x.id === +el.dataset.bcm); if (m) bcSuedeFauteuil(m);
+  }));
+  c.querySelectorAll('[data-bcl]').forEach(el => el.addEventListener('click', ev => {
+    ev.stopPropagation(); const m = list.find(x => x.id === +el.dataset.bcl); if (m) bcSuedeLienModele(m);
   }));
   c.querySelectorAll('[data-carac]').forEach(el => el.addEventListener('click', ev => {
     ev.stopPropagation(); const m = list.find(x => x.id === +el.dataset.carac); if (m) ficheCaracteristiques(m);
@@ -611,7 +614,7 @@ function renderViewer(ttl, c, a){
     <div style="position:relative"><input id="ecl-q" class="search-bar" placeholder="${T('search')}" autocomplete="off" style="width:260px"><div class="ecl-res" id="ecl-res"></div></div>
     <div class="ecl-seg"><button data-lg="fr" class="${L()==='fr'?'on':''}">FR</button><button data-lg="en" class="${L()==='en'?'on':''}">EN</button><button data-lg="sv" class="${L()==='sv'?'on':''}">SV</button></div>
     ${peutCommander() ? boutonPanier() : ''}
-    ${E.bcSuede ? `<button class="btn" id="ecl-bcm" title="${TV('Ajouter à un bon de commande Suède')}"><i class="ti ti-truck-delivery"></i> ${TV('Commander ce fauteuil')}</button>` : ''}
+    ${E.bcSuede ? `<button class="btn" id="ecl-bcm" title="${TV('Ajouter à un bon de commande Suède')}"><i class="ti ti-truck-delivery"></i> ${TV('Commander ce fauteuil')}</button>${E.bcAdmin ? `<button class="btn" id="ecl-bcl" title="${TR('Régler l’article commandé (administrateur)')}"><i class="ti ti-settings"></i></button>` : ''}` : ''}
     <button class="btn primary" id="ecl-pdf"><i class="ti ti-file-type-pdf"></i> ${({fr:'Télécharger PDF',en:'Download PDF',sv:'Ladda ner PDF'})[L()]}</button>
     ${lienM(d,'lien_web') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_web'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_web'))}"><i class="ti ti-world"></i> ${({fr:'Site web',en:'Website',sv:'Webbplats'})[L()]}</a>` : ''}
     ${lienM(d,'lien_notice') ? `<a class="btn" style="text-decoration:none" href="${e_(lienM(d,'lien_notice'))}" target="_blank" rel="noopener" title="${e_(lienM(d,'lien_notice'))}"><i class="ti ti-book"></i> ${({fr:'Notice',en:'User manual',sv:'Bruksanvisning'})[L()]}</a>` : ''}
@@ -646,6 +649,7 @@ function renderViewer(ttl, c, a){
   if ($('ecl-lien')) $('ecl-lien').onclick = () => modifierLiens(d, r => { Object.assign(d, r); renderViewer(ttl, c, a); });
   $('ecl-pdf').onclick = choisirPDF;
   if ($('ecl-bcm')) $('ecl-bcm').onclick = () => bcSuedeFauteuil(d);
+  if ($('ecl-bcl')) $('ecl-bcl').onclick = () => bcSuedeLienModele(d);
   if ($('ecl-addb')) $('ecl-addb').onclick = () => { addMode = { step: 1 }; hint(TR('Cliquez à l’endroit de la nouvelle bulle (Échap pour annuler)')); $('ecl-paper').classList.add('adding'); };
   bindZoom(); bindSearch();
   const pend = E._pendingSel; E._pendingSel = null;
@@ -1214,8 +1218,58 @@ const estDistrib = () => typeof window.estDistributeur === 'function' && window.
 // Demande de devis : ouverte à tout utilisateur qui a accès aux éclatés (distributeurs, équipe, comptes étrangers)
 // ── Bon de commande Suède depuis les éclatés (Brice, Frédéric, Lyes, Linnea, Olivier) ──
 function bcSuedeFauteuil(m){
-  bcSuedeChoisir({ catalogue_id: null, reference: m.ref_modele || '', designation: m.nom || '', fauteuil: true });
+  const cfg = (E.bcCfg || {})[m.id] || {};
+  bcSuedeChoisir({ catalogue_id: cfg.catalogue_id || null, reference: cfg.reference || m.ref_modele || '', designation: cfg.designation || m.nom || '',
+    note: cfg.note || '', fauteuil: true });
 }
+// Administrateur : article commandé par « Commander ce fauteuil » (catalogue, référence, texte du bon, configuration par défaut)
+async function bcSuedeLienModele(m){
+  const cfg = (E.bcCfg || {})[m.id] || {};
+  E._bclM = m; E._bclCat = cfg.catalogue_id || null;
+  showModal(`<div class="modal-header"><h3><i class="ti ti-truck-delivery"></i>${TR('Commander ce fauteuil')} — ${e_(m.nom)}</h3><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${TR('Article ajouté au bon de commande Suède quand on clique sur « Commander ce fauteuil ». Réglage réservé à l’administrateur.')}</div>
+      <div class="form-group" style="position:relative"><label class="form-label">${TR('Article du catalogue (facultatif)')}</label>
+        <input class="form-input" id="bcl-q" placeholder="${TR('Rechercher par référence ou désignation…')}" autocomplete="off" oninput="bcSuedeLienCherche(this.value)">
+        <div id="bcl-sug" style="position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:60;max-height:240px;overflow:auto;display:none"></div>
+        <div id="bcl-cat" style="font-size:12.5px;margin-top:4px;color:var(--success)">${cfg.catalogue_id ? '<i class="ti ti-link"></i> ' + e_(cfg.reference) + ' — ' + TR('relié au catalogue') : ''}</div></div>
+      <div class="form-group"><label class="form-label">${TR('Référence sur le bon')}</label><input class="form-input mono" id="bcl-ref" value="${e_(cfg.reference || m.ref_modele || '')}"></div>
+      <div class="form-group"><label class="form-label">${TR('Désignation sur le bon (anglais de préférence)')}</label><input class="form-input" id="bcl-des" value="${e_(cfg.designation || m.nom || '')}"></div>
+      <div class="form-group"><label class="form-label">${TR('Configuration proposée par défaut')}</label><input class="form-input" id="bcl-note" value="${e_(cfg.note || '')}" placeholder="e.g. black, joystick right"></div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">${TR('Annuler')}</button><button class="btn primary" onclick="bcSuedeLienSauver()"><i class="ti ti-check"></i>${TR('Enregistrer')}</button></div>`);
+}
+let _bclCatalogue = null, _bclT = null;
+function bcSuedeLienCherche(q){
+  clearTimeout(_bclT);
+  _bclT = setTimeout(async () => {
+    const box = $('bcl-sug'); if (!box) return;
+    q = String(q || '').trim().toLowerCase(); if (q.length < 2) { box.style.display = 'none'; return; }
+    if (!_bclCatalogue) { try { _bclCatalogue = await API.get('/catalogue'); } catch (_) { _bclCatalogue = []; } }
+    const n = x => String(x || '').toLowerCase(), qc = normRef(q);
+    E._bclRes = _bclCatalogue.filter(c => n(c.ref).includes(q) || n(c.designation).includes(q) || n(c.ref_fournisseur).includes(q) || (qc && normRef(c.ref).includes(qc))).slice(0, 12);
+    box.innerHTML = E._bclRes.length ? E._bclRes.map((c, i) => `<div onmousedown="event.preventDefault();bcSuedeLienChoix(${i})" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px"><b class="mono">${e_(c.ref)}</b> — ${e_(c.designation)}</div>`).join('')
+      : `<div style="padding:8px 12px;font-size:13px;color:var(--text3)">${TR('Aucun résultat')}</div>`;
+    box.style.display = '';
+  }, 200);
+}
+function bcSuedeLienChoix(i){
+  const c = (E._bclRes || [])[i]; if (!c) return;
+  E._bclCat = c.id; $('bcl-ref').value = c.ref || ''; if (!$('bcl-des').value.trim() || $('bcl-des').value === (E._bclM && E._bclM.nom)) $('bcl-des').value = c.designation || '';
+  $('bcl-cat').innerHTML = '<i class="ti ti-link"></i> ' + e_(c.ref) + ' — ' + TR('relié au catalogue');
+  $('bcl-sug').style.display = 'none'; $('bcl-q').value = '';
+}
+async function bcSuedeLienSauver(){
+  const m = E._bclM; if (!m) return;
+  try {
+    await API.put(`/eclates-bc-suede/modele/${m.id}`, { catalogue_id: E._bclCat, reference: $('bcl-ref').value.trim(), designation: $('bcl-des').value.trim(), note: $('bcl-note').value.trim() });
+    const r = await API.get('/eclates-bc-suede'); E.bcCfg = r.modeles || {};
+    closeModal(); if (typeof toast === 'function') toast(TR('Article de commande enregistré'), 'ti-check', 'var(--success)');
+  } catch (err) { if (typeof toast === 'function') toast(err.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+window.bcSuedeLienCherche = bcSuedeLienCherche;
+window.bcSuedeLienChoix = bcSuedeLienChoix;
+window.bcSuedeLienSauver = bcSuedeLienSauver;
 function bcSuedePiece(it){
   bcSuedeChoisir({ catalogue_id: it.cat_id || null, reference: it.ref || '',
     designation: (it.cat_designation || it.fr || it.desc_en || label(it) || '') });
@@ -1238,7 +1292,7 @@ async function bcSuedeChoisir(art){
       <div style="display:grid;grid-template-columns:110px 1fr;gap:10px">
         <div class="form-group"><label class="form-label">${TV('Quantité')}</label><input class="form-input" type="number" min="1" max="999" id="bc-qte" value="1"></div>
         <div class="form-group"><label class="form-label">${TV('Configuration / options / accessoires (facultatif)')}</label>
-          <input class="form-input" id="bc-note" placeholder="${art.fauteuil ? 'e.g. black, joystick right, headrest, bag' : ''}"></div>
+          <input class="form-input" id="bc-note" value="${e_(art.note || '')}" placeholder="${art.fauteuil ? 'e.g. black, joystick right, headrest, bag' : ''}"></div>
       </div>
       ${opt('', !dernier, `<b><i class="ti ti-plus"></i> ${TV('Nouveau bon de commande')}</b> <span class="mono" style="color:var(--text3)">${e_(d.prochain_numero)}</span>
         <div style="font-size:12px;color:var(--text3)">${TV('livraison Lagord par défaut, modifiable dans le bon')}</div>`)}
