@@ -78,9 +78,9 @@ function quitter(sansConfirm) {
 }
 async function nouveau() {
   const cfg = await config(true);
-  const p = cfg.presets.lagord || {};
+  const p = cfg.presets.paris || {};
   S.cs = { id: null, etape: 'brouillon', numero_bc: cfg.prochain_numero, date_commande: new Date().toISOString().slice(0, 10),
-    reference_client: '', livraison_type: 'lagord', livraison_nom: p.nom, livraison_contact: p.contact, livraison_adresse: p.adresse,
+    reference_client: '', livraison_type: 'paris', livraison_nom: p.nom, livraison_contact: p.contact, livraison_adresse: p.adresse,
     livraison_pays: p.pays || 'France', livraison_tel: p.tel, livraison_email: p.email, afficher_prix: false, notes: '', lignes: [] };
   S.vue = 'edition'; S.id = null; S.modifie = false;
   if (typeof setView === 'function' && typeof STATE !== 'undefined' && STATE.view !== 'commande-suede') setView('commande-suede', { garderPO: true }); else render();
@@ -155,7 +155,11 @@ async function renderEdition(ttl, c, a) {
           ${champ('cs-liv-pays', _T('Pays'), cs.livraison_pays || 'France')}
           ${champ('cs-liv-tel', _T('Téléphone') + ' *', cs.livraison_tel, 'type="tel"')}
         </div>
-        ${champ('cs-liv-email', _T('E-mail') + ' *', cs.livraison_email, 'type="email"')}
+        ${champ('cs-liv-email', _T('E-mail') + ' *', cs.livraison_email, 'type="text" oninput="csModif();csMajMailsParis()"')}
+        <div id="cs-mails-paris" style="display:${typ === 'paris' ? 'flex' : 'none'};gap:16px;margin:-6px 0 8px;font-size:13px">
+          ${['info@eloflex.fr', 'sav@eloflex.fr'].map(m => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+            <input type="checkbox" class="cs-mail-paris" value="${m}" ${String(cs.livraison_email || '').toLowerCase().includes(m) ? 'checked' : ''} ${dis} onchange="csChoixMailParis()"> ${m}</label>`).join('')}
+        </div>
       </div>
     </div>
 
@@ -337,10 +341,24 @@ function remplirLivraison(p) {
   const set = (id, v) => { const el = $(id); if (el) el.value = v || ''; };
   set('cs-liv-nom', p.nom); set('cs-liv-contact', p.contact); set('cs-liv-adr', p.adresse);
   set('cs-liv-pays', p.pays || 'France'); set('cs-liv-tel', p.tel); set('cs-liv-email', p.email);
+  majMailsParis();
   S.modifie = true;
 }
+// Paris : e-mail de livraison = info@ et/ou sav@ (cases à cocher)
+function choixMailParis() {
+  const l = [...document.querySelectorAll('.cs-mail-paris:checked')].map(x => x.value);
+  const el = $('cs-liv-email'); if (el) el.value = l.join(', ');
+  S.modifie = true;
+}
+function majMailsParis() {
+  const v = String(($('cs-liv-email') || {}).value || '').toLowerCase();
+  document.querySelectorAll('.cs-mail-paris').forEach(x => { x.checked = v.includes(x.value); });
+}
+window.csChoixMailParis = choixMailParis;
+window.csMajMailsParis = majMailsParis;
 function typeLivraison(t) {
   S.cs.livraison_type = t;
+  const mp = $('cs-mails-paris'); if (mp) mp.style.display = t === 'paris' ? 'flex' : 'none';
   const z = $('cs-dist-zone'); if (z) z.style.display = t === 'distributeur' ? '' : 'none';
   if (t === 'lagord' || t === 'paris') remplirLivraison((S.cfg && S.cfg.presets[t]) || {});
   else if (t === 'autre') remplirLivraison({ pays: 'France' });

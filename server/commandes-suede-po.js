@@ -14,6 +14,8 @@ const CC_SAV = 'sav@eloflex.fr';
 const VALIDATEURS_DEFAUT = 'brice, lyes, frederic, olivier';
 const ACCES_ECLATES_DEFAUT = 'brice, frederic, lyes, linnea, olivier';
 const ADR_LAGORD = 'Éloflex France\n41 rue des Maraichers\n17140 LAGORD';
+// Livraison à Paris : coordonnées fixes (e-mail : info@ et/ou sav@, au choix dans le bon)
+const PRESET_PARIS = { nom: 'ELOFLEX FRANCE', contact: '', adresse: '102 AVENUE DES CHAMPS ELYSEES\n75008 PARIS', pays: 'France', tel: '+33 9 67 66 51 29', email: 'info@eloflex.fr' };
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const esc = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -117,7 +119,7 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
   }
   // Mémorise les coordonnées de livraison Lagord / Paris pour les prochaines commandes
   async function memoriser(b) {
-    if (!['lagord', 'paris'].includes(b.livraison_type)) return;
+    if (b.livraison_type !== 'lagord') return;   // Paris : coordonnées fixes
     await setParam(db, 'po_suede_livraison_' + b.livraison_type, JSON.stringify({
       nom: txt(b.livraison_nom, 200), contact: txt(b.livraison_contact, 200), adresse: txt(b.livraison_adresse, 600),
       pays: txt(b.livraison_pays, 80), tel: txt(b.livraison_tel, 60), email: txt(b.livraison_email, 200) }));
@@ -142,7 +144,7 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
         prochain_numero: await prochainNumero(db),
         presets: {
           lagord: await preset('lagord', await param(db, 'transfert_adresse_lagord', ADR_LAGORD)),
-          paris: await preset('paris', await param(db, 'transfert_adresse_paris', 'Éloflex France — Paris\n')),
+          paris: { ...PRESET_PARIS },
         },
       });
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -201,12 +203,12 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
         if (cs.etape === 'validee') { revalider = true; await pg.query(`UPDATE commandes_suede SET etape='brouillon', valide_par=NULL, valide_le=NULL WHERE id=$1`, [id]); }
       } else {
         numero = await prochainNumero(db); nouveau = true;
-        let p = {}; try { p = JSON.parse(await param(db, 'po_suede_livraison_lagord', '{}')) || {}; } catch (_) { p = {}; }
-        const adr = String(p.adresse ? (p.nom || '') + '\n' + p.adresse : await param(db, 'transfert_adresse_lagord', ADR_LAGORD)).split('\n');
+        // Nouveau bon vierge : livraison à Paris par défaut
+        const p = PRESET_PARIS;
         const { rows: [cs] } = await pg.query(`INSERT INTO commandes_suede (numero_bc, fournisseur, statut, etape, cree_par, date_commande, livraison_type,
             livraison_nom, livraison_contact, livraison_adresse, livraison_pays, livraison_tel, livraison_email)
-          VALUES ($1,'Eloflex AB','En cours','brouillon',$2,CURRENT_DATE,'lagord',$3,$4,$5,$6,$7,$8) RETURNING id`,
-          [numero, nomU(u), adr[0] || 'Éloflex France', p.contact || null, adr.slice(1).join('\n') || null, p.pays || 'France', p.tel || null, p.email || CC_SAV]);
+          VALUES ($1,'Eloflex AB','En cours','brouillon',$2,CURRENT_DATE,'paris',$3,$4,$5,$6,$7,$8) RETURNING id`,
+          [numero, nomU(u), p.nom, null, p.adresse, p.pays, p.tel, p.email]);
         id = cs.id;
       }
       const { rows: [mx] } = await pg.query('SELECT COALESCE(MAX(ordre),-1)+1 AS o FROM commandes_suede_lignes WHERE commande_id=$1', [id]);
