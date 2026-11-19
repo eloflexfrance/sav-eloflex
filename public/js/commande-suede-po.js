@@ -97,6 +97,7 @@ async function renderEdition(ttl, c, a) {
 
   c.innerHTML = `
   <div style="max-width:1100px">
+    ${!cs.id && cs.devis_pennylane ? `<div style="background:#fff4e0;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-file-import"></i> ${_T('Bon pré-rempli depuis le devis Pennylane')} <b class="mono">${e_(cs.devis_pennylane)}</b>${cs.distributeur_devis ? ' (' + e_(cs.distributeur_devis) + ')' : ''}. ${_T('Vérifiez les articles, l’adresse et la référence commande client, puis cliquez sur « Enregistrer ».')}</div>` : ''}
     ${cs.etape === 'validee' && editable ? `<div style="background:#e6f0fb;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-info-circle"></i> ${_T('Commande validée : toute modification enregistrée la repasse en brouillon (nouvelle validation nécessaire).')}</div>` : ''}
     <div class="grid-2" style="gap:16px;align-items:start">
       <div class="card" style="padding:14px 16px">
@@ -165,6 +166,7 @@ async function renderEdition(ttl, c, a) {
 function traca(cs, cfg) {
   const l = (ic, lab, v) => v ? `<div style="font-size:12.5px;color:var(--text2);margin-top:3px"><i class="ti ${ic}"></i> ${_T(lab)} ${v}</div>` : '';
   return `<div style="border-top:0.5px solid var(--border);margin-top:8px;padding-top:8px">
+    ${l('ti-file-invoice', 'Devis Pennylane', cs.devis_pennylane ? `<b class="mono">${e_(cs.devis_pennylane)}</b>` : '')}
     ${l('ti-user', 'Créée par', e_(cs.cree_par || ''))}
     ${l('ti-circle-check', 'Validée par', cs.valide_par ? `<b>${e_(cs.valide_par)}</b> — ${dhFr(cs.valide_le)}` : '')}
     ${l('ti-send', 'Envoyée par', cs.envoye_par ? `<b>${e_(cs.envoye_par)}</b> — ${dhFr(cs.envoye_le)} → ${e_(cs.envoye_a || '')}` : '')}
@@ -347,7 +349,7 @@ async function enregistrer(silencieux) {
   if (!d.lignes.length && !silencieux) { if (!confirm(_T('Aucun article : enregistrer quand même le brouillon ?'))) return false; }
   try {
     if (!S.cs.id) {
-      const r = await API.post('/commandes-suede-po', { ...d, numero_bc: S.cs.numero_bc });
+      const r = await API.post('/commandes-suede-po', { ...d, numero_bc: S.cs.numero_bc, devis_pennylane: S.cs.devis_pennylane || null });
       S.id = r.id;
     } else {
       const r = await API.put(`/commandes-suede-po/${S.cs.id}`, d);
@@ -439,6 +441,115 @@ async function supprimer() {
   try { await API.deleteCommandeSuede(S.cs.id); quitter(true); _toast(_T('Supprimé'), 'ti-check'); }
   catch (e) { _toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
+
+// ── Import d'un devis Pennylane → bon de commande Suède pré-rempli ──
+const nRef = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const estFrais = d => /frais|\bport\b|livraison|exp[ée]dition|transport|shipping|\benvoi\b|colissimo|chronopost|remise|escompte/i.test(String(d || ''));
+const sansHtml = t => String(t || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+function modalDevisPL(numero) {
+  showModal(`
+    <div class="modal-header"><h3><i class="ti ti-file-import"></i>${_T('Bon de commande depuis un devis Pennylane')}</h3>
+      <button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px">
+        <input class="form-input mono" id="cs-pl-num" placeholder="${_T('N° du devis, ex. D-2026-11-0123')}" value="${e_(numero || '')}" style="flex:1" onkeydown="if(event.key==='Enter')csChercherDevisPL()">
+        <button class="btn primary" id="cs-pl-go" onclick="csChercherDevisPL()"><i class="ti ti-search"></i>${_T('Rechercher')}</button>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">${_T('Les articles du devis sont repris (hors frais de port), reliés au catalogue avec la référence fournisseur et le prix d’achat Suède.')}</div>
+      <div id="cs-pl-res" style="margin-top:12px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">${_T('Annuler')}</button>
+      <button class="btn primary" id="cs-pl-ok" style="display:none" onclick="csCreerDepuisDevisPL()"><i class="ti ti-file-plus"></i>${_T('Préparer le bon de commande')}</button>
+    </div>`);
+  const i = $('cs-pl-num'); if (i) i.focus();
+  if (numero) chercherDevisPL();
+}
+async function chercherDevisPL() {
+  const num = ($('cs-pl-num') || {}).value.trim(), z = $('cs-pl-res'), ok = $('cs-pl-ok');
+  if (!num) return;
+  if (ok) ok.style.display = 'none';
+  z.innerHTML = `<div style="font-size:13px;color:var(--text2)"><i class="ti ti-loader"></i> ${_T('Recherche dans Pennylane…')}</div>`;
+  let r;
+  try { r = await API.pennylane_bdc_lookup(num); } catch (e) { z.innerHTML = `<div style="color:var(--danger);font-size:13px">${e_(e.message)}</div>`; return; }
+  if (r.configured === false) { z.innerHTML = `<div style="color:var(--danger);font-size:13px">${_T('Pennylane n’est pas configuré.')}</div>`; return; }
+  if (!r.found) {
+    z.innerHTML = `<div style="font-size:13px;color:var(--warning)">${_T('Devis introuvable dans Pennylane.')}</div>
+      ${(r.suggestions || []).length ? `<div style="font-size:12.5px;color:var(--text2);margin:8px 0 4px">${_T('Vouliez-vous dire :')}</div>${r.suggestions.map(x => `<button class="btn sm" style="margin:0 6px 6px 0" onclick="document.getElementById('cs-pl-num').value='${e_(x.numero)}';csChercherDevisPL()"><span class="mono">${e_(x.numero)}</span>${x.distributeur ? ' — ' + e_(x.distributeur) : ''}</button>`).join('')}` : ''}`;
+    return;
+  }
+  const cat = await catalogue();
+  const parRef = new Map();
+  cat.forEach(c => { [c.ref, c.ref_fournisseur].forEach(k => { const n = nRef(k); if (n && !parRef.has(n)) parRef.set(n, c); }); });
+  S._pl = { r, lignes: (r.lignes || []).map(l => {
+    const c = parRef.get(nRef(l.reference)) || null;
+    const frais = estFrais(l.designation) || /^ESSAI/i.test(String(l.reference || '')) || /offre d.essai/i.test(String(l.designation || ''));
+    return { garder: !frais && (+l.quantite || 0) > 0, catalogue_id: c ? c.id : null, reference: c ? c.ref : (l.reference || ''),
+      ref_fournisseur: c ? (c.ref_fournisseur || '') : '', designation: c ? c.designation : (l.designation || ''),
+      note: c ? '' : sansHtml(l.description).slice(0, 300), quantite: Math.max(1, parseInt(l.quantite) || 1),
+      prix_unitaire: c && c.prix_achat_suede != null ? String(c.prix_achat_suede) : null, frais };
+  }) };
+  const cl = r.client || {};
+  const adrDist = [cl.adresse, [cl.cp, cl.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  z.innerHTML = `
+    <div style="background:var(--bg);border-radius:8px;padding:10px 12px;font-size:13.5px;margin-bottom:10px">
+      <b class="mono">${e_(r.numero)}</b> — <b>${e_(r.distributeur || '—')}</b>${r.date_commande ? ' · ' + dateFr(r.date_commande) : ''}${r.url_doc ? ` · <a href="${e_(r.url_doc)}" target="_blank" rel="noopener" style="color:var(--accent)">${_T('voir le devis')}</a>` : ''}</div>
+    <div class="table-wrap"><table class="t"><thead><tr><th style="width:30px"></th><th>${_T('Réf.')}</th><th>${_T('Désignation')}</th><th style="width:70px">${_T('Qté')}</th></tr></thead>
+      <tbody>${S._pl.lignes.map((l, i) => `<tr style="${l.frais ? 'opacity:.55' : ''}">
+        <td><input type="checkbox" ${l.garder ? 'checked' : ''} onchange="csPlLigne(${i},'garder',this.checked)"></td>
+        <td class="mono" style="font-weight:700">${e_(l.reference || '—')}${l.catalogue_id ? `<div style="font-size:11px;font-weight:400;color:var(--success)"><i class="ti ti-link"></i> ${_T('catalogue')}</div>` : `<div style="font-size:11px;font-weight:400;color:var(--text3)">${_T('hors catalogue')}</div>`}</td>
+        <td>${e_(l.designation)}${l.note ? `<div style="font-size:11.5px;color:var(--text3);font-style:italic">${e_(l.note.slice(0, 140))}${l.note.length > 140 ? '…' : ''}</div>` : ''}${l.frais ? `<div style="font-size:11.5px;color:var(--text3)">${_T('frais ou offre d’essai — non repris par défaut')}</div>` : ''}</td>
+        <td><input class="form-input" type="number" min="1" value="${l.quantite}" style="width:60px;padding:3px 6px" onchange="csPlLigne(${i},'quantite',this.value)"></td></tr>`).join('')}</tbody></table></div>
+    <div class="section-title" style="margin-top:12px"><i class="ti ti-map-pin"></i>${_T('Livraison')}</div>
+    <label style="display:block;font-size:13.5px;margin:4px 0;cursor:pointer"><input type="radio" name="cs-pl-liv" value="distributeur" ${adrDist ? 'checked' : ''}> ${_T('Directement chez le distributeur')} <span style="color:var(--text3)">${e_(adrDist || _T('(adresse absente de Pennylane : à compléter)'))}</span></label>
+    <label style="display:block;font-size:13.5px;margin:4px 0;cursor:pointer"><input type="radio" name="cs-pl-liv" value="lagord" ${adrDist ? '' : 'checked'}> Lagord</label>
+    <label style="display:block;font-size:13.5px;margin:4px 0;cursor:pointer"><input type="radio" name="cs-pl-liv" value="paris"> Paris</label>`;
+  if (ok) ok.style.display = '';
+}
+function plLigne(i, k, v) {
+  const l = S._pl && S._pl.lignes[i]; if (!l) return;
+  if (k === 'garder') l.garder = !!v; else l.quantite = Math.max(1, parseInt(v) || 1);
+}
+async function creerDepuisDevisPL() {
+  const pl = S._pl; if (!pl) return;
+  const lignes = pl.lignes.filter(l => l.garder).map(({ garder, frais, ...l }) => l);
+  if (!lignes.length) { _toast(_T('Cochez au moins un article.'), 'ti-alert-circle', 'var(--danger)'); return; }
+  const liv = (document.querySelector('input[name=cs-pl-liv]:checked') || {}).value || 'lagord';
+  const cfg = await config(true);
+  let adr;
+  if (liv === 'distributeur') {
+    const cl = pl.r.client || {};
+    adr = { nom: cl.nom || pl.r.distributeur || '', contact: cl.contact || '', adresse: [cl.adresse, [cl.cp, cl.ville].filter(Boolean).join(' ')].filter(Boolean).join('\n'),
+      pays: cl.pays || 'France', tel: cl.tel || '', email: cl.email || '' };
+    // Coordonnées manquantes : on complète avec la fiche du distributeur dans l'appli
+    try {
+      if (pl.r.distributeur) {
+        const rows = await API.clients(pl.r.distributeur);
+        const n = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const f = rows.find(c => n(c.nom) === n(pl.r.distributeur)) || (rows.length === 1 ? rows[0] : null);
+        if (f) {
+          S._plClientId = f.id;
+          if (!adr.adresse) adr.adresse = [f.adresse, f.adresse2, [f.cp, f.ville].filter(Boolean).join(' ')].filter(x => x && String(x).trim()).join('\n');
+          if (!adr.tel) adr.tel = f.tel || f.portable || '';
+          if (!adr.email) adr.email = f.email || '';
+          if (!adr.contact) adr.contact = f.contact || '';
+        }
+      }
+    } catch (_) {}
+  } else adr = cfg.presets[liv] || {};
+  S.cs = { id: null, etape: 'brouillon', numero_bc: cfg.prochain_numero, date_commande: new Date().toISOString().slice(0, 10),
+    reference_client: '', client_id: liv === 'distributeur' ? (S._plClientId || null) : null, livraison_type: liv,
+    livraison_nom: adr.nom, livraison_contact: adr.contact, livraison_adresse: adr.adresse, livraison_pays: adr.pays || 'France',
+    livraison_tel: adr.tel, livraison_email: adr.email, afficher_prix: false, notes: '', lignes,
+    devis_pennylane: pl.r.numero, distributeur_devis: pl.r.distributeur || '' };
+  S.vue = 'edition'; S.id = null; S.modifie = true; S._pl = null; S._plClientId = null;
+  closeModal();
+  if (typeof setView === 'function' && typeof STATE !== 'undefined' && STATE.view !== 'commande-suede') setView('commande-suede', { garderPO: true }); else render();
+}
+window.csDepuisDevisPL = modalDevisPL;
+window.csChercherDevisPL = chercherDevisPL;
+window.csPlLigne = plLigne;
+window.csCreerDepuisDevisPL = creerDepuisDevisPL;
 
 window.csNouveau = nouveau;
 window.csOuvrir = ouvrir;

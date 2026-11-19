@@ -6531,6 +6531,7 @@ async function renderCommandeSuede(ttl, c, a) {
   ttl.textContent = t('nav_commande_suede') || 'Commande Suède';
   a.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
     <button class="btn" onclick="modalNouvelleCommandeSuede()" title="${TR('Ancien circuit : bon de commande saisi dans VosFactures')}"><i class="ti ti-download"></i>${TR('Importer de VosFactures')}</button>
+    ${typeof csDepuisDevisPL === 'function' ? `<button class="btn" onclick="csDepuisDevisPL()"><i class="ti ti-file-import"></i>${TR('Depuis un devis Pennylane')}</button>` : ''}
     ${typeof csNouveau === 'function' ? `<button class="btn primary" onclick="csNouveau()"><i class="ti ti-plus"></i>${TR('Nouveau bon de commande')}</button>` : ''}</div>`;
   c.innerHTML = `<div id="cs-body"><div style="color:var(--text2);font-size:14px;padding:20px 0">${t('msg_chargement')||'Chargement…'}</div></div>`;
   chargerCommandesSuede();
@@ -6554,7 +6555,7 @@ async function chargerCommandesSuede() {
           : (cs.date_livraison ? '<span class="badge hg">'+TR("À intégrer")+'</span>' : '<span class="badge" style="opacity:.6">En attente</span>');
         const reliquat = cs.total_reliquat > 0 ? ` <span class="badge hg" title="Reliquat">R:${cs.total_reliquat}</span>` : '';
         return `<tr onclick="ouvrirCommandeSuede(${cs.id})" style="cursor:pointer">
-          <td style="font-weight:600" class="mono">${esc(cs.numero_bc)}${cs.reference_client ? `<div style="font-size:11.5px;font-weight:400;color:var(--text3)">${TR('Réf. client')} ${esc(cs.reference_client)}</div>` : ''}</td>
+          <td style="font-weight:600" class="mono">${esc(cs.numero_bc)}${cs.reference_client ? `<div style="font-size:11.5px;font-weight:400;color:var(--text3)">${TR('Réf. client')} ${esc(cs.reference_client)}</div>` : ''}${cs.devis_pennylane ? `<div style="font-size:11.5px;font-weight:400;color:var(--text3)">${TR('Devis')} ${esc(cs.devis_pennylane)}</div>` : ''}</td>
           <td>${typeof csBadgeEtape === 'function' ? csBadgeEtape(cs) : esc(cs.statut || '')}${cs.valide_par ? `<div style="font-size:11.5px;color:var(--text3)">${TR('validée par')} ${esc(cs.valide_par)}</div>` : ''}</td>
           <td style="font-size:13px">${esc(cs.livraison_nom || '—')}</td>
           <td>${cs.date_commande ? fd(cs.date_commande) : '—'}</td>

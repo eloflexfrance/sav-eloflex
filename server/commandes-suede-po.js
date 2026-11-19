@@ -27,7 +27,7 @@ async function assurer(db) {
   for (const c of ['etape TEXT', 'reference_client TEXT', 'client_id INTEGER', 'livraison_type TEXT', 'livraison_nom TEXT',
     'livraison_contact TEXT', 'livraison_adresse TEXT', 'livraison_pays TEXT', 'livraison_tel TEXT', 'livraison_email TEXT',
     'afficher_prix BOOLEAN DEFAULT FALSE', 'notes TEXT', 'cree_par TEXT', 'valide_par TEXT', 'valide_le TIMESTAMPTZ',
-    'envoye_par TEXT', 'envoye_le TIMESTAMPTZ', 'envoye_a TEXT', 'date_expedition DATE', 'historique JSONB'])
+    'envoye_par TEXT', 'envoye_le TIMESTAMPTZ', 'envoye_a TEXT', 'date_expedition DATE', 'historique JSONB', 'devis_pennylane TEXT'])
     await db.run(`ALTER TABLE commandes_suede ADD COLUMN IF NOT EXISTS ${c}`);
   for (const c of ['prix_unitaire NUMERIC(12,2)', 'ref_fournisseur TEXT', 'note TEXT'])
     await db.run(`ALTER TABLE commandes_suede_lignes ADD COLUMN IF NOT EXISTS ${c}`);
@@ -237,8 +237,9 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
       const { rows: [cs] } = await pg.query(`INSERT INTO commandes_suede (numero_bc, fournisseur, statut, etape, cree_par, date_commande)
         VALUES ($1,'Eloflex AB','En cours','brouillon',$2,CURRENT_DATE) RETURNING id`, [numero, nomU(res.locals.user)]);
       await ecrire(pg, cs.id, b);
+      if (txt(b.devis_pennylane)) await pg.query('UPDATE commandes_suede SET devis_pennylane=$2 WHERE id=$1', [cs.id, txt(b.devis_pennylane, 60)]);
       await pg.query('COMMIT');
-      await histo(cs.id, res.locals.user, 'création');
+      await histo(cs.id, res.locals.user, txt(b.devis_pennylane) ? 'création depuis le devis Pennylane' : 'création', txt(b.devis_pennylane, 60));
       await memoriser(b).catch(() => {});
       res.status(201).json({ ok: true, id: cs.id, numero_bc: numero });
     } catch (e) { await pg.query('ROLLBACK').catch(() => {}); res.status(500).json({ error: e.message }); }
