@@ -356,6 +356,16 @@ const PDF = {
     let total = 0, qteTot = 0, sansPrix = 0;
     (cs.lignes || []).forEach((l, i) => {
       const q = +l.quantite_commandee || +l.quantite || 0, pu = l.prix_unitaire === '' || l.prix_unitaire == null ? null : +l.prix_unitaire;
+      // Fauteuil gaucher : ligne d'avertissement (sans référence, quantité ni prix)
+      let oa = l.options; if (typeof oa === 'string') { try { oa = JSON.parse(oa); } catch (_) { oa = null; } }
+      if (oa && oa.auto === 'gauche' && !String(l.reference || '').trim()) {
+        if (y + 8 > 270) { doc.addPage(); y = 20; entete(); }
+        doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(200,30,30);
+        doc.text(String(i + 1), C.n, y); doc.text(T(l.designation || 'IMPORTANT : LEFT HANDED'), C.des, y);
+        doc.setTextColor(0,0,0); doc.setFont('helvetica','normal'); doc.setFontSize(8.8);
+        y += 6.7; doc.setDrawColor(225,225,225); doc.setLineWidth(0.2); doc.line(L, y - 3.2, R, y - 3.2); y += 1.2;
+        return;
+      }
       qteTot += q; if (pu == null) sansPrix++; else total += pu * q;
       doc.setFontSize(8.8);
       const des = doc.splitTextToSize(T(l.designation || ''), C.desW);
@@ -363,11 +373,11 @@ const PDF = {
       let o = l.options; if (typeof o === 'string') { try { o = JSON.parse(o); } catch (_) { o = null; } }
       const acc = [];
       if (o && !o.auto && ('droit' in o || 'protections' in o || 'feux' in o)) {
-        const ACC = [['droit', 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']];
+        const ACC = [['droit', o.gauche ? 'Joystick mount swing-away' : 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']];
         const oui = ACC.filter(([k]) => o[k]).map(x => x[1]), non = ACC.filter(([k]) => !o[k]).map(x => x[1]);
         if (oui.length) acc.push('Included: ' + oui.join(', '));
         if (non.length) acc.push('NOT included: ' + non.join(', '));
-        if (o.gauche) acc.push('Joystick mount on the LEFT (see next line)');
+        if (o.gauche) acc.push('LEFT HANDED (see next line)');
       }
       const cfgTxt = [acc.join(' - '), l.note || ''].filter(Boolean).join(' - ');
       const note = cfgTxt ? doc.splitTextToSize(T(cfgTxt), C.desW) : [];
@@ -388,7 +398,8 @@ const PDF = {
     });
     if (y > 262) { doc.addPage(); y = 20; }
     y += 2; doc.setFontSize(9.5); doc.setFont('helvetica','bold');
-    doc.text(`${(cs.lignes || []).length} line(s) - ${qteTot} item(s)`, L, y);
+    const nbL = (cs.lignes || []).filter(l => { let o = l.options; if (typeof o === 'string') { try { o = JSON.parse(o); } catch (_) { o = null; } } return !(o && o.auto === 'gauche' && !String(l.reference || '').trim()); }).length;
+    doc.text(`${nbL} line(s) - ${qteTot} item(s)`, L, y);
     if (prix) { doc.text('Total (excl. VAT): ' + eur(total) + (sansPrix ? ' *' : ''), R, y, { align:'right' });
       if (sansPrix) { y += 4.5; doc.setFontSize(7.5); doc.setFont('helvetica','italic'); doc.text('* lines without price not included', R, y, { align:'right' }); } }
     y += 9;

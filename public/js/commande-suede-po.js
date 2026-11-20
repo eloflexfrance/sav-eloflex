@@ -301,9 +301,9 @@ function dessinerLignes() {
           const cb = (k, lab) => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="cs-l-opt-${k}-${i}" ${o[k] ? 'checked' : ''} ${dis} onchange="csOptFauteuil(${i},'${k}')"> ${lab}</label>`;
           return `<div style="margin-top:6px;padding:7px 10px;background:var(--bg);border-radius:8px;font-size:12.5px;color:var(--text2);display:flex;flex-wrap:wrap;gap:6px 16px">
             <span style="font-weight:600;color:var(--text)"><i class="ti ti-adjustments"></i> ${_T('Accessoires de série')}${mg ? ' — ' + _T('modèle') + ' ' + e_(mg) : ''}</span>
-            ${OPTIONS_FAUTEUIL.map(([k, lab]) => cb(k, lab)).join('')}
-            ${cb('gauche', `${_T('Pantographe à gauche')} <span class="mono" style="color:var(--text3)">${rg || _T('réf. à compléter')}</span>`)}</div>`; })() : ''}
-        ${l.options && l.options.auto === 'gauche' ? `<div style="font-size:11.5px;color:var(--text3);margin-top:4px"><i class="ti ti-link"></i> ${_T('ajouté automatiquement : pantographe à gauche (0 €)')}</div>` : ''}</td>
+            ${OPTIONS_FAUTEUIL.map(([k, lab]) => cb(k, k === 'droit' && o.gauche ? 'Joystick mount swing-away' : lab)).join('')}
+            ${cb('gauche', `<b style="color:#b42828">${_T('Gaucher')}</b> <span style="color:var(--text3)">(IMPORTANT : LEFT HANDED)</span>`)}</div>`; })() : ''}
+        ${l.options && l.options.auto === 'gauche' ? `<div style="font-size:11.5px;color:var(--text3);margin-top:4px"><i class="ti ti-link"></i> ${_T('ajouté automatiquement : fauteuil gaucher')}</div>` : ''}</td>
       ${td()}${inp('q', i, l.quantite, 'text-align:center', 'type="number" min="1"')}</td>
       ${td()}${inp('px', i, l.prix_unitaire, 'text-align:right', 'inputmode="decimal"')}</td>
       ${td('text-align:right;white-space:nowrap;line-height:34px;font-weight:600')}<span id="cs-l-tot-${i}"></span></td>
@@ -319,7 +319,7 @@ function totaux() {
   let q = 0, t = 0;
   cs.lignes.forEach((l, i) => {
     const pu = l.prix_unitaire === '' || l.prix_unitaire == null ? null : +l.prix_unitaire;
-    q += +l.quantite || 0; if (pu != null && isFinite(pu)) t += pu * (+l.quantite || 0);
+    if (!(l.options && l.options.auto === 'gauche' && !String(l.reference || '').trim())) q += +l.quantite || 0; if (pu != null && isFinite(pu)) t += pu * (+l.quantite || 0);
     const c = $(`cs-l-tot-${i}`); if (c) c.textContent = pu != null && isFinite(pu) ? eur(pu * (+l.quantite || 0)) : '—';
   });
   if ($('cs-tot-q')) $('cs-tot-q').textContent = q;
@@ -372,11 +372,9 @@ function optFauteuil(i, k) {
   const l = S.cs.lignes[i]; if (!l) return;
   l.options = Object.assign(optionsDefaut(), l.options || {});
   const suiv = S.cs.lignes[i + 1], aAuto = suiv && suiv.options && suiv.options.auto === 'gauche';
-  if (k === 'gauche' && l.options.gauche) l.options.droit = false;
-  if (k === 'droit' && l.options.droit) l.options.gauche = false;
-  if (k === 'gauche' && !l.options.gauche) l.options.droit = true;   // retour au pantographe droit
-  if (l.options.gauche && !aAuto) S.cs.lignes.splice(i + 1, 0, { catalogue_id: null, reference: refPantographeGauche(modeleFauteuil(l)), ref_fournisseur: '',
-    designation: 'Joystick mount swing-away left', note: '', quantite: +l.quantite || 1, prix_unitaire: '0', options: { auto: 'gauche' } });
+  // Gaucher : ligne « IMPORTANT : LEFT HANDED » ajoutée sous le fauteuil (sans référence ni prix)
+  if (l.options.gauche && !aAuto) S.cs.lignes.splice(i + 1, 0, { catalogue_id: null, reference: '', ref_fournisseur: '',
+    designation: 'IMPORTANT : LEFT HANDED', note: '', quantite: +l.quantite || 1, prix_unitaire: null, options: { auto: 'gauche' } });
   if (!l.options.gauche && aAuto) S.cs.lignes.splice(i + 1, 1);
   S.modifie = true; dessinerLignes();
 }

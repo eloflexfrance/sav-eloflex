@@ -171,7 +171,7 @@ if (typeof EN_STR !== 'undefined') Object.assign(EN_STR, {
   "article(s)": "item(s)",
   "Livrer à": "Deliver to",
   "Accessoires de série": "Standard accessories",
-  "Pantographe à gauche": "Joystick mount on the left",
+  "Gaucher": "Left handed",
   "Ajouter": "Add",
   "Annuler": "Cancel",
   "ajouté au bon": "added to order",
@@ -1305,8 +1305,8 @@ async function bcSuedeChoisir(art){
       </div>
       ${art.fauteuil && bcAOptions(art) ? `<div class="form-group"><label class="form-label">${TV('Accessoires de série')}</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px">
-          ${[['droit', 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']].map(([k, l]) => `<label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="bc-opt-${k}" checked onchange="if(this.checked&&'${k}'==='droit')document.getElementById('bc-opt-gauche').checked=false"> ${l}</label>`).join('')}
-          <label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="bc-opt-gauche" onchange="if(this.checked)document.getElementById('bc-opt-droit').checked=false"> ${TV('Pantographe à gauche')} (0 €)</label>
+          ${[['droit', 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']].map(([k, l]) => `<label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="bc-opt-${k}" checked> ${l}</label>`).join('')}
+          <label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="bc-opt-gauche"> <b style="color:#b42828">${TV('Gaucher')}</b> (IMPORTANT : LEFT HANDED)</label>
         </div></div>` : ''}
       ${opt('', !dernier, `<b><i class="ti ti-plus"></i> ${TV('Nouveau bon de commande')}</b> <span class="mono" style="color:var(--text3)">${e_(d.prochain_numero)}</span>
         <div style="font-size:12px;color:var(--text3)">${TV('livraison Paris par défaut, modifiable dans le bon')}</div>`)}

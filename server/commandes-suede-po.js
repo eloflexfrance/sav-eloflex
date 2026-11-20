@@ -251,9 +251,8 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
               cat && cat.prix_achat_suede != null ? cat.prix_achat_suede : null, ordre++, optionsJSON(opt)]);
           // Pantographe à gauche coché : article ajouté en complément, à 0 €
           if (opt && opt.gauche) {
-            const rg = refPantographeGauche(modeleFauteuil({ reference: ref, designation: des }));
             await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, reference, designation, quantite_commandee, prix_unitaire, ordre, options)
-                VALUES ($1,$2,'Joystick mount swing-away left',$3,0,$4,$5)`, [id, rg, q, ordre++, JSON.stringify({ auto: 'gauche' })]);
+                VALUES ($1,NULL,'IMPORTANT : LEFT HANDED',$2,NULL,$3,$4)`, [id, q, ordre++, JSON.stringify({ auto: 'gauche' })]);
           }
         }
       }
