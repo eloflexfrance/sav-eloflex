@@ -343,11 +343,12 @@ const PDF = {
     y += hAdr + 5;
 
     // Lignes
-    const C = prix ? { n: L + 1, ref: L + 7, sup: L + 41, des: L + 67, qte: 152, pu: 173, tot: R - 1, desW: 62 }
-                   : { n: L + 1, ref: L + 7, sup: L + 43, des: L + 73, qte: R - 1, desW: 100 };
+    // Colonne « Our ref. » : notre référence, et en dessous la référence suédoise complète
+    const C = prix ? { n: L + 1, ref: L + 7, refW: 50, des: L + 60, qte: 152, pu: 173, tot: R - 1, desW: 69 }
+                   : { n: L + 1, ref: L + 7, refW: 52, des: L + 62, qte: R - 1, desW: 106 };
     const entete = () => {
       doc.setFillColor(...BLEU); doc.rect(L, y - 4.2, W, 6.5, 'F'); doc.setTextColor(255,255,255); doc.setFontSize(8.5); doc.setFont('helvetica','bold');
-      doc.text('#', C.n, y); doc.text('Our ref.', C.ref, y); doc.text('Supplier ref.', C.sup, y); doc.text('Description', C.des, y);
+      doc.text('#', C.n, y); doc.text('Our ref.', C.ref, y); doc.text('Description', C.des, y);
       doc.text('Qty', C.qte, y, { align:'right' });
       if (prix) { doc.text('Unit price', C.pu, y, { align:'right' }); doc.text('Total', C.tot, y, { align:'right' }); }
       doc.setTextColor(0,0,0); y += 6.5;
@@ -374,13 +375,19 @@ const PDF = {
       const cfgTxt = [acc.join(' - '), l.note || ''].filter(Boolean).join(' - ');
       const note = cfgTxt ? doc.splitTextToSize(T(cfgTxt), C.desW) : [];
       doc.setFont('helvetica','bold');
-      const refL = doc.splitTextToSize(T(l.reference || ''), C.sup - C.ref - 2);
+      const refL = doc.splitTextToSize(T(l.reference || ''), C.refW);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.2);
+      const seL = l.ref_fournisseur ? doc.splitTextToSize(T(l.ref_fournisseur), C.refW) : [];
+      doc.setFontSize(8.8);
       doc.setFont('helvetica','normal');
-      const h = Math.max(1, des.length, refL.length) * 4.2 + note.length * 3.8 + 2.5;
+      const hRef = refL.length * 4.2 + seL.length * 3.7;
+      const h = Math.max(Math.max(1, des.length) * 4.2 + note.length * 3.8, hRef) + 2.5;
       if (y + h > 270) { doc.addPage(); y = 20; entete(); }
       doc.setFont('helvetica','normal'); doc.text(String(i + 1), C.n, y);
       doc.setFont('helvetica','bold'); refL.forEach((t, k) => doc.text(t, C.ref, y + k * 4.2));
-      doc.setFont('helvetica','normal'); doc.text(doc.splitTextToSize(T(l.ref_fournisseur || ''), C.des - C.sup - 2)[0] || '', C.sup, y);
+      if (seL.length) { doc.setFont('helvetica','normal'); doc.setFontSize(8.2); doc.setTextColor(40,40,40);
+        seL.forEach((t, k) => doc.text(t, C.ref, y + refL.length * 4.2 + k * 3.7)); doc.setTextColor(0,0,0); doc.setFontSize(8.8); }
+      doc.setFont('helvetica','normal');
       if (gaucher) { doc.setFont('helvetica','bold'); doc.setTextColor(200,30,30); }
       des.forEach((t, k) => doc.text(t, C.des, y + k * 4.2));
       if (gaucher) { doc.setFont('helvetica','normal'); doc.setTextColor(0,0,0); }
