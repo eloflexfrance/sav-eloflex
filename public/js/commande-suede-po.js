@@ -362,20 +362,30 @@ function ligneLibre() {
 }
 function retirerLigne(i) {
   lireLignesDuDom();
-  const suiv = S.cs.lignes[i + 1];
-  S.cs.lignes.splice(i, suiv && suiv.options && suiv.options.auto === 'gauche' && estFauteuil(S.cs.lignes[i]) ? 2 : 1);
+  S.cs.lignes.splice(i, 1 + (estFauteuil(S.cs.lignes[i]) ? nbAutoApres(i) : 0));
   S.modifie = true; dessinerLignes();
 }
 // Options d'un fauteuil : le pantographe gauche remplace le droit et ajoute l'article à 0 € juste en dessous
-function optFauteuil(i, k) {
+// Gaucher : compléments à 0 € (selon le modèle) puis « IMPORTANT : LEFT HANDED », sous le fauteuil
+const COMPLEMENTS_GAUCHER = { P: ['7350006088148', '7350006084652'], D2: ['7350006088148', '7350006084652'],
+  L: ['7350006088070', '7350006084157'], F: ['7350006088070', '7350006084157'], R: ['7350006088155', '7350006084157'] };
+const estAuto = x => !!(x && x.options && x.options.auto === 'gauche');
+function nbAutoApres(i) { let n = 0; while (estAuto(S.cs.lignes[i + 1 + n])) n++; return n; }
+async function optFauteuil(i, k) {
   lireLignesDuDom();
   const l = S.cs.lignes[i]; if (!l) return;
   l.options = Object.assign(optionsDefaut(), l.options || {});
-  const suiv = S.cs.lignes[i + 1], aAuto = suiv && suiv.options && suiv.options.auto === 'gauche';
-  // Gaucher : ligne « IMPORTANT : LEFT HANDED » ajoutée sous le fauteuil (sans référence ni prix)
-  if (l.options.gauche && !aAuto) S.cs.lignes.splice(i + 1, 0, { catalogue_id: null, reference: '', ref_fournisseur: '',
-    designation: 'IMPORTANT : LEFT HANDED', note: '', quantite: 1, prix_unitaire: '0', options: { auto: 'gauche' } });
-  if (!l.options.gauche && aAuto) S.cs.lignes.splice(i + 1, 1);
+  const n = nbAutoApres(i);
+  if (l.options.gauche && !n) {
+    const cat = await catalogue();
+    const refs = COMPLEMENTS_GAUCHER[modeleFauteuil(l)] || [];
+    const lignes = refs.map(r => { const c = cat.find(x => refNorm(x.ref) === r);
+      return { catalogue_id: null, reference: r, ref_fournisseur: c ? (c.ref_fournisseur || '') : '', designation: c ? c.designation : '', note: '',
+        quantite: +l.quantite || 1, prix_unitaire: '0', options: { auto: 'gauche' } }; });
+    lignes.push({ catalogue_id: null, reference: '', ref_fournisseur: '', designation: 'IMPORTANT : LEFT HANDED', note: '', quantite: 1, prix_unitaire: '0', options: { auto: 'gauche' } });
+    S.cs.lignes.splice(i + 1, 0, ...lignes);
+  }
+  if (!l.options.gauche && n) S.cs.lignes.splice(i + 1, n);
   S.modifie = true; dessinerLignes();
 }
 window.csOptFauteuil = optFauteuil;

@@ -251,6 +251,14 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
               cat && cat.prix_achat_suede != null ? cat.prix_achat_suede : null, ordre++, optionsJSON(opt)]);
           // Pantographe à gauche coché : article ajouté en complément, à 0 €
           if (opt && opt.gauche) {
+            // Compléments à 0 € selon le modèle, puis la ligne « IMPORTANT : LEFT HANDED »
+            const comp = { P: ['7350006088148', '7350006084652'], D2: ['7350006088148', '7350006084652'],
+              L: ['7350006088070', '7350006084157'], F: ['7350006088070', '7350006084157'], R: ['7350006088155', '7350006084157'] }[modeleFauteuil({ reference: ref, designation: des })] || [];
+            for (const r of comp) {
+              const c = (await pg.query(`SELECT designation, ref_fournisseur FROM catalogue WHERE regexp_replace(ref, '\\s', '', 'g')=$1 LIMIT 1`, [r])).rows[0];
+              await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, reference, ref_fournisseur, designation, quantite_commandee, prix_unitaire, ordre, options)
+                  VALUES ($1,$2,$3,$4,$5,0,$6,$7)`, [id, r, c ? c.ref_fournisseur : null, (c && c.designation) || r, q, ordre++, JSON.stringify({ auto: 'gauche' })]);
+            }
             await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, reference, designation, quantite_commandee, prix_unitaire, ordre, options)
                 VALUES ($1,NULL,'IMPORTANT : LEFT HANDED',1,0,$2,$3)`, [id, ordre++, JSON.stringify({ auto: 'gauche' })]);
           }
