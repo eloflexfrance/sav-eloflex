@@ -252,7 +252,7 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
           // Pantographe à gauche coché : article ajouté en complément, à 0 €
           if (opt && opt.gauche) {
             await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, reference, designation, quantite_commandee, prix_unitaire, ordre, options)
-                VALUES ($1,NULL,'IMPORTANT : LEFT HANDED',$2,NULL,$3,$4)`, [id, q, ordre++, JSON.stringify({ auto: 'gauche' })]);
+                VALUES ($1,NULL,'IMPORTANT : LEFT HANDED',1,0,$2,$3)`, [id, ordre++, JSON.stringify({ auto: 'gauche' })]);
           }
         }
       }

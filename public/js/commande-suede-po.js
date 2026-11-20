@@ -271,7 +271,7 @@ function lireLignesDuDom() {
     if (v('note') !== undefined) l.note = v('note');
     if (v('q') !== undefined) l.quantite = Math.max(0, parseInt(v('q')) || 0);
     if (v('px') !== undefined) l.prix_unitaire = v('px') === '' ? null : v('px').replace(',', '.');
-    if ($(`cs-l-opt-droit-${i}`)) {
+    if ($(`cs-l-opt-gauche-${i}`)) {
       l.options = Object.assign(optionsDefaut(), l.options || {});
       for (const k of ['droit', 'protections', 'feux', 'gauche']) { const c = $(`cs-l-opt-${k}-${i}`); if (c) l.options[k] = c.checked; }
     }
@@ -301,7 +301,7 @@ function dessinerLignes() {
           const cb = (k, lab) => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="cs-l-opt-${k}-${i}" ${o[k] ? 'checked' : ''} ${dis} onchange="csOptFauteuil(${i},'${k}')"> ${lab}</label>`;
           return `<div style="margin-top:6px;padding:7px 10px;background:var(--bg);border-radius:8px;font-size:12.5px;color:var(--text2);display:flex;flex-wrap:wrap;gap:6px 16px">
             <span style="font-weight:600;color:var(--text)"><i class="ti ti-adjustments"></i> ${_T('Accessoires de série')}${mg ? ' — ' + _T('modèle') + ' ' + e_(mg) : ''}</span>
-            ${OPTIONS_FAUTEUIL.map(([k, lab]) => cb(k, k === 'droit' && o.gauche ? 'Joystick mount swing-away' : lab)).join('')}
+            ${OPTIONS_FAUTEUIL.filter(([k]) => !(k === 'droit' && o.gauche)).map(([k, lab]) => cb(k, lab)).join('')}
             ${cb('gauche', `<b style="color:#b42828">${_T('Gaucher')}</b> <span style="color:var(--text3)">(IMPORTANT : LEFT HANDED)</span>`)}</div>`; })() : ''}
         ${l.options && l.options.auto === 'gauche' ? `<div style="font-size:11.5px;color:var(--text3);margin-top:4px"><i class="ti ti-link"></i> ${_T('ajouté automatiquement : fauteuil gaucher')}</div>` : ''}</td>
       ${td()}${inp('q', i, l.quantite, 'text-align:center', 'type="number" min="1"')}</td>
@@ -319,7 +319,7 @@ function totaux() {
   let q = 0, t = 0;
   cs.lignes.forEach((l, i) => {
     const pu = l.prix_unitaire === '' || l.prix_unitaire == null ? null : +l.prix_unitaire;
-    if (!(l.options && l.options.auto === 'gauche' && !String(l.reference || '').trim())) q += +l.quantite || 0; if (pu != null && isFinite(pu)) t += pu * (+l.quantite || 0);
+    q += +l.quantite || 0; if (pu != null && isFinite(pu)) t += pu * (+l.quantite || 0);
     const c = $(`cs-l-tot-${i}`); if (c) c.textContent = pu != null && isFinite(pu) ? eur(pu * (+l.quantite || 0)) : '—';
   });
   if ($('cs-tot-q')) $('cs-tot-q').textContent = q;
@@ -374,7 +374,7 @@ function optFauteuil(i, k) {
   const suiv = S.cs.lignes[i + 1], aAuto = suiv && suiv.options && suiv.options.auto === 'gauche';
   // Gaucher : ligne « IMPORTANT : LEFT HANDED » ajoutée sous le fauteuil (sans référence ni prix)
   if (l.options.gauche && !aAuto) S.cs.lignes.splice(i + 1, 0, { catalogue_id: null, reference: '', ref_fournisseur: '',
-    designation: 'IMPORTANT : LEFT HANDED', note: '', quantite: +l.quantite || 1, prix_unitaire: null, options: { auto: 'gauche' } });
+    designation: 'IMPORTANT : LEFT HANDED', note: '', quantite: 1, prix_unitaire: '0', options: { auto: 'gauche' } });
   if (!l.options.gauche && aAuto) S.cs.lignes.splice(i + 1, 1);
   S.modifie = true; dessinerLignes();
 }
@@ -382,7 +382,7 @@ window.csOptFauteuil = optFauteuil;
 // Une ligne libre devient « fauteuil » quand sa référence / désignation le montre : on affiche alors les accessoires
 function verifFauteuil(i) {
   const l = S.cs && S.cs.lignes[i]; if (!l) return;
-  const avant = !!$(`cs-l-opt-droit-${i}`); lireLignesDuDom();
+  const avant = !!$(`cs-l-opt-gauche-${i}`); lireLignesDuDom();
   if (aOptions(l) !== avant) dessinerLignes();
 }
 window.csVerifFauteuil = verifFauteuil;
