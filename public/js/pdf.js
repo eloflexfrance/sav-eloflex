@@ -342,8 +342,8 @@ const PDF = {
     y += hAdr + 5;
 
     // Lignes
-    const C = prix ? { n: L + 1, ref: L + 9, sup: L + 33, des: L + 62, qte: 150, pu: 172, tot: R - 1, desW: 76 }
-                   : { n: L + 1, ref: L + 9, sup: L + 38, des: L + 70, qte: R - 1, desW: 108 };
+    const C = prix ? { n: L + 1, ref: L + 7, sup: L + 41, des: L + 67, qte: 152, pu: 173, tot: R - 1, desW: 62 }
+                   : { n: L + 1, ref: L + 7, sup: L + 43, des: L + 73, qte: R - 1, desW: 100 };
     const entete = () => {
       doc.setFillColor(...BLEU); doc.rect(L, y - 4.2, W, 6.5, 'F'); doc.setTextColor(255,255,255); doc.setFontSize(8.5); doc.setFont('helvetica','bold');
       doc.text('#', C.n, y); doc.text('Our ref.', C.ref, y); doc.text('Supplier ref.', C.sup, y); doc.text('Description', C.des, y);
@@ -358,12 +358,25 @@ const PDF = {
       qteTot += q; if (pu == null) sansPrix++; else total += pu * q;
       doc.setFontSize(8.8);
       const des = doc.splitTextToSize(T(l.designation || ''), C.desW);
-      const cfgTxt = [l.joystick === 'left' ? 'Joystick on the left' : l.joystick === 'right' ? 'Joystick on the right' : '', l.note || ''].filter(Boolean).join(' - ');
+      // Fauteuil : accessoires de série gardés / retirés, pantographe gauche (ligne à 0 € en dessous)
+      let o = l.options; if (typeof o === 'string') { try { o = JSON.parse(o); } catch (_) { o = null; } }
+      const acc = [];
+      if (o && !o.auto && ('droit' in o || 'protections' in o || 'feux' in o)) {
+        const ACC = [['droit', 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']];
+        const oui = ACC.filter(([k]) => o[k]).map(x => x[1]), non = ACC.filter(([k]) => !o[k]).map(x => x[1]);
+        if (oui.length) acc.push('Included: ' + oui.join(', '));
+        if (non.length) acc.push('NOT included: ' + non.join(', '));
+        if (o.gauche) acc.push('Joystick mount on the LEFT (see next line)');
+      }
+      const cfgTxt = [acc.join(' - '), l.note || ''].filter(Boolean).join(' - ');
       const note = cfgTxt ? doc.splitTextToSize(T(cfgTxt), C.desW) : [];
-      const h = Math.max(1, des.length) * 4.2 + note.length * 3.8 + 2.5;
+      doc.setFont('helvetica','bold');
+      const refL = doc.splitTextToSize(T(l.reference || ''), C.sup - C.ref - 2);
+      doc.setFont('helvetica','normal');
+      const h = Math.max(1, des.length, refL.length) * 4.2 + note.length * 3.8 + 2.5;
       if (y + h > 270) { doc.addPage(); y = 20; entete(); }
       doc.setFont('helvetica','normal'); doc.text(String(i + 1), C.n, y);
-      doc.setFont('helvetica','bold'); doc.text(T(l.reference || ''), C.ref, y);
+      doc.setFont('helvetica','bold'); refL.forEach((t, k) => doc.text(t, C.ref, y + k * 4.2));
       doc.setFont('helvetica','normal'); doc.text(doc.splitTextToSize(T(l.ref_fournisseur || ''), C.des - C.sup - 2)[0] || '', C.sup, y);
       des.forEach((t, k) => doc.text(t, C.des, y + k * 4.2));
       if (note.length) { doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(90,90,90);

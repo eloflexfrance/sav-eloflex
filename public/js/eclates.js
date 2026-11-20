@@ -170,13 +170,15 @@ if (typeof EN_STR !== 'undefined') Object.assign(EN_STR, {
   "Validée": "Approved",
   "article(s)": "item(s)",
   "Livrer à": "Deliver to",
+  "Accessoires de série": "Standard accessories",
+  "Pantographe à gauche": "Joystick mount on the left",
   "Ajouter": "Add",
   "Annuler": "Cancel",
   "ajouté au bon": "added to order",
   "Ouvrir le bon de commande": "Open the purchase order",
   "Continuer": "Continue",
   "Ce bon était validé : il repasse en brouillon et devra être revalidé.": "This order was approved: it goes back to draft and must be approved again.",
-  "livraison Lagord par défaut, modifiable dans le bon": "delivery to Lagord by default, can be changed in the order"
+  "livraison Paris par défaut, modifiable dans le bon": "delivery to Paris by default, can be changed in the order"
 });
 // Libellés suédois : traduction automatique depuis l'anglais (public/js/trad-sv.js)
 const SV = s => (typeof tradSV === 'function') ? tradSV(s) : s;
@@ -1294,10 +1296,13 @@ async function bcSuedeChoisir(art){
         <div class="form-group"><label class="form-label">${TV('Configuration / options / accessoires (facultatif)')}</label>
           <input class="form-input" id="bc-note" value="${e_(art.note || '')}" placeholder="${art.fauteuil ? 'e.g. black, headrest, bag' : ''}"></div>
       </div>
-      ${art.fauteuil ? `<div class="form-group"><label class="form-label">Joystick</label>
-        <select class="form-input" id="bc-joy" style="max-width:260px"><option value="right" selected>on the right (${TV('à droite')})</option><option value="left">on the left (${TV('à gauche')})</option></select></div>` : ''}
+      ${art.fauteuil ? `<div class="form-group"><label class="form-label">${TV('Accessoires de série')}</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px">
+          ${[['droit', 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']].map(([k, l]) => `<label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="bc-opt-${k}" checked onchange="if(this.checked&&'${k}'==='droit')document.getElementById('bc-opt-gauche').checked=false"> ${l}</label>`).join('')}
+          <label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="bc-opt-gauche" onchange="if(this.checked)document.getElementById('bc-opt-droit').checked=false"> ${TV('Pantographe à gauche')} (0 €)</label>
+        </div></div>` : ''}
       ${opt('', !dernier, `<b><i class="ti ti-plus"></i> ${TV('Nouveau bon de commande')}</b> <span class="mono" style="color:var(--text3)">${e_(d.prochain_numero)}</span>
-        <div style="font-size:12px;color:var(--text3)">${TV('livraison Lagord par défaut, modifiable dans le bon')}</div>`)}
+        <div style="font-size:12px;color:var(--text3)">${TV('livraison Paris par défaut, modifiable dans le bon')}</div>`)}
       <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;margin:10px 0 6px">${TV('Bons en attente (non envoyés)')}</div>
       ${d.en_attente.length ? d.en_attente.map(b => opt(b.id, b.id === dernier, `<span class="mono" style="font-weight:700">${e_(b.numero_bc)}</span>
           <span class="badge" style="${b.etape === 'validee' ? 'background:#e6f0fb;color:#1F5C8C' : 'background:#eef0f3;color:#555'}">${TV(b.etape === 'validee' ? 'Validée' : 'Brouillon')}</span>
@@ -1320,7 +1325,7 @@ async function bcSuedeValider(){
   const btn = $('bc-ok'); if (btn) btn.disabled = true;
   try {
     const r = await API.post('/eclates-bc-suede/ajouter', { commande_id: cible ? +cible : null, lignes: [{ catalogue_id: art.catalogue_id, reference: art.reference,
-      designation: art.designation, note: ($('bc-note') || {}).value || '', joystick: $('bc-joy') ? $('bc-joy').value : null, quantite: Math.max(1, parseInt(($('bc-qte') || {}).value) || 1) }] });
+      designation: art.designation, note: ($('bc-note') || {}).value || '', options: $('bc-opt-droit') ? { droit: $('bc-opt-droit').checked, protections: $('bc-opt-protections').checked, feux: $('bc-opt-feux').checked, gauche: $('bc-opt-gauche').checked } : null, quantite: Math.max(1, parseInt(($('bc-qte') || {}).value) || 1) }] });
     E._bcDernier = r.id;
     const ouvrir = typeof hasAccess !== 'function' || hasAccess('commande-suede');
     showModal(`

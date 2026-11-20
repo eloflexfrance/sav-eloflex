@@ -17,6 +17,21 @@ const ADR_LAGORD = 'Éloflex France\n41 rue des Maraichers\n17140 LAGORD';
 // Livraison à Paris : coordonnées fixes (e-mail : info@ et/ou sav@, au choix dans le bon)
 const PRESET_PARIS = { nom: 'ELOFLEX FRANCE', contact: '', adresse: '102 AVENUE DES CHAMPS ELYSEES\n75008 PARIS', pays: 'France', tel: '+33 9 67 66 51 29', email: 'info@eloflex.fr' };
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
+// Fauteuils : modèle → référence du pantographe (joystick mount swing-away) gauche
+const EAN_MODELES = { '7350006080067': 'L', '7350006080531': 'P', '7350006080616': 'D2', '7350006080623': 'X', '7350006080685': 'F', '7350006080852': 'H',
+  '7350006084737': 'K', '7350006085994': 'C3', '7350006086007': 'R', '7350006088162': 'H2' };
+function modeleFauteuil(l) {
+  const r = String(l.reference || '').replace(/\s+/g, '');
+  for (const [e, m] of Object.entries(EAN_MODELES)) if (r === e || r.startsWith(e + '-')) return m;
+  const m = /mod[eè]le\s+([A-Z][0-9]?)\b/i.exec(String(l.designation || '')) || /eloflex\s+([A-Z][0-9]?)\b/i.exec(String(l.designation || ''));
+  return m ? m[1].toUpperCase() : null;
+}
+function refPantographeGauche(modele) {
+  if (['L', 'F', 'X', 'K'].includes(modele)) return '7350006087813';
+  if (['P', 'H2', 'Z', 'D2', 'C3', 'R'].includes(modele)) return '7350006087790';
+  return null;
+}
+const optionsJSON = o => (o && typeof o === 'object') ? JSON.stringify({ droit: !!o.droit, protections: !!o.protections, feux: !!o.feux, gauche: !!o.gauche, ...(o.auto ? { auto: String(o.auto).slice(0, 20) } : {}) }) : null;
 const esc = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 const isoJ = d => !d ? null : (d instanceof Date ? d.toISOString() : String(d)).slice(0, 10);
@@ -31,7 +46,7 @@ async function assurer(db) {
     'afficher_prix BOOLEAN DEFAULT FALSE', 'notes TEXT', 'cree_par TEXT', 'valide_par TEXT', 'valide_le TIMESTAMPTZ',
     'envoye_par TEXT', 'envoye_le TIMESTAMPTZ', 'envoye_a TEXT', 'date_expedition DATE', 'historique JSONB', 'devis_pennylane TEXT', 'annule_par TEXT', 'annule_le TIMESTAMPTZ', 'annule_motif TEXT'])
     await db.run(`ALTER TABLE commandes_suede ADD COLUMN IF NOT EXISTS ${c}`);
-  for (const c of ['prix_unitaire NUMERIC(12,2)', 'ref_fournisseur TEXT', 'note TEXT', 'joystick TEXT'])
+  for (const c of ['prix_unitaire NUMERIC(12,2)', 'ref_fournisseur TEXT', 'note TEXT', 'joystick TEXT', 'options JSONB'])
     await db.run(`ALTER TABLE commandes_suede_lignes ADD COLUMN IF NOT EXISTS ${c}`);
   // Éclatés : article commandé par « Commander ce fauteuil » (réglé par l'administrateur)
   for (const c of ['cmd_catalogue_id INTEGER', 'cmd_reference TEXT', 'cmd_designation TEXT', 'cmd_note TEXT'])
@@ -111,10 +126,10 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
       const q = parseInt(l.quantite) || 0;
       if (q <= 0 || !(txt(l.designation) || txt(l.reference))) continue;
       const px = l.prix_unitaire === '' || l.prix_unitaire == null ? null : Number(String(l.prix_unitaire).replace(',', '.'));
-      await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre, joystick)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre, joystick, options)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [id, parseInt(l.catalogue_id) || null, txt(l.reference, 80), txt(l.ref_fournisseur, 80), txt(l.designation, 300) || txt(l.reference, 80),
-          txt(l.note, 600), q, isFinite(px) ? px : null, ordre++, ['right', 'left', 'none'].includes(l.joystick) ? l.joystick : null]);
+          txt(l.note, 600), q, isFinite(px) ? px : null, ordre++, null, optionsJSON(l.options)]);
     }
   }
   // Mémorise les coordonnées de livraison Lagord / Paris pour les prochaines commandes
@@ -206,8 +221,8 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
         // Nouveau bon vierge : livraison à Paris par défaut
         const p = PRESET_PARIS;
         const { rows: [cs] } = await pg.query(`INSERT INTO commandes_suede (numero_bc, fournisseur, statut, etape, cree_par, date_commande, livraison_type,
-            livraison_nom, livraison_contact, livraison_adresse, livraison_pays, livraison_tel, livraison_email)
-          VALUES ($1,'Eloflex AB','En cours','brouillon',$2,CURRENT_DATE,'paris',$3,$4,$5,$6,$7,$8) RETURNING id`,
+            livraison_nom, livraison_contact, livraison_adresse, livraison_pays, livraison_tel, livraison_email, afficher_prix)
+          VALUES ($1,'Eloflex AB','En cours','brouillon',$2,CURRENT_DATE,'paris',$3,$4,$5,$6,$7,$8,TRUE) RETURNING id`,
           [numero, nomU(u), p.nom, null, p.adresse, p.pays, p.tel, p.email]);
         id = cs.id;
       }
@@ -222,13 +237,23 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
             WHERE upper(regexp_replace(ref, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace($1, '[^A-Za-z0-9]', '', 'g')) LIMIT 1`, [txt(l.reference)])).rows[0] || null;
         const ref = cat ? cat.ref : txt(l.reference, 80);
         // Même article déjà présent sans configuration particulière → on augmente la quantité
-        const ex = !note && !['right', 'left'].includes(l.joystick) && (await pg.query(`SELECT id FROM commandes_suede_lignes WHERE commande_id=$1 AND COALESCE(note,'')='' AND
+        const opt = l.options && typeof l.options === 'object' ? l.options : null;
+        const ex = !note && !opt && (await pg.query(`SELECT id FROM commandes_suede_lignes WHERE commande_id=$1 AND COALESCE(note,'')='' AND
             ${cat ? 'catalogue_id=$2' : "catalogue_id IS NULL AND upper(COALESCE(reference,''))=upper($2)"} LIMIT 1`, [id, cat ? cat.id : (ref || '')])).rows[0];
         if (ex && (cat || ref)) await pg.query('UPDATE commandes_suede_lignes SET quantite_commandee=quantite_commandee+$1 WHERE id=$2', [q, ex.id]);
-        else await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre, joystick)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [id, cat ? cat.id : null, ref, cat ? cat.ref_fournisseur : null, txt(l.designation, 300) || (cat && cat.designation) || ref, note, q,
-            cat && cat.prix_achat_suede != null ? cat.prix_achat_suede : null, ordre++, ['right', 'left', 'none'].includes(l.joystick) ? l.joystick : null]);
+        else {
+          const des = txt(l.designation, 300) || (cat && cat.designation) || ref;
+          await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, catalogue_id, reference, ref_fournisseur, designation, note, quantite_commandee, prix_unitaire, ordre, options)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [id, cat ? cat.id : null, ref, cat ? cat.ref_fournisseur : null, des, note, q,
+              cat && cat.prix_achat_suede != null ? cat.prix_achat_suede : null, ordre++, optionsJSON(opt)]);
+          // Pantographe à gauche coché : article ajouté en complément, à 0 €
+          if (opt && opt.gauche) {
+            const rg = refPantographeGauche(modeleFauteuil({ reference: ref, designation: des }));
+            await pg.query(`INSERT INTO commandes_suede_lignes (commande_id, reference, designation, quantite_commandee, prix_unitaire, ordre, options)
+                VALUES ($1,$2,'Joystick mount swing-away left',$3,0,$4,$5)`, [id, rg, q, ordre++, JSON.stringify({ auto: 'gauche' })]);
+          }
+        }
       }
       await pg.query('UPDATE commandes_suede SET updated_at=NOW() WHERE id=$1', [id]);
       await pg.query('COMMIT');

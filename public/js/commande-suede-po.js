@@ -35,7 +35,22 @@ const ETAPES = {
 const EAN_MODELES = { L: '7350006080067', P: '7350006080531', D2: '7350006080616', X: '7350006080623', F: '7350006080685', H: '7350006080852',
   K: '7350006084737', C3: '7350006085994', R: '7350006086007', H2: '7350006088162' };
 const EANS = Object.values(EAN_MODELES);
+function modeleFauteuil(l) {
+  const r = String(l.reference || '').replace(/\s+/g, '');
+  for (const [m, e] of Object.entries(EAN_MODELES)) if (r === e || r.startsWith(e + '-')) return m;
+  const x = /mod[eè]le\s+([A-Z][0-9]?)\b/i.exec(String(l.designation || '')) || /eloflex\s+([A-Z][0-9]?)\b/i.exec(String(l.designation || ''));
+  return x ? x[1].toUpperCase() : null;
+}
+// Pantographe (joystick mount swing-away) gauche selon le modèle
+function refPantographeGauche(m) {
+  if (['L', 'F', 'X', 'K'].includes(m)) return '7350006087813';
+  if (['P', 'H2', 'Z', 'D2', 'C3', 'R'].includes(m)) return '7350006087790';
+  return '';
+}
+const OPTIONS_FAUTEUIL = [['droit', 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']];
+const optionsDefaut = () => ({ droit: true, protections: true, feux: true, gauche: false });
 function estFauteuil(l) {
+  if (l && l.options && l.options.auto) return false;
   const r = String(l.reference || '').replace(/\s+/g, '');
   return EANS.some(e => r === e || r.startsWith(e + '-')) || /fauteuil (roulant |électrique )?eloflex|wheelchair|^ESSAI-[A-Z0-9]+-\d{2}\s*CM$/i.test(String(l.designation || '') + ' ' + String(l.reference || ''));
 }
@@ -81,7 +96,7 @@ async function nouveau() {
   const p = cfg.presets.paris || {};
   S.cs = { id: null, etape: 'brouillon', numero_bc: cfg.prochain_numero, date_commande: new Date().toISOString().slice(0, 10),
     reference_client: '', livraison_type: 'paris', livraison_nom: p.nom, livraison_contact: p.contact, livraison_adresse: p.adresse,
-    livraison_pays: p.pays || 'France', livraison_tel: p.tel, livraison_email: p.email, afficher_prix: false, notes: '', lignes: [] };
+    livraison_pays: p.pays || 'France', livraison_tel: p.tel, livraison_email: p.email, afficher_prix: true, notes: '', lignes: [] };
   S.vue = 'edition'; S.id = null; S.modifie = false;
   if (typeof setView === 'function' && typeof STATE !== 'undefined' && STATE.view !== 'commande-suede') setView('commande-suede', { garderPO: true }); else render();
 }
@@ -250,7 +265,10 @@ function lireLignesDuDom() {
     if (v('note') !== undefined) l.note = v('note');
     if (v('q') !== undefined) l.quantite = Math.max(0, parseInt(v('q')) || 0);
     if (v('px') !== undefined) l.prix_unitaire = v('px') === '' ? null : v('px').replace(',', '.');
-    if (v('joy') !== undefined) l.joystick = v('joy') || 'none';
+    if ($(`cs-l-opt-droit-${i}`)) {
+      l.options = Object.assign(optionsDefaut(), l.options || {});
+      for (const k of ['droit', 'protections', 'feux', 'gauche']) { const c = $(`cs-l-opt-${k}-${i}`); if (c) l.options[k] = c.checked; }
+    }
   });
 }
 function dessinerLignes() {
@@ -268,16 +286,18 @@ function dessinerLignes() {
     <thead><tr><th>${_T('Réf.')} / ${_T('Réf. fournisseur')}</th><th>${_T('Désignation')} / ${_T('configuration')}</th>
       <th>${_T('Qté')}</th><th>${_T('Prix U. HT')}${prix ? '' : ` <span title="${_T('Non imprimé sur le bon')}" style="opacity:.6">(${_T('masqué')})</span>`}</th><th style="text-align:right">${_T('Total')}</th><th></th></tr></thead>
     <tbody>${cs.lignes.map((l, i) => `<tr>
-      ${td()}${inp('ref', i, l.reference, 'font-weight:700;font-size:14px')}
+      ${td()}${inp('ref', i, l.reference, 'font-weight:700;font-size:14px', `onchange="csVerifFauteuil(${i})"`)}
         ${inp('sup', i, l.ref_fournisseur, 'font-size:12px;color:var(--text2);margin-top:4px', `placeholder="${_T('Réf. fournisseur')}"`)}
         ${sous(l.catalogue_id ? `<i class="ti ti-link"></i> ${_T('catalogue')}` : _T('hors catalogue'), l.catalogue_id ? 'var(--success)' : 'var(--text3)')}</td>
-      ${td()}${inp('des', i, l.designation, 'font-weight:600')}
+      ${td()}${inp('des', i, l.designation, 'font-weight:600', `onchange="csVerifFauteuil(${i})"`)}
         ${inp('note', i, l.note, 'font-style:italic;margin-top:4px', `placeholder="${_T('Configuration / options / accessoires (facultatif)')}"`)}
-        ${l.joystick || estFauteuil(l) ? `<div style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:12.5px;color:var(--text2)"><i class="ti ti-steering-wheel"></i> Joystick
-          <select class="form-input" id="cs-l-joy-${i}" ${dis} onchange="csModif()" style="height:30px;padding:0 6px;font-size:12.5px;width:auto">
-            <option value="right" ${(l.joystick || 'right') === 'right' ? 'selected' : ''}>on the right (${_T('à droite')})</option>
-            <option value="left" ${l.joystick === 'left' ? 'selected' : ''}>on the left (${_T('à gauche')})</option>
-            <option value="none" ${l.joystick === 'none' ? 'selected' : ''}>${_T('sans objet')}</option></select></div>` : ''}</td>
+        ${estFauteuil(l) ? (() => { const o = l.options || (l.options = optionsDefaut()), mg = modeleFauteuil(l), rg = refPantographeGauche(mg);
+          const cb = (k, lab) => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="cs-l-opt-${k}-${i}" ${o[k] ? 'checked' : ''} ${dis} onchange="csOptFauteuil(${i},'${k}')"> ${lab}</label>`;
+          return `<div style="margin-top:6px;padding:7px 10px;background:var(--bg);border-radius:8px;font-size:12.5px;color:var(--text2);display:flex;flex-wrap:wrap;gap:6px 16px">
+            <span style="font-weight:600;color:var(--text)"><i class="ti ti-adjustments"></i> ${_T('Accessoires de série')}${mg ? ' — ' + _T('modèle') + ' ' + e_(mg) : ''}</span>
+            ${OPTIONS_FAUTEUIL.map(([k, lab]) => cb(k, lab)).join('')}
+            ${cb('gauche', `${_T('Pantographe à gauche')} <span class="mono" style="color:var(--text3)">${rg || _T('réf. à compléter')}</span>`)}</div>`; })() : ''}
+        ${l.options && l.options.auto === 'gauche' ? `<div style="font-size:11.5px;color:var(--text3);margin-top:4px"><i class="ti ti-link"></i> ${_T('ajouté automatiquement : pantographe à gauche (0 €)')}</div>` : ''}</td>
       ${td()}${inp('q', i, l.quantite, 'text-align:center', 'type="number" min="1"')}</td>
       ${td()}${inp('px', i, l.prix_unitaire, 'text-align:right', 'inputmode="decimal"')}</td>
       ${td('text-align:right;white-space:nowrap;line-height:34px;font-weight:600')}<span id="cs-l-tot-${i}"></span></td>
@@ -321,8 +341,8 @@ function ajouterArticle(id) {
   const ex = S.cs.lignes.find(l => l.catalogue_id === id && !l.note);
   const nl = { catalogue_id: art.id, reference: art.ref, ref_fournisseur: art.ref_fournisseur || '', designation: art.designation,
     note: '', quantite: 1, prix_unitaire: art.prix_achat_suede != null ? String(art.prix_achat_suede) : null };
-  if (estFauteuil(nl)) nl.joystick = 'right';
-  if (ex && !nl.joystick) ex.quantite = (+ex.quantite || 0) + 1;
+  if (estFauteuil(nl)) nl.options = optionsDefaut();
+  if (ex && !nl.options) ex.quantite = (+ex.quantite || 0) + 1;
   else S.cs.lignes.push(nl);
   if ($('cs-art-q')) $('cs-art-q').value = '';
   if ($('cs-art-sug')) $('cs-art-sug').style.display = 'none';
@@ -330,11 +350,38 @@ function ajouterArticle(id) {
 }
 function ligneLibre() {
   lireLignesDuDom();
-  S.cs.lignes.push({ catalogue_id: null, reference: '', ref_fournisseur: '', designation: '', note: '', quantite: 1, prix_unitaire: null, joystick: 'right' });
+  S.cs.lignes.push({ catalogue_id: null, reference: '', ref_fournisseur: '', designation: '', note: '', quantite: 1, prix_unitaire: null });
   S.modifie = true; dessinerLignes();
   const i = S.cs.lignes.length - 1; const el = $(`cs-l-des-${i}`); if (el) el.focus();
 }
-function retirerLigne(i) { lireLignesDuDom(); S.cs.lignes.splice(i, 1); S.modifie = true; dessinerLignes(); }
+function retirerLigne(i) {
+  lireLignesDuDom();
+  const suiv = S.cs.lignes[i + 1];
+  S.cs.lignes.splice(i, suiv && suiv.options && suiv.options.auto === 'gauche' && estFauteuil(S.cs.lignes[i]) ? 2 : 1);
+  S.modifie = true; dessinerLignes();
+}
+// Options d'un fauteuil : le pantographe gauche remplace le droit et ajoute l'article à 0 € juste en dessous
+function optFauteuil(i, k) {
+  lireLignesDuDom();
+  const l = S.cs.lignes[i]; if (!l) return;
+  l.options = Object.assign(optionsDefaut(), l.options || {});
+  const suiv = S.cs.lignes[i + 1], aAuto = suiv && suiv.options && suiv.options.auto === 'gauche';
+  if (k === 'gauche' && l.options.gauche) l.options.droit = false;
+  if (k === 'droit' && l.options.droit) l.options.gauche = false;
+  if (k === 'gauche' && !l.options.gauche) l.options.droit = true;   // retour au pantographe droit
+  if (l.options.gauche && !aAuto) S.cs.lignes.splice(i + 1, 0, { catalogue_id: null, reference: refPantographeGauche(modeleFauteuil(l)), ref_fournisseur: '',
+    designation: 'Joystick mount swing-away left', note: '', quantite: +l.quantite || 1, prix_unitaire: '0', options: { auto: 'gauche' } });
+  if (!l.options.gauche && aAuto) S.cs.lignes.splice(i + 1, 1);
+  S.modifie = true; dessinerLignes();
+}
+window.csOptFauteuil = optFauteuil;
+// Une ligne libre devient « fauteuil » quand sa référence / désignation le montre : on affiche alors les accessoires
+function verifFauteuil(i) {
+  const l = S.cs && S.cs.lignes[i]; if (!l) return;
+  const avant = !!$(`cs-l-opt-droit-${i}`); lireLignesDuDom();
+  if (estFauteuil(l) !== avant) dessinerLignes();
+}
+window.csVerifFauteuil = verifFauteuil;
 
 // ── Livraison ──────────────────────────────────────────────────────
 function remplirLivraison(p) {
@@ -401,7 +448,7 @@ function donnees() {
     livraison_email: v('cs-liv-email').trim(), afficher_prix: $('cs-prix') ? $('cs-prix').checked : !!cs.afficher_prix, notes: v('cs-notes'),
     lignes: cs.lignes.filter(l => (+l.quantite > 0) && (String(l.designation || '').trim() || String(l.reference || '').trim()))
       .map(l => ({ catalogue_id: l.catalogue_id || null, reference: l.reference, ref_fournisseur: l.ref_fournisseur, designation: l.designation,
-        note: l.note, quantite: l.quantite, prix_unitaire: l.prix_unitaire, joystick: ['right', 'left', 'none'].includes(l.joystick) ? l.joystick : (estFauteuil(l) ? 'right' : null) })),
+        note: l.note, quantite: l.quantite, prix_unitaire: l.prix_unitaire, options: l.options || (estFauteuil(l) ? optionsDefaut() : null) })),
   };
 }
 async function enregistrer(silencieux) {
@@ -583,7 +630,7 @@ async function chercherDevisPL() {
       const des = e ? String(e.designation).replace(/\s*-\s*DEMONSTRATION\s*$/i, '').replace(/\d{2}\s*cm/i, taille + ' cm') : (l.designation || '');
       return { garder: (+l.quantite || 0) > 0, catalogue_id: null, reference: e ? `${e.ean}-E ${taille}` : (l.reference || ''), ref_fournisseur: '',
         designation: !e || /\d{2}\s*cm/i.test(des) ? des : des + ' - ' + taille + ' cm', note: '', quantite: Math.max(1, parseInt(l.quantite) || 1),
-        prix_unitaire: null, joystick: 'right', frais: false, essai: e ? 'ok' : 'inconnu', refOrigine: l.reference };
+        prix_unitaire: null, options: optionsDefaut(), frais: false, essai: e ? 'ok' : 'inconnu', refOrigine: l.reference };
     }
     const c = parRef.get(nRef(l.reference)) || null;
     const frais = estFrais(l.designation) || /^ESSAI/i.test(String(l.reference || '')) || /offre d.essai/i.test(String(l.designation || ''));
@@ -591,7 +638,7 @@ async function chercherDevisPL() {
       ref_fournisseur: c ? (c.ref_fournisseur || '') : '', designation: c ? c.designation : (l.designation || ''),
       note: c ? '' : sansHtml(l.description).slice(0, 300), quantite: Math.max(1, parseInt(l.quantite) || 1),
       prix_unitaire: c && c.prix_achat_suede != null ? String(c.prix_achat_suede) : null, frais,
-      joystick: (c && estFauteuil(c.ref ? { reference: c.ref, designation: c.designation } : {})) || (!c && estFauteuil(l)) ? 'right' : undefined };
+      options: (c && estFauteuil({ reference: c.ref, designation: c.designation })) || (!c && estFauteuil(l)) ? optionsDefaut() : undefined };
   }) };
   const cl = r.client || {};
   const adrDist = [cl.adresse, [cl.cp, cl.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
@@ -654,7 +701,7 @@ async function creerDepuisDevisPL() {
   S.cs = { id: null, etape: 'brouillon', numero_bc: numBc, date_commande: new Date().toISOString().slice(0, 10),
     reference_client: '', client_id: liv === 'distributeur' ? (S._plClientId || null) : null, livraison_type: liv,
     livraison_nom: adr.nom, livraison_contact: adr.contact, livraison_adresse: adr.adresse, livraison_pays: adr.pays || 'France',
-    livraison_tel: adr.tel, livraison_email: adr.email, afficher_prix: false, notes: '', lignes,
+    livraison_tel: adr.tel, livraison_email: adr.email, afficher_prix: true, notes: '', lignes,
     devis_pennylane: pl.r.numero, distributeur_devis: pl.r.distributeur || '' };
   S.vue = 'edition'; S.id = null; S.modifie = true; S._pl = null; S._plClientId = null;
   closeModal();
