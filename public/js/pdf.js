@@ -292,6 +292,7 @@ const PDF = {
       .replace(/…/g, '...').replace(/[  ]/g, ' ').replace(/[^\x00-\xff€]/g, '');
     const prix = opts.afficher_prix != null ? !!opts.afficher_prix : !!cs.afficher_prix;
     const dEN = d => { if (!d) return ''; const x = new Date(String(d).slice(0,10) + 'T12:00:00'); return isNaN(x) ? String(d) : x.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }); };
+    const nb = n => (Math.round(n * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });   // colonnes : sans devise
     const eur = n => (Math.round(n * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' EUR';
     const piedDePage = () => {
       const n = doc.getNumberOfPages();
@@ -382,7 +383,7 @@ const PDF = {
       if (note.length) { doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(90,90,90);
         note.forEach((t, k) => doc.text(t, C.des, y + des.length * 4.2 + k * 3.8)); doc.setTextColor(0,0,0); doc.setFontSize(8.8); }
       doc.setFont('helvetica','bold'); doc.text(String(q), C.qte, y, { align:'right' }); doc.setFont('helvetica','normal');
-      if (prix) { doc.text(pu == null ? '-' : eur(pu), C.pu, y, { align:'right' }); doc.text(pu == null ? '-' : eur(pu * q), C.tot, y, { align:'right' }); }
+      if (prix) { doc.text(pu == null ? '-' : nb(pu), C.pu, y, { align:'right' }); doc.text(pu == null ? '-' : nb(pu * q), C.tot, y, { align:'right' }); }
       y += h; doc.setDrawColor(225,225,225); doc.setLineWidth(0.2); doc.line(L, y - 3.2, R, y - 3.2); y += 1.2;
     });
     if (y > 262) { doc.addPage(); y = 20; }
