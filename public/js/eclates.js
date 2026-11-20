@@ -1276,6 +1276,13 @@ function bcSuedePiece(it){
   bcSuedeChoisir({ catalogue_id: it.cat_id || null, reference: it.ref || '',
     designation: (it.cat_designation || it.fr || it.desc_en || label(it) || '') });
 }
+// Seuls les modèles L, F, P, D2 et R ont pantographe, protège-vêtements et kit feux de série
+function bcAOptions(art){
+  let r = String(art.reference || '').replace(/\s+/g, '').toUpperCase(); if (/^350006\d/.test(r)) r = '7' + r;
+  if (/^7350006(080067|080685|080531|080616|086007)(-|$)/.test(r) || /^ESSAI-(L|F|P|D2|R)-\d{2}CM$/.test(r)) return true;
+  const m = /mod[eè]le\s+([A-Z][0-9]?)\b/i.exec(art.designation || '') || /eloflex\s+([A-Z][0-9]?)\b/i.exec(art.designation || '');
+  return !!m && ['L', 'F', 'P', 'D2', 'R'].includes(m[1].toUpperCase());
+}
 async function bcSuedeChoisir(art){
   let d;
   try { d = await API.get('/eclates-bc-suede'); } catch (err) { if (typeof toast === 'function') toast(err.message, 'ti-alert-circle', 'var(--danger)'); return; }
@@ -1296,7 +1303,7 @@ async function bcSuedeChoisir(art){
         <div class="form-group"><label class="form-label">${TV('Configuration / options / accessoires (facultatif)')}</label>
           <input class="form-input" id="bc-note" value="${e_(art.note || '')}" placeholder="${art.fauteuil ? 'e.g. black, headrest, bag' : ''}"></div>
       </div>
-      ${art.fauteuil ? `<div class="form-group"><label class="form-label">${TV('Accessoires de série')}</label>
+      ${art.fauteuil && bcAOptions(art) ? `<div class="form-group"><label class="form-label">${TV('Accessoires de série')}</label>
         <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px">
           ${[['droit', 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']].map(([k, l]) => `<label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="bc-opt-${k}" checked onchange="if(this.checked&&'${k}'==='droit')document.getElementById('bc-opt-gauche').checked=false"> ${l}</label>`).join('')}
           <label style="display:inline-flex;gap:5px;align-items:center;cursor:pointer"><input type="checkbox" id="bc-opt-gauche" onchange="if(this.checked)document.getElementById('bc-opt-droit').checked=false"> ${TV('Pantographe à gauche')} (0 €)</label>

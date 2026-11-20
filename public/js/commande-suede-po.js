@@ -35,23 +35,29 @@ const ETAPES = {
 const EAN_MODELES = { L: '7350006080067', P: '7350006080531', D2: '7350006080616', X: '7350006080623', F: '7350006080685', H: '7350006080852',
   K: '7350006084737', C3: '7350006085994', R: '7350006086007', H2: '7350006088162' };
 const EANS = Object.values(EAN_MODELES);
+// Référence normalisée : sans espaces, « 350006… » (7 initial oublié) → « 7350006… »
+const refNorm = r => { r = String(r || '').replace(/\s+/g, '').toUpperCase(); return /^350006\d/.test(r) ? '7' + r : r; };
 function modeleFauteuil(l) {
-  const r = String(l.reference || '').replace(/\s+/g, '');
+  const r = refNorm(l.reference);
   for (const [m, e] of Object.entries(EAN_MODELES)) if (r === e || r.startsWith(e + '-')) return m;
+  const es = /^ESSAI-([A-Z][0-9]?)-\d{2}CM$/.exec(r); if (es) return es[1];
   const x = /mod[eè]le\s+([A-Z][0-9]?)\b/i.exec(String(l.designation || '')) || /eloflex\s+([A-Z][0-9]?)\b/i.exec(String(l.designation || ''));
   return x ? x[1].toUpperCase() : null;
 }
 // Pantographe (joystick mount swing-away) gauche selon le modèle
+// Seuls les modèles L, F, P, D2 et R ont pantographe, protège-vêtements et kit feux de série.
+// K, X, H, C3, Z (et les autres) : aucune de ces options.
 function refPantographeGauche(m) {
-  if (['L', 'F', 'X', 'K'].includes(m)) return '7350006087813';
-  if (['P', 'H2', 'Z', 'D2', 'C3', 'R'].includes(m)) return '7350006087790';
+  if (['L', 'F'].includes(m)) return '7350006087813';
+  if (['P', 'D2', 'R'].includes(m)) return '7350006087790';
   return '';
 }
+const aOptions = l => estFauteuil(l) && !!refPantographeGauche(modeleFauteuil(l));
 const OPTIONS_FAUTEUIL = [['droit', 'Joystick mount swing-away right'], ['protections', 'Side guards'], ['feux', 'Direction and brakelight kit']];
 const optionsDefaut = () => ({ droit: true, protections: true, feux: true, gauche: false });
 function estFauteuil(l) {
   if (l && l.options && l.options.auto) return false;
-  const r = String(l.reference || '').replace(/\s+/g, '');
+  const r = refNorm(l.reference);
   return EANS.some(e => r === e || r.startsWith(e + '-')) || /fauteuil (roulant |électrique )?eloflex|wheelchair|^ESSAI-[A-Z0-9]+-\d{2}\s*CM$/i.test(String(l.designation || '') + ' ' + String(l.reference || ''));
 }
 // Étape affichée (tient compte de la livraison et de la réception)
@@ -291,7 +297,7 @@ function dessinerLignes() {
         ${sous(l.catalogue_id ? `<i class="ti ti-link"></i> ${_T('catalogue')}` : _T('hors catalogue'), l.catalogue_id ? 'var(--success)' : 'var(--text3)')}</td>
       ${td()}${inp('des', i, l.designation, 'font-weight:600', `onchange="csVerifFauteuil(${i})"`)}
         ${inp('note', i, l.note, 'font-style:italic;margin-top:4px', `placeholder="${_T('Configuration / options / accessoires (facultatif)')}"`)}
-        ${estFauteuil(l) ? (() => { const o = l.options || (l.options = optionsDefaut()), mg = modeleFauteuil(l), rg = refPantographeGauche(mg);
+        ${(() => { if (!aOptions(l) && l.options && !l.options.auto) l.options = null; return ''; })()}${aOptions(l) ? (() => { const o = l.options || (l.options = optionsDefaut()), mg = modeleFauteuil(l), rg = refPantographeGauche(mg);
           const cb = (k, lab) => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap"><input type="checkbox" id="cs-l-opt-${k}-${i}" ${o[k] ? 'checked' : ''} ${dis} onchange="csOptFauteuil(${i},'${k}')"> ${lab}</label>`;
           return `<div style="margin-top:6px;padding:7px 10px;background:var(--bg);border-radius:8px;font-size:12.5px;color:var(--text2);display:flex;flex-wrap:wrap;gap:6px 16px">
             <span style="font-weight:600;color:var(--text)"><i class="ti ti-adjustments"></i> ${_T('Accessoires de série')}${mg ? ' — ' + _T('modèle') + ' ' + e_(mg) : ''}</span>
@@ -341,7 +347,7 @@ function ajouterArticle(id) {
   const ex = S.cs.lignes.find(l => l.catalogue_id === id && !l.note);
   const nl = { catalogue_id: art.id, reference: art.ref, ref_fournisseur: art.ref_fournisseur || '', designation: art.designation,
     note: '', quantite: 1, prix_unitaire: art.prix_achat_suede != null ? String(art.prix_achat_suede) : null };
-  if (estFauteuil(nl)) nl.options = optionsDefaut();
+  if (aOptions(nl)) nl.options = optionsDefaut();
   if (ex && !nl.options) ex.quantite = (+ex.quantite || 0) + 1;
   else S.cs.lignes.push(nl);
   if ($('cs-art-q')) $('cs-art-q').value = '';
@@ -379,7 +385,7 @@ window.csOptFauteuil = optFauteuil;
 function verifFauteuil(i) {
   const l = S.cs && S.cs.lignes[i]; if (!l) return;
   const avant = !!$(`cs-l-opt-droit-${i}`); lireLignesDuDom();
-  if (estFauteuil(l) !== avant) dessinerLignes();
+  if (aOptions(l) !== avant) dessinerLignes();
 }
 window.csVerifFauteuil = verifFauteuil;
 
@@ -448,7 +454,7 @@ function donnees() {
     livraison_email: v('cs-liv-email').trim(), afficher_prix: $('cs-prix') ? $('cs-prix').checked : !!cs.afficher_prix, notes: v('cs-notes'),
     lignes: cs.lignes.filter(l => (+l.quantite > 0) && (String(l.designation || '').trim() || String(l.reference || '').trim()))
       .map(l => ({ catalogue_id: l.catalogue_id || null, reference: l.reference, ref_fournisseur: l.ref_fournisseur, designation: l.designation,
-        note: l.note, quantite: l.quantite, prix_unitaire: l.prix_unitaire, options: l.options || (estFauteuil(l) ? optionsDefaut() : null) })),
+        note: l.note, quantite: l.quantite, prix_unitaire: l.prix_unitaire, options: l.options && l.options.auto ? l.options : (aOptions(l) ? (l.options || optionsDefaut()) : null) })),
   };
 }
 async function enregistrer(silencieux) {
@@ -630,7 +636,7 @@ async function chercherDevisPL() {
       const des = e ? String(e.designation).replace(/\s*-\s*DEMONSTRATION\s*$/i, '').replace(/\d{2}\s*cm/i, taille + ' cm') : (l.designation || '');
       return { garder: (+l.quantite || 0) > 0, catalogue_id: null, reference: e ? `${e.ean}-E ${taille}` : (l.reference || ''), ref_fournisseur: '',
         designation: !e || /\d{2}\s*cm/i.test(des) ? des : des + ' - ' + taille + ' cm', note: '', quantite: Math.max(1, parseInt(l.quantite) || 1),
-        prix_unitaire: null, options: optionsDefaut(), frais: false, essai: e ? 'ok' : 'inconnu', refOrigine: l.reference };
+        prix_unitaire: null, options: refPantographeGauche(mod) ? optionsDefaut() : undefined, frais: false, essai: e ? 'ok' : 'inconnu', refOrigine: l.reference };
     }
     const c = parRef.get(nRef(l.reference)) || null;
     const frais = estFrais(l.designation) || /^ESSAI/i.test(String(l.reference || '')) || /offre d.essai/i.test(String(l.designation || ''));
@@ -638,7 +644,7 @@ async function chercherDevisPL() {
       ref_fournisseur: c ? (c.ref_fournisseur || '') : '', designation: c ? c.designation : (l.designation || ''),
       note: c ? '' : sansHtml(l.description).slice(0, 300), quantite: Math.max(1, parseInt(l.quantite) || 1),
       prix_unitaire: c && c.prix_achat_suede != null ? String(c.prix_achat_suede) : null, frais,
-      options: (c && estFauteuil({ reference: c.ref, designation: c.designation })) || (!c && estFauteuil(l)) ? optionsDefaut() : undefined };
+      options: (c && aOptions({ reference: c.ref, designation: c.designation })) || (!c && aOptions(l)) ? optionsDefaut() : undefined };
   }) };
   const cl = r.client || {};
   const adrDist = [cl.adresse, [cl.cp, cl.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');

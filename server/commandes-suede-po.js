@@ -20,15 +20,17 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
 // Fauteuils : modèle → référence du pantographe (joystick mount swing-away) gauche
 const EAN_MODELES = { '7350006080067': 'L', '7350006080531': 'P', '7350006080616': 'D2', '7350006080623': 'X', '7350006080685': 'F', '7350006080852': 'H',
   '7350006084737': 'K', '7350006085994': 'C3', '7350006086007': 'R', '7350006088162': 'H2' };
+const refNorm = r => { r = String(r || '').replace(/\s+/g, '').toUpperCase(); return /^350006\d/.test(r) ? '7' + r : r; };
 function modeleFauteuil(l) {
-  const r = String(l.reference || '').replace(/\s+/g, '');
+  const r = refNorm(l.reference);
   for (const [e, m] of Object.entries(EAN_MODELES)) if (r === e || r.startsWith(e + '-')) return m;
+  const es = /^ESSAI-([A-Z][0-9]?)-\d{2}CM$/.exec(r); if (es) return es[1];
   const m = /mod[eè]le\s+([A-Z][0-9]?)\b/i.exec(String(l.designation || '')) || /eloflex\s+([A-Z][0-9]?)\b/i.exec(String(l.designation || ''));
   return m ? m[1].toUpperCase() : null;
 }
 function refPantographeGauche(modele) {
-  if (['L', 'F', 'X', 'K'].includes(modele)) return '7350006087813';
-  if (['P', 'H2', 'Z', 'D2', 'C3', 'R'].includes(modele)) return '7350006087790';
+  if (['L', 'F'].includes(modele)) return '7350006087813';
+  if (['P', 'D2', 'R'].includes(modele)) return '7350006087790';
   return null;
 }
 const optionsJSON = o => (o && typeof o === 'object') ? JSON.stringify({ droit: !!o.droit, protections: !!o.protections, feux: !!o.feux, gauche: !!o.gauche, ...(o.auto ? { auto: String(o.auto).slice(0, 20) } : {}) }) : null;
@@ -237,7 +239,7 @@ module.exports = function monterPO(router, { db, adminOrOp, envoyerEmailPret, SI
             WHERE upper(regexp_replace(ref, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace($1, '[^A-Za-z0-9]', '', 'g')) LIMIT 1`, [txt(l.reference)])).rows[0] || null;
         const ref = cat ? cat.ref : txt(l.reference, 80);
         // Même article déjà présent sans configuration particulière → on augmente la quantité
-        const opt = l.options && typeof l.options === 'object' ? l.options : null;
+        const opt = l.options && typeof l.options === 'object' && refPantographeGauche(modeleFauteuil({ reference: l.reference, designation: l.designation })) ? l.options : null;
         const ex = !note && !opt && (await pg.query(`SELECT id FROM commandes_suede_lignes WHERE commande_id=$1 AND COALESCE(note,'')='' AND
             ${cat ? 'catalogue_id=$2' : "catalogue_id IS NULL AND upper(COALESCE(reference,''))=upper($2)"} LIMIT 1`, [id, cat ? cat.id : (ref || '')])).rows[0];
         if (ex && (cat || ref)) await pg.query('UPDATE commandes_suede_lignes SET quantite_commandee=quantite_commandee+$1 WHERE id=$2', [q, ex.id]);
