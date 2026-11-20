@@ -141,7 +141,7 @@ async function renderEdition(ttl, c, a) {
     ${!cs.id && cs.devis_pennylane ? `<div style="background:#fff4e0;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-file-import"></i> ${_T('Bon pré-rempli depuis le devis Pennylane')} <b class="mono">${e_(cs.devis_pennylane)}</b>${cs.distributeur_devis ? ' (' + e_(cs.distributeur_devis) + ')' : ''}. ${_T('Vérifiez les articles, l’adresse et la référence commande client, puis cliquez sur « Enregistrer ».')}</div>` : ''}
     ${cs.etape === 'annulee' ? `<div style="background:#fdecec;color:#b42828;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-ban"></i> ${_T('Commande annulée')}${cs.annule_par ? ' ' + _T('par') + ' <b>' + e_(cs.annule_par) + '</b>' : ''}${cs.annule_le ? ' — ' + dhFr(cs.annule_le) : ''}${cs.annule_motif ? '<br>' + _T('Motif') + ' : ' + e_(cs.annule_motif) : ''}</div>` : ''}
     ${cs.etape === 'validee' && editable ? `<div style="background:#e6f0fb;border-radius:8px;padding:9px 12px;font-size:13px;margin-bottom:12px"><i class="ti ti-info-circle"></i> ${_T('Commande validée : toute modification enregistrée la repasse en brouillon (nouvelle validation nécessaire).')}</div>` : ''}
-    <div class="grid-2" style="gap:16px;align-items:start">
+    <div class="grid-2" style="gap:16px;align-items:start;position:relative;z-index:40">
       <div class="card" style="padding:14px 16px">
         <div class="section-title"><i class="ti ti-file-invoice"></i>${_T('Commande')}</div>
         <div class="grid-2">
@@ -184,7 +184,7 @@ async function renderEdition(ttl, c, a) {
       </div>
     </div>
 
-    <div class="card" style="padding:14px 16px;margin-top:16px">
+    <div class="card" style="padding:14px 16px;margin-top:16px;position:relative;z-index:30">
       <div class="section-title"><i class="ti ti-list"></i>${_T('Articles commandés')}</div>
       ${editable ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <div style="position:relative;flex:1;min-width:260px">
