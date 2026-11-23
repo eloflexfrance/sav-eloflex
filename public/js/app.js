@@ -3,6 +3,9 @@
 let STATE = { view:'dashboard', clientId:null, fauteuilId:null, q:'' };
 let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:'', type:'' };
 let _cmdReqId = 0; // anti-race condition pour la recherche commandes
+// Couleurs des options distributeur (fiche + contours clignotants sur la carte)
+const OPT_PRIV_COUL = '#dc2626';   // Privilèges : rouge
+const OPT_AVA_COUL  = '#eab308';   // Avantages : jaune
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
 const CMD_COLS_DEFAULT = { num_annuel: false, paiement: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false, notes: false };
 // Merge stored prefs with defaults — nouvelles colonnes héritent de false si absentes du stockage
@@ -855,6 +858,8 @@ function ficheDistributeurBloc(cl){
   if(cl.edi) chips.push(`<span class="badge ouvert" title="${TR('Prélèvement EDI')}"><i class="ti ti-credit-card"></i> ${TR('EDI — Prélèvement')}</span>`);
   if(cl.public_site) chips.push(`<span class="badge hg" title="Visible sur la carte publique eloflex.fr"><i class="ti ti-world"></i> ${TR('Site public')}</span>`);
   if(cl.priorite) chips.push(`<span style="font-size:12px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${TR('Priorité')} ${cl.priorite}</span>`);
+  if(cl.privileges) chips.push(`<span style="font-size:12px;font-weight:700;color:#fff;background:${OPT_PRIV_COUL};padding:2px 8px;border-radius:99px"><i class="ti ti-crown"></i> ${TR('Privilèges')}</span>`);
+  if(cl.avantages) chips.push(`<span style="font-size:12px;font-weight:700;color:#713f12;background:${OPT_AVA_COUL};padding:2px 8px;border-radius:99px"><i class="ti ti-gift"></i> ${TR('Avantages')}</span>`);
   if(cl.entite_facturation_id) chips.push(`<span class="badge ouvert"><i class="ti ti-receipt"></i> ${TR('Facturé à')} ${esc(cl.entite_facturation_nom||'—')}</span>`);
   const annEsc = cl.annotation ? esc(cl.annotation) : '';
   return `<div class="card">
@@ -3095,7 +3100,7 @@ window.demoShowroom = demoShowroom;
 // ── Entrée showroom : fauteuils neufs reçus de Suède sans bon de commande ──
 // Saisie par lot (une ligne par fauteuil, ou collage depuis Excel : Modèle ⇥ Référence ⇥ N° de série),
 // contrôle (aperçu) puis intégration directe dans l'onglet Showroom du Parc de démo.
-const _ES_MODELES=['Modèle L','Modèle F','Modèle P','Modèle D2','Modèle X','Modèle H','Modèle C3','Modèle C','Modèle K','Modèle H2','Modèle S1'];
+const _ES_MODELES=['Modèle L','Modèle L2','Modèle R','Modèle F','Modèle P','Modèle D2','Modèle X','Modèle H','Modèle C3','Modèle C','Modèle K','Modèle H2','Modèle S1'];
 let _ES = { lignes:[], apercu:null };
 function _esModele(v){
   const s=String(v||'').trim(); if(!s) return '';
@@ -4660,6 +4665,12 @@ function clientForm(d={}){return `<div class="grid-2">
       ${[['T1','T1 — Priorité absolue'],['T2','T2 — Priorité moyenne'],['T3','T3 — Priorité basse']].map(p=>`<option value="${p[0]}" ${d.priorite===p[0]?'selected':''}>${p[1]}</option>`).join('')}
     </select>
   </div>
+  <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Options')}</label>
+    <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:14px">
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-privileges" ${d.privileges?'checked':''}><span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid ${OPT_PRIV_COUL}"></span>${TR('Privilèges')}</label>
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-avantages" ${d.avantages?'checked':''}><span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid ${OPT_AVA_COUL}"></span>${TR('Avantages')}</label>
+    </div>
+  </div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
     <select class="form-input" id="f-facturation-mode" onchange="toggleFacturation(this.value)">
       <option value="identique" ${!d.entite_facturation_id?'selected':''}>${TR('Identique (le distributeur se facture lui-même)')}</option>
@@ -4729,6 +4740,8 @@ async function saveClient(id){
     sur_carte: surCarte,
     public_site: !!document.getElementById('f-public-site')?.checked,
     priorite: gv('f-priorite') || null,
+    privileges: !!document.getElementById('f-privileges')?.checked,
+    avantages: !!document.getElementById('f-avantages')?.checked,
     reseau_carte: reseau,
     siren: (gv('f-siren')||'').replace(/\s+/g,'') || null,
     siret: (gv('f-siret')||'').replace(/\s+/g,'') || null,
@@ -4786,7 +4799,7 @@ async function regenererToken(id){if(!confirm(TR('Régénérer invalide l\'ancie
 
 // ── MODALES FAUTEUILS ─────────────────────────────────────────────
 
-function fauteuilForm(d={}, clients=null){const mods=['Modèle L','Modèle F','Modèle P','Modèle D2','Modèle X','Modèle H','Modèle C3','Modèle C','Modèle K','Modèle H2','Modèle S1'];
+function fauteuilForm(d={}, clients=null){const mods=['Modèle L','Modèle L2','Modèle R','Modèle F','Modèle P','Modèle D2','Modèle X','Modèle H','Modèle C3','Modèle C','Modèle K','Modèle H2','Modèle S1'];
   const selDistrib = Array.isArray(clients) ? `<div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Distributeur')}</label><select class="form-input" id="f-client">${clients.map(c=>`<option value="${c.id}" ${d.client_id===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select></div>` : '';
   return `<div class="grid-2">
   ${selDistrib}
@@ -7792,6 +7805,7 @@ var _carteSansAnnee = false; // affiche les points sans année de dernière comm
 // Filtre par priorité (T1/T2/T3) : toutes cochées par défaut + "sans priorité"
 var _cartePriorites = { T1:true, T2:true, T3:true };
 var _cartePrioriteSans = true; // affiche les points sans priorité assignée
+var _carteOptions = 'tous';     // filtre Privilèges / Avantages : 'tous' | 'privileges' | 'avantages' | 'les2'
 (function(){ _carteAnneesFiltre[new Date().getFullYear()] = true; })();
 var _carteMarkers = [];
 var _carteClusterGroup = null; // groupe de clustering (leaflet.markercluster) si dispo
@@ -7945,6 +7959,63 @@ function basculerPrioriteSans(actif){
 }
 window.basculerPrioriteSans = basculerPrioriteSans;
 
+// ── Filtre Privilèges / Avantages (Tous par défaut) ──
+function passeOptionsCarte(p){
+  if (_carteOptions === 'privileges') return !!p.privileges;
+  if (_carteOptions === 'avantages')  return !!p.avantages;
+  if (_carteOptions === 'les2')       return !!p.privileges && !!p.avantages;
+  return true;
+}
+function legendeOptions(){
+  var choix = [
+    ['tous', TR('Tous'), ''],
+    ['privileges', TR('Privilèges'), OPT_PRIV_COUL],
+    ['avantages', TR('Avantages'), OPT_AVA_COUL],
+    ['les2', TR('Privilèges + Avantages'), '']
+  ];
+  var html = '<details class="card carte-collapse" style="padding:0;margin-bottom:10px">' +
+    '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-crown"></i>' + TR('Privilèges / Avantages') + '</summary>' +
+    '<div style="padding:0 13px 13px">';
+  choix.forEach(function(c){
+    var pastille = c[0] === 'les2'
+      ? '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid ' + OPT_PRIV_COUL + ';box-shadow:0 0 0 2px ' + OPT_AVA_COUL + '"></span>'
+      : c[2] ? '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid ' + c[2] + '"></span>'
+      : '<span style="display:inline-block;width:12px"></span>';
+    html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:13px">' +
+      '<input type="radio" name="carte-options" ' + (_carteOptions === c[0] ? 'checked' : '') + ' onchange="choisirOptionsCarte(\'' + c[0] + '\')">' +
+      pastille + c[1] +
+      '<span id="cnt-opt-' + c[0] + '" style="margin-left:auto;font-size:12px;color:var(--text3)">0</span>' +
+      '</label>';
+  });
+  html += '</div></details>';
+  return html;
+}
+function choisirOptionsCarte(v){ _carteOptions = v || 'tous'; afficherMarkers(); }
+window.choisirOptionsCarte = choisirOptionsCarte;
+
+// Contours clignotants autour d'un marqueur (Privilèges rouge, Avantages jaune, cumulables)
+function _assurerCssOptionsCarte(){
+  if (document.getElementById('css-options-carte')) return;
+  var st = document.createElement('style');
+  st.id = 'css-options-carte';
+  st.textContent = '@keyframes carteOptBlink{0%,100%{opacity:1}50%{opacity:.15}}' +
+    '.carte-opt-ring{position:absolute;border-radius:50%;pointer-events:none;animation:carteOptBlink 1.4s ease-in-out infinite}' +
+    '.carte-opt-ring.ava{animation-delay:.7s}' +
+    '@media (prefers-reduced-motion:reduce){.carte-opt-ring{animation:none}}';
+  document.head.appendChild(st);
+}
+function anneauxOptionsCarte(point, cx, cy, r){
+  if (!point || (!point.privileges && !point.avantages)) return '';
+  _assurerCssOptionsCarte();
+  var out = '', rr = r + 3;
+  var ring = function(coul, cls, rad){
+    return '<div class="carte-opt-ring ' + cls + '" style="left:' + (cx - rad) + 'px;top:' + (cy - rad) + 'px;width:' + (2*rad) + 'px;height:' + (2*rad) + 'px;border:3px solid ' + coul + ';box-sizing:border-box"></div>';
+  };
+  if (point.privileges) { out += ring(OPT_PRIV_COUL, 'priv', rr); rr += 4; }
+  if (point.avantages)  { out += ring(OPT_AVA_COUL, 'ava', rr); }
+  return out;
+}
+
 // Construit le calque de fond de carte : MapTiler (clé) si disponible, sinon Esri (sans clé).
 function _carteBaseTiles() {
   var key = window._MAPTILER_KEY || '';
@@ -8033,6 +8104,7 @@ function renderCarte(ttl, c, a) {
       '</details>' +
       legendeAnnees() +
       legendePriorites() +
+      legendeOptions() +
     '</div>' +
     '<div id="carte-leaflet" style="flex:1;height:100%;background:#dce4ec"></div>' +
     '</div>';
@@ -8081,6 +8153,13 @@ function voirDistributeurSurCarte(clientId, nom){
         _cartePrioriteSans = true;
         var cbs = document.querySelector('input[onchange*="basculerPrioriteSans"]');
         if (cbs) cbs.checked = true;
+        afficherMarkers();
+      }
+      // Idem pour le filtre Privilèges / Avantages
+      if (!passeOptionsCarte(pt)) {
+        _carteOptions = 'tous';
+        var cbo = document.querySelector('input[name="carte-options"][onchange*="\'tous\'"]');
+        if (cbo) cbo.checked = true;
         afficherMarkers();
       }
       // Armer la cible : les recadrages auto différés (chargerPoints) resteront centrés
@@ -8236,15 +8315,15 @@ function pinIconCarte(reseau, point) {
   // Image spécifique par groupe (marqueur = l'image ronde, ancrée en son centre)
   if (cfg.img) {
     var noteI = point.note_interne ? '<div style="position:absolute;top:-1px;right:-1px;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
-    var htmlI = '<div style="position:relative;width:34px;height:34px">' +
+    var htmlI = '<div style="position:relative;width:34px;height:34px">' + anneauxOptionsCarte(point, 17, 17, 17) +
       '<img src="' + cfg.img + '" width="34" height="34" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">' + noteI + '</div>';
     return L.divIcon({ html: htmlI, className: '', iconSize: [34,34], iconAnchor: [17,17], popupAnchor: [0,-18] });
   }
   // Anneau de statut selon commandes
   var ring = point.impayes > 0 ? '#ef4444' : point.en_cours > 0 ? '#f97316' : point.nb_commandes > 0 ? '#22c55e' : '#cbd5e1';
   var noted = point.note_interne ? '<div style="position:absolute;top:-2px;right:-2px;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
-  var html = '<div style="position:relative">' +
-    '<svg width="30" height="42" viewBox="0 0 30 42">' +
+  var html = '<div style="position:relative">' + anneauxOptionsCarte(point, 15, 15, 15) +
+    '<svg width="30" height="42" viewBox="0 0 30 42" style="display:block;position:relative">' +
     '<circle cx="15" cy="15" r="14" fill="none" stroke="' + ring + '" stroke-width="3"/>' +
     '<path d="M15 3C9 3 4 8 4 14c0 8 11 24 11 24s11-16 11-24C26 8 21 3 15 3z" fill="' + cfg.color + '" stroke="#fff" stroke-width="1.5"/>' +
     '<circle cx="15" cy="14" r="7" fill="#fff"/>' +
@@ -8286,6 +8365,10 @@ function majCompteursCarte(){
   });
   var elPrioSans = document.getElementById('cnt-prio-sans');
   if (elPrioSans) elPrioSans.textContent = pts.filter(function(p){ return p.priorite !== 'T1' && p.priorite !== 'T2' && p.priorite !== 'T3'; }).length;
+  // Compteurs Privilèges / Avantages (absolu)
+  var cntOpt = { tous: pts.length, privileges: 0, avantages: 0, les2: 0 };
+  pts.forEach(function(p){ if (p.privileges) cntOpt.privileges++; if (p.avantages) cntOpt.avantages++; if (p.privileges && p.avantages) cntOpt.les2++; });
+  Object.keys(cntOpt).forEach(function(k){ var e = document.getElementById('cnt-opt-' + k); if (e) e.textContent = cntOpt[k]; });
 }
 window.majCompteursCarte = majCompteursCarte;
 
@@ -8330,6 +8413,7 @@ function afficherMarkers(recadrer) {
     } else {
       if (!_cartePrioriteSans) return;
     }
+    if (!passeOptionsCarte(p)) return;
     if (q && (p.nom + ' ' + (p.ville||'') + ' ' + (p.description||'')).toLowerCase().indexOf(q) < 0) return;
     // Filtre par département (recherche "Ville / CP / département") : basé sur le CP du point
     if (_carteDeptGeo && !pointDansDepartement(p, _carteDeptGeo)) return;
@@ -8425,6 +8509,10 @@ function popupCarte(p) {
       (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:13px;font-weight:500;word-break:break-all"><i class="ti ti-mail" style="font-size:13px"></i> ' + _esc(emailTxt) + '</a>' : '') +
     '</div>' +
     (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:14px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:13px"></i> ' + prioLib + '</span></div>' : '') +
+    ((p.privileges || p.avantages) ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px">' +
+      (p.privileges ? '<span style="font-size:13px;font-weight:700;color:#fff;background:' + OPT_PRIV_COUL + ';padding:3px 10px;border-radius:99px"><i class="ti ti-crown" style="font-size:13px"></i> ' + TR('Privilèges') + '</span>' : '') +
+      (p.avantages ? '<span style="font-size:13px;font-weight:700;color:#713f12;background:' + OPT_AVA_COUL + ';padding:3px 10px;border-radius:99px"><i class="ti ti-gift" style="font-size:13px"></i> ' + TR('Avantages') + '</span>' : '') +
+      '</div>' : '') +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
       '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:12px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
       statutTxt +
@@ -8439,6 +8527,7 @@ function popupCarte(p) {
     '</div>' +
     (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:12px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:12px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
     (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:12px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
+    '<button onclick="copierInfosCarte(' + p.id + ',this)" style="width:100%;background:#fff;color:#1F5C8C;border:1px solid #1F5C8C;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px"><i class="ti ti-copy"></i> '+TR("Copier les coordonnées")+'</button>' +
     (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> '+TR("Voir la fiche complète →")+'</button>' : '') +
     (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px">'+TR("Voir ses commandes →")+'</button>' : '') +
     '<button onclick="nouvelleDemandeDepuisCarte(' + (p.client_id||'null') + ',\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px"><i class="ti ti-address-book"></i> '+TR("Nouvelle demande d'info →")+'</button>' +
@@ -8447,6 +8536,34 @@ function popupCarte(p) {
 }
 
 function wirePopupCarte(e, p) { dessinerCouverture(p); }
+
+// Copie dans le presse-papiers les coordonnées du distributeur affiché (nom, adresse, téléphone(s), e-mail)
+async function copierInfosCarte(id, btn){
+  var p = (_cartePoints || []).find(function(x){ return x.id === id; });
+  if (!p) return;
+  var nom = String(p.nom || '').trim();
+  var adr = (p.adresse && p.adresse.trim().toLowerCase() !== nom.toLowerCase()) ? p.adresse.trim() : '';
+  var cpv = [p.cp, p.ville].filter(Boolean).join(' ').trim();
+  var lignes = [nom, adr, cpv, (p.pays && p.pays !== 'France') ? p.pays : '',
+    p.tel ? TR('Tél.') + ' ' + fmtTel(String(p.tel).trim()) : '',
+    p.portable ? TR('Mob.') + ' ' + fmtTel(String(p.portable).trim()) : '',
+    p.email ? String(p.email).trim() : ''].filter(Boolean);
+  var texte = lignes.join('\n');
+  var ok = false;
+  try { await navigator.clipboard.writeText(texte); ok = true; }
+  catch (_) {
+    var ta = document.createElement('textarea'); ta.value = texte; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand('copy'); } catch (__) {}
+    document.body.removeChild(ta);
+  }
+  if (ok) {
+    if (btn) { var h = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check"></i> ' + TR('Copié'); btn.style.color = '#16a34a'; btn.style.borderColor = '#16a34a';
+      setTimeout(function(){ btn.innerHTML = h; btn.style.color = '#1F5C8C'; btn.style.borderColor = '#1F5C8C'; }, 1500); }
+    if (typeof toast === 'function') toast(TR('Coordonnées copiées'), 'ti-copy');
+  } else alert(texte);
+}
+window.copierInfosCarte = copierInfosCarte;
 
 // ── Couverture géographique d'un distributeur (départements colorés + rayon) ──
 var _carteCouvertureLayer = null;   // couche des overlays de couverture (départements + cercle)
@@ -8642,6 +8759,7 @@ function afficherHorsMarkers() {
     var prio = c.priorite;
     if (prio === 'T1' || prio === 'T2' || prio === 'T3') { if (!_cartePriorites[prio]) return; }
     else { if (!_cartePrioriteSans) return; }
+    if (!passeOptionsCarte(c)) return;
     if (q && ((c.nom||'') + ' ' + (c.ville||'') + ' ' + (c.adresse||'')).toLowerCase().indexOf(q) < 0) return;
     if (_carteDeptGeo && !pointDansDepartement(c, _carteDeptGeo)) return;
     var m = L.marker([parseFloat(c.lat), parseFloat(c.lng)], { icon: iconAutres });

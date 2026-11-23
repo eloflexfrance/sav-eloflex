@@ -628,6 +628,15 @@ router.get('/clients/:id', async (req, res) => {
 });
 
 // SIREN / SIRET / TVA intracommunautaire : mis à jour seulement s'ils sont fournis (sans toucher au reste de la fiche)
+// Options Privilèges / Avantages : mises à jour SEULEMENT si le champ est envoyé (booléen),
+// pour que les PUT partiels (ex. ajout à la carte) n'effacent jamais ces cases.
+async function _majOptionsClient(id, b) {
+  const pv = (b && typeof b.privileges === 'boolean') ? b.privileges : null;
+  const av = (b && typeof b.avantages === 'boolean') ? b.avantages : null;
+  if (pv === null && av === null) return null;
+  return db.run('UPDATE clients SET privileges=COALESCE($1,privileges), avantages=COALESCE($2,avantages) WHERE id=$3 RETURNING privileges, avantages', [pv, av, id]);
+}
+
 async function _majIdentifiantsClient(id, b) {
   if (!id || !b) return;
   const sets = [], vals = [];
@@ -666,6 +675,8 @@ router.post('/clients', async (req, res) => {
        adresse||null, adresse2||null, cp||null, pays||null, entite_facturation_id||null, !!public_site, priorite||null, annotation||null]
     );
     let carte = null;
+    const opts = await _majOptionsClient(cl.id, req.body);
+    if (opts) Object.assign(cl, opts);
     if (sur_carte) carte = await syncClientCarte(cl.id);
     await _majIdentifiantsClient(cl.id, req.body);
     // Vérification de l'adresse (fiche créée quand même ; e-mail de contrôle si anomalie)
@@ -696,6 +707,8 @@ router.put('/clients/:id', async (req, res) => {
     if (avant && (avant.ville !== ville || avant.adresse !== (adresse||null) || avant.cp !== (cp||null))) {
       await db.run('UPDATE clients SET lat=NULL, lng=NULL WHERE id=$1', [req.params.id]);
     }
+    const opts = await _majOptionsClient(req.params.id, req.body);
+    if (opts && cl) Object.assign(cl, opts);
     await _majIdentifiantsClient(req.params.id, req.body);
     const carte = await syncClientCarte(req.params.id);
     // Adresse modifiée → nouvelle vérification (e-mail de contrôle si anomalie)
@@ -7265,6 +7278,20 @@ router.get('/carte/points', requireAuth, async (req, res) => {
       const flou = prioNorm.find(r => memeEntite(p.nom, r.nom));
       return flou ? flou.priorite : null;
     };
+    // Options Privilèges / Avantages : par client_id, sinon par nom (comme la priorité)
+    const optRows = await db.all(`SELECT id, nom, privileges, avantages FROM clients WHERE privileges IS TRUE OR avantages IS TRUE`);
+    const optParClient = {};
+    for (const r of optRows) optParClient[r.id] = r;
+    const optNorm = optRows.map(r => ({ n: normNom(r.nom), r }));
+    const optionsPour = (p) => {
+      let r = p.client_id ? optParClient[p.client_id] : null;
+      if (!r && !p.client_id) {
+        const np = normNom(p.nom);
+        const ex = optNorm.find(o => o.n === np) || optNorm.find(o => memeEntite(p.nom, o.r.nom));
+        r = ex ? ex.r : null;
+      }
+      return { privileges: !!(r && r.privileges), avantages: !!(r && r.avantages) };
+    };
     const stats = await db.all(`
       SELECT distributeur_nom, client_id,
         COUNT(*) AS nb_commandes,
@@ -7331,6 +7358,7 @@ router.get('/carte/points', requireAuth, async (req, res) => {
         lien_type: lien,
         derniere_annee: derniereAnneePour(p, trouves),
         priorite: prioritePour(p),
+        ...optionsPour(p),
         abs_retour: absRetourPour(p),
         noms_rattaches: [...new Set(trouves.map(t => t.distributeur_nom).filter(Boolean))]
       };
@@ -7445,7 +7473,7 @@ router.put('/carte/points/:id/priorite', requireAuth, async (req, res) => {
 router.get('/carte/hors-carte', requireAuth, async (req, res) => {
   try {
     const rows = await db.all(
-      `SELECT id, nom, ville, cp, adresse, tel, email, lat, lng, priorite, reseau_carte
+      `SELECT id, nom, ville, cp, adresse, tel, email, lat, lng, priorite, reseau_carte, COALESCE(privileges,FALSE) AS privileges, COALESCE(avantages,FALSE) AS avantages
          FROM clients
         WHERE (sur_carte IS NOT TRUE) AND (type IS DISTINCT FROM 'Particulier')
           AND lat IS NOT NULL AND lng IS NOT NULL`

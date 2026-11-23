@@ -440,6 +440,9 @@ async function initDB() {
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS portable TEXT`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS public_site BOOLEAN DEFAULT FALSE`);
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS priorite TEXT`);
+      // Options commerciales du distributeur (cumulables) — affichées sur la carte
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS privileges BOOLEAN DEFAULT FALSE`);
+      await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS avantages BOOLEAN DEFAULT FALSE`);
       // Annotation libre (information spécifique) sur la fiche distributeur
       await client.query(`ALTER TABLE clients ADD COLUMN IF NOT EXISTS annotation TEXT`);
       // Journal d'activité (logs) : qui a ajouté / modifié / supprimé quoi
