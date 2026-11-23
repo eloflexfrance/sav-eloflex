@@ -4667,8 +4667,8 @@ function clientForm(d={}){return `<div class="grid-2">
   </div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Options')}</label>
     <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:14px">
-      <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-privileges" ${d.privileges?'checked':''}><span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid ${OPT_PRIV_COUL}"></span>${TR('Privilèges')}</label>
-      <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-avantages" ${d.avantages?'checked':''}><span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid ${OPT_AVA_COUL}"></span>${TR('Avantages')}</label>
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-privileges" ${d.privileges?'checked':''}>${badgeOptionCarte('privileges',17)}${TR('Privilèges')}</label>
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-avantages" ${d.avantages?'checked':''}>${badgeOptionCarte('avantages',17)}${TR('Avantages')}</label>
     </div>
   </div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
@@ -7977,10 +7977,9 @@ function legendeOptions(){
     '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-crown"></i>' + TR('Privilèges / Avantages') + '</summary>' +
     '<div style="padding:0 13px 13px">';
   choix.forEach(function(c){
-    var pastille = c[0] === 'les2'
-      ? '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid ' + OPT_PRIV_COUL + ';box-shadow:0 0 0 2px ' + OPT_AVA_COUL + '"></span>'
-      : c[2] ? '<span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2.5px solid ' + c[2] + '"></span>'
-      : '<span style="display:inline-block;width:12px"></span>';
+    var pastille = c[0] === 'les2' ? badgeOptionCarte('privileges', 15) + badgeOptionCarte('avantages', 15)
+      : c[0] === 'tous' ? '<span style="display:inline-block;width:15px"></span>'
+      : badgeOptionCarte(c[0], 15);
     html += '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;font-size:13px">' +
       '<input type="radio" name="carte-options" ' + (_carteOptions === c[0] ? 'checked' : '') + ' onchange="choisirOptionsCarte(\'' + c[0] + '\')">' +
       pastille + c[1] +
@@ -7993,27 +7992,20 @@ function legendeOptions(){
 function choisirOptionsCarte(v){ _carteOptions = v || 'tous'; afficherMarkers(); }
 window.choisirOptionsCarte = choisirOptionsCarte;
 
-// Contours clignotants autour d'un marqueur (Privilèges rouge, Avantages jaune, cumulables)
-function _assurerCssOptionsCarte(){
-  if (document.getElementById('css-options-carte')) return;
-  var st = document.createElement('style');
-  st.id = 'css-options-carte';
-  st.textContent = '@keyframes carteOptBlink{0%,100%{opacity:1}50%{opacity:.15}}' +
-    '.carte-opt-ring{position:absolute;border-radius:50%;pointer-events:none;animation:carteOptBlink 1.4s ease-in-out infinite}' +
-    '.carte-opt-ring.ava{animation-delay:.7s}' +
-    '@media (prefers-reduced-motion:reduce){.carte-opt-ring{animation:none}}';
-  document.head.appendChild(st);
+// Pastilles fixes Privilèges (couronne rouge) / Avantages (cadeau jaune), cumulables
+function badgeOptionCarte(type, taille){
+  var t = taille || 15, priv = type === 'privileges';
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;width:' + t + 'px;height:' + t + 'px;border-radius:50%;' +
+    'background:' + (priv ? OPT_PRIV_COUL : OPT_AVA_COUL) + ';border:1.5px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.4);box-sizing:border-box;flex:0 0 auto">' +
+    '<i class="ti ' + (priv ? 'ti-crown' : 'ti-gift') + '" style="font-size:' + Math.round(t * 0.62) + 'px;line-height:1;color:' + (priv ? '#fff' : '#713f12') + '"></i></span>';
 }
-function anneauxOptionsCarte(point, cx, cy, r){
+// Positionnées en haut à gauche de l'icône (le coin haut-droit porte déjà le point « note interne »)
+function anneauxOptionsCarte(point, x, y){
   if (!point || (!point.privileges && !point.avantages)) return '';
-  _assurerCssOptionsCarte();
-  var out = '', rr = r + 3;
-  var ring = function(coul, cls, rad){
-    return '<div class="carte-opt-ring ' + cls + '" style="left:' + (cx - rad) + 'px;top:' + (cy - rad) + 'px;width:' + (2*rad) + 'px;height:' + (2*rad) + 'px;border:3px solid ' + coul + ';box-sizing:border-box"></div>';
-  };
-  if (point.privileges) { out += ring(OPT_PRIV_COUL, 'priv', rr); rr += 4; }
-  if (point.avantages)  { out += ring(OPT_AVA_COUL, 'ava', rr); }
-  return out;
+  var out = '<div style="position:absolute;left:' + x + 'px;top:' + y + 'px;display:flex;flex-direction:column;gap:1px;z-index:2;pointer-events:none">';
+  if (point.privileges) out += badgeOptionCarte('privileges', 15);
+  if (point.avantages)  out += badgeOptionCarte('avantages', 15);
+  return out + '</div>';
 }
 
 // Construit le calque de fond de carte : MapTiler (clé) si disponible, sinon Esri (sans clé).
@@ -8315,14 +8307,14 @@ function pinIconCarte(reseau, point) {
   // Image spécifique par groupe (marqueur = l'image ronde, ancrée en son centre)
   if (cfg.img) {
     var noteI = point.note_interne ? '<div style="position:absolute;top:-1px;right:-1px;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
-    var htmlI = '<div style="position:relative;width:34px;height:34px">' + anneauxOptionsCarte(point, 17, 17, 17) +
+    var htmlI = '<div style="position:relative;width:34px;height:34px">' + anneauxOptionsCarte(point, -7, -5) +
       '<img src="' + cfg.img + '" width="34" height="34" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))">' + noteI + '</div>';
     return L.divIcon({ html: htmlI, className: '', iconSize: [34,34], iconAnchor: [17,17], popupAnchor: [0,-18] });
   }
   // Anneau de statut selon commandes
   var ring = point.impayes > 0 ? '#ef4444' : point.en_cours > 0 ? '#f97316' : point.nb_commandes > 0 ? '#22c55e' : '#cbd5e1';
   var noted = point.note_interne ? '<div style="position:absolute;top:-2px;right:-2px;width:11px;height:11px;background:#16a34a;border:2px solid #fff;border-radius:50%"></div>' : '';
-  var html = '<div style="position:relative">' + anneauxOptionsCarte(point, 15, 15, 15) +
+  var html = '<div style="position:relative">' + anneauxOptionsCarte(point, -8, -5) +
     '<svg width="30" height="42" viewBox="0 0 30 42" style="display:block;position:relative">' +
     '<circle cx="15" cy="15" r="14" fill="none" stroke="' + ring + '" stroke-width="3"/>' +
     '<path d="M15 3C9 3 4 8 4 14c0 8 11 24 11 24s11-16 11-24C26 8 21 3 15 3z" fill="' + cfg.color + '" stroke="#fff" stroke-width="1.5"/>' +
@@ -9121,6 +9113,10 @@ function modalPointCarte(id) {
           '</select></div>' +
           '<div style="width:130px"><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">Rayon (km)</label><input id="pc-rayon" type="number" min="0" step="5" value="' + (p&&p.rayon_km!=null?_esc(String(p.rayon_km)):'') + '" placeholder="optionnel" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px"></div>' +
         '</div>' +
+        '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Options")+'</label><div style="display:flex;gap:20px;font-size:14px">' +
+          '<label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="pc-privileges"' + (p&&p.privileges?' checked':'') + '>' + badgeOptionCarte('privileges', 16) + TR("Privilèges") + '</label>' +
+          '<label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="pc-avantages"' + (p&&p.avantages?' checked':'') + '>' + badgeOptionCarte('avantages', 16) + TR("Avantages") + '</label>' +
+        '</div><div style="font-size:12px;color:#999;margin-top:3px">'+TR("Enregistré sur la fiche du client rattaché.")+'</div></div>' +
         '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Zone de chalandise / départements")+'</label><textarea id="pc-zone" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px;resize:vertical;font-family:inherit">' + (p&&p.zone_chalandise?_esc(p.zone_chalandise):'') + '</textarea></div>' +
         '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Note interne")+'</label><textarea id="pc-note" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px;resize:vertical;font-family:inherit">' + (p&&p.note_interne?_esc(p.note_interne):'') + '</textarea></div>' +
         '<div style="background:#f8f9fa;border-radius:8px;padding:10px 12px">' +
@@ -9232,8 +9228,12 @@ function sauverPointCarte(id) {
     priorite: (document.getElementById('pc-priorite') || {}).value || null,
     zone: (document.getElementById('pc-zone') || {}).value || '',
     rayon: (document.getElementById('pc-rayon') && document.getElementById('pc-rayon').value !== '') ? parseFloat(document.getElementById('pc-rayon').value) : null,
-    note: (document.getElementById('pc-note') || {}).value || ''
+    note: (document.getElementById('pc-note') || {}).value || '',
+    privileges: !!(document.getElementById('pc-privileges') || {}).checked,
+    avantages: !!(document.getElementById('pc-avantages') || {}).checked
   };
+  var avantOpts = id ? (_cartePoints.find(function(x){ return x.id === id; }) || {}) : {};
+  var optsChangees = !!avantOpts.privileges !== extra.privileges || !!avantOpts.avantages !== extra.avantages;
   var url = id ? '/api/carte/points/' + id : '/api/carte/points';
   var method = id ? 'PUT' : 'POST';
   fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
@@ -9245,6 +9245,7 @@ function sauverPointCarte(id) {
       if (pid) {
         suites.push(fetch('/api/carte/points/' + pid + '/zone', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ zone: extra.zone, rayon_km: extra.rayon }) }));
         suites.push(fetch('/api/carte/points/' + pid + '/note', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: extra.note }) }));
+        if (optsChangees) suites.push(fetch('/api/carte/points/' + pid + '/options', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ privileges: extra.privileges, avantages: extra.avantages }) }).then(function(r){ return r.json(); }).then(function(o){ if (o && o.error) alert(o.error); }).catch(function(){}));
         suites.push(fetch('/api/carte/points/' + pid + '/priorite', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ priorite: extra.priorite }) }).then(function(r){ return r.json(); }).then(function(pr){ if (pr && pr.error) console.warn('Priorité :', pr.error); }).catch(function(){}));
       }
       Promise.all(suites).catch(function(){}).then(function(){

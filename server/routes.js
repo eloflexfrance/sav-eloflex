@@ -7451,6 +7451,23 @@ router.put('/carte/points/:id/zone', requireAuth, async (req, res) => {
 });
 
 // Route: modifier la priorité d'un point depuis la carte → écrit sur la fiche client
+// Options Privilèges / Avantages depuis la fenêtre « Modifier le distributeur » de la carte :
+// écrites sur la fiche client rattachée (même résolution que la priorité) → visibles dans la fiche complète.
+router.put('/carte/points/:id/options', requireAuth, async (req, res) => {
+  try {
+    const pt = await db.get('SELECT id, client_id, nom FROM distributeurs_carte WHERE id=$1', [req.params.id]);
+    if (!pt) return res.status(404).json({ error: 'Point introuvable' });
+    let clientId = pt.client_id;
+    if (!clientId) {
+      const c = await db.get('SELECT id FROM clients WHERE LOWER(TRIM(nom))=LOWER(TRIM($1))', [pt.nom]);
+      if (c) clientId = c.id;
+    }
+    if (!clientId) return res.status(400).json({ error: 'Point non relié à une fiche client — Privilèges / Avantages non enregistrables. Choisissez le « Client rattaché ».' });
+    const r = await _majOptionsClient(clientId, { privileges: !!req.body.privileges, avantages: !!req.body.avantages });
+    res.json({ ok: true, client_id: clientId, ...(r || {}) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.put('/carte/points/:id/priorite', requireAuth, async (req, res) => {
   try {
     const prio = req.body.priorite || null;
