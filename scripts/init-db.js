@@ -308,6 +308,9 @@ async function initDB() {
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS demande_client TEXT`);
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS relance_mail_date DATE`);
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS relance_tel_date DATE`);
+    // 2e distributeur facultatif (Privilèges / Avantage Eloflex) proposé au patient en complément du plus proche
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS client2_id INTEGER REFERENCES clients(id) ON DELETE SET NULL`);
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS distributeur2_nom TEXT`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (

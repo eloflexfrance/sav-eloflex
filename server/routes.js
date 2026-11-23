@@ -9133,8 +9133,9 @@ router.get('/demandes-info', requireAuth, async (req, res) => {
     if (req.query.q) { conds.push(`(d.nom ILIKE $${++i} OR d.ville ILIKE $${i} OR d.telephone ILIKE $${i} OR d.annotation ILIKE $${i} OR COALESCE(c.nom,d.distributeur_nom) ILIKE $${i})`); p.push('%'+req.query.q+'%'); }
     const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
     const rows = await db.all(
-      `SELECT d.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel
-       FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id
+      `SELECT d.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel,
+              c2.nom AS client2_nom_actuel, COALESCE(c2.privileges,FALSE) AS client2_privileges, COALESCE(c2.avantages,FALSE) AS client2_avantages
+       FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN clients c2 ON c2.id = d.client2_id
        ${where} ORDER BY d.date_transmission DESC NULLS LAST, d.id DESC
        LIMIT ${Math.min(parseInt(req.query.limit)||2000, 5000)}`, p);
     res.json(rows);
@@ -9181,17 +9182,38 @@ router.get('/demandes-info/par-distributeur', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Distributeurs Privilèges / Avantage proposables en 2e contact, classés par distance du patient (ville / CP)
+router.get('/demandes-info/distributeurs-premium', requireAuth, async (req, res) => {
+  try {
+    const rows = await db.all(`SELECT c.id, c.nom, c.ville, c.cp, COALESCE(c.privileges,FALSE) AS privileges, COALESCE(c.avantages,FALSE) AS avantages,
+        COALESCE(c.lat, dc.lat) AS lat, COALESCE(c.lng, dc.lng) AS lng
+      FROM clients c
+      LEFT JOIN LATERAL (SELECT lat, lng FROM distributeurs_carte WHERE client_id=c.id AND lat IS NOT NULL LIMIT 1) dc ON TRUE
+      WHERE (c.privileges IS TRUE OR c.avantages IS TRUE) AND c.type IS DISTINCT FROM 'Particulier'`);
+    const cp = String(req.query.cp || '').trim(), ville = String(req.query.ville || '').trim();
+    let pos = null;
+    if (cp || ville) { try { pos = await geocoderLibre([cp, ville].filter(Boolean).join(' '), 'France'); } catch (_) { pos = null; } }
+    const rad = x => x * Math.PI / 180;
+    const km = (a, b, c, d) => { const R = 6371, dl = rad(c - a), dg = rad(d - b);
+      const h = Math.sin(dl / 2) ** 2 + Math.cos(rad(a)) * Math.cos(rad(c)) * Math.sin(dg / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+    const out = rows.map(r => ({ ...r, distance_km: (pos && r.lat != null && r.lng != null) ? Math.round(km(pos.lat, pos.lng, parseFloat(r.lat), parseFloat(r.lng))) : null }));
+    out.sort((a, b) => (a.distance_km == null) - (b.distance_km == null) || (a.distance_km || 0) - (b.distance_km || 0) || String(a.nom).localeCompare(String(b.nom), 'fr'));
+    res.json({ localise: !!pos, distributeurs: out.map(({ lat, lng, ...r }) => r) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/demandes-info', requireAuth, async (req, res) => {
   try {
     const d = req.body || {};
     const statut = DI_STATUTS.includes(d.statut) ? d.statut : 'transmise';
     const row = await db.run(
-      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par, demande_client, relance_mail_date, relance_tel_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par, demande_client, relance_mail_date, relance_tel_date, client2_id, distributeur2_nom)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
       [d.client_id||null, d.distributeur_nom||null, d.nom||null, d.ville||null, d.cp||null, fmtTel(d.telephone)||null,
        d.email||null, d.annotation||null, statut, d.date_transmission||new Date().toISOString().slice(0,10),
        d.date_retour||null, (req.session.user && req.session.user.id)||null,
-       d.demande_client||null, d.relance_mail_date||null, d.relance_tel_date||null]);
+       d.demande_client||null, d.relance_mail_date||null, d.relance_tel_date||null,
+       parseInt(d.client2_id)||null, (parseInt(d.client2_id) && d.distributeur2_nom) || null]);
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9208,6 +9230,12 @@ router.put('/demandes-info/:id', requireAuth, async (req, res) => {
        statut, d.date_transmission||null, d.date_retour||null, d.demande_client||null,
        d.relance_mail_date||null, d.relance_tel_date||null, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Demande introuvable' });
+    if (Object.prototype.hasOwnProperty.call(d, 'client2_id')) {
+      const c2 = parseInt(d.client2_id) || null;
+      const r2 = await db.run('UPDATE demandes_info SET client2_id=$1, distributeur2_nom=$2 WHERE id=$3 RETURNING client2_id, distributeur2_nom',
+        [c2, c2 ? (d.distributeur2_nom || null) : null, req.params.id]);
+      if (r2) Object.assign(row, r2);
+    }
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9471,6 +9499,13 @@ async function _diContexte(id) {
   const d = await db.get(`SELECT di.*, c.id AS cid, c.nom AS c_nom, c.email AS c_email, c.tel AS c_tel, c.portable AS c_portable,
       c.adresse AS c_adresse, c.adresse2 AS c_adresse2, c.cp AS c_cp, c.ville AS c_ville, c.pays AS c_pays, c.lat AS c_lat, c.lng AS c_lng
     FROM demandes_info di LEFT JOIN clients c ON c.id = di.client_id WHERE di.id=$1`, [id]);
+  if (d && d.client2_id) {
+    const c2 = await db.get(`SELECT c.id, c.nom, c.email, c.tel, c.portable, c.adresse, c.adresse2, c.cp, c.ville,
+        COALESCE(c.privileges,FALSE) AS privileges, COALESCE(c.avantages,FALSE) AS avantages, COALESCE(c.lat, dc.lat) AS lat, COALESCE(c.lng, dc.lng) AS lng
+      FROM clients c LEFT JOIN LATERAL (SELECT lat, lng FROM distributeurs_carte WHERE client_id=c.id AND lat IS NOT NULL LIMIT 1) dc ON TRUE
+      WHERE c.id=$1`, [d.client2_id]);
+    if (c2) d.d2 = c2;
+  }
   if (d && d.cid && (d.c_lat == null || d.c_lng == null)) {
     // Position de la carte : celle déjà connue sur la carte des distributeurs, sinon géocodage
     try {
@@ -9486,6 +9521,11 @@ async function _diContexte(id) {
   }
   return d;
 }
+// « Privilèges Eloflex » / « Avantage Eloflex » / les deux
+function _labelPremium(c) {
+  const l = [c && c.privileges ? 'Privilèges' : null, c && c.avantages ? 'Avantage' : null].filter(Boolean);
+  return l.length ? l.join(' et ') + ' Eloflex' : 'Eloflex';
+}
 router.get('/demandes-info/:id/emails-apercu', requireAuth, async (req, res) => {
   try {
     const d = await _diContexte(req.params.id);
@@ -9493,7 +9533,8 @@ router.get('/demandes-info/:id/emails-apercu', requireAuth, async (req, res) => 
     let hist = []; try { hist = Array.isArray(d.historique) ? d.historique : JSON.parse(d.historique || '[]'); } catch (_) { hist = []; }
     res.json({ envois: hist.filter(h => h && h.statut === 'emails').map(h => ({ date: h.date, par: h.par, detail: h.detail })),
       contact_email: d.email || '', contact_nom: d.nom || '', distrib_email: d.c_email || '',
-      distrib_nom: d.c_nom || d.distributeur_nom || '', distrib_lie: !!d.cid, position: d.c_lat != null && d.c_lng != null });
+      distrib_nom: d.c_nom || d.distributeur_nom || '', distrib_lie: !!d.cid, position: d.c_lat != null && d.c_lng != null,
+      distrib2: d.d2 ? { nom: d.d2.nom, email: d.d2.email || '', label: _labelPremium(d.d2) } : null });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
@@ -9501,7 +9542,7 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
     const d = await _diContexte(req.params.id);
     if (!d) return res.status(404).json({ error: 'Demande introuvable' });
     const envois = (Array.isArray((req.body || {}).envois) ? req.body.envois : [])
-      .filter(e => e && /^(contact|distributeur)$/.test(e.type) && /@/.test(String(e.email || '')));
+      .filter(e => e && /^(contact|distributeur|distributeur2)$/.test(e.type) && /@/.test(String(e.email || '')));
     if (!envois.length) return res.json({ ok: true, envoyes: [] });
     const p = {}; (await db.all('SELECT cle, valeur FROM parametres')).forEach(r => p[r.cle] = r.valeur);
     const from = (p.email_from_relance || 'info@eloflex.fr').replace(/^.*<|>.*$/g, '').trim() || 'info@eloflex.fr';
@@ -9509,30 +9550,56 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
     const st = 'font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222;font-size:14px;line-height:1.55';
 
     // ── Bloc distributeur (sans e-mail) + mini-carte cliquable vers Google Maps ──
-    const nomD = d.c_nom || d.distributeur_nom || '';
-    const adr = [d.c_adresse, d.c_adresse2].filter(Boolean);
-    const cpv = [d.c_cp, d.c_ville].filter(Boolean).join(' ');
-    const tels = [d.c_tel, d.c_portable].filter(Boolean).map(t => fmtTel(t)).filter((t, i, a) => a.indexOf(t) === i);
-    const gmaps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([nomD, adr.join(' '), cpv].filter(Boolean).join(', '));
-    let carteHtml = '';
-    if (d.cid && d.c_lat != null && d.c_lng != null) {
-      try {
-        const cm = require('../scripts/carte-mini');
-        const png = await cm.pngClient(d.cid, d.c_lat, d.c_lng);
-        const base = (process.env.APP_URL || p.app_url || (req.protocol + '://' + req.get('host'))).replace(/\/$/, '');
-        if (png) carteHtml = `<a href="${gmaps}" target="_blank" style="display:block;margin-top:12px;text-decoration:none">
-          <img src="${base}/carte-mini/${d.cid}/${cm.signature(d.cid)}.png" width="560" alt="Plan d'accès — ${esc(nomD)}" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:8px"></a>`;
-      } catch (e) { console.warn('[DEMANDES] mini-carte :', e.message); }
-    }
-    const blocDistrib = `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="width:100%;max-width:580px;border-collapse:collapse;margin:14px 0 18px;background:#F5F8FC;border-left:4px solid #2B7DC7;border-radius:6px">
+    const base = (process.env.APP_URL || p.app_url || (req.protocol + '://' + req.get('host'))).replace(/\/$/, '');
+    const blocDistribDe = async (x, etiquette) => {
+      const nomD = x.nom || '';
+      const adr = [x.adresse, x.adresse2].filter(Boolean);
+      const cpv = [x.cp, x.ville].filter(Boolean).join(' ');
+      const tels = [x.tel, x.portable].filter(Boolean).map(t => fmtTel(t)).filter((t, i, a) => a.indexOf(t) === i);
+      const gmaps = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([nomD, adr.join(' '), cpv].filter(Boolean).join(', '));
+      let carteHtml = '';
+      if (x.id && x.lat != null && x.lng != null) {
+        try {
+          const cm = require('../scripts/carte-mini');
+          const png = await cm.pngClient(x.id, x.lat, x.lng);
+          if (png) carteHtml = `<a href="${gmaps}" target="_blank" style="display:block;margin-top:12px;text-decoration:none">
+            <img src="${base}/carte-mini/${x.id}/${cm.signature(x.id)}.png" width="560" alt="Plan d'accès — ${esc(nomD)}" style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:8px"></a>`;
+        } catch (e) { console.warn('[DEMANDES] mini-carte :', e.message); }
+      }
+      if (x.id === d.cid) carteBien = carteBien || !!carteHtml;
+      const accent = etiquette ? '#B7791F' : '#2B7DC7';
+      return `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="width:100%;max-width:580px;border-collapse:collapse;margin:8px 0 18px;background:${etiquette ? '#FFF9EC' : '#F5F8FC'};border-left:4px solid ${accent};border-radius:6px">
       <tr><td style="padding:16px 20px">
+        ${etiquette ? `<div style="font-size:12px;font-weight:bold;color:${accent};text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">★ ${esc(etiquette)}</div>` : ''}
         <div style="font-size:17px;font-weight:bold;color:#1F3A5F;margin-bottom:8px">${esc(nomD)}</div>
         ${adr.length || cpv ? `<div style="font-size:14px;color:#333;margin-bottom:6px">📍 ${adr.map(esc).join('<br>&nbsp;&nbsp;&nbsp;&nbsp;')}${adr.length && cpv ? '<br>&nbsp;&nbsp;&nbsp;&nbsp;' : ''}${esc(cpv)}</div>` : ''}
         ${tels.length ? `<div style="font-size:15px;color:#333;margin-bottom:2px">📞 ${tels.map(t => `<a href="tel:${t.replace(/\s/g, '')}" style="color:#2B7DC7;text-decoration:none;font-weight:bold">${esc(t)}</a>`).join(' &nbsp;·&nbsp; ')}</div>` : ''}
         ${carteHtml}
         <div style="margin-top:10px"><a href="${gmaps}" target="_blank" style="color:#2B7DC7;font-size:13px;text-decoration:none">🗺️ Voir sur Google Maps (itinéraire, horaires…)</a></div>
       </td></tr></table>`;
-    const mailContact = () => `<div style="${st}">
+    };
+    let carteBien = false;
+    const blocDistrib = await blocDistribDe({ id: d.cid, nom: d.c_nom || d.distributeur_nom || '', adresse: d.c_adresse, adresse2: d.c_adresse2,
+      cp: d.c_cp, ville: d.c_ville, tel: d.c_tel, portable: d.c_portable, lat: d.c_lat, lng: d.c_lng }, null);
+    const label2 = d.d2 ? _labelPremium(d.d2) : '';
+    const veutContact = envois.some(e => e.type === 'contact');
+    const blocDistrib2 = (d.d2 && veutContact) ? await blocDistribDe(d.d2, 'Distributeur ' + label2) : '';
+    const carteHtml = carteBien;
+    const titre = t => `<div style="font-size:15px;font-weight:bold;color:#1F3A5F;margin:18px 0 0">${t}</div>`;
+    const mailContact = () => d.d2 ? `<div style="${st}">
+      <p>Bonjour,</p>
+      <p>Vous nous avez contactés pour connaître notre distributeur le plus proche de votre domicile.</p>
+      <p>Vous disposez de <b>deux contacts</b> pour vous accompagner : un distributeur proche de chez vous, et un distributeur reconnu <b>${esc(label2)}</b>. Vous pouvez contacter l'un, l'autre, ou les deux.</p>
+      ${titre('1. Votre distributeur le plus proche')}
+      ${blocDistrib}
+      ${titre('2. Votre distributeur ' + esc(label2))}
+      <div style="font-size:13px;color:#555;margin-top:4px">Ce distributeur fait partie de notre réseau ${esc(label2)} : un partenaire de confiance, sélectionné par Eloflex.</div>
+      ${blocDistrib2}
+      <p>Ils peuvent se déplacer jusqu'à chez vous et vous renseigner sur nos tarifs et modèles. N'hésitez pas à leur demander un essai avec un de nos modèles : nous ferons le maximum pour trouver une solution afin que cela se réalise.</p>
+      <p>Nous leur communiquons aussi vos coordonnées.</p>
+      <p>Nous restons à votre disposition si vous avez la moindre question.</p>
+      <p>Bien à vous,</p>
+      <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>` : `<div style="${st}">
       <p>Bonjour,</p>
       <p>Vous nous avez contactés pour connaître notre distributeur le plus proche de votre domicile.</p>
       <p>Sachez qu'il peut se déplacer jusqu'à chez vous et vous renseigner sur nos tarifs et modèles.</p>
@@ -9559,15 +9626,26 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
       <p>Bien à vous,</p>
       <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
 
+    // Mail au 2e distributeur (Privilèges / Avantage) : même contact, avec le contexte de la double mise en relation
+    const mailDistrib2 = () => `<div style="${st}">
+      <p>Bonjour,</p>
+      <p>En tant que distributeur <b>${esc(label2)}</b>, nous vous transmettons un client potentiel Eloflex :</p>
+      ${blocContact}
+      <p>Ce client a également reçu les coordonnées d'un distributeur proche de chez lui ; vous lui avez été présenté comme distributeur ${esc(label2)}. Il est donc susceptible de vous contacter directement.</p>
+      <p>Si vous souhaitez un fauteuil de notre gamme pour faire des essais, n'hésitez pas à vous rapprocher de nous afin de trouver une solution.</p>
+      <p>Nous restons à votre disposition si vous avez la moindre question.</p>
+      <p>Bien à vous,</p>
+      <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
+
     const envoyes = [], erreurs = [];
     for (const e of envois) {
       const to = String(e.email).trim();
       try {
         await sendBrevoMail({ from, fromName: 'Eloflex France', to,
           cc: /(^|[,;\s])info@eloflex\.fr($|[,;\s])/i.test(to) ? null : 'info@eloflex.fr',
-          subject: e.type === 'contact' ? 'Eloflex — Les coordonnées de votre distributeur le plus proche'
+          subject: e.type === 'contact' ? (d.d2 ? 'Eloflex — Vos deux contacts distributeurs' : 'Eloflex — Les coordonnées de votre distributeur le plus proche')
                                         : `Eloflex — Nouveau contact à rappeler : ${d.nom || ''}${d.ville ? ' (' + d.ville + ')' : ''}`,
-          html: e.type === 'contact' ? mailContact() : mailDistrib() });
+          html: e.type === 'contact' ? mailContact() : e.type === 'distributeur2' ? mailDistrib2() : mailDistrib() });
         envoyes.push({ type: e.type, email: to });
       } catch (err) { erreurs.push({ type: e.type, email: to, error: err.response && err.response.data ? JSON.stringify(err.response.data).slice(0, 200) : err.message }); }
     }
@@ -9575,7 +9653,7 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
       const u = (req.session && req.session.user) || {};
       let hist = []; try { hist = Array.isArray(d.historique) ? d.historique : JSON.parse(d.historique || '[]'); } catch (_) { hist = []; }
       hist.push({ statut: 'emails', date: new Date().toISOString().slice(0, 10), par: u.nom || u.email || null,
-        detail: (hist.some(h => h && h.statut === 'emails') ? 'Renvoi — ' : '') + envoyes.map(x => (x.type === 'contact' ? 'contact' : 'distributeur') + ' → ' + x.email).join(', ') });
+        detail: (hist.some(h => h && h.statut === 'emails') ? 'Renvoi — ' : '') + envoyes.map(x => (x.type === 'contact' ? 'contact' : x.type === 'distributeur2' ? 'distributeur ' + label2 : 'distributeur') + ' → ' + x.email).join(', ') });
       await db.run('UPDATE demandes_info SET historique=$2::jsonb, updated_at=NOW() WHERE id=$1', [d.id, JSON.stringify(hist)]);
     }
     res.json({ ok: !erreurs.length, envoyes, erreurs, carte: !!carteHtml });

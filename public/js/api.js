@@ -91,6 +91,7 @@ const API = {
   relanceContactInfo:(id,email)=>API.post(`/demandes-info/${id}/relance`,{email}),
   relanceTelInfo:(id,date)=>API.post(`/demandes-info/${id}/relance-tel`,{date}),
   diEmailsApercu:(id)=>API.get(`/demandes-info/${id}/emails-apercu`),
+  diDistribPremium:(cp,ville)=>API.get('/demandes-info/distributeurs-premium?'+new URLSearchParams({cp:cp||'',ville:ville||''}).toString()),
   diEmailsEnvoyer:(id,envois)=>API.post(`/demandes-info/${id}/emails`,{envois}),
   reaffecterDemandes:(payload)=>API.post('/demandes-info/reaffecter',payload),
   distributeursReferences:()=>API.get('/demandes-info/distributeurs'),

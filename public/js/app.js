@@ -10670,7 +10670,7 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:12px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
     <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
-    <td style="padding:8px 10px">${esc(d.nom||'')}</td>
+    <td style="padding:8px 10px">${esc(d.nom||'')}${d.client2_id?`<div title="${TR('2e distributeur proposé au patient')}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px;background:#FAEEDA;color:#633806;border:0.5px solid #FAC775;border-radius:99px;padding:1px 7px;font-size:11.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.client2_privileges?badgeOptionCarte('privileges',13):''}${d.client2_avantages?badgeOptionCarte('avantages',13):''}+ ${esc(d.client2_nom_actuel||d.distributeur2_nom||'')}</div>`:''}</td>
     <td style="padding:8px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(telHref(d.telephone))}" style="color:inherit;text-decoration:none">${esc(fmtTel(d.telephone))}</a>`:'—'}</td>
     <td style="padding:8px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:13px">${esc(d.email)}</a>`:'—'}</td>
     <td style="padding:8px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
@@ -10970,11 +10970,18 @@ async function modalDemande(clientId, distribNom, id){
           <div id="di-distrib-drop" style="display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 2px);max-height:240px;overflow:auto;background:rgba(255,255,255,0.98);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(30,60,110,.18)"></div>
         </div>
         <div id="di-distrib-lien" style="font-size:13px;margin-top:4px"></div></div>
+      <div class="form-group" style="background:#FFF9EC;border:0.5px solid #FAC775;border-radius:10px;padding:10px 12px">
+        <label class="form-label" style="display:flex;align-items:center;gap:6px">${badgeOptionCarte('privileges',15)}${badgeOptionCarte('avantages',15)} ${TR('2e distributeur Privilèges / Avantage (facultatif)')}</label>
+        <input type="hidden" id="di-client2-id" value="${d.client2_id||''}">
+        <input type="hidden" id="di-distrib2-nom" value="${esc(d.distributeur2_nom||'')}">
+        <select class="form-input" id="di-distrib2" onchange="diDistrib2Change()"><option value="">${TR('— Aucun —')}</option>${d.client2_id?`<option value="${d.client2_id}" selected>${esc(d.client2_nom_actuel||d.distributeur2_nom||'')}</option>`:''}</select>
+        <div id="di-distrib2-info" style="font-size:12px;color:var(--text3);margin-top:4px">${TR('Proposé au patient en plus du distributeur le plus proche ; classés par distance une fois la ville / le CP du patient saisis.')}</div>
+      </div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="di-tel" value="${esc(fmtTel(d.telephone||''))}"></div>
-        <div class="form-group"><label class="form-label">${TR('Ville')}</label><input class="form-input" id="di-ville" value="${esc(d.ville||'')}"></div>
-        <div class="form-group"><label class="form-label">${TR('Code postal')}</label><input class="form-input" id="di-cp" value="${esc(d.cp||'')}"></div>
+        <div class="form-group"><label class="form-label">${TR('Ville')}</label><input class="form-input" id="di-ville" value="${esc(d.ville||'')}" onchange="diChargerPremium()"></div>
+        <div class="form-group"><label class="form-label">${TR('Code postal')}</label><input class="form-input" id="di-cp" value="${esc(d.cp||'')}" onchange="diChargerPremium()"></div>
         <div class="form-group"><label class="form-label">${TR('E-mail')}</label><input class="form-input" id="di-email" value="${esc(d.email||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Statut')}</label><select class="form-input" id="di-statut">${diStatutOptions(d.statut)}</select></div>
         <div class="form-group"><label class="form-label">${TR('Date de transmission')}</label><input class="form-input" id="di-date" type="date" value="${(d.date_transmission||'').slice(0,10)}"></div>
@@ -10985,9 +10992,33 @@ async function modalDemande(clientId, distribNom, id){
       <div class="form-group"><label class="form-label">${TR('Annotation de suivi')}</label><textarea class="form-input" id="di-annot" rows="2">${esc(d.annotation||'')}</textarea></div>
     </div>
     <div class="modal-footer">${id?`<button class="btn" style="margin-right:auto" onclick="closeModal();modalEmailsDemande(${id})" title="${TR('Envoyer les e-mails au contact et/ou au distributeur')}"><i class="ti ti-mail-forward"></i> ${TR('E-mails contact / distributeur')}</button>`:''}<button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="saveDemande()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
-  setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); },0);
+  setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); diChargerPremium(); },0);
 }
 window.modalDemande = modalDemande;
+// 2e distributeur Privilèges / Avantage : liste classée par distance du patient
+let _diPremiumReq = 0;
+async function diChargerPremium(){
+  const sel=$('di-distrib2'), info=$('di-distrib2-info'); if(!sel) return;
+  const req=++_diPremiumReq, actuel=gv('di-client2-id');
+  if(info) info.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Recherche des distributeurs Privilèges / Avantage…');
+  let r; try{ r=await API.diDistribPremium(gv('di-cp'), gv('di-ville')); }catch(e){ if(info) info.textContent='Erreur : '+e.message; return; }
+  if(req!==_diPremiumReq || !document.getElementById('di-distrib2')) return;
+  const L=r.distributeurs||[];
+  const lib=x=>[x.privileges?TR('Privilèges'):null, x.avantages?TR('Avantage'):null].filter(Boolean).join(' + ');
+  const opts=L.map(x=>`<option value="${x.id}" data-nom="${esc(x.nom)}" ${String(x.id)===String(actuel)?'selected':''}>${esc(x.nom)}${x.ville?' — '+esc(x.ville):''}${x.distance_km!=null?' · '+x.distance_km+' km':''} (${lib(x)})</option>`).join('');
+  const garde = actuel && !L.some(x=>String(x.id)===String(actuel)) ? `<option value="${esc(actuel)}" data-nom="${esc(gv('di-distrib2-nom'))}" selected>${esc(gv('di-distrib2-nom'))} (${TR('n’est plus Privilèges / Avantage')})</option>` : '';
+  sel.innerHTML=`<option value="">${TR('— Aucun —')}</option>`+garde+opts;
+  if(info) info.innerHTML = !L.length ? TR('Aucun distributeur n’est coché Privilèges ou Avantage pour l’instant (fiche distributeur ou carte).')
+    : r.localise ? TR('Classés du plus proche au plus éloigné du patient.') : TR('Saisissez la ville ou le CP du patient pour les classer par distance.');
+}
+window.diChargerPremium = diChargerPremium;
+function diDistrib2Change(){
+  const sel=$('di-distrib2'); if(!sel) return;
+  const o=sel.options[sel.selectedIndex];
+  const h=$('di-client2-id'), n=$('di-distrib2-nom');
+  if(h) h.value=sel.value||''; if(n) n.value=sel.value?(o.getAttribute('data-nom')||''):'';
+}
+window.diDistrib2Change = diDistrib2Change;
 function diDistribChange(nom){
   const val=(nom||'').trim();
   const m=(window._clientsCache||[]).find(c=>(c.nom||'').toLowerCase()===val.toLowerCase());
@@ -11030,8 +11061,10 @@ async function saveDemande(){
     email: gv('di-email')||null, statut: gv('di-statut')||'transmise',
     date_transmission: gv('di-date')||null, annotation: gv('di-annot')||null,
     demande_client: gv('di-demande')||null,
-    relance_mail_date: gv('di-rel-mail')||null, relance_tel_date: gv('di-rel-tel')||null
+    relance_mail_date: gv('di-rel-mail')||null, relance_tel_date: gv('di-rel-tel')||null,
+    client2_id: gv('di-client2-id')||null, distributeur2_nom: gv('di-distrib2-nom')||null
   };
+  if(data.client2_id && data.client_id && String(data.client2_id)===String(data.client_id)){ toast(TR('Le 2e distributeur doit être différent du distributeur principal'),'ti-alert-circle','var(--danger)'); return; }
   const cidAvant = gv('di-client-id')||STATE.clientId;
   try{ let cree=null; if(id){ await API.updateDemandeInfo(id,data); } else { cree = await API.createDemandeInfo(data); }
     closeModal(); toast(TR('Demande enregistrée'),'ti-check','var(--success)');
@@ -11056,8 +11089,9 @@ async function modalEmailsDemande(id){
       ${env.length?`<div style="font-size:12.5px;background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">
         <b><i class="ti ti-history"></i> ${TR('Déjà envoyés')} :</b><br>${env.slice(-5).reverse().map(x=>_dfd(x.date)+(x.par?' · '+esc(x.par):'')+(x.detail?' — '+esc(x.detail):'')).join('<br>')}
         <div style="color:var(--text3);margin-top:4px">${TR('Vous pouvez renvoyer les e-mails (problème de réception, e-mail supprimé…) en corrigeant l’adresse si besoin.')}</div></div>`:''}
-      ${ligne('contact', '👤 '+TR('Au contact')+(a.contact_nom?' — '+esc(a.contact_nom):''), TR('Coordonnées du distributeur le plus proche (téléphone, adresse, plan)')+(a.position?'':' — <span style="color:var(--warning)">'+TR('position inconnue : pas de plan, lien Google Maps seul')+'</span>'), a.contact_email, true)}
+      ${ligne('contact', '👤 '+TR('Au contact')+(a.contact_nom?' — '+esc(a.contact_nom):''), (a.distrib2?TR('Ses deux contacts : le distributeur le plus proche et le distributeur')+' '+esc(a.distrib2.label)+' — ':'')+TR('Coordonnées du distributeur le plus proche (téléphone, adresse, plan)')+(a.position?'':' — <span style="color:var(--warning)">'+TR('position inconnue : pas de plan, lien Google Maps seul')+'</span>'), a.contact_email, true)}
       ${ligne('distrib', '🏪 '+TR('Au distributeur')+(a.distrib_nom?' — '+esc(a.distrib_nom):''), a.distrib_lie?TR('Coordonnées complètes du contact et sa demande'):'<span style="color:var(--warning)">'+TR('Distributeur non relié à une fiche : saisissez son adresse e-mail')+'</span>', a.distrib_email, true)}
+      ${a.distrib2?ligne('distrib2', '★ '+TR('Au distributeur')+' '+esc(a.distrib2.label)+' — '+esc(a.distrib2.nom), TR('Coordonnées du contact, en précisant qu’il a aussi reçu un distributeur proche de chez lui'), a.distrib2.email, true):''}
       <div style="border:1px dashed var(--border);border-radius:10px;padding:10px 12px">
         <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" id="dim-autre" onchange="dimMaj()"> ✉️ ${TR('Une autre adresse')}</label>
         <div style="display:flex;gap:8px;margin:6px 0 0 24px">
@@ -11076,7 +11110,7 @@ window.modalEmailsDemande = modalEmailsDemande;
 function _dimEnvois(){
   const out=[]; const ok=v=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
   const add=(k,type)=>{ const c=document.getElementById('dim-'+k); const v=(gv('dim-'+k+'-email')||'').trim(); if(c&&c.checked) out.push({type, email:v, valide:ok(v)}); };
-  add('contact','contact'); add('distrib','distributeur'); add('autre', gv('dim-autre-type')||'contact');
+  add('contact','contact'); add('distrib','distributeur'); add('distrib2','distributeur2'); add('autre', gv('dim-autre-type')||'contact');
   return out;
 }
 function dimMaj(){
