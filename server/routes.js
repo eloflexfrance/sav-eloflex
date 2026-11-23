@@ -628,7 +628,7 @@ router.get('/clients/:id', async (req, res) => {
 });
 
 // SIREN / SIRET / TVA intracommunautaire : mis à jour seulement s'ils sont fournis (sans toucher au reste de la fiche)
-// Options Privilèges / Avantages : mises à jour SEULEMENT si le champ est envoyé (booléen),
+// Options Privilèges / Avantage : mises à jour SEULEMENT si le champ est envoyé (booléen),
 // pour que les PUT partiels (ex. ajout à la carte) n'effacent jamais ces cases.
 async function _majOptionsClient(id, b) {
   const pv = (b && typeof b.privileges === 'boolean') ? b.privileges : null;
@@ -7278,7 +7278,7 @@ router.get('/carte/points', requireAuth, async (req, res) => {
       const flou = prioNorm.find(r => memeEntite(p.nom, r.nom));
       return flou ? flou.priorite : null;
     };
-    // Options Privilèges / Avantages : par client_id, sinon par nom (comme la priorité)
+    // Options Privilèges / Avantage : par client_id, sinon par nom (comme la priorité)
     const optRows = await db.all(`SELECT id, nom, privileges, avantages FROM clients WHERE privileges IS TRUE OR avantages IS TRUE`);
     const optParClient = {};
     for (const r of optRows) optParClient[r.id] = r;
@@ -7451,7 +7451,7 @@ router.put('/carte/points/:id/zone', requireAuth, async (req, res) => {
 });
 
 // Route: modifier la priorité d'un point depuis la carte → écrit sur la fiche client
-// Options Privilèges / Avantages depuis la fenêtre « Modifier le distributeur » de la carte :
+// Options Privilèges / Avantage depuis la fenêtre « Modifier le distributeur » de la carte :
 // écrites sur la fiche client rattachée (même résolution que la priorité) → visibles dans la fiche complète.
 router.put('/carte/points/:id/options', requireAuth, async (req, res) => {
   try {
@@ -7462,7 +7462,7 @@ router.put('/carte/points/:id/options', requireAuth, async (req, res) => {
       const c = await db.get('SELECT id FROM clients WHERE LOWER(TRIM(nom))=LOWER(TRIM($1))', [pt.nom]);
       if (c) clientId = c.id;
     }
-    if (!clientId) return res.status(400).json({ error: 'Point non relié à une fiche client — Privilèges / Avantages non enregistrables. Choisissez le « Client rattaché ».' });
+    if (!clientId) return res.status(400).json({ error: 'Point non relié à une fiche client — Privilèges / Avantage non enregistrables. Choisissez le « Client rattaché ».' });
     const r = await _majOptionsClient(clientId, { privileges: !!req.body.privileges, avantages: !!req.body.avantages });
     res.json({ ok: true, client_id: clientId, ...(r || {}) });
   } catch (e) { res.status(500).json({ error: e.message }); }

@@ -5,7 +5,7 @@ let CMD_FILTERS = { annee:'', mois:'', statut:'', groupe:'', distributeur:'', q:
 let _cmdReqId = 0; // anti-race condition pour la recherche commandes
 // Couleurs des options distributeur (fiche + contours clignotants sur la carte)
 const OPT_PRIV_COUL = '#dc2626';   // Privilèges : rouge
-const OPT_AVA_COUL  = '#eab308';   // Avantages : jaune
+const OPT_AVA_COUL  = '#eab308';   // Avantage : jaune
 // Colonnes visibles en Suivi commandes (persistées en localStorage)
 const CMD_COLS_DEFAULT = { num_annuel: false, paiement: false, facture: false, date_facture: false, demo_origine: false, edi: false, pays: false, retour: false, date_retour: false, notes: false };
 // Merge stored prefs with defaults — nouvelles colonnes héritent de false si absentes du stockage
@@ -859,7 +859,7 @@ function ficheDistributeurBloc(cl){
   if(cl.public_site) chips.push(`<span class="badge hg" title="Visible sur la carte publique eloflex.fr"><i class="ti ti-world"></i> ${TR('Site public')}</span>`);
   if(cl.priorite) chips.push(`<span style="font-size:12px;font-weight:700;color:#fff;background:${({T1:'#dc2626',T2:'#d97706',T3:'#65a30d'})[cl.priorite]||'#888'};padding:2px 8px;border-radius:99px">${TR('Priorité')} ${cl.priorite}</span>`);
   if(cl.privileges) chips.push(`<span style="font-size:12px;font-weight:700;color:#fff;background:${OPT_PRIV_COUL};padding:2px 8px;border-radius:99px"><i class="ti ti-crown"></i> ${TR('Privilèges')}</span>`);
-  if(cl.avantages) chips.push(`<span style="font-size:12px;font-weight:700;color:#713f12;background:${OPT_AVA_COUL};padding:2px 8px;border-radius:99px"><i class="ti ti-gift"></i> ${TR('Avantages')}</span>`);
+  if(cl.avantages) chips.push(`<span style="font-size:12px;font-weight:700;color:#713f12;background:${OPT_AVA_COUL};padding:2px 8px;border-radius:99px"><i class="ti ti-gift"></i> ${TR('Avantage')}</span>`);
   if(cl.entite_facturation_id) chips.push(`<span class="badge ouvert"><i class="ti ti-receipt"></i> ${TR('Facturé à')} ${esc(cl.entite_facturation_nom||'—')}</span>`);
   const annEsc = cl.annotation ? esc(cl.annotation) : '';
   return `<div class="card">
@@ -4668,7 +4668,7 @@ function clientForm(d={}){return `<div class="grid-2">
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Options')}</label>
     <div style="display:flex;gap:22px;flex-wrap:wrap;font-size:14px">
       <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-privileges" ${d.privileges?'checked':''}>${badgeOptionCarte('privileges',17)}${TR('Privilèges')}</label>
-      <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-avantages" ${d.avantages?'checked':''}>${badgeOptionCarte('avantages',17)}${TR('Avantages')}</label>
+      <label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="f-avantages" ${d.avantages?'checked':''}>${badgeOptionCarte('avantages',17)}${TR('Avantage')}</label>
     </div>
   </div>
   <div class="form-group" style="grid-column:1/-1"><label class="form-label">Facturation</label>
@@ -7805,7 +7805,7 @@ var _carteSansAnnee = false; // affiche les points sans année de dernière comm
 // Filtre par priorité (T1/T2/T3) : toutes cochées par défaut + "sans priorité"
 var _cartePriorites = { T1:true, T2:true, T3:true };
 var _cartePrioriteSans = true; // affiche les points sans priorité assignée
-var _carteOptions = 'tous';     // filtre Privilèges / Avantages : 'tous' | 'privileges' | 'avantages' | 'les2'
+var _carteOptions = 'tous';     // filtre Privilèges / Avantage : 'tous' | 'privileges' | 'avantages' | 'les2'
 (function(){ _carteAnneesFiltre[new Date().getFullYear()] = true; })();
 var _carteMarkers = [];
 var _carteClusterGroup = null; // groupe de clustering (leaflet.markercluster) si dispo
@@ -7959,7 +7959,7 @@ function basculerPrioriteSans(actif){
 }
 window.basculerPrioriteSans = basculerPrioriteSans;
 
-// ── Filtre Privilèges / Avantages (Tous par défaut) ──
+// ── Filtre Privilèges / Avantage (Tous par défaut) ──
 function passeOptionsCarte(p){
   if (_carteOptions === 'privileges') return !!p.privileges;
   if (_carteOptions === 'avantages')  return !!p.avantages;
@@ -7970,11 +7970,11 @@ function legendeOptions(){
   var choix = [
     ['tous', TR('Tous'), ''],
     ['privileges', TR('Privilèges'), OPT_PRIV_COUL],
-    ['avantages', TR('Avantages'), OPT_AVA_COUL],
-    ['les2', TR('Privilèges + Avantages'), '']
+    ['avantages', TR('Avantage'), OPT_AVA_COUL],
+    ['les2', TR('Privilèges + Avantage'), '']
   ];
   var html = '<details class="card carte-collapse" style="padding:0;margin-bottom:10px">' +
-    '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-crown"></i>' + TR('Privilèges / Avantages') + '</summary>' +
+    '<summary class="section-title carte-collapse-sum" style="padding:13px;margin:0"><i class="ti ti-crown"></i>' + TR('Privilèges / Avantage') + '</summary>' +
     '<div style="padding:0 13px 13px">';
   choix.forEach(function(c){
     var pastille = c[0] === 'les2' ? badgeOptionCarte('privileges', 15) + badgeOptionCarte('avantages', 15)
@@ -7992,7 +7992,7 @@ function legendeOptions(){
 function choisirOptionsCarte(v){ _carteOptions = v || 'tous'; afficherMarkers(); }
 window.choisirOptionsCarte = choisirOptionsCarte;
 
-// Pastilles fixes Privilèges (couronne rouge) / Avantages (cadeau jaune), cumulables
+// Pastilles fixes Privilèges (couronne rouge) / Avantage (cadeau jaune), cumulables
 function badgeOptionCarte(type, taille){
   var t = taille || 15, priv = type === 'privileges';
   return '<span style="display:inline-flex;align-items:center;justify-content:center;width:' + t + 'px;height:' + t + 'px;border-radius:50%;' +
@@ -8147,7 +8147,7 @@ function voirDistributeurSurCarte(clientId, nom){
         if (cbs) cbs.checked = true;
         afficherMarkers();
       }
-      // Idem pour le filtre Privilèges / Avantages
+      // Idem pour le filtre Privilèges / Avantage
       if (!passeOptionsCarte(pt)) {
         _carteOptions = 'tous';
         var cbo = document.querySelector('input[name="carte-options"][onchange*="\'tous\'"]');
@@ -8357,7 +8357,7 @@ function majCompteursCarte(){
   });
   var elPrioSans = document.getElementById('cnt-prio-sans');
   if (elPrioSans) elPrioSans.textContent = pts.filter(function(p){ return p.priorite !== 'T1' && p.priorite !== 'T2' && p.priorite !== 'T3'; }).length;
-  // Compteurs Privilèges / Avantages (absolu)
+  // Compteurs Privilèges / Avantage (absolu)
   var cntOpt = { tous: pts.length, privileges: 0, avantages: 0, les2: 0 };
   pts.forEach(function(p){ if (p.privileges) cntOpt.privileges++; if (p.avantages) cntOpt.avantages++; if (p.privileges && p.avantages) cntOpt.les2++; });
   Object.keys(cntOpt).forEach(function(k){ var e = document.getElementById('cnt-opt-' + k); if (e) e.textContent = cntOpt[k]; });
@@ -8503,7 +8503,7 @@ function popupCarte(p) {
     (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:14px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:13px"></i> ' + prioLib + '</span></div>' : '') +
     ((p.privileges || p.avantages) ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px">' +
       (p.privileges ? '<span style="font-size:13px;font-weight:700;color:#fff;background:' + OPT_PRIV_COUL + ';padding:3px 10px;border-radius:99px"><i class="ti ti-crown" style="font-size:13px"></i> ' + TR('Privilèges') + '</span>' : '') +
-      (p.avantages ? '<span style="font-size:13px;font-weight:700;color:#713f12;background:' + OPT_AVA_COUL + ';padding:3px 10px;border-radius:99px"><i class="ti ti-gift" style="font-size:13px"></i> ' + TR('Avantages') + '</span>' : '') +
+      (p.avantages ? '<span style="font-size:13px;font-weight:700;color:#713f12;background:' + OPT_AVA_COUL + ';padding:3px 10px;border-radius:99px"><i class="ti ti-gift" style="font-size:13px"></i> ' + TR('Avantage') + '</span>' : '') +
       '</div>' : '') +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
       '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:12px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
@@ -9115,7 +9115,7 @@ function modalPointCarte(id) {
         '</div>' +
         '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Options")+'</label><div style="display:flex;gap:20px;font-size:14px">' +
           '<label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="pc-privileges"' + (p&&p.privileges?' checked':'') + '>' + badgeOptionCarte('privileges', 16) + TR("Privilèges") + '</label>' +
-          '<label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="pc-avantages"' + (p&&p.avantages?' checked':'') + '>' + badgeOptionCarte('avantages', 16) + TR("Avantages") + '</label>' +
+          '<label style="display:flex;align-items:center;gap:7px;cursor:pointer"><input type="checkbox" id="pc-avantages"' + (p&&p.avantages?' checked':'') + '>' + badgeOptionCarte('avantages', 16) + TR("Avantage") + '</label>' +
         '</div><div style="font-size:12px;color:#999;margin-top:3px">'+TR("Enregistré sur la fiche du client rattaché.")+'</div></div>' +
         '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Zone de chalandise / départements")+'</label><textarea id="pc-zone" rows="2" placeholder="ex : 84, 30, 13 — ou Vaucluse, Gard" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px;resize:vertical;font-family:inherit">' + (p&&p.zone_chalandise?_esc(p.zone_chalandise):'') + '</textarea></div>' +
         '<div><label style="font-size:13px;color:#666;display:block;margin-bottom:3px">'+TR("Note interne")+'</label><textarea id="pc-note" rows="2" style="width:100%;border:0.5px solid #cfcfca;border-radius:7px;padding:7px 9px;font-size:14px;resize:vertical;font-family:inherit">' + (p&&p.note_interne?_esc(p.note_interne):'') + '</textarea></div>' +
