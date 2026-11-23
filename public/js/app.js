@@ -8477,53 +8477,76 @@ function prioSelectCarte(p) {
 
 function popupCarte(p) {
   var cfg = RESEAUX_CONFIG[p.reseau] || { label:'?', color:'#888' };
-  var statutTxt = p.impayes > 0 ? '<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:99px;font-size:12px">⚠️ ' + p.impayes + ' impayé' + (p.impayes>1?'s':'') + '</span>'
-    : p.en_cours > 0 ? '<span style="background:#fff7ed;color:#ea580c;padding:2px 7px;border-radius:99px;font-size:12px">' + p.en_cours + ' en cours</span>'
-    : p.nb_commandes > 0 ? '<span style="background:#f0fdf4;color:#16a34a;padding:2px 7px;border-radius:99px;font-size:12px">'+TR("à jour")+'</span>'
-    : '<span style="background:#f1f5f9;color:#64748b;padding:2px 7px;border-radius:99px;font-size:12px">'+TR("aucune commande")+'</span>';
-
-  var prioCoul = {T1:'#dc2626',T2:'#d97706',T3:'#65a30d'}[p.priorite] || '#888';
-  var prioLib  = {T1:'T1 — Priorité absolue',T2:'T2 — Priorité moyenne',T3:'T3 — Priorité basse'}[p.priorite] || '';
+  // Badges en teinte douce (fond pâle + texte foncé + liseré), harmonisés avec le reste de l'interface
+  var chip = function(bg, fg, bd, icon, txt, title){
+    return '<span' + (title ? ' title="' + _esc(title) + '"' : '') + ' style="display:inline-flex;align-items:center;gap:4px;background:' + bg + ';color:' + fg + ';border:0.5px solid ' + bd + ';padding:2px 8px;border-radius:99px;font-size:12px;font-weight:500;white-space:nowrap">' +
+      (icon ? '<i class="ti ' + icon + '" style="font-size:12px"></i>' : '') + txt + '</span>';
+  };
+  var PRIO = { T1:['#FCEBEB','#791F1F','#F7C1C1','Priorité absolue'], T2:['#FAEEDA','#633806','#FAC775','Priorité moyenne'], T3:['#EAF3DE','#27500A','#C0DD97','Priorité basse'] }[p.priorite];
   var telTxt   = p.tel ? String(p.tel).trim() : '';
-  var telHref  = telTxt.replace(/[^0-9+]/g, '');
   var mobTxt   = p.portable ? String(p.portable).trim() : '';
-  var mobHref  = mobTxt.replace(/[^0-9+]/g, '');
   var emailTxt = p.email ? String(p.email).trim() : '';
-  return '<div style="width:262px;font-size:14px">' +
-    '<div style="font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:' + cfg.color + ';margin-bottom:6px">' + labelReseauTraduit(p.reseau, cfg.label) + '</div>' +
-    '<div style="font-weight:700;font-size:16px;margin-bottom:6px;line-height:1.3">' + _esc(p.nom) + '</div>' +
-    '<div style="font-size:14.5px;line-height:1.65;margin-bottom:10px;color:var(--text)">' +
-      ((p.adresse && p.adresse.trim().toLowerCase() !== String(p.nom||'').trim().toLowerCase()) ? _esc(p.adresse) + '<br>' : '') +
-      (p.cp || p.ville ? _esc((p.cp||'') + ' ' + (p.ville||'')) + '<br>' : '') +
-      (p.pays && p.pays !== 'France' ? '<span style="font-weight:600">' + libellePays(p.pays) + '</span><br>' : '') +
-      (telTxt ? '<a href="tel:' + telHref + '" style="color:var(--accent);text-decoration:none;font-size:15.5px;font-weight:600"><i class="ti ti-phone" style="font-size:14px"></i> ' + _esc(fmtTel(telTxt)) + '</a><br>' : '') +
-      (mobTxt ? '<a href="tel:' + mobHref + '" style="color:var(--accent);text-decoration:none;font-size:15.5px;font-weight:600"><i class="ti ti-device-mobile" style="font-size:14px"></i> ' + _esc(fmtTel(mobTxt)) + '</a><br>' : '') +
-      (emailTxt ? '<a href="mailto:' + _esc(emailTxt) + '" style="color:var(--accent);text-decoration:none;font-size:13px;font-weight:500;word-break:break-all"><i class="ti ti-mail" style="font-size:13px"></i> ' + _esc(emailTxt) + '</a>' : '') +
+  var adr      = (p.adresse && p.adresse.trim().toLowerCase() !== String(p.nom||'').trim().toLowerCase()) ? p.adresse.trim() : '';
+  var cpv      = ((p.cp||'') + ' ' + (p.ville||'')).trim();
+  var ligneAdr = [adr, cpv].filter(Boolean).join(', ') + (p.pays && p.pays !== 'France' ? ' — ' + libellePays(p.pays) : '');
+  var ico = function(n){ return '<i class="ti ' + n + '" style="font-size:14px;color:#8a8a85;width:16px;flex:0 0 16px"></i>'; };
+  var ligne = function(icon, html){ return '<div style="display:flex;align-items:flex-start;gap:6px;line-height:1.45;margin-bottom:3px">' + ico(icon) + '<div style="min-width:0;flex:1">' + html + '</div></div>'; };
+  var lien = function(href, txt){ return '<a href="' + href + '" style="color:#2e7cf6;text-decoration:none;word-break:break-all">' + txt + '</a>'; };
+
+  // Case statut : impayés (rouge) > en cours (orange) > à jour (vert) > aucune commande (gris)
+  var st = p.impayes > 0 ? ['#FCEBEB','#A32D2D','#791F1F', TR('Impayé' + (p.impayes>1?'s':'')), p.impayes]
+    : p.en_cours > 0 ? ['#FAEEDA','#854F0B','#633806', TR('En cours'), p.en_cours]
+    : p.nb_commandes > 0 ? ['#EAF3DE','#3B6D11','#27500A', TR('Statut'), TR('À jour')]
+    : ['#F1EFE8','#5F5E5A','#444441', TR('Statut'), TR('Aucune')];
+  var caseChiffre = function(bg, lc, vc, lib, val){
+    return '<div style="background:' + bg + ';border-radius:8px;padding:6px 9px"><div style="font-size:11px;color:' + lc + '">' + lib + '</div><div style="font-size:16px;font-weight:600;color:' + vc + ';line-height:1.3">' + val + '</div></div>';
+  };
+  var btnSec = 'background:#fff;border:0.5px solid #cfcfca;color:var(--text);border-radius:6px;padding:6px 4px;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px';
+  var lienPied = 'background:none;border:none;padding:3px 2px;font-size:12.5px;cursor:pointer;color:#6b6b66;display:inline-flex;align-items:center;gap:4px';
+  var nomJs = _esc(p.nom).replace(/\'/g,"");
+  var peutEcrire = typeof canWriteCarte==='function' && canWriteCarte();
+  var secondaires = [];
+  if (p.nb_commandes > 0) secondaires.push('<button onclick="filtrerParDistrib(\'' + nomJs + '\')" style="' + btnSec + '"><i class="ti ti-list" style="font-size:13px"></i>' + TR("Commandes") + '</button>');
+  secondaires.push('<button onclick="nouvelleDemandeDepuisCarte(' + (p.client_id||'null') + ',\'' + nomJs + '\')" style="' + btnSec + '"><i class="ti ti-message-plus" style="font-size:13px"></i>' + TR("Demande d'info") + '</button>');
+
+  return '<div style="width:272px;font-size:13.5px">' +
+    // En-tête : réseau + nom, priorité à droite
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+      '<div style="min-width:0"><div style="font-size:12px;font-weight:500;color:' + cfg.color + '">' + labelReseauTraduit(p.reseau, cfg.label) + '</div>' +
+      '<div style="font-weight:600;font-size:16px;line-height:1.3;margin-top:1px">' + _esc(p.nom) + '</div></div>' +
+      (PRIO ? chip(PRIO[0], PRIO[1], PRIO[2], 'ti-flag', p.priorite, p.priorite + ' — ' + TR(PRIO[3])) : '') +
     '</div>' +
-    (p.priorite ? '<div style="margin-bottom:9px"><span style="font-size:14px;font-weight:700;color:#fff;background:' + prioCoul + ';padding:3px 11px;border-radius:99px"><i class="ti ti-flag" style="font-size:13px"></i> ' + prioLib + '</span></div>' : '') +
-    ((p.privileges || p.avantages) ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px">' +
-      (p.privileges ? '<span style="font-size:13px;font-weight:700;color:#fff;background:' + OPT_PRIV_COUL + ';padding:3px 10px;border-radius:99px"><i class="ti ti-crown" style="font-size:13px"></i> ' + TR('Privilèges') + '</span>' : '') +
-      (p.avantages ? '<span style="font-size:13px;font-weight:700;color:#713f12;background:' + OPT_AVA_COUL + ';padding:3px 10px;border-radius:99px"><i class="ti ti-gift" style="font-size:13px"></i> ' + TR('Avantage') + '</span>' : '') +
-      '</div>' : '') +
-    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">' +
-      '<span style="background:rgba(46,124,246,.1);color:#2e7cf6;padding:2px 7px;border-radius:99px;font-size:12px">' + p.nb_commandes + ' commande' + (p.nb_commandes>1?'s':'') + ' ' + _carteAnnee + '</span>' +
-      statutTxt +
+    // Options
+    ((p.privileges || p.avantages) ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">' +
+      (p.privileges ? chip('#FCEBEB','#791F1F','#F7C1C1','ti-crown',TR('Privilèges')) : '') +
+      (p.avantages  ? chip('#FAEEDA','#633806','#FAC775','ti-gift',TR('Avantage')) : '') + '</div>' : '') +
+    // Coordonnées
+    '<div style="border-top:0.5px solid var(--border);margin-top:9px;padding-top:8px">' +
+      (ligneAdr ? ligne('ti-map-pin', '<span style="color:#55554f">' + _esc(ligneAdr) + '</span>') : '') +
+      (telTxt ? ligne('ti-phone', lien('tel:' + telTxt.replace(/[^0-9+]/g,''), _esc(fmtTel(telTxt)))) : '') +
+      (mobTxt ? ligne('ti-device-mobile', lien('tel:' + mobTxt.replace(/[^0-9+]/g,''), _esc(fmtTel(mobTxt)))) : '') +
+      (emailTxt ? ligne('ti-mail', lien('mailto:' + _esc(emailTxt), _esc(emailTxt))) : '') +
     '</div>' +
-    ((p.abs_retour||0) > 3 ? '<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:6px;padding:5px 8px;font-size:12.5px;font-weight:600;margin-bottom:8px"><i class="ti ti-alert-triangle" style="font-size:13px"></i> ' + p.abs_retour + ' ' + TR("demandes sans retour (distributeur peu réactif)") + '</div>' : '') +
-    '<div style="font-size:12px;color:#999;margin-bottom:10px">' +
-      (p.lien_type === 'client'
-        ? '<span style="color:#16a34a">'+TR("🔗 Lié au client")+'</span>'
-        : p.lien_type === 'nom'
-          ? 'Rapproché par nom : ' + _esc((p.noms_rattaches||[]).join(', '))
-          : '<span style="color:#d97706">'+TR("⚠ Aucune commande rattachée — liez ce point à un client pour fiabiliser")+'</span>') +
+    // Chiffres
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:9px 0 8px">' +
+      caseChiffre('#F1EFE8','#5F5E5A','var(--text)', TR('Commandes') + ' ' + _carteAnnee, p.nb_commandes || 0) +
+      caseChiffre(st[0], st[1], st[2], st[3], st[4]) +
     '</div>' +
-    (p.zone_chalandise ? '<div style="background:rgba(46,124,246,.10);color:#2e7cf6;border-radius:6px;padding:5px 8px;font-size:12px;margin-bottom:8px"><i class="ti ti-map-2" style="font-size:12px"></i> <strong>Couvre :</strong> ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' · rayon ' + _esc(String(p.rayon_km)) + ' km' : '') + '</div>' : '') +
-    (p.note_interne ? '<div style="background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;color:var(--text2);margin-bottom:8px"><i class="ti ti-note" style="font-size:12px"></i> ' + _esc(p.note_interne) + '</div>' : '') +
-    '<button onclick="copierInfosCarte(' + p.id + ',this)" style="width:100%;background:#fff;color:#1F5C8C;border:1px solid #1F5C8C;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px"><i class="ti ti-copy"></i> '+TR("Copier les coordonnées")+'</button>' +
-    (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px"><i class="ti ti-user"></i> '+TR("Voir la fiche complète →")+'</button>' : '') +
-    (p.nb_commandes > 0 ? '<button onclick="filtrerParDistrib(\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#2e7cf6;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px">'+TR("Voir ses commandes →")+'</button>' : '') +
-    '<button onclick="nouvelleDemandeDepuisCarte(' + (p.client_id||'null') + ',\'' + _esc(p.nom).replace(/\'/g,"") + '\')" style="width:100%;background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;cursor:pointer;margin-bottom:8px"><i class="ti ti-address-book"></i> '+TR("Nouvelle demande d'info →")+'</button>' +
-    (typeof canWriteCarte==='function' && canWriteCarte() ? '<div style="margin-top:6px;padding-top:8px;border-top:0.5px solid var(--border);display:flex;gap:6px"><button onclick="modalPointCarte(' + p.id + ')" style="flex:1;background:var(--surface);border:0.5px solid #cfcfca;border-radius:6px;padding:6px 0;font-size:13px;cursor:pointer"><i class="ti ti-edit"></i> '+TR("Modifier")+'</button><button onclick="supprimerPointCarte(' + p.id + ')" style="background:#fef2f2;color:#dc2626;border:0.5px solid #fecaca;border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer"><i class="ti ti-trash"></i></button></div>' : '') +
+    ((p.abs_retour||0) > 3 ? '<div style="background:#FCEBEB;color:#791F1F;border-radius:6px;padding:5px 8px;font-size:12px;margin-bottom:7px"><i class="ti ti-alert-triangle" style="font-size:12px"></i> ' + p.abs_retour + ' ' + TR("demandes sans retour (distributeur peu réactif)") + '</div>' : '') +
+    (p.zone_chalandise ? '<div style="font-size:12px;color:#55554f;margin-bottom:5px;display:flex;gap:5px"><i class="ti ti-map-2" style="font-size:13px;color:#8a8a85"></i><span>' + TR('Couvre') + ' ' + _esc(p.zone_chalandise) + (p.rayon_km ? ' — ' + TR('rayon') + ' ' + _esc(String(p.rayon_km)) + ' km' : '') + '</span></div>' : '') +
+    (p.note_interne ? '<div style="font-size:12px;color:#55554f;margin-bottom:5px;display:flex;gap:5px"><i class="ti ti-note" style="font-size:13px;color:#8a8a85"></i><span style="font-style:italic">' + _esc(p.note_interne) + '</span></div>' : '') +
+    (p.lien_type === 'nom' ? '<div style="font-size:11.5px;color:#8a8a85;margin-bottom:5px">' + TR('Rapproché par nom :') + ' ' + _esc((p.noms_rattaches||[]).join(', ')) + '</div>'
+      : p.lien_type !== 'client' ? '<div style="font-size:11.5px;color:#b45309;margin-bottom:5px"><i class="ti ti-link-off" style="font-size:12px"></i> ' + TR("Aucune commande rattachée — liez ce point à un client pour fiabiliser") + '</div>' : '') +
+    // Actions : une principale, deux secondaires, pied discret
+    '<div style="margin-top:8px">' +
+      (p.client_id ? '<button onclick="ouvrirFicheDistrib(' + p.client_id + ')" style="width:100%;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:7px 0;font-size:13px;font-weight:500;cursor:pointer;margin-bottom:6px"><i class="ti ti-user"></i> ' + TR("Voir la fiche complète") + '</button>' : '') +
+      '<div style="display:grid;grid-template-columns:' + (secondaires.length > 1 ? '1fr 1fr' : '1fr') + ';gap:6px">' + secondaires.join('') + '</div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;border-top:0.5px solid var(--border);margin-top:9px;padding-top:6px">' +
+      '<button onclick="copierInfosCarte(' + p.id + ',this)" style="' + lienPied + '"><i class="ti ti-copy" style="font-size:13px"></i>' + TR("Copier") + '</button>' +
+      (peutEcrire ? '<button onclick="modalPointCarte(' + p.id + ')" style="' + lienPied + '"><i class="ti ti-edit" style="font-size:13px"></i>' + TR("Modifier") + '</button>' +
+        '<button onclick="supprimerPointCarte(' + p.id + ')" title="' + TR('Supprimer') + '" style="' + lienPied + ';margin-left:auto;color:#dc2626"><i class="ti ti-trash" style="font-size:14px"></i></button>' : '') +
+    '</div>' +
     '</div>';
 }
 
@@ -8550,8 +8573,8 @@ async function copierInfosCarte(id, btn){
     document.body.removeChild(ta);
   }
   if (ok) {
-    if (btn) { var h = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check"></i> ' + TR('Copié'); btn.style.color = '#16a34a'; btn.style.borderColor = '#16a34a';
-      setTimeout(function(){ btn.innerHTML = h; btn.style.color = '#1F5C8C'; btn.style.borderColor = '#1F5C8C'; }, 1500); }
+    if (btn) { var h = btn.innerHTML, c0 = btn.style.color; btn.innerHTML = '<i class="ti ti-check" style="font-size:13px"></i>' + TR('Copié'); btn.style.color = '#16a34a';
+      setTimeout(function(){ btn.innerHTML = h; btn.style.color = c0; }, 1500); }
     if (typeof toast === 'function') toast(TR('Coordonnées copiées'), 'ti-copy');
   } else alert(texte);
 }
