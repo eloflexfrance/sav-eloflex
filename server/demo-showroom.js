@@ -58,6 +58,100 @@ module.exports = function monter(router, deps) {
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
+  // ── Entrée showroom : fauteuils neufs envoyés par la Suède SANS bon de commande ──
+  // Crée pour chaque unité une entrée interne (origine='showroom') directement au showroom
+  // de Paris : hors numérotation annuelle et hors statistiques de ventes.
+  // { apercu:true } = contrôle seul, rien n'est écrit.
+  // Corps : { date, note, invoice_se, unites:[{modele, reference, num_serie}], apercu }
+  router.post('/demos/entree-showroom', async (req, res) => {
+    try {
+      await assurerSchema(db);
+      const b = req.body || {};
+      const date = String(b.date || '').slice(0, 10);
+      if (!ISO.test(date)) return res.status(400).json({ error: 'Date de réception invalide' });
+      const note = String(b.note || '').trim();
+      const invoiceSe = String(b.invoice_se || '').trim() || null;
+      const brutes = Array.isArray(b.unites) ? b.unites : [];
+      if (!brutes.length) return res.status(400).json({ error: 'Aucun fauteuil à intégrer' });
+      if (brutes.length > 200) return res.status(400).json({ error: 'Maximum 200 fauteuils par lot' });
+
+      const normSn = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const vusLot = new Set();
+      const lignes = [];
+      for (let i = 0; i < brutes.length; i++) {
+        const u = brutes[i] || {};
+        const l = { ligne: i + 1, modele: String(u.modele || '').trim(), reference: String(u.reference || '').trim(),
+          num_serie: String(u.num_serie || '').trim().toUpperCase(), erreurs: [], alertes: [] };
+        l.sn = normSn(l.num_serie);
+        if (!l.modele) l.erreurs.push('modèle manquant');
+        if (l.sn.length < 4) l.erreurs.push('n° de série manquant ou trop court');
+        else if (vusLot.has(l.sn)) l.erreurs.push('n° de série en double dans la liste');
+        vusLot.add(l.sn);
+        lignes.push(l);
+      }
+
+      // Contrôles en base, par n° de série normalisé
+      const SN = `upper(regexp_replace(coalesce(num_serie,''),'[^A-Za-z0-9]','','g'))`;
+      for (const l of lignes) {
+        if (l.sn.length < 4) continue;
+        const auParc = await db.get(`SELECT id, distributeur_nom FROM commandes WHERE ${SN}=$1 AND modele_demo=TRUE ORDER BY id DESC LIMIT 1`, [l.sn]);
+        if (auParc) { l.erreurs.push(`déjà au parc de démo (commande #${auParc.id}${auParc.distributeur_nom ? ', ' + auParc.distributeur_nom : ''})`); continue; }
+        const vente = await db.get(`SELECT id, distributeur_nom FROM commandes WHERE ${SN}=$1 ORDER BY id DESC LIMIT 1`, [l.sn]);
+        if (vente) l.alertes.push(`série déjà présente sur la commande #${vente.id}${vente.distributeur_nom ? ' (' + vente.distributeur_nom + ')' : ''}`);
+        const f = await db.get(`SELECT f.id, f.client_id, c.nom AS client_nom FROM fauteuils f LEFT JOIN clients c ON c.id=f.client_id
+                                WHERE upper(regexp_replace(f.serie,'[^A-Za-z0-9]','','g'))=$1 LIMIT 1`, [l.sn]);
+        if (f) { l.fauteuil_id = f.id; l.fauteuil_client_id = f.client_id; l.fauteuil_client_nom = f.client_nom; }
+        if (l.reference) {
+          const cat = await db.get('SELECT designation FROM catalogue WHERE upper(ref)=upper($1) LIMIT 1', [l.reference]);
+          if (cat) l.designation = cat.designation;
+        }
+      }
+
+      // Fiche propriétaire : Eloflex France (créée si absente)
+      let proprio = await db.get(`SELECT id, nom FROM clients
+        WHERE upper(translate(nom,'Éé','Ee')) ~ '^ELOFLEX[ -]*FRANCE' ORDER BY id LIMIT 1`);
+      const ok = lignes.filter(l => !l.erreurs.length);
+      const resume = { total: lignes.length, a_integrer: ok.length, en_erreur: lignes.length - ok.length,
+        proprietaire: proprio ? proprio.nom : 'ELOFLEX FRANCE (fiche créée)' };
+      const sortie = l => ({ ligne: l.ligne, modele: l.modele, reference: l.reference, num_serie: l.num_serie,
+        designation: l.designation || null, erreurs: l.erreurs, alertes: l.alertes, commande_id: l.commande_id || null });
+
+      if (b.apercu || !ok.length) return res.json({ ok: true, apercu: true, resume, lignes: lignes.map(sortie) });
+
+      if (!proprio) {
+        proprio = await db.run(`INSERT INTO clients (nom, type, token_portail) VALUES ('ELOFLEX FRANCE','Interne',md5(random()::text)) RETURNING id, nom`);
+      }
+      const u = res.locals.user || {};
+      const qui = u.nom || u.email || '';
+      const info = ['Entrée showroom — reçu de Suède sans bon de commande', note, qui ? `(saisi par ${qui})` : ''].filter(Boolean).join(' · ');
+      const annee = parseInt(date.slice(0, 4));
+      for (const l of ok) {
+        try {
+          // Fiche fauteuil : créée chez Eloflex France si la série est inconnue ; une fiche existante n'est pas déplacée.
+          let fauteuilId = l.fauteuil_id || null;
+          if (!fauteuilId) {
+            const f = await db.run(`INSERT INTO fauteuils (client_id, modele, serie, annee, date_achat, notes)
+              VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (serie) DO NOTHING RETURNING id`,
+              [proprio.id, l.modele, l.num_serie, annee, date, 'Démo showroom Paris — reçu le ' + fr(date)]);
+            fauteuilId = f ? f.id : null;
+          } else if (l.fauteuil_client_id !== proprio.id) {
+            l.alertes.push(`fiche fauteuil laissée chez ${l.fauteuil_client_nom || 'un autre distributeur'}`);
+          }
+          const row = await db.run(`INSERT INTO commandes (client_id, fauteuil_id, annee_onglet, distributeur_nom, modele, quantite,
+              date_commande, date_livraison, num_serie, invoice_se, informations, statut, modele_demo, type_fauteuil_demo,
+              commande_type, origine, demo_showroom, demo_suivi_resultat, demo_retour_date, demo_rappel_date)
+            VALUES ($1,$2,$3,$4,$5,1,$6,$6,$7,$8,$9,'Auto',TRUE,TRUE,'fauteuil','showroom',TRUE,'retour',$6,NULL) RETURNING id`,
+            [proprio.id, fauteuilId, annee, proprio.nom, l.modele, date, l.num_serie, invoiceSe, info]);
+          l.commande_id = row.id;
+          await db.run(`INSERT INTO commandes_lignes (commande_id, designation, reference, quantite, ordre) VALUES ($1,$2,$3,1,0)`,
+            [row.id, l.designation || ('Fauteuil Eloflex ' + l.modele + ' — démo showroom'), l.reference || null]);
+        } catch (e) { l.erreurs.push('échec : ' + e.message); }
+      }
+      const integres = ok.filter(l => l.commande_id).length;
+      res.json({ ok: true, apercu: false, resume: { ...resume, integres, proprietaire: proprio.nom }, lignes: lignes.map(sortie) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   // Dates de prêt souhaitées
   router.get('/commandes-demo-souhaits', async (req, res) => {
     try {

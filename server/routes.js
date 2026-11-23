@@ -3174,10 +3174,10 @@ router.get('/commandes', async (req, res) => {
          (SELECT COUNT(*) FROM commande_notes n WHERE n.commande_id=cmd.id)::int AS notes_count,
          (SELECT n.texte FROM commande_notes n WHERE n.commande_id=cmd.id ORDER BY n.created_at DESC LIMIT 1) AS derniere_note,
          c.nom AS client_nom, c.ville AS client_ville, c.edi AS client_edi,
-         ROW_NUMBER() OVER (
-           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
+         CASE WHEN cmd.origine='showroom' THEN NULL ELSE ROW_NUMBER() OVER (
+           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date), (cmd.origine IS NOT DISTINCT FROM 'showroom')
            ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
-         ) AS num_annuel`
+         ) END AS num_annuel`
       : `cmd.*, c.nom AS client_nom, c.ville AS client_ville,
          (SELECT json_agg(json_build_object('d', l.designation, 'q', l.quantite) ORDER BY l.ordre, l.id) FROM commandes_lignes l WHERE l.commande_id=cmd.id) AS lignes_resume,
          (SELECT json_agg(json_build_object('id', cs.id, 'n', cs.numero_bc, 'e', cs.etape) ORDER BY cs.id) FROM commandes_suede cs
@@ -3185,10 +3185,10 @@ router.get('/commandes', async (req, res) => {
              AND upper(regexp_replace(cs.devis_pennylane, '[^A-Za-z0-9]', '', 'g')) = upper(regexp_replace(cmd.bdc, '[^A-Za-z0-9]', '', 'g'))) AS po_suede,
          (SELECT COUNT(*) FROM documents_signes ds WHERE ds.objet='commande' AND ds.objet_id=cmd.id)::int AS nb_confirmations,
          c.edi AS client_edi, cmd.facture_paiement_statut, cmd.facture_date_echeance,
-         ROW_NUMBER() OVER (
-           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date)
+         CASE WHEN cmd.origine='showroom' THEN NULL ELSE ROW_NUMBER() OVER (
+           PARTITION BY EXTRACT(YEAR FROM cmd.date_commande::date), (cmd.origine IS NOT DISTINCT FROM 'showroom')
            ORDER BY cmd.date_commande ASC NULLS LAST, cmd.id ASC
-         ) AS num_annuel`;
+         ) END AS num_annuel`;
     let sql = `SELECT ${fields} FROM commandes cmd LEFT JOIN clients c ON c.id = cmd.client_id`;
     const conds = [], p = [];
     let idx = 0;
@@ -3250,9 +3250,10 @@ router.get('/commandes/stats', async (req, res) => {
     const paysFilter = userPays ? `AND (pays = '${userPays.replace(/'/g,"''")}' OR pays IS NULL)` : '';
     // Les commandes issues d'un SAV facturé (origine='sav') sont INCLUSES dans les compteurs
     // de ventes et dans la numérotation annuelle (choix de Brice, 30/07).
+    // Les entrées showroom (origine='showroom', fauteuils reçus sans BC) en sont EXCLUES.
     const anneeFilter = annee
-      ? `(annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1)) ${paysFilter}`
-      : `TRUE ${paysFilter}`;
+      ? `(annee_onglet=$1 OR (annee_onglet IS NULL AND EXTRACT(YEAR FROM date_commande::date)=$1)) AND origine IS DISTINCT FROM 'showroom' ${paysFilter}`
+      : `origine IS DISTINCT FROM 'showroom' ${paysFilter}`;
     const params = annee ? [annee] : [];
 
     // Calcul SQL du statut (miroir de la fonction JS statutCommande + isRealTracking)

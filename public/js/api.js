@@ -171,6 +171,7 @@ const API = {
   demosSuivi:()=>API.get('/demos/suivi'),
   demosParc:()=>API.get('/demos/parc'),
   demoShowroom:(id,on)=>API.post(`/commandes/${id}/demo-showroom`,{showroom:!!on}),
+  entreeShowroom:(payload)=>API.post('/demos/entree-showroom',payload),
   pretsSouhaits:()=>API.get('/commandes-demo-souhaits'),
   pretSouhaitCreer:(b)=>API.post('/commandes-demo-souhaits',b),
   pretSouhaitMaj:(id,b)=>API.put(`/commandes-demo-souhaits/${id}`,b),

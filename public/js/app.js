@@ -1460,7 +1460,7 @@ async function renderCommandesTable(page=1){
         <td style="text-align:center">${estCmdFauteuil(cm)
           ? `<span class="cmd-fauteuil-ic" title="Commande fauteuil roulant${cm.modele?' — '+esc(cm.modele):''}"><i class="ti ti-wheelchair"></i></span>`
           : `<i class="ti ti-box" style="color:var(--text3);font-size:14px" title="${TR("Pièces détachées")}"></i>`}</td>
-        <td>${articlesCmd(cm)}${cm.modele_demo?` <span class="badge hg" style="font-size:11px" title="${cm.demo_rappel_date&&!cm.demo_suivi_resultat?TR('Retour prévu le')+' '+fd(String(cm.demo_rappel_date).slice(0,10)):''}">🔄 ${t('cmd_demo_badge')||'Démo'} ${+cm.demo_duree_mois||1} ${TR('mois')}</span>`:''}${cm.nb_confirmations?` <span title="${TR('Confirmation du distributeur archivée')}" style="font-size:12px">📎</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
+        <td>${articlesCmd(cm)}${cm.origine==='showroom'?` <span class="badge" style="font-size:11px;background:#9333ea18;color:#9333ea;border:0.5px solid #9333ea44" title="${TR('Entrée showroom : fauteuil reçu de Suède sans bon de commande — hors numérotation et statistiques de ventes')}">🏬 ${TR('Showroom')}</span>`:''}${cm.modele_demo&&cm.origine!=='showroom'?` <span class="badge hg" style="font-size:11px" title="${cm.demo_rappel_date&&!cm.demo_suivi_resultat?TR('Retour prévu le')+' '+fd(String(cm.demo_rappel_date).slice(0,10)):''}">🔄 ${t('cmd_demo_badge')||'Démo'} ${+cm.demo_duree_mois||1} ${TR('mois')}</span>`:''}${cm.nb_confirmations?` <span title="${TR('Confirmation du distributeur archivée')}" style="font-size:12px">📎</span>`:''}${(cm.est_avoir||/avoir/i.test(cm.informations||''))?` <span class="badge urgent" style="font-size:11px" title="${TR("Cette commande porte un avoir (retour / remboursement) — voir le champ Informations")}">↩ Avoir</span>`:''}${cm.origine==='sav'?` <span class="badge hg" style="font-size:11px" title="Commande issue d'un SAV facturé (hors stats de ventes)">🛠️ SAV</span>`:''}</td>
         <td class="mono">${(()=>{
           if(!cm.num_suivi) return '';
           if(isRealTracking(cm.num_suivi)){
@@ -1727,6 +1727,7 @@ async function modalCommande(id, prefill){
       <h2 style="flex:1">${id?(t('cmd_edit')||'Modifier'):(t('cmd_add')||'Nouvelle commande')}${cm.distributeur_nom?` <span style="font-weight:400;color:var(--text2);font-size:16px">— ${esc(cm.distributeur_nom)}</span>`:''}</h2>
       ${cm.client_edi?`<span class="badge ouvert" style="font-size:12px;margin-right:4px">💳 EDI</span>`:''}
       ${/avoir/i.test(cm.informations||'')?`<span class="badge urgent" style="font-size:12px;margin-right:4px" title="${esc((cm.informations||'').replace(/"/g,'&quot;').slice(0,140))}">${TR('↩ Avoir / Retour')}</span>`:''}
+      ${id&&cm.origine==='showroom'?`<span class="badge" style="font-size:12px;margin-right:4px;background:#9333ea18;color:#9333ea;border:0.5px solid #9333ea44" title="${TR('Fauteuil reçu de Suède sans bon de commande — hors numérotation et statistiques de ventes')}">🏬 ${TR('Entrée showroom')}</span>`:''}
       ${id&&cm.origine==='sav'?`<span class="badge hg" style="font-size:12px;margin-right:4px" title="Commande issue d'un SAV facturé — exclue des stats de ventes et de la numérotation">${TR('🛠️ SAV facturé')}</span>`:''}
       ${id?(cm.intervention_id
         ? `<button class="btn sm" onclick="ouvrirInterventionLiee(${cm.intervention_id})" title="${TR("Voir le SAV lié")}"><i class="ti ti-tool"></i> ${TR('SAV lié')}</button>`
@@ -3090,6 +3091,108 @@ async function demoShowroom(id, on){
   try{ await API.demoShowroom(id, on); toast(on?TR('Démo placée au showroom'):TR('Démo retirée du showroom'),'ti-building-store'); render(); }catch(e){ alert(e.message); }
 }
 window.demoShowroom = demoShowroom;
+
+// ── Entrée showroom : fauteuils neufs reçus de Suède sans bon de commande ──
+// Saisie par lot (une ligne par fauteuil, ou collage depuis Excel : Modèle ⇥ Référence ⇥ N° de série),
+// contrôle (aperçu) puis intégration directe dans l'onglet Showroom du Parc de démo.
+const _ES_MODELES=['Modèle L','Modèle F','Modèle P','Modèle D2','Modèle X','Modèle H','Modèle C3','Modèle C','Modèle K','Modèle H2','Modèle S1'];
+let _ES = { lignes:[], apercu:null };
+function _esModele(v){
+  const s=String(v||'').trim(); if(!s) return '';
+  const exact=_ES_MODELES.find(m=>m.toLowerCase()===s.toLowerCase()); if(exact) return exact;
+  const k=s.toUpperCase().replace(/^MOD[EÈ]LE\s*/,'').replace(/^ELOFLEX\s*/,'').trim();
+  return _ES_MODELES.find(m=>m.slice(7).toUpperCase()===k) || s;
+}
+function modalEntreeShowroom(){
+  _ES = { lignes:[{modele:'',reference:'',num_serie:''}], apercu:null };
+  const today=new Date().toISOString().slice(0,10);
+  showModal(`<div class="modal-header"><i class="ti ti-building-store" style="font-size:19px;color:#9333ea"></i><h2>${TR('Entrée showroom')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body" style="max-width:860px">
+      <div style="font-size:13.5px;color:var(--text2);margin-bottom:12px">${TR('Fauteuils neufs reçus de Suède sans bon de commande. Ils arrivent directement dans l’onglet Showroom, rattachés à Eloflex France, hors numérotation annuelle et hors statistiques de ventes.')}</div>
+      <div style="display:grid;grid-template-columns:160px 1fr 1fr;gap:10px;margin-bottom:12px">
+        <div class="form-group" style="margin:0"><label class="form-label">${TR('Date de réception')}</label><input class="form-input" type="date" id="es-date" value="${today}"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">${TR('Réf. Suède (facultatif)')}</label><input class="form-input mono" id="es-invoice" placeholder="${TR('n° de BL / facture SE')}"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">${TR('Note (commune au lot)')}</label><input class="form-input" id="es-note" placeholder="${TR('ex. lot reçu par DSV')}"></div>
+      </div>
+      <details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13.5px;color:var(--accent)"><i class="ti ti-clipboard"></i> ${TR('Coller une liste depuis Excel')}</summary>
+        <div style="font-size:12.5px;color:var(--text3);margin:6px 0">${TR('Une ligne par fauteuil, colonnes : Modèle, Référence, N° de série (tabulation, point-virgule ou virgule).')}</div>
+        <textarea class="form-input mono" id="es-coller" rows="4" style="width:100%" placeholder="L&#9;7350006080000&#9;A08L2511000001"></textarea>
+        <button class="btn sm" style="margin-top:6px" onclick="esColler()"><i class="ti ti-arrow-down"></i>${TR('Ajouter à la liste')}</button>
+      </details>
+      <div id="es-table"></div>
+      <div id="es-apercu" style="margin-top:10px"></div>
+    </div>
+    <div class="modal-footer" style="margin-top:12px">
+      <button class="btn" onclick="closeModal()">${TR('Annuler')}</button>
+      <button class="btn" onclick="esVerifier()"><i class="ti ti-checklist"></i>${TR('Vérifier')}</button>
+      <button class="btn primary" id="es-go" onclick="esIntegrer()" disabled><i class="ti ti-building-store"></i>${TR('Intégrer au showroom')}</button>
+    </div>`);
+  esDessiner();
+}
+function esDessiner(){
+  const b=document.getElementById('es-table'); if(!b) return;
+  const opts=v=>`<option value=""></option>`+_ES_MODELES.map(m=>`<option${m===v?' selected':''}>${m}</option>`).join('')+(v&&!_ES_MODELES.includes(v)?`<option selected>${esc(v)}</option>`:'');
+  b.innerHTML=`<table class="table" style="width:100%"><thead><tr><th style="width:30px">#</th><th style="width:150px">${TR('Modèle')}</th><th>${TR('Référence')}</th><th>${TR('N° de série')}</th><th style="width:40px"></th></tr></thead><tbody>
+    ${_ES.lignes.map((l,i)=>`<tr><td style="color:var(--text3)">${i+1}</td>
+      <td><select class="form-input" onchange="esMaj(${i},'modele',this.value)">${opts(l.modele)}</select></td>
+      <td><input class="form-input mono" value="${esc(l.reference)}" oninput="esMaj(${i},'reference',this.value)"></td>
+      <td><input class="form-input mono" value="${esc(l.num_serie)}" oninput="esMaj(${i},'num_serie',this.value)"></td>
+      <td><button class="btn sm" title="${TR('Retirer')}" onclick="esRetirer(${i})"><i class="ti ti-trash"></i></button></td></tr>`).join('')}
+    </tbody></table>
+    <button class="btn sm" style="margin-top:6px" onclick="esAjouter()"><i class="ti ti-plus"></i>${TR('Ajouter un fauteuil')}</button>`;
+}
+function _esInvalider(){ _ES.apercu=null; const g=document.getElementById('es-go'); if(g) g.disabled=true; const a=document.getElementById('es-apercu'); if(a) a.innerHTML=''; }
+function esMaj(i,k,v){ if(_ES.lignes[i]) _ES.lignes[i][k]=v; _esInvalider(); }
+function esAjouter(){ _ES.lignes.push({modele:(_ES.lignes[_ES.lignes.length-1]||{}).modele||'',reference:'',num_serie:''}); _esInvalider(); esDessiner(); }
+function esRetirer(i){ _ES.lignes.splice(i,1); if(!_ES.lignes.length) _ES.lignes.push({modele:'',reference:'',num_serie:''}); _esInvalider(); esDessiner(); }
+function esColler(){
+  const ta=document.getElementById('es-coller'); if(!ta) return;
+  const nouvelles=ta.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(x=>{
+    const c=x.split(/\t|;|,/).map(y=>y.trim());
+    if(c.length===1) return {modele:'',reference:'',num_serie:c[0]};
+    if(c.length===2) return {modele:_esModele(c[0]),reference:'',num_serie:c[1]};
+    return {modele:_esModele(c[0]),reference:c[1],num_serie:c[2]};
+  }).filter(l=>!/^(mod[eè]le|n°|num)/i.test(l.modele+l.num_serie));   // ignore une ligne d'en-tête
+  _ES.lignes=_ES.lignes.filter(l=>l.modele||l.reference||l.num_serie).concat(nouvelles);
+  if(!_ES.lignes.length) _ES.lignes.push({modele:'',reference:'',num_serie:''});
+  ta.value=''; _esInvalider(); esDessiner();
+}
+function _esPayload(apercu){
+  return { apercu, date:gv('es-date'), invoice_se:gv('es-invoice'), note:gv('es-note'),
+    unites:_ES.lignes.filter(l=>l.modele||l.reference||l.num_serie) };
+}
+function esDessinerResultat(r){
+  const a=document.getElementById('es-apercu'); if(!a) return;
+  const R=r.resume||{};
+  a.innerHTML=`<div style="font-size:13.5px;margin-bottom:6px">${r.apercu
+      ? `<b>${R.a_integrer}</b> ${TR('fauteuil(s) prêt(s) à intégrer')}${R.en_erreur?` · <span style="color:var(--danger)"><b>${R.en_erreur}</b> ${TR('en erreur (ignoré(s))')}</span>`:''} · ${TR('propriétaire')} : <b>${esc(R.proprietaire||'')}</b>`
+      : `<span style="color:var(--success)"><i class="ti ti-check"></i> <b>${R.integres||0}</b> ${TR('fauteuil(s) intégré(s) au showroom')}</span>${R.en_erreur?` · <span style="color:var(--danger)">${R.en_erreur} ${TR('non intégré(s)')}</span>`:''}`}</div>
+    <table class="table" style="width:100%"><tbody>${(r.lignes||[]).map(l=>`<tr>
+      <td style="width:30px;color:var(--text3)">${l.ligne}</td><td>${esc(l.modele)}</td><td class="mono">${esc(l.num_serie)}</td>
+      <td style="font-size:12.5px">${l.erreurs.length?`<span style="color:var(--danger)"><i class="ti ti-x"></i> ${esc(l.erreurs.join(' ; '))}</span>`:(l.commande_id?`<span style="color:var(--success)"><i class="ti ti-check"></i> ${TR('commande')} #${l.commande_id}</span>`:`<span style="color:var(--success)"><i class="ti ti-check"></i> OK</span>`)}${l.alertes.length?`<div style="color:var(--warning)"><i class="ti ti-alert-triangle"></i> ${esc(l.alertes.join(' ; '))}</div>`:''}${l.designation?`<div style="color:var(--text3)">${esc(l.designation)}</div>`:''}</td></tr>`).join('')}</tbody></table>`;
+}
+async function esVerifier(){
+  try{
+    const r=await API.entreeShowroom(_esPayload(true));
+    _ES.apercu=r; esDessinerResultat(r);
+    const g=document.getElementById('es-go'); if(g) g.disabled=!(r.resume&&r.resume.a_integrer>0);
+  }catch(e){ alert(e.message); }
+}
+async function esIntegrer(){
+  if(!_ES.apercu) return esVerifier();
+  const n=_ES.apercu.resume.a_integrer;
+  if(!confirm(TR('Intégrer')+' '+n+' '+TR('fauteuil(s) au showroom de Paris ?'))) return;
+  const g=document.getElementById('es-go'); if(g) g.disabled=true;
+  try{
+    const r=await API.entreeShowroom(_esPayload(false));
+    esDessinerResultat(r);
+    toast((r.resume.integres||0)+' '+TR('fauteuil(s) ajouté(s) au showroom'),'ti-building-store');
+    _ES.apercu=null;
+    if(STATE.view==='parc-demo'){ PARC_TAB='show'; }
+    const mb=document.querySelector('.modal-footer'); if(mb) mb.innerHTML=`<button class="btn primary" onclick="closeModal();render()">${TR('Fermer')}</button>`;
+  }catch(e){ alert(e.message); if(g) g.disabled=false; }
+}
+Object.assign(window,{modalEntreeShowroom,esMaj,esAjouter,esRetirer,esColler,esVerifier,esIntegrer});
 
 // ── Parc de démo : date de prêt souhaitée par modèle (rappel par mail) ──
 function pretSouhaitModal(id, modele){
@@ -5372,7 +5475,7 @@ function demoModele(m){
 }
 async function renderParcDemo(ttl,c,a){
   ttl.textContent = TR('Parc de démo');
-  a.innerHTML = `<button class="btn sm" onclick="render()"><i class="ti ti-refresh"></i>${TR('Actualiser')}</button>`;
+  a.innerHTML = `${(canWrite('parc-demo')||(CURRENT_USER?.permissions||{})['parc-demo']===undefined&&canWrite('commandes'))?`<button class="btn sm primary" onclick="modalEntreeShowroom()" title="${TR('Intégrer des fauteuils neufs reçus de Suède sans bon de commande')}"><i class="ti ti-building-store"></i>${TR('Entrée showroom')}</button>`:''}<button class="btn sm" onclick="render()"><i class="ti ti-refresh"></i>${TR('Actualiser')}</button>`;
   c.innerHTML = `<div style="color:var(--text2);font-size:14px;padding:16px 0"><i class="ti ti-loader-2"></i> ${t('msg_chargement')||'Chargement…'}</div>`;
   let demos=[], prets=[], transferts=[];
   try{
