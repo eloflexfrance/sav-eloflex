@@ -468,7 +468,7 @@ router.get('/clients', async (req, res) => {
                 COUNT(*) FILTER (WHERE commande_type='fauteuil' OR type_fauteuil_neuf=TRUE OR type_fauteuil_demo=TRUE OR modele ILIKE '%eloflex%')::int AS n_fauteuils
          FROM commandes GROUP BY client_id
        ) nc ON nc.client_id = c.id
-       LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM demandes_info GROUP BY client_id) nd ON nd.client_id = c.id
+       LEFT JOIN (SELECT client_id, COUNT(*)::int AS n FROM demandes_info WHERE NOT COALESCE(essai_interne,FALSE) GROUP BY client_id) nd ON nd.client_id = c.id
        WHERE c.nom ILIKE $1 OR c.contact ILIKE $1 OR c.ville ILIKE $1
           OR c.adresse ILIKE $1 OR c.cp ILIKE $1 OR c.email ILIKE $1
        ORDER BY c.nom`,
@@ -7315,7 +7315,7 @@ router.get('/carte/points', requireAuth, async (req, res) => {
     // Demandes "absence de retour" par distributeur (pour signaler les distributeurs peu réactifs sur la carte)
     const absRows = await db.all(`
       SELECT client_id, COALESCE(distributeur_nom,'') AS distributeur_nom, COUNT(*)::int AS n
-      FROM demandes_info WHERE statut='absence_retour'
+      FROM demandes_info WHERE statut='absence_retour' AND NOT COALESCE(essai_interne,FALSE)
       GROUP BY client_id, COALESCE(distributeur_nom,'')`);
     const absRetourPour = (p) => {
       let cand = [];
@@ -9138,6 +9138,8 @@ async function _diSyncJumelle(id, par) {
   const delier = async () => { await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL WHERE id=$1`, [d.id]);
     if (tw) { if (intacte(tw)) await db.run('DELETE FROM demandes_info WHERE id=$1', [tw.id]); else await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL WHERE id=$1`, [tw.id]); } };
   if (!d.client2_id) { if (tw || d.lien_id) await delier(); return null; }
+  // Essai interne : pas de nouvelle demande reliée ; une demande reliée déjà créée devient elle aussi « essai interne » (masquée)
+  if (d.essai_interne && !tw) return null;
   const patient = [d.nom, d.ville, d.cp, d.telephone, d.email, d.demande_client, !!d.essai_interne];
   if (tw && tw.client_id === d.client2_id) {
     await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, essai_interne=$7, updated_at=NOW() WHERE id=$8`, [...patient, tw.id]);
@@ -9171,7 +9173,7 @@ async function _diPropager(row, par) {
 router.get('/demandes-info', requireAuth, async (req, res) => {
   try {
     const conds = [], p = []; let i = 0;
-    if (req.query.client_id) { conds.push(`d.client_id = $${++i}`); p.push(req.query.client_id); }
+    if (req.query.client_id) { conds.push(`d.client_id = $${++i}`); p.push(req.query.client_id); conds.push('NOT COALESCE(d.essai_interne,FALSE)'); }
     if (req.query.statut)    { conds.push(`d.statut = $${++i}`); p.push(req.query.statut); }
     if (req.query.non_traitees === '1') conds.push(`d.statut = ANY('{transmise,relance}')`);
     if (req.query.q) { conds.push(`(d.nom ILIKE $${++i} OR d.ville ILIKE $${i} OR d.telephone ILIKE $${i} OR d.annotation ILIKE $${i} OR COALESCE(c.nom,d.distributeur_nom) ILIKE $${i})`); p.push('%'+req.query.q+'%'); }
@@ -9191,8 +9193,9 @@ router.get('/demandes-info', requireAuth, async (req, res) => {
 // Compteurs (global ou pour un distributeur)
 router.get('/demandes-info/stats', requireAuth, async (req, res) => {
   try {
-    const p = []; let where = '';
-    if (req.query.client_id) { where = 'WHERE client_id = $1'; p.push(req.query.client_id); }
+    // Les essais internes ne comptent dans aucune statistique
+    const p = []; let where = 'WHERE NOT COALESCE(essai_interne,FALSE)';
+    if (req.query.client_id) { where += ' AND client_id = $1'; p.push(req.query.client_id); }
     const rows = await db.all(`SELECT statut, COUNT(*)::int AS n FROM demandes_info ${where} GROUP BY statut`, p);
     const par = {}; let total = 0, nonTraitees = 0;
     for (const r of rows) { par[r.statut] = r.n; total += r.n; if (DI_NON_TRAITEES.includes(r.statut)) nonTraitees += r.n; }
@@ -9222,6 +9225,7 @@ router.get('/demandes-info/par-distributeur', requireAuth, async (req, res) => {
              MAX(d.date_transmission) AS derniere_date,
              BOOL_OR(d.relance_envoyee) AS relance_envoyee
       FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id
+      WHERE NOT COALESCE(d.essai_interne,FALSE)
       GROUP BY COALESCE(c.nom, d.distributeur_nom)
       ORDER BY non_traitees DESC, total DESC`);
     res.json(rows);

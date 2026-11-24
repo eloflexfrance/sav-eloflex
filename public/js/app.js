@@ -10764,9 +10764,9 @@ window.diFiltreReset = diFiltreReset;
 const _diKey = s => (s==null?'':String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 async function chargerDemandesParDistrib(){
   const el = document.getElementById('di-distrib-list'); if(!el) return;
-  let rows=[]; try{ rows=await API.demandesInfo({}); }catch(e){ el.innerHTML=`<div class="empty">Erreur : ${esc(e.message)}</div>`; return; }
+  let rows=[]; try{ rows=(await API.demandesInfo({})).filter(d=>!d.essai_interne); }catch(e){ el.innerHTML=`<div class="empty">Erreur : ${esc(e.message)}</div>`; return; }
   if(!rows.length){ el.innerHTML=`<div class="empty"><i class="ti ti-building-store"></i>${TR('Aucune demande.')}</div>`; return; }
-  // Regroupement par distributeur
+  // Regroupement par distributeur (hors essais internes)
   const groups = {};
   for(const d of rows){
     const key = (d.client_nom_actuel||d.distributeur_nom||'—').trim() || '—';
@@ -10969,7 +10969,7 @@ async function modalDemande(clientId, distribNom, id){
       <input type="hidden" id="di-client-id" value="${d.client_id||''}">
       <label style="display:flex;align-items:flex-start;gap:9px;background:#FFF8E1;border:1px dashed #C98A00;border-radius:10px;padding:9px 12px;margin-bottom:12px;cursor:pointer">
         <input type="checkbox" id="di-essai" ${d.essai_interne?'checked':''} style="margin-top:3px">
-        <span><b><i class="ti ti-flask"></i> ${TR('Essai interne')}</b><br><span style="font-size:12.5px;color:var(--text2)">${TR('Aucun e-mail ne part au patient ni aux distributeurs : tous les e-mails (et relances) de cette demande sont envoyés à')} <b>info@eloflex.fr</b>, ${TR('marqués « essai interne »')}.</span></span>
+        <span><b><i class="ti ti-flask"></i> ${TR('Essai interne')}</b><br><span style="font-size:12.5px;color:var(--text2)">${TR('Aucun e-mail ne part au patient ni aux distributeurs : tous les e-mails (et relances) de cette demande sont envoyés à')} <b>info@eloflex.fr</b>, ${TR('marqués « essai interne »')}. ${TR('La demande reste visible seulement dans la liste globale : elle n’apparaît pas sur les fiches distributeurs ni dans les statistiques.')}</span></span>
       </label>
       ${d.role_lien==='secondaire'?`<div style="font-size:12.5px;background:#EEF4FB;border:0.5px solid #BFD3EA;border-radius:8px;padding:8px 11px;margin-bottom:12px"><i class="ti ti-link"></i> ${TR('Demande partagée avec')} <b>${esc(d.lien_nom||'')}</b> (${TR('distributeur le plus proche')}). ${TR('Les coordonnées du patient sont communes aux deux demandes ; les e-mails se gèrent depuis la demande principale.')}</div>`:''}
       <div class="form-group"><label class="form-label">${TR('Distributeur')}</label>
