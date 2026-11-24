@@ -11090,7 +11090,7 @@ async function modalEmailsDemande(id){
     <div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">
       <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" id="dim-${k}" ${coche?'checked':''} onchange="dimMaj()"> ${titre}</label>
       <div style="font-size:12px;color:var(--text3);margin:2px 0 6px 24px">${sousTitre}</div>
-      <input class="form-input" id="dim-${k}-email" style="margin-left:24px;width:calc(100% - 24px)" value="${esc(email||'')}" placeholder="adresse@exemple.fr" oninput="dimMaj()">
+      <input class="form-input" id="dim-${k}-email" style="margin-left:24px;width:calc(100% - 24px)" value="${esc(String(email||'').split(/[,;\s]+/).filter(Boolean).join('; '))}" placeholder="adresse@exemple.fr ; autre@exemple.fr" oninput="dimMaj()" onblur="this.value=this.value.split(/[,;\s]+/).filter(Boolean).join('; ')">
     </div>`;
   const env = a.envois||[]; window._DIM_RENVOI = env.length>0;
   showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="color:var(--accent)"></i><h2>${env.length?TR('Renvoyer les e-mails de la demande'):TR('Envoyer les e-mails de la demande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
@@ -11119,8 +11119,11 @@ async function modalEmailsDemande(id){
 }
 window.modalEmailsDemande = modalEmailsDemande;
 function _dimEnvois(){
-  const out=[]; const ok=v=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-  const add=(k,type)=>{ const c=document.getElementById('dim-'+k); const v=(gv('dim-'+k+'-email')||'').trim(); if(c&&c.checked) out.push({type, email:v, valide:ok(v)}); };
+  // Une ou plusieurs adresses par destinataire, séparées par « ; » (la virgule et l'espace sont aussi acceptés)
+  const out=[]; const un=v=>/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(v);
+  const liste=v=>String(v||'').split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
+  const ok=v=>{ const l=liste(v); return l.length>0 && l.every(un); };
+  const add=(k,type)=>{ const c=document.getElementById('dim-'+k); const v=liste(gv('dim-'+k+'-email')).join('; '); if(c&&c.checked) out.push({type, email:v, valide:ok(v)}); };
   add('contact','contact'); add('distrib','distributeur'); add('distrib2','distributeur2'); add('autre', gv('dim-autre-type')||'contact');
   return out;
 }
@@ -11134,7 +11137,7 @@ window.dimMaj = dimMaj;
 async function dimEnvoyer(id){
   const e=_dimEnvois(), msg=document.getElementById('dim-msg');
   const bad=e.filter(x=>!x.valide);
-  if(bad.length){ msg.innerHTML='<span style="color:var(--danger)">'+TR('Adresse e-mail invalide :')+' '+esc(bad.map(x=>x.email||'(vide)').join(', '))+'</span>'; return; }
+  if(bad.length){ msg.innerHTML='<span style="color:var(--danger)">'+TR('Adresse e-mail invalide :')+' '+esc(bad.map(x=>{ const l=String(x.email||'').split(/[,;\s]+/).filter(Boolean); const f=l.filter(v=>!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(v)); return f.length?f.join(', '):'(vide)'; }).join(', '))+'</span>'; return; }
   const b=document.getElementById('dim-go'); b.disabled=true; msg.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Envoi en cours…');
   try{
     const r=await API.diEmailsEnvoyer(id, e.map(x=>({type:x.type,email:x.email})));
@@ -11147,7 +11150,7 @@ window.dimEnvoyer = dimEnvoyer;
 async function dimApercu(id){
   const e=_dimEnvois(), msg=document.getElementById('dim-msg');
   const bad=e.filter(x=>!x.valide);
-  if(bad.length){ msg.innerHTML='<span style="color:var(--danger)">'+TR('Adresse e-mail invalide :')+' '+esc(bad.map(x=>x.email||'(vide)').join(', '))+'</span>'; return; }
+  if(bad.length){ msg.innerHTML='<span style="color:var(--danger)">'+TR('Adresse e-mail invalide :')+' '+esc(bad.map(x=>{ const l=String(x.email||'').split(/[,;\s]+/).filter(Boolean); const f=l.filter(v=>!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(v)); return f.length?f.join(', '):'(vide)'; }).join(', '))+'</span>'; return; }
   if(!e.length) return;
   msg.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Préparation de l’aperçu…');
   let r; try{ r=await API.diEmailsPreview(id, [...new Set(e.map(x=>x.type))]); }catch(err){ msg.innerHTML='<span style="color:var(--danger)">Erreur : '+esc(err.message)+'</span>'; return; }
