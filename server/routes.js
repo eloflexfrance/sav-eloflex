@@ -9120,8 +9120,52 @@ router.post('/contrat-public/:token/signer', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 // ── DEMANDES D'INFORMATIONS transmises aux distributeurs (leads) ──
 // ══════════════════════════════════════════════════════════════════
-const DI_STATUTS = ['transmise','relance','retour_recu','essai','vente','sans_suite','absence_retour'];
+const DI_STATUTS = ['transmise','relance','retour_recu','essai','vente','sans_suite','absence_retour','autre_distributeur'];
 const DI_NON_TRAITEES = ['transmise','relance'];
+// Essai interne : tous les e-mails de la demande partent à cette adresse (aucun vers le patient ni les distributeurs)
+const DI_EMAIL_ESSAI = 'info@eloflex.fr';
+// Statuts qui montrent qu'un distributeur a pris en charge le patient → l'autre passe en « traité par autre distributeur »
+const DI_STATUTS_PRISE_EN_CHARGE = ['essai', 'vente'];
+const _diHist = r => { try { return Array.isArray(r.historique) ? r.historique : JSON.parse(r.historique || '[]'); } catch (_) { return []; } };
+const _diPar = req => { const u = (req && req.session && req.session.user) || {}; return u.nom || u.prenom || u.email || u.login || null; };
+
+// Demande « jumelle » chez le 2e distributeur (Privilèges / Avantage) : mêmes coordonnées patient, reliée à la demande principale.
+async function _diSyncJumelle(id, par) {
+  const d = await db.get('SELECT * FROM demandes_info WHERE id=$1', [id]);
+  if (!d || d.role_lien === 'secondaire') return null;
+  const tw = d.lien_id ? await db.get('SELECT * FROM demandes_info WHERE id=$1', [d.lien_id]) : null;
+  const intacte = x => x && ['transmise', 'relance'].includes(x.statut) && !_diHist(x).some(h => h && h.statut === 'emails') && !x.relance_mail_date;
+  const delier = async () => { await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL WHERE id=$1`, [d.id]);
+    if (tw) { if (intacte(tw)) await db.run('DELETE FROM demandes_info WHERE id=$1', [tw.id]); else await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL WHERE id=$1`, [tw.id]); } };
+  if (!d.client2_id) { if (tw || d.lien_id) await delier(); return null; }
+  const patient = [d.nom, d.ville, d.cp, d.telephone, d.email, d.demande_client, !!d.essai_interne];
+  if (tw && tw.client_id === d.client2_id) {
+    await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, essai_interne=$7, updated_at=NOW() WHERE id=$8`, [...patient, tw.id]);
+    return tw.id;
+  }
+  if (tw) await delier();
+  const c2 = await db.get('SELECT nom FROM clients WHERE id=$1', [d.client2_id]);
+  const c1 = d.client_id ? await db.get('SELECT nom FROM clients WHERE id=$1', [d.client_id]) : null;
+  const nom1 = (c1 && c1.nom) || d.distributeur_nom || 'le distributeur le plus proche';
+  const hist = [{ statut: 'transmise', date: new Date().toISOString().slice(0, 10), par, detail: `Demande partagée avec ${nom1} (distributeur le plus proche)` }];
+  const n = await db.run(`INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, demande_client, essai_interne, statut, date_transmission, cree_par, historique, lien_id, role_lien)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transmise',$10,$11,$12::jsonb,$13,'secondaire') RETURNING id`,
+    [d.client2_id, d.distributeur2_nom || (c2 && c2.nom) || null, ...patient, d.date_transmission || new Date().toISOString().slice(0, 10), d.cree_par, JSON.stringify(hist), d.id]);
+  await db.run(`UPDATE demandes_info SET lien_id=$1, role_lien='principal' WHERE id=$2`, [n.id, d.id]);
+  return n.id;
+}
+// Un des deux distributeurs a pris le patient en charge → l'autre demande passe en « traité par autre distributeur » (plus de relance)
+async function _diPropager(row, par) {
+  if (!row || !row.lien_id || !DI_STATUTS_PRISE_EN_CHARGE.includes(row.statut)) return null;
+  const o = await db.get('SELECT * FROM demandes_info WHERE id=$1', [row.lien_id]);
+  if (!o || DI_STATUTS_PRISE_EN_CHARGE.includes(o.statut) || o.statut === 'autre_distributeur') return null;
+  const c = row.client_id ? await db.get('SELECT nom FROM clients WHERE id=$1', [row.client_id]) : null;
+  const hist = _diHist(o);
+  hist.push({ statut: 'autre_distributeur', date: new Date().toISOString().slice(0, 10), par, detail: `Pris en charge par ${(c && c.nom) || row.distributeur_nom || 'l’autre distributeur'}` });
+  await db.run(`UPDATE demandes_info SET statut='autre_distributeur', statut_date=CURRENT_DATE, date_retour=COALESCE(date_retour, CURRENT_DATE),
+      historique=$2::jsonb, updated_at=NOW() WHERE id=$1`, [o.id, JSON.stringify(hist)]);
+  return o.id;
+}
 
 // Liste avec filtres (client_id, statut, non_traitees, q)
 router.get('/demandes-info', requireAuth, async (req, res) => {
@@ -9134,8 +9178,10 @@ router.get('/demandes-info', requireAuth, async (req, res) => {
     const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
     const rows = await db.all(
       `SELECT d.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel,
-              c2.nom AS client2_nom_actuel, COALESCE(c2.privileges,FALSE) AS client2_privileges, COALESCE(c2.avantages,FALSE) AS client2_avantages
+              c2.nom AS client2_nom_actuel, COALESCE(c2.privileges,FALSE) AS client2_privileges, COALESCE(c2.avantages,FALSE) AS client2_avantages,
+              COALESCE(cl.nom, dl.distributeur_nom) AS lien_nom, dl.statut AS lien_statut
        FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN clients c2 ON c2.id = d.client2_id
+       LEFT JOIN demandes_info dl ON dl.id = d.lien_id LEFT JOIN clients cl ON cl.id = dl.client_id
        ${where} ORDER BY d.date_transmission DESC NULLS LAST, d.id DESC
        LIMIT ${Math.min(parseInt(req.query.limit)||2000, 5000)}`, p);
     res.json(rows);
@@ -9207,13 +9253,14 @@ router.post('/demandes-info', requireAuth, async (req, res) => {
     const d = req.body || {};
     const statut = DI_STATUTS.includes(d.statut) ? d.statut : 'transmise';
     const row = await db.run(
-      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par, demande_client, relance_mail_date, relance_tel_date, client2_id, distributeur2_nom)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par, demande_client, relance_mail_date, relance_tel_date, client2_id, distributeur2_nom, essai_interne)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [d.client_id||null, d.distributeur_nom||null, d.nom||null, d.ville||null, d.cp||null, fmtTel(d.telephone)||null,
        d.email||null, d.annotation||null, statut, d.date_transmission||new Date().toISOString().slice(0,10),
        d.date_retour||null, (req.session.user && req.session.user.id)||null,
        d.demande_client||null, d.relance_mail_date||null, d.relance_tel_date||null,
-       parseInt(d.client2_id)||null, (parseInt(d.client2_id) && d.distributeur2_nom) || null]);
+       parseInt(d.client2_id)||null, (parseInt(d.client2_id) && d.distributeur2_nom) || null, !!d.essai_interne]);
+    if (row && row.client2_id) { const tid = await _diSyncJumelle(row.id, _diPar(req)); if (tid) row.lien_id = tid; }
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9230,12 +9277,20 @@ router.put('/demandes-info/:id', requireAuth, async (req, res) => {
        statut, d.date_transmission||null, d.date_retour||null, d.demande_client||null,
        d.relance_mail_date||null, d.relance_tel_date||null, req.params.id]);
     if (!row) return res.status(404).json({ error: 'Demande introuvable' });
-    if (Object.prototype.hasOwnProperty.call(d, 'client2_id')) {
+    if (Object.prototype.hasOwnProperty.call(d, 'essai_interne'))
+      await db.run('UPDATE demandes_info SET essai_interne=$1 WHERE id=$2', [!!d.essai_interne, req.params.id]);
+    if (Object.prototype.hasOwnProperty.call(d, 'client2_id') && row.role_lien !== 'secondaire') {
       const c2 = parseInt(d.client2_id) || null;
       const r2 = await db.run('UPDATE demandes_info SET client2_id=$1, distributeur2_nom=$2 WHERE id=$3 RETURNING client2_id, distributeur2_nom',
         [c2, c2 ? (d.distributeur2_nom || null) : null, req.params.id]);
       if (r2) Object.assign(row, r2);
     }
+    if (row.role_lien === 'secondaire') {
+      // Demande jumelle : les coordonnées du patient restent communes aux deux distributeurs
+      if (row.lien_id) await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, updated_at=NOW() WHERE id=$7`,
+        [row.nom, row.ville, row.cp, row.telephone, row.email, row.demande_client, row.lien_id]);
+    } else await _diSyncJumelle(row.id, _diPar(req));
+    await _diPropager(row, _diPar(req));
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9267,12 +9322,20 @@ router.post('/demandes-info/:id/statut', requireAuth, async (req, res) => {
          relance_tel_date = CASE WHEN $6 THEN COALESCE($2::date, CURRENT_DATE) ELSE relance_tel_date END,
          updated_at=NOW() WHERE id=$7 RETURNING *`,
       [statut, entree.date, JSON.stringify(hist), dateRetour, setRetour, appelEmis, req.params.id]);
-    res.json({ ok: true, demande: row });
+    const autre = await _diPropager(row, par);
+    res.json({ ok: true, demande: row, autre_mise_a_jour: autre });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete('/demandes-info/:id', requireAuth, async (req, res) => {
-  try { await db.run('DELETE FROM demandes_info WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
+  try {
+    const d = await db.get('SELECT id, lien_id, role_lien FROM demandes_info WHERE id=$1', [req.params.id]);
+    if (d && d.lien_id) {
+      // Principale supprimée → sa jumelle aussi ; jumelle supprimée → la principale ne propose plus de 2e distributeur
+      if (d.role_lien === 'principal') await db.run('DELETE FROM demandes_info WHERE id=$1 AND role_lien=\'secondaire\'', [d.lien_id]);
+      else await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL, client2_id=NULL, distributeur2_nom=NULL WHERE id=$1`, [d.lien_id]);
+    }
+    await db.run('DELETE FROM demandes_info WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -9412,7 +9475,7 @@ router.post('/demandes-info/relance', requireAuth, async (req, res) => {
     if (!dest) return res.status(400).json({ error: 'Aucune adresse e-mail' });
     const cli = await db.get('SELECT nom FROM clients WHERE id=$1', [clientId]);
     const dmd = await db.all(
-      `SELECT * FROM demandes_info WHERE client_id=$1 AND statut = ANY('{transmise,relance}') ORDER BY date_transmission ASC`, [clientId]);
+      `SELECT * FROM demandes_info WHERE client_id=$1 AND statut = ANY('{transmise,relance}') AND NOT COALESCE(essai_interne,FALSE) ORDER BY date_transmission ASC`, [clientId]);
     if (!dmd.length) return res.status(400).json({ error: 'Aucune demande en attente pour ce distributeur' });
     const lignes = dmd.map(d => `<tr>
         <td style="border:1px solid #e5e7eb;padding:6px 9px">${d.date_transmission || ''}</td>
@@ -9436,7 +9499,7 @@ router.post('/demandes-info/relance', requireAuth, async (req, res) => {
       </div>`
     });
     await db.run(`UPDATE demandes_info SET relance_envoyee=TRUE, statut=CASE WHEN statut='transmise' THEN 'relance' ELSE statut END, updated_at=NOW()
-      WHERE client_id=$1 AND statut = ANY('{transmise,relance}')`, [clientId]);
+      WHERE client_id=$1 AND statut = ANY('{transmise,relance}') AND NOT COALESCE(essai_interne,FALSE)`, [clientId]);
     res.json({ ok: true, to: dest, count: dmd.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9448,8 +9511,10 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
     const d = await db.get(
       `SELECT di.*, c.nom AS client_nom, c.email AS client_email FROM demandes_info di LEFT JOIN clients c ON c.id = di.client_id WHERE di.id = $1`, [id]);
     if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    if (d.statut === 'autre_distributeur') return res.status(400).json({ error: 'Patient pris en charge par l’autre distributeur : pas de relance.' });
     // Destinataire = le distributeur (fiche client). On peut forcer une adresse via le corps.
-    const dest = ((req.body && req.body.email) || d.client_email || '').trim();
+    const destReel = ((req.body && req.body.email) || d.client_email || '').trim();
+    const dest = d.essai_interne ? DI_EMAIL_ESSAI : destReel;
     if (!dest) return res.status(400).json({ error: "Aucune adresse e-mail pour ce distributeur (fiche client). Renseignez-la ou saisissez-en une." });
     // Date d'enregistrement du contact au format FR
     const frDate = (v) => {
@@ -9464,9 +9529,9 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
     const ligne = (v) => v ? `<div style="font-style:italic;font-weight:bold">${String(v)}</div>` : '';
     await envoyerEmailPret({
       to: dest,
-      bcc: 'info@eloflex.fr',
-      subject: `Eloflex — Suivi du contact ${d.nom || ''}`,
-      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222;font-size:14px;line-height:1.5">
+      bcc: d.essai_interne ? undefined : 'info@eloflex.fr',
+      subject: `${d.essai_interne ? '[ESSAI INTERNE] ' : ''}Eloflex — Suivi du contact ${d.nom || ''}`,
+      html: `${d.essai_interne ? _diBandeauEssai(destReel || '(aucune adresse)', 'relance au distributeur ' + (d.client_nom || d.distributeur_nom || '')) : ''}<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222;font-size:14px;line-height:1.5">
         <p>Bonjour</p>
         <p>Nous vous avons transmis les coordonnées d'un contact potentiel le ${frDate(d.date_transmission)} dont voici les coordonnées :</p>
         <div style="margin:10px 0 14px;padding-left:2px">
@@ -9489,7 +9554,7 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
     hist.push({ statut: 'relance', date: new Date().toISOString().slice(0,10), par });
     await db.run(`UPDATE demandes_info SET relance_envoyee=TRUE, relance_mail_date=CURRENT_DATE,
       statut='relance', statut_date=CURRENT_DATE, historique=$2::jsonb, updated_at=NOW() WHERE id=$1`, [id, JSON.stringify(hist)]);
-    res.json({ ok: true, to: dest });
+    res.json({ ok: true, to: dest, essai_interne: !!d.essai_interne });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -9526,24 +9591,8 @@ function _labelPremium(c) {
   const l = [c && c.privileges ? 'Privilèges' : null, c && c.avantages ? 'Avantage' : null].filter(Boolean);
   return l.length ? l.join(' et ') + ' Eloflex' : 'Eloflex';
 }
-router.get('/demandes-info/:id/emails-apercu', requireAuth, async (req, res) => {
-  try {
-    const d = await _diContexte(req.params.id);
-    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
-    let hist = []; try { hist = Array.isArray(d.historique) ? d.historique : JSON.parse(d.historique || '[]'); } catch (_) { hist = []; }
-    res.json({ envois: hist.filter(h => h && h.statut === 'emails').map(h => ({ date: h.date, par: h.par, detail: h.detail })),
-      contact_email: d.email || '', contact_nom: d.nom || '', distrib_email: d.c_email || '',
-      distrib_nom: d.c_nom || d.distributeur_nom || '', distrib_lie: !!d.cid, position: d.c_lat != null && d.c_lng != null,
-      distrib2: d.d2 ? { nom: d.d2.nom, email: d.d2.email || '', label: _labelPremium(d.d2) } : null });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
-  try {
-    const d = await _diContexte(req.params.id);
-    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
-    const envois = (Array.isArray((req.body || {}).envois) ? req.body.envois : [])
-      .filter(e => e && /^(contact|distributeur|distributeur2)$/.test(e.type) && /@/.test(String(e.email || '')));
-    if (!envois.length) return res.json({ ok: true, envoyes: [] });
+// Construit les e-mails d'une demande (sujet + HTML par type) — utilisé pour l'aperçu modifiable et pour l'envoi
+async function _diConstruireMails(d, req, veutContact) {
     const p = {}; (await db.all('SELECT cle, valeur FROM parametres')).forEach(r => p[r.cle] = r.valeur);
     const from = (p.email_from_relance || 'info@eloflex.fr').replace(/^.*<|>.*$/g, '').trim() || 'info@eloflex.fr';
     const esc = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -9582,7 +9631,7 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
     const blocDistrib = await blocDistribDe({ id: d.cid, nom: d.c_nom || d.distributeur_nom || '', adresse: d.c_adresse, adresse2: d.c_adresse2,
       cp: d.c_cp, ville: d.c_ville, tel: d.c_tel, portable: d.c_portable, lat: d.c_lat, lng: d.c_lng }, null);
     const label2 = d.d2 ? _labelPremium(d.d2) : '';
-    const veutContact = envois.some(e => e.type === 'contact');
+    
     const blocDistrib2 = (d.d2 && veutContact) ? await blocDistribDe(d.d2, 'Distributeur ' + label2) : '';
     const carteHtml = carteBien;
     const titre = t => `<div style="font-size:15px;font-weight:bold;color:#1F3A5F;margin:18px 0 0">${t}</div>`;
@@ -9637,26 +9686,91 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
       <p>Bien à vous,</p>
       <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
 
+    return {
+      from, label2, carte: !!carteHtml,
+      contact: { subject: d.d2 ? 'Eloflex — Vos deux contacts distributeurs' : 'Eloflex — Les coordonnées de votre distributeur le plus proche', html: mailContact() },
+      distributeur: { subject: `Eloflex — Nouveau contact à rappeler : ${d.nom || ''}${d.ville ? ' (' + d.ville + ')' : ''}`, html: mailDistrib() },
+      distributeur2: d.d2 ? { subject: `Eloflex — Nouveau contact à rappeler : ${d.nom || ''}${d.ville ? ' (' + d.ville + ')' : ''}`, html: mailDistrib2() } : null,
+    };
+}
+// Bandeau ajouté en tête des e-mails d'un essai interne
+function _diBandeauEssai(destReel, quoi) {
+  const e = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto 14px;background:#FFF4CC;border:2px dashed #C98A00;border-radius:8px;padding:10px 14px;font-size:13px;color:#5A3E00">
+    <b>ESSAI INTERNE</b> — e-mail non envoyé au destinataire réel.<br>${e(quoi)} · destinataire prévu : <b>${e(destReel)}</b></div>`;
+}
+// Une demande « jumelle » (2e distributeur) renvoie toujours aux e-mails de la demande principale
+async function _diIdPrincipal(id) {
+  const r = await db.get('SELECT id, lien_id, role_lien FROM demandes_info WHERE id=$1', [id]);
+  return r && r.role_lien === 'secondaire' && r.lien_id ? r.lien_id : (r ? r.id : null);
+}
+router.get('/demandes-info/:id/emails-apercu', requireAuth, async (req, res) => {
+  try {
+    const pid = await _diIdPrincipal(req.params.id);
+    const d = pid ? await _diContexte(pid) : null;
+    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    const hist = _diHist(d);
+    res.json({ id: d.id, envois: hist.filter(h => h && h.statut === 'emails').map(h => ({ date: h.date, par: h.par, detail: h.detail })),
+      contact_email: d.email || '', contact_nom: d.nom || '', distrib_email: d.c_email || '',
+      distrib_nom: d.c_nom || d.distributeur_nom || '', distrib_lie: !!d.cid, position: d.c_lat != null && d.c_lng != null,
+      essai_interne: !!d.essai_interne, email_essai: DI_EMAIL_ESSAI,
+      distrib2: d.d2 ? { nom: d.d2.nom, email: d.d2.email || '', label: _labelPremium(d.d2) } : null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Aperçu modifiable : sujet + HTML de chaque e-mail, tels qu'ils partiraient
+router.post('/demandes-info/:id/emails-preview', requireAuth, async (req, res) => {
+  try {
+    const pid = await _diIdPrincipal(req.params.id);
+    const d = pid ? await _diContexte(pid) : null;
+    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    const types = Array.isArray((req.body || {}).types) ? req.body.types : ['contact', 'distributeur', 'distributeur2'];
+    const m = await _diConstruireMails(d, req, types.includes('contact'));
+    const out = {};
+    for (const t of ['contact', 'distributeur', 'distributeur2']) if (types.includes(t) && m[t]) out[t] = m[t];
+    res.json({ mails: out, essai_interne: !!d.essai_interne, email_essai: DI_EMAIL_ESSAI });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
+  try {
+    const pid = await _diIdPrincipal(req.params.id);
+    if (pid) { try { await _diSyncJumelle(pid, _diPar(req)); } catch (e) { console.warn('[DEMANDES] jumelle :', e.message); } }
+    const d = pid ? await _diContexte(pid) : null;
+    if (!d) return res.status(404).json({ error: 'Demande introuvable' });
+    const envois = (Array.isArray((req.body || {}).envois) ? req.body.envois : [])
+      .filter(e => e && /^(contact|distributeur|distributeur2)$/.test(e.type) && /@/.test(String(e.email || '')));
+    if (!envois.length) return res.json({ ok: true, envoyes: [] });
+    const m = await _diConstruireMails(d, req, envois.some(e => e.type === 'contact'));
+    const label2 = m.label2;
+    const essai = !!d.essai_interne;
     const envoyes = [], erreurs = [];
     for (const e of envois) {
-      const to = String(e.email).trim();
+      const destReel = String(e.email).trim();
+      const base = m[e.type]; if (!base) continue;
+      // Contenu modifié dans l'aperçu (sinon le texte standard)
+      const subject = (typeof e.subject === 'string' && e.subject.trim()) ? e.subject.trim().slice(0, 250) : base.subject;
+      const html = (typeof e.html === 'string' && e.html.trim()) ? e.html.slice(0, 400000) : base.html;
+      const quoi = e.type === 'contact' ? 'e-mail au patient' : e.type === 'distributeur2' ? 'e-mail au distributeur ' + label2 : 'e-mail au distributeur le plus proche';
+      const to = essai ? DI_EMAIL_ESSAI : destReel;
       try {
-        await sendBrevoMail({ from, fromName: 'Eloflex France', to,
-          cc: /(^|[,;\s])info@eloflex\.fr($|[,;\s])/i.test(to) ? null : 'info@eloflex.fr',
-          subject: e.type === 'contact' ? (d.d2 ? 'Eloflex — Vos deux contacts distributeurs' : 'Eloflex — Les coordonnées de votre distributeur le plus proche')
-                                        : `Eloflex — Nouveau contact à rappeler : ${d.nom || ''}${d.ville ? ' (' + d.ville + ')' : ''}`,
-          html: e.type === 'contact' ? mailContact() : e.type === 'distributeur2' ? mailDistrib2() : mailDistrib() });
-        envoyes.push({ type: e.type, email: to });
+        await sendBrevoMail({ from: m.from, fromName: 'Eloflex France', to,
+          cc: essai || /(^|[,;\s])info@eloflex\.fr($|[,;\s])/i.test(to) ? null : 'info@eloflex.fr',
+          subject: (essai ? '[ESSAI INTERNE] ' : '') + subject,
+          html: (essai ? _diBandeauEssai(destReel, quoi) : '') + html });
+        envoyes.push({ type: e.type, email: to, destinataire_reel: destReel, modifie: html !== base.html || subject !== base.subject });
       } catch (err) { erreurs.push({ type: e.type, email: to, error: err.response && err.response.data ? JSON.stringify(err.response.data).slice(0, 200) : err.message }); }
     }
     if (envoyes.length) {
-      const u = (req.session && req.session.user) || {};
-      let hist = []; try { hist = Array.isArray(d.historique) ? d.historique : JSON.parse(d.historique || '[]'); } catch (_) { hist = []; }
-      hist.push({ statut: 'emails', date: new Date().toISOString().slice(0, 10), par: u.nom || u.email || null,
-        detail: (hist.some(h => h && h.statut === 'emails') ? 'Renvoi — ' : '') + envoyes.map(x => (x.type === 'contact' ? 'contact' : x.type === 'distributeur2' ? 'distributeur ' + label2 : 'distributeur') + ' → ' + x.email).join(', ') });
+      const par = _diPar(req), date = new Date().toISOString().slice(0, 10);
+      const lib = x => (x.type === 'contact' ? 'contact' : x.type === 'distributeur2' ? 'distributeur ' + label2 : 'distributeur') + ' → ' + (essai ? DI_EMAIL_ESSAI + ' (essai interne, au lieu de ' + x.destinataire_reel + ')' : x.email) + (x.modifie ? ' (texte modifié)' : '');
+      const hist = _diHist(d);
+      hist.push({ statut: 'emails', date, par, detail: (hist.some(h => h && h.statut === 'emails') ? 'Renvoi — ' : '') + envoyes.map(lib).join(', ') });
       await db.run('UPDATE demandes_info SET historique=$2::jsonb, updated_at=NOW() WHERE id=$1', [d.id, JSON.stringify(hist)]);
+      // Même trace sur la demande jumelle (2e distributeur)
+      const j = await db.get('SELECT id, lien_id, historique FROM demandes_info WHERE id=(SELECT lien_id FROM demandes_info WHERE id=$1)', [d.id]);
+      if (j) { const h2 = _diHist(j); h2.push({ statut: 'emails', date, par, detail: 'Envoyés depuis la demande principale — ' + envoyes.map(lib).join(', ') });
+        await db.run('UPDATE demandes_info SET historique=$2::jsonb, updated_at=NOW() WHERE id=$1', [j.id, JSON.stringify(h2)]); }
     }
-    res.json({ ok: !erreurs.length, envoyes, erreurs, carte: !!carteHtml });
+    res.json({ ok: !erreurs.length, envoyes, erreurs, carte: m.carte, essai_interne: essai });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -93,6 +93,7 @@ const API = {
   diEmailsApercu:(id)=>API.get(`/demandes-info/${id}/emails-apercu`),
   diDistribPremium:(cp,ville)=>API.get('/demandes-info/distributeurs-premium?'+new URLSearchParams({cp:cp||'',ville:ville||''}).toString()),
   diEmailsEnvoyer:(id,envois)=>API.post(`/demandes-info/${id}/emails`,{envois}),
+  diEmailsPreview:(id,types)=>API.post(`/demandes-info/${id}/emails-preview`,{types}),
   reaffecterDemandes:(payload)=>API.post('/demandes-info/reaffecter',payload),
   distributeursReferences:()=>API.get('/demandes-info/distributeurs'),
   fusionnerClients:(idCible,idSource,vfIgnore)=>API.post(`/clients/${idCible}/fusionner`,{client_source_id:idSource,vf_ignore_source:vfIgnore}),

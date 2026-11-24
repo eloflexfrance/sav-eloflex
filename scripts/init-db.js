@@ -311,6 +311,10 @@ async function initDB() {
     // 2e distributeur facultatif (Privilèges / Avantage Eloflex) proposé au patient en complément du plus proche
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS client2_id INTEGER REFERENCES clients(id) ON DELETE SET NULL`);
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS distributeur2_nom TEXT`);
+    // Essai interne (mails envoyés à info@eloflex.fr au lieu des vrais destinataires) + demandes jumelles (2 distributeurs)
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS essai_interne BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS lien_id INTEGER`);
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS role_lien TEXT`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (
