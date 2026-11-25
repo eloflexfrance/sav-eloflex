@@ -396,8 +396,9 @@ window.renderLogs=renderLogs; window.chargerLogs=chargerLogs;
 
 async function renderDashboard(ttl,c,a){
   ttl.textContent=t('nav_dashboard');
-  const{stats:s,recentes}=await API.stats();
+  const auj=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   c.innerHTML=`
+    <div style="font-size:13px;color:var(--text3);margin:-4px 0 12px">${auj.charAt(0).toUpperCase()+auj.slice(1)} — ${TR('ce qui demande une action aujourd’hui')}</div>
     <div class="quick-search-bar">
       <div style="position:relative;flex:1;max-width:560px">
         <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:17px;pointer-events:none"></i>
@@ -408,55 +409,100 @@ async function renderDashboard(ttl,c,a){
         <div id="qs-results" class="qs-results" style="display:none"></div>
       </div>
     </div>
-    <div id="dash-demos"></div>
-    <div class="card" style="margin-bottom:14px">
-      <div class="section-title"><i class="ti ti-clipboard-list"></i>${t('cmd_title')||'Suivi des commandes'}
+    <div style="font-size:12.5px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 8px">${TR('À traiter')}</div>
+    <div id="dash-tuiles" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px"><div style="font-size:13px;color:var(--text3)">${t('msg_chargement')}</div></div>
+    ${hasAccess('commandes')?`<div class="card" style="margin-bottom:14px">
+      <div class="section-title"><i class="ti ti-clipboard-list"></i>${TR('Commandes')} ${new Date().getFullYear()}
         <button class="btn sm" style="margin-left:auto" onclick="setView('commandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir toutes les commandes'}</button>
       </div>
       <div id="dash-commandes">${t('msg_chargement')}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px">
-      <div class="stat-card"><div class="stat-label">${t('db_interventions')}</div><div class="stat-value">${s.nb_interventions}</div></div>
-      <div class="stat-card"><div class="stat-label">${t('db_ouvertes')}</div><div class="stat-value" style="color:var(--accent)">${s.ouvert}</div></div>
-      <div class="stat-card"><div class="stat-label">${t('db_attente')}</div><div class="stat-value" style="color:var(--warning)">${s.attente}</div></div>
-    </div>
-    <div class="grid-4" style="margin-bottom:14px">
-      <div class="stat-card"><div class="stat-label">${t('db_garantie')}</div><div class="stat-value" style="color:var(--success)">${s.garantie}</div></div>
-      <div class="stat-card"><div class="stat-label">${t('db_hors_garantie')}</div><div class="stat-value" style="color:var(--warning)">${s.hors_garantie}</div></div>
-      <div class="stat-card"><div class="stat-label">${t('db_pieces_alerte')}</div><div class="stat-value" style="color:${s.pieces_alerte>0?'var(--danger)':'var(--text)'}">${s.pieces_alerte}</div></div>
-      <div class="stat-card" style="cursor:pointer" onclick="setView('alertes')"><div class="stat-label">${t('db_alertes')}</div><div class="stat-value" style="color:${s.alertes_non_lues>0?'var(--danger)':'var(--text)'}">${s.alertes_non_lues}</div></div>
-    </div>
-    ${hasAccess('demandes')?`<div class="card">
-      <div class="section-title"><i class="ti ti-address-book"></i>${t('db_dernieres_demandes')||"Dernières demandes d'informations"}
-        <button class="btn sm" style="margin-left:auto" onclick="setView('demandes')"><i class="ti ti-arrow-right"></i>${t('cmd_voir_tout')||'Voir tout'}</button>
-      </div>
-      <div id="dash-demandes-info">${t('msg_chargement')}</div>
     </div>`:''}
-    <div class="card" style="margin-top:14px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px">
+      ${hasAccess('demandes')?`<div class="card">
+        <div class="section-title"><i class="ti ti-address-book"></i>${t('db_dernieres_demandes')||"Dernières demandes d'informations"}
+          <button class="btn sm" style="margin-left:auto" onclick="setView('demandes')"><i class="ti ti-arrow-right"></i>${TR('Voir tout')}</button>
+        </div>
+        <div id="dash-demandes-info">${t('msg_chargement')}</div>
+      </div>`:''}
+      ${hasAccess('commande-suede')?`<div class="card" id="dash-suede-card">
+        <div class="section-title"><i class="ti ti-truck-delivery"></i>${TR('Commandes Suède en cours')}
+          <button class="btn sm" style="margin-left:auto" onclick="setView('commande-suede')"><i class="ti ti-arrow-right"></i>${TR('Voir tout')}</button>
+        </div>
+        <div id="dash-suede">${t('msg_chargement')}</div>
+      </div>`:''}
+    </div>
+    <div class="card" id="dash-transferts-card" style="margin-top:14px;display:none">
       <div class="section-title"><i class="ti ti-arrows-exchange"></i>${t('transferts_en_cours')}
         <button class="btn sm" style="margin-left:auto" onclick="setView('transferts')"><i class="ti ti-arrow-right"></i>${t('transferts_voir_tout')}</button>
       </div>
-      <div id="dash-transferts">${t('msg_chargement')}</div>
+      <div id="dash-transferts"></div>
     </div>`;
-  chargerTransfertsDashboard();
-  chargerCommandesDashboard();
-  chargerDemosDashboard();
+  chargerTuilesDashboard();
+  if(hasAccess('commandes')) chargerCommandesDashboard();
   if(hasAccess('demandes')) chargerDemandesInfoDashboard();
+  chargerTransfertsDashboard();
 }
+
+// Tuiles « À traiter » : un chiffre actionnable par module, clic = liste filtrée
+async function chargerTuilesDashboard(){
+  const el=document.getElementById('dash-tuiles'); if(!el) return;
+  const annee=new Date().getFullYear(), ok=v=>v&&v.status==='fulfilled'?v.value:null;
+  const [cmdS, diS, res, demos, st] = await Promise.allSettled([
+    hasAccess('commandes')?API.commandesStats(annee):Promise.resolve(null),
+    hasAccess('demandes')?API.demandesInfoStats():Promise.resolve(null),
+    API.dashboardResume(),
+    hasAccess('parc-demo')?API.demosSuivi():Promise.resolve(null),
+    hasAccess('interventions')?API.stats():Promise.resolve(null)
+  ]);
+  const cs=ok(cmdS), ds=ok(diS), r=ok(res)||{}, dm=ok(demos), s=(ok(st)||{}).stats;
+  const T=[];
+  const tuile=(n,coul,titre,sous,action)=>T.push({n,coul,titre,sous,action});
+  if(cs){
+    tuile(cs.impaye||0,'#dc2626',TR('Commandes impayées'),TR('clic = liste filtrée « Impayé »'),"setView('commandes',{statut:'Impayé'})");
+    tuile(cs.a_preparer||0,'#d97706',TR('Commandes à préparer'),(cs.en_preparation||0)+' '+TR('en préparation'),"setView('commandes',{statut:'À préparer'})");
+  }
+  if(ds) tuile(ds.relances_a_faire||0,'#2563eb',TR('Relances demandes d’info'),(ds.relances_mail||0)+' '+TR('mail')+' · '+(ds.relances_tel||0)+' '+TR('téléphone'),"DI_RELANCE_ONLY=true;DI_STATUT_FILTRE=new Set();DEMANDES_VUE='distrib';setView('demandes')");
+  if(r.prets) tuile(r.prets.retour_depasse||0,'#dc2626',TR('Prêts : retour dépassé'),(r.prets.en_cours||0)+' '+TR('en cours')+' · '+(r.prets.a_signer||0)+' '+TR('bon(s) à signer'),"setView('prets')");
+  if(dm){ const dues=(dm||[]).filter(d=>d.du); tuile(dues.length,'#d97706',TR('Démos à suivre'),dues.length?esc(dues.slice(0,2).map(d=>d.client_nom||d.distributeur_nom||'').join(' · '))+(dues.length>2?' …':''):TR('rappel échu'),"setView('alertes')"); }
+  if(r.suede){ const q=r.suede; const n=(q.a_valider||0)+(q.a_envoyer||0)+(q.en_attente||0);
+    tuile(n,'#7c3aed',TR('Commandes Suède'),[q.a_valider?q.a_valider+' '+TR('à valider'):null,q.a_envoyer?q.a_envoyer+' '+TR('à envoyer'):null,q.en_attente?q.en_attente+' '+TR('en attente de livraison'):null].filter(Boolean).join(' · ')||TR('aucune en cours'),"setView('commande-suede')"); }
+  if(s) tuile(s.ouvert||0,'#16a34a',TR('Interventions SAV ouvertes'),(s.nb_interventions||0)+' '+TR('au total'),"setView('interventions')");
+  if(r.stock && !r.stock.erreur) tuile((r.stock.rupture||0)+(r.stock.faible||0),'#64748b',TR('Pièces à recommander'),(r.stock.rupture||0)+' '+TR('à zéro')+' · '+(r.stock.faible||0)+' '+TR('sous le seuil')+' — '+TR('vendues ces 6 mois'),"setView('catalogue')");
+  if(!T.length){ el.innerHTML=''; return; }
+  el.innerHTML=T.map(x=>{ const vide=!x.n; const c=vide?'#cbd5e1':x.coul;
+    return `<div class="stat-card" onclick="${x.action}" style="cursor:pointer;position:relative;border-left:4px solid ${c};padding:12px 14px;${vide?'opacity:.6':''}" title="${esc(x.titre)}">
+      <i class="ti ti-arrow-right" style="position:absolute;right:12px;top:12px;color:var(--text3)"></i>
+      <div style="font-size:28px;font-weight:800;line-height:1.1;color:${vide?'var(--text3)':x.coul}">${x.n}</div>
+      <div style="font-size:13.5px;font-weight:600;color:var(--text)">${x.titre}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:2px">${vide?TR('Rien à traiter'):x.sous}</div>
+    </div>`; }).join('');
+  // Bloc « Commandes Suède en cours »
+  const sb=document.getElementById('dash-suede');
+  if(sb){
+    const L=(r.suede&&r.suede.liste)||[];
+    if(!L.length){ sb.innerHTML=`<div style="font-size:13px;color:var(--text3);padding:6px 0">${TR('Aucune commande en cours.')}</div>`; }
+    else sb.innerHTML=`<div class="table-wrap"><table class="t"><thead><tr><th>N°</th><th>${TR('Livrer à')}</th><th>${TR('Étape')}</th><th>${TR('Suivi')}</th></tr></thead>
+      <tbody>${L.map(x=>{ const lien=lienSuiviColis(x.transporteur,x.num_suivi);
+        return `<tr style="cursor:pointer" onclick="${x.etape?`window._CSPO=Object.assign(window._CSPO||{},{vue:'edition',id:${x.id},cs:null,modifie:false});setView('commande-suede',{garderPO:true})`:`setView('commande-suede')`}">
+        <td class="mono" style="font-weight:600">${esc(x.numero_bc)}</td><td>${esc(x.livraison_nom||'—')}</td>
+        <td>${typeof csBadgeEtape==='function'?csBadgeEtape(x):esc(x.statut||'')}</td>
+        <td class="mono" style="font-size:12px">${x.num_suivi?(lien?`<a href="${lien}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent)">${esc(x.num_suivi)}</a>`:esc(x.num_suivi))+(x.transporteur?' · '+esc(x.transporteur):''):'—'}</td></tr>`; }).join('')}</tbody></table></div>`;
+  }
+}
+window.chargerTuilesDashboard = chargerTuilesDashboard;
 
 async function chargerDemandesInfoDashboard(){
   const el=document.getElementById('dash-demandes-info'); if(!el) return;
   let rows=[]; try{ rows=await API.demandesInfo({}); }catch(e){ el.innerHTML=`<div style="font-size:13px;color:var(--danger);padding:6px 0">Erreur : ${esc(e.message)}</div>`; return; }
-  rows=(rows||[]).slice().sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,10);
+  rows=(rows||[]).filter(d=>!d.essai_interne).sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,6);
   if(!rows.length){ el.innerHTML=`<div style="font-size:13px;color:var(--text3);padding:6px 0">${TR('Aucune demande.')}</div>`; return; }
   el.innerHTML=`<div class="table-wrap"><table class="t">
-      <thead><tr><th>${TR('Statut')}</th><th>${TR('Date')}</th><th>${TR('Distributeur')}</th><th>${TR('Contact')}</th><th>${TR('Ville / CP')}</th></tr></thead>
+      <thead><tr><th>${TR('Date')}</th><th>${TR('Patient')}</th><th>${TR('Distributeur')}</th><th>${TR('Statut')}</th></tr></thead>
       <tbody>${rows.map(d=>`<tr style="cursor:pointer" onclick="setView('demandes')">
-        <td>${diBadge(d.statut)}</td>
         <td style="white-space:nowrap">${_dfd(d.date_transmission)}</td>
+        <td>${esc(d.nom||'')}${d.ville?`<span style="color:var(--text3)"> — ${esc(d.ville)}</span>`:''}</td>
         <td>${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>
-        <td>${esc(d.nom||'')}${d.telephone?`<div class="mono" style="color:var(--text3);font-size:12px">${esc(fmtTel(d.telephone))}</div>`:''}</td>
-        <td style="white-space:nowrap">${esc(d.ville||'')}${d.cp?' '+esc(d.cp):''}</td>
+        <td>${diBadge(d.statut)}</td>
       </tr>`).join('')}</tbody>
     </table></div>`;
 }
@@ -488,22 +534,17 @@ async function chargerCommandesDashboard(){
   try{
     const [stats, res] = await Promise.all([
       API.commandesStats(anneeEnCours),
-      API.commandes({ per_page: 10 })
+      API.commandes({ per_page: 8 })
     ]);
     const list = res.rows||[];
+    const etape=(lib,n,statut,coul,fond)=>`<div onclick="setView('commandes',{statut:'${statut}'})" title="${TR('Voir les commandes')} « ${lib} »" style="flex:1;min-width:92px;cursor:pointer;background:${fond||'var(--bg,#f6f8f7)'};border-radius:10px;padding:8px 10px">
+        <div style="font-size:12px;color:${coul||'var(--text2)'}">${lib}</div><div style="font-size:20px;font-weight:700;color:${coul||'var(--text)'}">${n||0}</div></div>`;
+    const fl='<span style="align-self:center;color:var(--text3);font-size:16px">›</span>';
     el.innerHTML=`
-      <div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Année ${anneeEnCours}</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">
-        <div class="stat-card"><div class="stat-label">${t('cmd_total')||'Total'}</div><div class="stat-value">${stats.total}</div></div>
-        <div class="stat-card"><div class="stat-label">${TR('🦽 Avec N° série')}</div><div class="stat-value" style="color:var(--accent)">${stats.fauteuils_serie||0}</div></div>
-        <div class="stat-card"><div class="stat-label">⏳ En attente</div><div class="stat-value">${stats.en_attente||0}</div></div>
-        <div class="stat-card"><div class="stat-label">${t('cmd_en_prep')||'En préparation'}</div><div class="stat-value" style="color:var(--danger)">${stats.en_preparation}</div></div>
-        <div class="stat-card"><div class="stat-label">${t('cmd_expedie')||'Expédié'}</div><div class="stat-value" style="color:var(--warning)">${stats.expedie}</div></div>
-        <div class="stat-card"><div class="stat-label">${t('cmd_livre')||'Livré'}</div><div class="stat-value" style="color:var(--success)">${stats.livre}</div></div>
-        <div class="stat-card"><div class="stat-label">${t('cmd_facture_statut')||'Facturé'}</div><div class="stat-value" style="color:var(--accent)">${stats.facture||0}</div></div>
-        <div class="stat-card" style="cursor:pointer${stats.impaye>0?';animation:pulse-danger 2s infinite':''}" onclick="STATE.view='commandes';CMD_FILTERS.statut='Impayé';render()" title="${TR("Voir les commandes impayées")}"><div class="stat-label" style="color:var(--danger)">${TR('⚠️ Impayés')}</div><div class="stat-value" style="color:var(--danger)">${stats.impaye||0}</div></div>
-        <div class="stat-card"><div class="stat-label">🔄 ${t('cmd_demo_count')||'Démos'}</div><div class="stat-value" style="color:var(--warning)">${stats.demo||0}</div></div>
-        <div class="stat-card"><div class="stat-label">${t('cmd_probleme')||'Problème'}</div><div class="stat-value" style="color:${stats.probleme>0?'var(--danger)':'var(--text)'}">${stats.probleme}</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        ${etape(TR('À préparer'),stats.a_preparer,'À préparer')}${fl}${etape(TR('En préparation'),stats.en_preparation,'En préparation')}${fl}${etape(TR('Expédiées'),stats.expedie,'Expédié')}${fl}${etape(TR('Livrées'),stats.livre,'Livré')}${fl}${etape(TR('Facturées'),stats.facture,'Facturé')}${fl}${etape(TR('Payées'),stats.paye,'Payé')}
+        ${etape(TR('Impayées'),stats.impaye,'Impayé',(stats.impaye||0)>0?'#dc2626':null,(stats.impaye||0)>0?'#fdecec':null)}
+        <div onclick="setView('commandes')" style="flex:1;min-width:92px;cursor:pointer;background:var(--bg,#f6f8f7);border-radius:10px;padding:8px 10px"><div style="font-size:12px;color:var(--text2)">${t('cmd_total')||'Total'}</div><div style="font-size:20px;font-weight:700">${stats.total||0}</div></div>
       </div>
       ${!list.length?`<div style="font-size:13px;color:var(--text3)">${t('cmd_empty')||'Aucune commande trouvée'}</div>`:`
       <div class="table-wrap"><table class="t">
@@ -541,7 +582,10 @@ async function chargerTransfertsDashboard(){  const el=document.getElementById('
   }
   try{
     const list=(await API.transferts()).filter(tr=>tr.statut!=='Arrivé'&&tr.statut!=='Annulé');
-    if(!list.length){ el.innerHTML=`<div style="font-size:13px;color:var(--text3)">${t('transferts_empty')}</div>`; return; }
+    // Bloc affiché seulement s'il y a des transferts en cours
+    const carte=document.getElementById('dash-transferts-card');
+    if(!list.length){ if(carte) carte.style.display='none'; return; }
+    if(carte) carte.style.display='';
     const scT={'En préparation':'attente','En transit':'ouvert'};
     const stTr={'En préparation':t('transferts_statut_prep'),'En transit':t('transferts_statut_transit')};
     el.innerHTML=`<div class="table-wrap"><table class="t">

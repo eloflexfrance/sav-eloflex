@@ -2022,6 +2022,46 @@ router.patch('/alertes/lire-toutes', async (req, res) => {
 });
 
 // ── STATS ─────────────────────────────────────────────────────────
+// ── Tableau de bord : chiffres « à traiter » (prêts, commandes Suède, ruptures de stock), selon les droits ──
+router.get('/dashboard/resume', async (req, res) => {
+  try {
+    const u = res.locals.user, out = {};
+    if (permModule(u, 'prets') !== 'none') {
+      out.prets = await db.get(`SELECT
+          COUNT(*) FILTER (WHERE statut IN ('en_cours','retard','prolonge'))::int AS en_cours,
+          COUNT(*) FILTER (WHERE statut IN ('en_cours','retard','prolonge') AND date_retour_prevue IS NOT NULL AND date_retour_prevue::date < CURRENT_DATE)::int AS retour_depasse,
+          COUNT(*) FILTER (WHERE statut IN ('brouillon','envoye'))::int AS a_signer
+        FROM prets`).catch(() => null);
+    }
+    if (permModule(u, 'commandes') !== 'none') {
+      try {
+        await require('./commandes-suede-po').assurer(db);
+        out.suede = await db.get(`SELECT
+            COUNT(*) FILTER (WHERE etape='brouillon')::int AS a_valider,
+            COUNT(*) FILTER (WHERE etape='validee')::int AS a_envoyer,
+            COUNT(*) FILTER (WHERE NOT COALESCE(stock_integre,FALSE) AND (etape IN ('envoyee','expediee') OR etape IS NULL))::int AS en_attente
+          FROM commandes_suede WHERE COALESCE(etape,'') <> 'annulee'`);
+        out.suede.liste = (await db.all(`SELECT id, numero_bc, etape, livraison_nom, transporteur, num_suivi, date_livraison, stock_integre, statut,
+            (SELECT COUNT(*)::int FROM commandes_suede_lignes l WHERE l.commande_id=cs.id) AS nb_lignes
+          FROM commandes_suede cs WHERE NOT COALESCE(stock_integre,FALSE) AND COALESCE(etape,'') <> 'annulee'
+          ORDER BY created_at DESC LIMIT 6`)).map(r => ({ ...r, date_livraison: r.date_livraison ? new Date(r.date_livraison).toISOString().slice(0, 10) : null }));
+      } catch (e) { out.suede = null; }
+    }
+    if (permModule(u, 'catalogue') !== 'none') {
+      // Ruptures utiles : pièces actives à zéro (ou sous le seuil) qui ont été commandées par un distributeur ces 6 derniers mois
+      out.stock = await db.get(`WITH vendues AS (
+            SELECT DISTINCT upper(regexp_replace(l.reference, '[^A-Za-z0-9]', '', 'g')) AS r
+            FROM commandes_lignes l JOIN commandes c ON c.id = l.commande_id
+            WHERE COALESCE(l.reference,'') <> '' AND c.date_commande ~ '^\\d{4}-\\d{2}-\\d{2}' AND substr(c.date_commande,1,10)::date >= CURRENT_DATE - INTERVAL '6 months')
+          SELECT COUNT(*) FILTER (WHERE cat.stock <= 0)::int AS rupture,
+                 COUNT(*) FILTER (WHERE cat.stock > 0 AND cat.stock <= cat.stock_alerte)::int AS faible
+          FROM catalogue cat JOIN vendues v ON v.r = upper(regexp_replace(cat.ref, '[^A-Za-z0-9]', '', 'g'))
+          WHERE cat.stock_actif IS NOT FALSE AND NOT COALESCE(cat.en_sommeil,FALSE)`).catch(e => ({ erreur: e.message }));
+    }
+    res.json(out);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/stats', async (req, res) => {
   try {
     const stats = await db.get(`
