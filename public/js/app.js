@@ -10588,6 +10588,18 @@ function diStatutIcons(d){
     return `<span onclick="event.stopPropagation();setDemandeStatutInline(${d.id},'${k}')" title="${t}" style="cursor:pointer;width:25px;height:26px;display:inline-flex;align-items:center;justify-content:center;flex:none"><i class="ti ${u.ic}" style="font-size:19px;color:var(--text3);opacity:.3"></i></span>`;
   }).join('')}</span>`;
 }
+// Indication compacte « patient partagé » (vue par distributeur)
+function diLienMini(d){
+  const st=x=>x&&DI_STATUTS[x]?' · '+DI_STATUTS[x].l:'';
+  const pill=(bg,bd,col,ic,txt,tit)=>`<div title="${tit}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px;background:${bg};color:${col};border:0.5px solid ${bd};border-radius:99px;padding:1px 7px;font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><i class="ti ${ic}"></i> ${txt}</div>`;
+  let h='';
+  if(d.role_lien==='secondaire') h+=pill('#EEF4FB','#BFD3EA','#1F3A5F','ti-link',TR('Partagée avec')+' '+esc(d.lien_nom||'')+(d.lien_autres_noms?', '+esc(d.lien_autres_noms):'')+st(d.lien_statut),TR('Même patient, transmis aussi à d’autres distributeurs'));
+  else {
+    if(d.client3_id||d.distributeur3_nom) h+=' '+pill('#EEF4FB','#BFD3EA','#1F3A5F','ti-building-store','+ '+esc(d.client3_nom_actuel||d.distributeur3_nom||'')+st(d.lien3_statut),TR('2e distributeur proposé au patient'));
+    if(d.client2_id) h+=' '+pill('#FAEEDA','#FAC775','#633806','ti-star','+ '+esc(d.client2_nom_actuel||d.distributeur2_nom||'')+st(d.lien2_statut),TR('Distributeur Privilèges / Avantage proposé au patient'));
+  }
+  return h?'<div>'+h+'</div>':'';
+}
 // Icône historique (placée en dernière colonne)
 function diHistCell(d){
   const nb = Array.isArray(d.historique)?d.historique.length:0;
@@ -10596,7 +10608,8 @@ function diHistCell(d){
 }
 async function setDemandeStatutInline(id, statut){
   try{ const r = await API.setDemandeInfoStatut(id, statut, {date_statut:new Date().toISOString().slice(0,10)});
-    if(r && r.autre_mise_a_jour) toast(TR('La demande reliée chez l’autre distributeur passe en « traité par l’autre distributeur » (plus de relance).'),'ti-arrows-exchange');
+    const nAutres = r && r.autre_mise_a_jour ? (Array.isArray(r.autre_mise_a_jour) ? r.autre_mise_a_jour.length : 1) : 0;
+    if(nAutres) toast(nAutres>1 ? TR('Les demandes reliées chez les autres distributeurs passent en « traité par l’autre distributeur » (plus de relance).') : TR('La demande reliée chez l’autre distributeur passe en « traité par l’autre distributeur » (plus de relance).'),'ti-arrows-exchange');
     rafraichirDemandes();
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
@@ -10717,7 +10730,7 @@ function demandesTableHTML(rows, withDistrib){
     <td style="padding:8px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:12px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
     <td style="padding:8px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
     ${withDistrib?`<td style="padding:8px 10px">${esc(d.client_nom_actuel||d.distributeur_nom||'—')}</td>`:''}
-    <td style="padding:8px 10px">${esc(d.nom||'')}${d.essai_interne?`<div style="margin-top:3px"><span style="display:inline-flex;align-items:center;gap:3px;background:#FFF4CC;color:#5A3E00;border:1px dashed #C98A00;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700"><i class="ti ti-flask"></i> ${TR('Essai interne')}</span></div>`:''}${d.role_lien==='secondaire'?`<div title="${TR('Même patient, transmis aussi au distributeur le plus proche')}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px;background:#EEF4FB;color:#1F3A5F;border:0.5px solid #BFD3EA;border-radius:99px;padding:1px 7px;font-size:11.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><i class="ti ti-link"></i> ${TR('Partagée avec')} ${esc(d.lien_nom||'')}${d.lien_statut&&DI_STATUTS[d.lien_statut]?' · '+DI_STATUTS[d.lien_statut].l:''}</div>`:''}${d.client2_id?`<div title="${TR('2e distributeur proposé au patient')}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px;background:#FAEEDA;color:#633806;border:0.5px solid #FAC775;border-radius:99px;padding:1px 7px;font-size:11.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.client2_privileges?badgeOptionCarte('privileges',13):''}${d.client2_avantages?badgeOptionCarte('avantages',13):''}+ ${esc(d.client2_nom_actuel||d.distributeur2_nom||'')}${d.role_lien==='principal'&&d.lien_statut&&DI_STATUTS[d.lien_statut]?' · '+DI_STATUTS[d.lien_statut].l:''}</div>`:''}</td>
+    <td style="padding:8px 10px">${esc(d.nom||'')}${d.essai_interne?`<div style="margin-top:3px"><span style="display:inline-flex;align-items:center;gap:3px;background:#FFF4CC;color:#5A3E00;border:1px dashed #C98A00;border-radius:99px;padding:1px 7px;font-size:11px;font-weight:700"><i class="ti ti-flask"></i> ${TR('Essai interne')}</span></div>`:''}${d.role_lien==='secondaire'?`<div title="${TR('Même patient, transmis aussi au distributeur le plus proche')}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px;background:#EEF4FB;color:#1F3A5F;border:0.5px solid #BFD3EA;border-radius:99px;padding:1px 7px;font-size:11.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><i class="ti ti-link"></i> ${TR('Partagée avec')} ${esc(d.lien_nom||'')}${d.lien_autres_noms?', '+esc(d.lien_autres_noms):''}${d.lien_statut&&DI_STATUTS[d.lien_statut]?' · '+DI_STATUTS[d.lien_statut].l:''}</div>`:''}${d.client2_id?`<div title="${TR('2e distributeur proposé au patient')}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px;background:#FAEEDA;color:#633806;border:0.5px solid #FAC775;border-radius:99px;padding:1px 7px;font-size:11.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.client2_privileges?badgeOptionCarte('privileges',13):''}${d.client2_avantages?badgeOptionCarte('avantages',13):''}+ ${esc(d.client2_nom_actuel||d.distributeur2_nom||'')}${d.lien2_statut&&DI_STATUTS[d.lien2_statut]?' · '+DI_STATUTS[d.lien2_statut].l:''}</div>`:''}${(d.client3_id||d.distributeur3_nom)&&d.role_lien!=='secondaire'?`<div title="${TR('2e distributeur proposé au patient')}" style="margin-top:3px;display:inline-flex;align-items:center;gap:4px;background:#EEF4FB;color:#1F3A5F;border:0.5px solid #BFD3EA;border-radius:99px;padding:1px 7px;font-size:11.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><i class="ti ti-building-store"></i> + ${esc(d.client3_nom_actuel||d.distributeur3_nom||'')}${d.lien3_statut&&DI_STATUTS[d.lien3_statut]?' · '+DI_STATUTS[d.lien3_statut].l:''}</div>`:''}</td>
     <td style="padding:8px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(telHref(d.telephone))}" style="color:inherit;text-decoration:none">${esc(fmtTel(d.telephone))}</a>`:'—'}</td>
     <td style="padding:8px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:13px">${esc(d.email)}</a>`:'—'}</td>
     <td style="padding:8px 10px;white-space:nowrap">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
@@ -10879,7 +10892,7 @@ async function chargerDemandesParDistrib(){
       return `<tr style="border-top:0.5px solid var(--border)">
       <td style="padding:7px 8px;border-left:3px solid ${diCouleur(d.statut)}"><div style="display:flex;align-items:center;gap:12px">${diStatutIcons(d)}${diActionsCluster(d)}</div></td>
       <td style="padding:7px 10px;white-space:nowrap">${_dfd(d.date_transmission)}</td>
-      <td style="padding:7px 10px;word-break:break-word">${esc(d.nom||'')}</td>
+      <td style="padding:7px 10px;word-break:break-word">${esc(d.nom||'')}${diLienMini(d)}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(telHref(d.telephone))}" style="color:inherit;text-decoration:none">${esc(fmtTel(d.telephone))}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:13px">${esc(d.email)}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
@@ -11024,19 +11037,33 @@ async function modalDemande(clientId, distribNom, id){
         <input type="checkbox" id="di-essai" ${d.essai_interne?'checked':''} style="margin-top:3px">
         <span><b><i class="ti ti-flask"></i> ${TR('Essai interne')}</b><br><span style="font-size:12.5px;color:var(--text2)">${TR('Aucun e-mail ne part au patient ni aux distributeurs : tous les e-mails (et relances) de cette demande sont envoyés à')} <b>info@eloflex.fr</b>, ${TR('marqués « essai interne »')}. ${TR('La demande reste visible seulement dans la liste globale : elle n’apparaît pas sur les fiches distributeurs ni dans les statistiques.')}</span></span>
       </label>
-      ${d.role_lien==='secondaire'?`<div style="font-size:12.5px;background:#EEF4FB;border:0.5px solid #BFD3EA;border-radius:8px;padding:8px 11px;margin-bottom:12px"><i class="ti ti-link"></i> ${TR('Demande partagée avec')} <b>${esc(d.lien_nom||'')}</b> (${TR('distributeur le plus proche')}). ${TR('Les coordonnées du patient sont communes aux deux demandes ; les e-mails se gèrent depuis la demande principale.')}</div>`:''}
+      ${d.role_lien==='secondaire'?`<div style="font-size:12.5px;background:#EEF4FB;border:0.5px solid #BFD3EA;border-radius:8px;padding:8px 11px;margin-bottom:12px"><i class="ti ti-link"></i> ${TR('Demande partagée avec')} <b>${esc(d.lien_nom||'')}</b> (${TR('distributeur le plus proche')})${d.lien_autres_noms?' '+TR('et')+' <b>'+esc(d.lien_autres_noms)+'</b>':''}. ${TR('Les coordonnées du patient sont communes à toutes ces demandes ; les e-mails se gèrent depuis la demande principale.')}</div>`:''}
       <div class="form-group"><label class="form-label">${TR('Distributeur')}</label>
         <div style="position:relative">
           <input class="form-input" id="di-distrib" autocomplete="off" value="${esc(d.distributeur_nom||'')}" placeholder="${TR('Nom du distributeur (lié à une fiche existante)')}" oninput="diDistribInput(this.value)" onfocus="diDistribInput(this.value)" onblur="setTimeout(diDistribHideDrop,200)">
           <div id="di-distrib-drop" style="display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 2px);max-height:240px;overflow:auto;background:rgba(255,255,255,0.98);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(30,60,110,.18)"></div>
         </div>
         <div id="di-distrib-lien" style="font-size:13px;margin-top:4px"></div></div>
+      <div class="form-group" style="background:#F3F7FC;border:0.5px solid #BFD3EA;border-radius:10px;padding:10px 12px;${d.role_lien==='secondaire'?'display:none':''}">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" id="di-opt3" ${(d.client3_id||d.distributeur3_nom)?'checked':''} onchange="diOptToggle()"> <i class="ti ti-building-store"></i> ${TR('2e distributeur')}</label>
+        <div id="di-opt3-bloc" style="display:${(d.client3_id||d.distributeur3_nom)?'block':'none'};margin-top:8px">
+          <input type="hidden" id="di-client3-id" value="${d.client3_id||''}">
+          <div style="position:relative">
+            <input class="form-input" id="di-distrib3" autocomplete="off" value="${esc(d.client3_nom_actuel||d.distributeur3_nom||'')}" placeholder="${TR('Nom du 2e distributeur')}" oninput="diDistrib3Input(this.value)" onfocus="diDistrib3Input(this.value)" onblur="setTimeout(diDistrib3HideDrop,200)">
+            <div id="di-distrib3-drop" style="display:none;position:absolute;z-index:60;left:0;right:0;top:calc(100% + 2px);max-height:240px;overflow:auto;background:rgba(255,255,255,0.98);border:0.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(30,60,110,.18)"></div>
+          </div>
+          <div id="di-distrib3-lien" style="font-size:13px;margin-top:4px"></div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">${TR('Proposé au patient en plus du distributeur le plus proche : une demande reliée, avec les coordonnées du patient, est créée sur sa fiche ; les e-mails en tiennent compte.')}</div>
+        </div>
+      </div>
       <div class="form-group" style="background:#FFF9EC;border:0.5px solid #FAC775;border-radius:10px;padding:10px 12px;${d.role_lien==='secondaire'?'display:none':''}">
-        <label class="form-label" style="display:flex;align-items:center;gap:6px">${badgeOptionCarte('privileges',15)}${badgeOptionCarte('avantages',15)} ${TR('2e distributeur Privilèges / Avantage (facultatif)')}</label>
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" id="di-opt2" ${d.client2_id?'checked':''} onchange="diOptToggle()"> ${badgeOptionCarte('privileges',15)}${badgeOptionCarte('avantages',15)} ${TR('3e distributeur Privilèges / Avantage')}</label>
+        <div id="di-opt2-bloc" style="display:${d.client2_id?'block':'none'};margin-top:8px">
         <input type="hidden" id="di-client2-id" value="${d.client2_id||''}">
         <input type="hidden" id="di-distrib2-nom" value="${esc(d.distributeur2_nom||'')}">
         <select class="form-input" id="di-distrib2" onchange="diDistrib2Change()"><option value="">${TR('— Aucun —')}</option>${d.client2_id?`<option value="${d.client2_id}" selected>${esc(d.client2_nom_actuel||d.distributeur2_nom||'')}</option>`:''}</select>
         <div id="di-distrib2-info" style="font-size:12px;color:var(--text3);margin-top:4px">${TR('Proposé au patient en plus du distributeur le plus proche : une demande reliée, avec les coordonnées du patient, est créée sur sa fiche. Classés par distance une fois la ville / le CP du patient saisis.')}</div>
+        </div>
       </div>
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
@@ -11053,7 +11080,7 @@ async function modalDemande(clientId, distribNom, id){
       <div class="form-group"><label class="form-label">${TR('Annotation de suivi')}</label><textarea class="form-input" id="di-annot" rows="2">${esc(d.annotation||'')}</textarea></div>
     </div>
     <div class="modal-footer">${id?`<button class="btn" style="margin-right:auto" onclick="closeModal();modalEmailsDemande(${id})" title="${TR('Envoyer les e-mails au contact et/ou au distributeur')}"><i class="ti ti-mail-forward"></i> ${TR('E-mails contact / distributeur')}</button>`:''}<button class="btn" onclick="closeModal()">${t('btn_annuler')||'Annuler'}</button><button class="btn primary" onclick="saveDemande()"><i class="ti ti-check"></i>${t('btn_enregistrer')||'Enregistrer'}</button></div>`);
-  setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); diChargerPremium(); },0);
+  setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); const d3=$('di-distrib3'); if(d3&&d3.value) diDistrib3Change(d3.value, true); diChargerPremium(); },0);
 }
 window.modalDemande = modalDemande;
 // ── Aide à la saisie Ville / Code postal (demandes d'info) ───────────────────
@@ -11184,6 +11211,44 @@ function diDistribPick(i){
 window.diDistribPick=diDistribPick;
 function diDistribHideDrop(){ const d=document.getElementById('di-distrib-drop'); if(d) d.style.display='none'; }
 window.diDistribHideDrop=diDistribHideDrop;
+// Options « 2e distributeur » / « 3e distributeur Privilèges / Avantage » (cases à cocher)
+function diOptToggle(){
+  for(const k of ['2','3']){ const c=document.getElementById('di-opt'+k), b=document.getElementById('di-opt'+k+'-bloc'); if(c&&b) b.style.display=c.checked?'block':'none'; }
+  const c3=document.getElementById('di-opt3'); if(c3&&c3.checked){ const i=document.getElementById('di-distrib3'); if(i&&!i.value) setTimeout(()=>i.focus(),0); }
+}
+window.diOptToggle=diOptToggle;
+function diDistrib3Change(nom, init){
+  const val=(nom||'').trim();
+  const m=(window._clientsCache||[]).find(c=>(c.nom||'').toLowerCase()===val.toLowerCase());
+  const h=$('di-client3-id'); if(h && !(init && h.value && !m)) h.value = m?m.id:'';
+  const lien=$('di-distrib3-lien');
+  if(lien){
+    if(!val) lien.innerHTML='';
+    else if(m) lien.innerHTML=`<span style="color:var(--success)"><i class="ti ti-link"></i> ${TR('Lié à la fiche')} : <strong>${esc(m.nom)}</strong>${m.email?'':' — <span style="color:var(--warning)">'+TR('pas d’e-mail sur la fiche')+'</span>'}</span>`;
+    else lien.innerHTML=`<span style="color:var(--text3)"><i class="ti ti-alert-triangle"></i> ${TR('Distributeur non lié à une fiche : son e-mail sera à saisir à l’envoi')}</span>`;
+  }
+}
+window.diDistrib3Change=diDistrib3Change;
+function diDistrib3Input(val){
+  const drop=document.getElementById('di-distrib3-drop'); if(!drop) return;
+  diDistrib3Change(val);
+  const q=_diKey(val);
+  const list=window._DI_NOMS_LISTE||[];
+  const matches=(q?list.filter(n=>_diKey(n).includes(q)):list).slice(0,15);
+  window._DI_MATCH3=matches;
+  if(!matches.length){ drop.style.display='none'; return; }
+  drop.innerHTML=matches.map((n,i)=>`<div onmousedown="event.preventDefault();diDistrib3Pick(${i})" onmouseover="this.style.background='rgba(46,124,246,.10)'" onmouseout="this.style.background='transparent'" style="padding:8px 11px;cursor:pointer;font-size:14px;color:var(--text);border-bottom:0.5px solid var(--border)">${esc(n)}</div>`).join('');
+  drop.style.display='block';
+}
+window.diDistrib3Input=diDistrib3Input;
+function diDistrib3Pick(i){
+  const n=(window._DI_MATCH3||[])[i]; if(n==null) return;
+  const inp=$('di-distrib3'); if(inp) inp.value=n;
+  diDistrib3Change(n); diDistrib3HideDrop();
+}
+window.diDistrib3Pick=diDistrib3Pick;
+function diDistrib3HideDrop(){ const d=document.getElementById('di-distrib3-drop'); if(d) d.style.display='none'; }
+window.diDistrib3HideDrop=diDistrib3HideDrop;
 async function saveDemande(){
   const id=gv('di-id');
   const data={
@@ -11194,9 +11259,19 @@ async function saveDemande(){
     demande_client: gv('di-demande')||null,
     relance_mail_date: gv('di-rel-mail')||null, relance_tel_date: gv('di-rel-tel')||null,
     client2_id: gv('di-client2-id')||null, distributeur2_nom: gv('di-distrib2-nom')||null,
+    client3_id: gv('di-client3-id')||null, distributeur3_nom: gv('di-distrib3')||null,
     essai_interne: !!(document.getElementById('di-essai')||{}).checked
   };
-  if(data.client2_id && data.client_id && String(data.client2_id)===String(data.client_id)){ toast(TR('Le 2e distributeur doit être différent du distributeur principal'),'ti-alert-circle','var(--danger)'); return; }
+  const opt2=document.getElementById('di-opt2'), opt3=document.getElementById('di-opt3');
+  if(opt2 && !opt2.checked){ data.client2_id=null; data.distributeur2_nom=null; }
+  if(opt3 && !opt3.checked){ data.client3_id=null; data.distributeur3_nom=null; }
+  if(opt2 && opt2.checked && !data.client2_id){ toast(TR('Choisissez le distributeur Privilèges / Avantage, ou décochez l’option'),'ti-alert-circle','var(--danger)'); return; }
+  if(opt3 && opt3.checked && !data.distributeur3_nom){ toast(TR('Saisissez le 2e distributeur, ou décochez l’option'),'ti-alert-circle','var(--danger)'); return; }
+  const memeD=(a,b)=>a&&b&&String(a)===String(b);
+  const memeN=(a,b)=>a&&b&&_diKey(a)===_diKey(b);
+  if(memeD(data.client2_id,data.client_id)){ toast(TR('Le distributeur Privilèges / Avantage doit être différent du distributeur principal'),'ti-alert-circle','var(--danger)'); return; }
+  if(memeD(data.client3_id,data.client_id) || memeN(data.distributeur3_nom,data.distributeur_nom)){ toast(TR('Le 2e distributeur doit être différent du distributeur principal'),'ti-alert-circle','var(--danger)'); return; }
+  if(memeD(data.client3_id,data.client2_id)){ toast(TR('Le 2e distributeur et le distributeur Privilèges / Avantage doivent être différents'),'ti-alert-circle','var(--danger)'); return; }
   const cidAvant = gv('di-client-id')||STATE.clientId;
   try{ let cree=null; if(id){ await API.updateDemandeInfo(id,data); } else { cree = await API.createDemandeInfo(data); }
     closeModal(); toast(TR('Demande enregistrée'),'ti-check','var(--success)');
@@ -11222,8 +11297,9 @@ async function modalEmailsDemande(id){
       ${env.length?`<div style="font-size:12.5px;background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:10px;line-height:1.6">
         <b><i class="ti ti-history"></i> ${TR('Déjà envoyés')} :</b><br>${env.slice(-5).reverse().map(x=>_dfd(x.date)+(x.par?' · '+esc(x.par):'')+(x.detail?' — '+esc(x.detail):'')).join('<br>')}
         <div style="color:var(--text3);margin-top:4px">${TR('Vous pouvez renvoyer les e-mails (problème de réception, e-mail supprimé…) en corrigeant l’adresse si besoin.')}</div></div>`:''}
-      ${ligne('contact', '👤 '+TR('Au contact')+(a.contact_nom?' — '+esc(a.contact_nom):''), (a.distrib2?TR('Ses deux contacts : le distributeur le plus proche et le distributeur')+' '+esc(a.distrib2.label)+' — ':'')+TR('Coordonnées du distributeur le plus proche (téléphone, adresse, plan)')+(a.position?'':' — <span style="color:var(--warning)">'+TR('position inconnue : pas de plan, lien Google Maps seul')+'</span>'), a.contact_email, true)}
+      ${ligne('contact', '👤 '+TR('Au contact')+(a.contact_nom?' — '+esc(a.contact_nom):''), ((a.distrib2||a.distrib3)?TR('Ses contacts')+' : '+[TR('le distributeur le plus proche'), a.distrib3?TR('le 2e distributeur')+' ('+esc(a.distrib3.nom)+')':null, a.distrib2?TR('le distributeur')+' '+esc(a.distrib2.label):null].filter(Boolean).join(', ')+' — ':'')+TR('Coordonnées du distributeur le plus proche (téléphone, adresse, plan)')+(a.position?'':' — <span style="color:var(--warning)">'+TR('position inconnue : pas de plan, lien Google Maps seul')+'</span>'), a.contact_email, true)}
       ${ligne('distrib', '🏪 '+TR('Au distributeur')+(a.distrib_nom?' — '+esc(a.distrib_nom):''), a.distrib_lie?TR('Coordonnées complètes du contact et sa demande'):'<span style="color:var(--warning)">'+TR('Distributeur non relié à une fiche : saisissez son adresse e-mail')+'</span>', a.distrib_email, true)}
+      ${a.distrib3?ligne('distrib3', '🏪 '+TR('Au 2e distributeur')+' — '+esc(a.distrib3.nom), a.distrib3.lie?TR('Coordonnées du contact, en précisant qu’il a aussi reçu un autre distributeur proche de chez lui'):'<span style="color:var(--warning)">'+TR('Distributeur non relié à une fiche : saisissez son adresse e-mail')+'</span>', a.distrib3.email, true):''}
       ${a.distrib2?ligne('distrib2', '★ '+TR('Au distributeur')+' '+esc(a.distrib2.label)+' — '+esc(a.distrib2.nom), TR('Coordonnées du contact, en précisant qu’il a aussi reçu un distributeur proche de chez lui'), a.distrib2.email, true):''}
       <div style="border:1px dashed var(--border);border-radius:10px;padding:10px 12px">
         <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" id="dim-autre" onchange="dimMaj()"> ✉️ ${TR('Une autre adresse')}</label>
@@ -11247,7 +11323,7 @@ function _dimEnvois(){
   const liste=v=>String(v||'').split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
   const ok=v=>{ const l=liste(v); return l.length>0 && l.every(un); };
   const add=(k,type)=>{ const c=document.getElementById('dim-'+k); const v=liste(gv('dim-'+k+'-email')).join('; '); if(c&&c.checked) out.push({type, email:v, valide:ok(v)}); };
-  add('contact','contact'); add('distrib','distributeur'); add('distrib2','distributeur2'); add('autre', gv('dim-autre-type')||'contact');
+  add('contact','contact'); add('distrib','distributeur'); add('distrib2','distributeur2'); add('distrib3','distributeur3'); add('autre', gv('dim-autre-type')||'contact');
   return out;
 }
 function dimMaj(){
@@ -11278,7 +11354,7 @@ async function dimApercu(id){
   msg.innerHTML='<i class="ti ti-loader-2"></i> '+TR('Préparation de l’aperçu…');
   let r; try{ r=await API.diEmailsPreview(id, [...new Set(e.map(x=>x.type))]); }catch(err){ msg.innerHTML='<span style="color:var(--danger)">Erreur : '+esc(err.message)+'</span>'; return; }
   window._DIM = { id, envois:e, mails:r.mails||{}, essai:!!r.essai_interne, emailEssai:r.email_essai||'info@eloflex.fr' };
-  const LIB = { contact:'👤 '+TR('Au patient'), distributeur:'🏪 '+TR('Au distributeur le plus proche'), distributeur2:'★ '+TR('Au distributeur Privilèges / Avantage') };
+  const LIB = { contact:'👤 '+TR('Au patient'), distributeur:'🏪 '+TR('Au distributeur le plus proche'), distributeur2:'★ '+TR('Au distributeur Privilèges / Avantage'), distributeur3:'🏪 '+TR('Au 2e distributeur') };
   showModal(`<div class="modal-header"><i class="ti ti-eye" style="color:var(--accent)"></i><h2>${TR('Aperçu des e-mails — modifiables avant envoi')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
     <div class="modal-body" style="max-height:72vh;overflow:auto">
       ${window._DIM.essai?`<div style="background:#FFF4CC;border:2px dashed #C98A00;border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:13px;color:#5A3E00"><b><i class="ti ti-flask"></i> ${TR('Essai interne')}</b> — ${TR('chaque e-mail part à')} <b>${esc(window._DIM.emailEssai)}</b> ${TR('(objet préfixé « [ESSAI INTERNE] », destinataire prévu rappelé en tête)')}.</div>`:''}

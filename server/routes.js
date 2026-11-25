@@ -9169,44 +9169,78 @@ const DI_STATUTS_PRISE_EN_CHARGE = ['essai', 'vente'];
 const _diHist = r => { try { return Array.isArray(r.historique) ? r.historique : JSON.parse(r.historique || '[]'); } catch (_) { return []; } };
 const _diPar = req => { const u = (req && req.session && req.session.user) || {}; return u.nom || u.prenom || u.email || u.login || null; };
 
-// Demande « jumelle » chez le 2e distributeur (Privilèges / Avantage) : mêmes coordonnées patient, reliée à la demande principale.
+// Demandes « jumelles » : mêmes coordonnées patient, reliées à la demande principale (lien_id = id de la principale).
+//  • 'premium' : distributeur Privilèges / Avantage (client2_id / distributeur2_nom)
+//  • 'autre'   : 2e distributeur au choix (client3_id / distributeur3_nom)
+// La principale garde lien_id = sa jumelle Privilèges (ou, à défaut, l'autre) et role_lien='principal'.
+const DI_SLOTS = [
+  { type: 'premium', cid: d => d.client2_id, nom: d => d.distributeur2_nom },
+  { type: 'autre',   cid: d => d.client3_id, nom: d => d.distributeur3_nom },
+];
+const _diJumelles = pid => db.all(`SELECT * FROM demandes_info WHERE lien_id=$1 AND role_lien='secondaire' ORDER BY id`, [pid]);
+// Toutes les demandes d'un même patient partagé (principale + jumelles)
+async function _diGroupe(row) {
+  if (!row || !row.role_lien) return row ? [row] : [];
+  const pid = row.role_lien === 'secondaire' ? row.lien_id : row.id;
+  if (!pid) return [row];
+  return db.all(`SELECT * FROM demandes_info WHERE id=$1 OR (lien_id=$1 AND role_lien='secondaire') ORDER BY id`, [pid]);
+}
 async function _diSyncJumelle(id, par) {
   const d = await db.get('SELECT * FROM demandes_info WHERE id=$1', [id]);
   if (!d || d.role_lien === 'secondaire') return null;
-  const tw = d.lien_id ? await db.get('SELECT * FROM demandes_info WHERE id=$1', [d.lien_id]) : null;
-  const intacte = x => x && ['transmise', 'relance'].includes(x.statut) && !_diHist(x).some(h => h && h.statut === 'emails') && !x.relance_mail_date;
-  const delier = async () => { await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL WHERE id=$1`, [d.id]);
-    if (tw) { if (intacte(tw)) await db.run('DELETE FROM demandes_info WHERE id=$1', [tw.id]); else await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL WHERE id=$1`, [tw.id]); } };
-  if (!d.client2_id) { if (tw || d.lien_id) await delier(); return null; }
-  // Essai interne : pas de nouvelle demande reliée ; une demande reliée déjà créée devient elle aussi « essai interne » (masquée)
-  if (d.essai_interne && !tw) return null;
-  const patient = [d.nom, d.ville, d.cp, d.telephone, d.email, d.demande_client, !!d.essai_interne];
-  if (tw && tw.client_id === d.client2_id) {
-    await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, essai_interne=$7, updated_at=NOW() WHERE id=$8`, [...patient, tw.id]);
-    return tw.id;
+  const tws = await _diJumelles(d.id);
+  // Ancienne jumelle pointée par la principale mais pas encore marquée (compatibilité)
+  if (d.lien_id && !tws.some(t => t.id === d.lien_id)) {
+    const old = await db.get(`SELECT * FROM demandes_info WHERE id=$1 AND role_lien='secondaire'`, [d.lien_id]);
+    if (old) tws.push(old);
   }
-  if (tw) await delier();
-  const c2 = await db.get('SELECT nom FROM clients WHERE id=$1', [d.client2_id]);
+  const intacte = x => x && ['transmise', 'relance'].includes(x.statut) && !_diHist(x).some(h => h && h.statut === 'emails') && !x.relance_mail_date;
+  const retirer = async tw => { if (intacte(tw)) await db.run('DELETE FROM demandes_info WHERE id=$1', [tw.id]);
+    else await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL WHERE id=$1`, [tw.id]); };
+  const patient = [d.nom, d.ville, d.cp, d.telephone, d.email, d.demande_client, !!d.essai_interne];
   const c1 = d.client_id ? await db.get('SELECT nom FROM clients WHERE id=$1', [d.client_id]) : null;
   const nom1 = (c1 && c1.nom) || d.distributeur_nom || 'le distributeur le plus proche';
-  const hist = [{ statut: 'transmise', date: new Date().toISOString().slice(0, 10), par, detail: `Demande partagée avec ${nom1} (distributeur le plus proche)` }];
-  const n = await db.run(`INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, demande_client, essai_interne, statut, date_transmission, cree_par, historique, lien_id, role_lien)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transmise',$10,$11,$12::jsonb,$13,'secondaire') RETURNING id`,
-    [d.client2_id, d.distributeur2_nom || (c2 && c2.nom) || null, ...patient, d.date_transmission || new Date().toISOString().slice(0, 10), d.cree_par, JSON.stringify(hist), d.id]);
-  await db.run(`UPDATE demandes_info SET lien_id=$1, role_lien='principal' WHERE id=$2`, [n.id, d.id]);
-  return n.id;
+  const gardees = [], utilisees = new Set();
+  for (const s of DI_SLOTS) {
+    const cid = parseInt(s.cid(d)) || null, nom = String(s.nom(d) || '').trim() || null;
+    const tw = tws.find(t => !utilisees.has(t.id) && (t.lien_type || 'premium') === s.type);
+    if (tw) utilisees.add(tw.id);
+    if (!cid && !nom) { if (tw) await retirer(tw); continue; }
+    const memeDistrib = tw && (cid ? tw.client_id === cid : (!tw.client_id && String(tw.distributeur_nom || '').trim().toLowerCase() === nom.toLowerCase()));
+    if (memeDistrib) {
+      await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, essai_interne=$7, lien_type=$8, updated_at=NOW() WHERE id=$9`, [...patient, s.type, tw.id]);
+      gardees.push({ id: tw.id, type: s.type }); continue;
+    }
+    if (tw) await retirer(tw);
+    // Essai interne : pas de nouvelle demande reliée (une demande reliée déjà créée suit le statut « essai interne »)
+    if (d.essai_interne) continue;
+    const c = cid ? await db.get('SELECT nom FROM clients WHERE id=$1', [cid]) : null;
+    const hist = [{ statut: 'transmise', date: new Date().toISOString().slice(0, 10), par, detail: `Demande partagée avec ${nom1} (distributeur le plus proche)` }];
+    const n = await db.run(`INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, demande_client, essai_interne, statut, date_transmission, cree_par, historique, lien_id, role_lien, lien_type)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transmise',$10,$11,$12::jsonb,$13,'secondaire',$14) RETURNING id`,
+      [cid, nom || (c && c.nom) || null, ...patient, d.date_transmission || new Date().toISOString().slice(0, 10), d.cree_par, JSON.stringify(hist), d.id, s.type]);
+    gardees.push({ id: n.id, type: s.type });
+  }
+  // Jumelles en trop (anciennes données) : détachées
+  for (const t of tws) if (!utilisees.has(t.id)) await retirer(t);
+  const ref = gardees.find(g => g.type === 'premium') || gardees[0] || null;
+  await db.run(`UPDATE demandes_info SET lien_id=$1, role_lien=$2 WHERE id=$3`, [ref ? ref.id : null, ref ? 'principal' : null, d.id]);
+  return ref ? ref.id : null;
 }
-// Un des deux distributeurs a pris le patient en charge → l'autre demande passe en « traité par autre distributeur » (plus de relance)
+// Un des distributeurs a pris le patient en charge → les autres demandes du même patient passent en
+// « traité par autre distributeur » (plus de relance)
 async function _diPropager(row, par) {
-  if (!row || !row.lien_id || !DI_STATUTS_PRISE_EN_CHARGE.includes(row.statut)) return null;
-  const o = await db.get('SELECT * FROM demandes_info WHERE id=$1', [row.lien_id]);
-  if (!o || DI_STATUTS_PRISE_EN_CHARGE.includes(o.statut) || o.statut === 'autre_distributeur') return null;
+  if (!row || !row.role_lien || !DI_STATUTS_PRISE_EN_CHARGE.includes(row.statut)) return null;
+  const autres = (await _diGroupe(row)).filter(o => o.id !== row.id && !DI_STATUTS_PRISE_EN_CHARGE.includes(o.statut) && o.statut !== 'autre_distributeur');
+  if (!autres.length) return null;
   const c = row.client_id ? await db.get('SELECT nom FROM clients WHERE id=$1', [row.client_id]) : null;
-  const hist = _diHist(o);
-  hist.push({ statut: 'autre_distributeur', date: new Date().toISOString().slice(0, 10), par, detail: `Pris en charge par ${(c && c.nom) || row.distributeur_nom || 'l’autre distributeur'}` });
-  await db.run(`UPDATE demandes_info SET statut='autre_distributeur', statut_date=CURRENT_DATE, date_retour=COALESCE(date_retour, CURRENT_DATE),
-      historique=$2::jsonb, updated_at=NOW() WHERE id=$1`, [o.id, JSON.stringify(hist)]);
-  return o.id;
+  for (const o of autres) {
+    const hist = _diHist(o);
+    hist.push({ statut: 'autre_distributeur', date: new Date().toISOString().slice(0, 10), par, detail: `Pris en charge par ${(c && c.nom) || row.distributeur_nom || 'un autre distributeur'}` });
+    await db.run(`UPDATE demandes_info SET statut='autre_distributeur', statut_date=CURRENT_DATE, date_retour=COALESCE(date_retour, CURRENT_DATE),
+        historique=$2::jsonb, updated_at=NOW() WHERE id=$1`, [o.id, JSON.stringify(hist)]);
+  }
+  return autres.map(o => o.id);
 }
 
 // Liste avec filtres (client_id, statut, non_traitees, q)
@@ -9221,8 +9255,13 @@ router.get('/demandes-info', requireAuth, async (req, res) => {
     const rows = await db.all(
       `SELECT d.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel,
               c2.nom AS client2_nom_actuel, COALESCE(c2.privileges,FALSE) AS client2_privileges, COALESCE(c2.avantages,FALSE) AS client2_avantages,
-              COALESCE(cl.nom, dl.distributeur_nom) AS lien_nom, dl.statut AS lien_statut
-       FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN clients c2 ON c2.id = d.client2_id
+              COALESCE(cl.nom, dl.distributeur_nom) AS lien_nom, dl.statut AS lien_statut,
+              c3.nom AS client3_nom_actuel,
+              (SELECT t.statut FROM demandes_info t WHERE t.lien_id=d.id AND t.role_lien='secondaire' AND COALESCE(t.lien_type,'premium')='premium' ORDER BY t.id LIMIT 1) AS lien2_statut,
+              (SELECT t.statut FROM demandes_info t WHERE t.lien_id=d.id AND t.role_lien='secondaire' AND t.lien_type='autre' ORDER BY t.id LIMIT 1) AS lien3_statut,
+              (SELECT string_agg(COALESCE(ct.nom, t.distributeur_nom), ', ' ORDER BY t.id) FROM demandes_info t LEFT JOIN clients ct ON ct.id=t.client_id
+                 WHERE d.role_lien='secondaire' AND t.lien_id=d.lien_id AND t.role_lien='secondaire' AND t.id<>d.id) AS lien_autres_noms
+       FROM demandes_info d LEFT JOIN clients c ON c.id = d.client_id LEFT JOIN clients c2 ON c2.id = d.client2_id LEFT JOIN clients c3 ON c3.id = d.client3_id
        LEFT JOIN demandes_info dl ON dl.id = d.lien_id LEFT JOIN clients cl ON cl.id = dl.client_id
        ${where} ORDER BY d.date_transmission DESC NULLS LAST, d.id DESC
        LIMIT ${Math.min(parseInt(req.query.limit)||2000, 5000)}`, p);
@@ -9297,14 +9336,15 @@ router.post('/demandes-info', requireAuth, async (req, res) => {
     const d = req.body || {};
     const statut = DI_STATUTS.includes(d.statut) ? d.statut : 'transmise';
     const row = await db.run(
-      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par, demande_client, relance_mail_date, relance_tel_date, client2_id, distributeur2_nom, essai_interne)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+      `INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, annotation, statut, date_transmission, date_retour, cree_par, demande_client, relance_mail_date, relance_tel_date, client2_id, distributeur2_nom, essai_interne, client3_id, distributeur3_nom)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
       [d.client_id||null, d.distributeur_nom||null, d.nom||null, d.ville||null, d.cp||null, fmtTel(d.telephone)||null,
        d.email||null, d.annotation||null, statut, d.date_transmission||new Date().toISOString().slice(0,10),
        d.date_retour||null, (req.session.user && req.session.user.id)||null,
        d.demande_client||null, d.relance_mail_date||null, d.relance_tel_date||null,
-       parseInt(d.client2_id)||null, (parseInt(d.client2_id) && d.distributeur2_nom) || null, !!d.essai_interne]);
-    if (row && row.client2_id) { const tid = await _diSyncJumelle(row.id, _diPar(req)); if (tid) row.lien_id = tid; }
+       parseInt(d.client2_id)||null, (parseInt(d.client2_id) && d.distributeur2_nom) || null, !!d.essai_interne,
+       parseInt(d.client3_id)||null, String(d.distributeur3_nom||'').trim() || null]);
+    if (row && (row.client2_id || row.client3_id || row.distributeur3_nom)) { const tid = await _diSyncJumelle(row.id, _diPar(req)); if (tid) { row.lien_id = tid; row.role_lien = 'principal'; } }
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9329,10 +9369,19 @@ router.put('/demandes-info/:id', requireAuth, async (req, res) => {
         [c2, c2 ? (d.distributeur2_nom || null) : null, req.params.id]);
       if (r2) Object.assign(row, r2);
     }
+    if (Object.prototype.hasOwnProperty.call(d, 'client3_id') && row.role_lien !== 'secondaire') {
+      const c3 = parseInt(d.client3_id) || null, n3 = String(d.distributeur3_nom || '').trim() || null;
+      const r3 = await db.run('UPDATE demandes_info SET client3_id=$1, distributeur3_nom=$2 WHERE id=$3 RETURNING client3_id, distributeur3_nom',
+        [c3, (c3 || n3) ? n3 : null, req.params.id]);
+      if (r3) Object.assign(row, r3);
+    }
     if (row.role_lien === 'secondaire') {
-      // Demande jumelle : les coordonnées du patient restent communes aux deux distributeurs
-      if (row.lien_id) await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, updated_at=NOW() WHERE id=$7`,
-        [row.nom, row.ville, row.cp, row.telephone, row.email, row.demande_client, row.lien_id]);
+      // Demande jumelle : les coordonnées du patient restent communes à tous les distributeurs du patient
+      if (row.lien_id) {
+        await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, updated_at=NOW() WHERE id=$7`,
+          [row.nom, row.ville, row.cp, row.telephone, row.email, row.demande_client, row.lien_id]);
+        await _diSyncJumelle(row.lien_id, _diPar(req));
+      }
     } else await _diSyncJumelle(row.id, _diPar(req));
     await _diPropager(row, _diPar(req));
     res.json(row);
@@ -9373,13 +9422,19 @@ router.post('/demandes-info/:id/statut', requireAuth, async (req, res) => {
 
 router.delete('/demandes-info/:id', requireAuth, async (req, res) => {
   try {
-    const d = await db.get('SELECT id, lien_id, role_lien FROM demandes_info WHERE id=$1', [req.params.id]);
-    if (d && d.lien_id) {
-      // Principale supprimée → sa jumelle aussi ; jumelle supprimée → la principale ne propose plus de 2e distributeur
-      if (d.role_lien === 'principal') await db.run('DELETE FROM demandes_info WHERE id=$1 AND role_lien=\'secondaire\'', [d.lien_id]);
-      else await db.run(`UPDATE demandes_info SET lien_id=NULL, role_lien=NULL, client2_id=NULL, distributeur2_nom=NULL WHERE id=$1`, [d.lien_id]);
+    const d = await db.get('SELECT id, lien_id, role_lien, lien_type FROM demandes_info WHERE id=$1', [req.params.id]);
+    if (d && d.role_lien === 'principal') {
+      // Principale supprimée → ses demandes reliées aussi
+      await db.run(`DELETE FROM demandes_info WHERE role_lien='secondaire' AND (lien_id=$1 OR id=$2)`, [d.id, d.lien_id || 0]);
     }
-    await db.run('DELETE FROM demandes_info WHERE id=$1', [req.params.id]); res.json({ ok: true }); }
+    await db.run('DELETE FROM demandes_info WHERE id=$1', [req.params.id]);
+    if (d && d.role_lien === 'secondaire' && d.lien_id) {
+      // Demande reliée supprimée → la principale ne propose plus ce distributeur
+      if (d.lien_type === 'autre') await db.run('UPDATE demandes_info SET client3_id=NULL, distributeur3_nom=NULL WHERE id=$1', [d.lien_id]);
+      else await db.run('UPDATE demandes_info SET client2_id=NULL, distributeur2_nom=NULL WHERE id=$1', [d.lien_id]);
+      await _diSyncJumelle(d.lien_id, _diPar(req));
+    }
+    res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -9615,6 +9670,14 @@ async function _diContexte(id) {
       WHERE c.id=$1`, [d.client2_id]);
     if (c2) d.d2 = c2;
   }
+  // 2e distributeur au choix (fiche liée, sinon simple nom)
+  if (d && (d.client3_id || d.distributeur3_nom)) {
+    const c3 = d.client3_id ? await db.get(`SELECT c.id, c.nom, c.email, c.tel, c.portable, c.adresse, c.adresse2, c.cp, c.ville,
+        COALESCE(c.lat, dc.lat) AS lat, COALESCE(c.lng, dc.lng) AS lng
+      FROM clients c LEFT JOIN LATERAL (SELECT lat, lng FROM distributeurs_carte WHERE client_id=c.id AND lat IS NOT NULL LIMIT 1) dc ON TRUE
+      WHERE c.id=$1`, [d.client3_id]) : null;
+    d.d3 = c3 || { id: null, nom: d.distributeur3_nom, email: '' };
+  }
   if (d && d.cid && (d.c_lat == null || d.c_lng == null)) {
     // Position de la carte : celle déjà connue sur la carte des distributeurs, sinon géocodage
     try {
@@ -9677,22 +9740,13 @@ async function _diConstruireMails(d, req, veutContact) {
     const label2 = d.d2 ? _labelPremium(d.d2) : '';
     
     const blocDistrib2 = (d.d2 && veutContact) ? await blocDistribDe(d.d2, 'Distributeur ' + label2) : '';
+    const blocDistrib3 = (d.d3 && veutContact) ? await blocDistribDe(d.d3, null) : '';
     const carteHtml = carteBien;
     const titre = t => `<div style="font-size:15px;font-weight:bold;color:#1F3A5F;margin:18px 0 0">${t}</div>`;
-    const mailContact = () => d.d2 ? `<div style="${st}">
-      <p>Bonjour,</p>
-      <p>Vous nous avez contactés pour connaître notre distributeur le plus proche de votre domicile.</p>
-      <p>Vous disposez de <b>deux contacts</b> pour vous accompagner : un distributeur proche de chez vous, et un distributeur reconnu <b>${esc(label2)}</b>. Vous pouvez contacter l'un, l'autre, ou les deux.</p>
-      ${titre('1. Votre distributeur le plus proche')}
-      ${blocDistrib}
-      ${titre('2. Votre distributeur ' + esc(label2))}
-      <div style="font-size:13px;color:#555;margin-top:4px">Ce distributeur fait partie de notre réseau ${esc(label2)} : un partenaire de confiance, sélectionné par Eloflex.</div>
-      ${blocDistrib2}
-      <p>Ils peuvent se déplacer jusqu'à chez vous et vous renseigner sur nos tarifs et modèles. N'hésitez pas à leur demander un essai avec un de nos modèles : nous ferons le maximum pour trouver une solution afin que cela se réalise.</p>
-      <p>Nous leur communiquons aussi vos coordonnées.</p>
-      <p>Nous restons à votre disposition si vous avez la moindre question.</p>
-      <p>Bien à vous,</p>
-      <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>` : `<div style="${st}">
+    const nbContacts = 1 + (d.d3 ? 1 : 0) + (d.d2 ? 1 : 0);
+    const motNb = ['', 'un', 'deux', 'trois'][nbContacts];
+    const mailContact = () => {
+      if (nbContacts === 1) return `<div style="${st}">
       <p>Bonjour,</p>
       <p>Vous nous avez contactés pour connaître notre distributeur le plus proche de votre domicile.</p>
       <p>Sachez qu'il peut se déplacer jusqu'à chez vous et vous renseigner sur nos tarifs et modèles.</p>
@@ -9702,6 +9756,23 @@ async function _diConstruireMails(d, req, veutContact) {
       <p>Nous restons à votre disposition si vous avez la moindre question.</p>
       <p>Bien à vous,</p>
       <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
+      const qui = [d.d3 ? 'deux distributeurs proches de chez vous' : 'un distributeur proche de chez vous', d.d2 ? `un distributeur reconnu <b>${esc(label2)}</b>` : null].filter(Boolean).join(', et ');
+      let n = 0; const sections = [];
+      sections.push(titre(`${++n}. Votre distributeur le plus proche`) + blocDistrib);
+      if (d.d3) sections.push(titre(`${++n}. Un autre distributeur de notre réseau`) + blocDistrib3);
+      if (d.d2) sections.push(titre(`${++n}. Votre distributeur ${esc(label2)}`)
+        + `<div style="font-size:13px;color:#555;margin-top:4px">Ce distributeur fait partie de notre réseau ${esc(label2)} : un partenaire de confiance, sélectionné par Eloflex.</div>` + blocDistrib2);
+      return `<div style="${st}">
+      <p>Bonjour,</p>
+      <p>Vous nous avez contactés pour connaître notre distributeur le plus proche de votre domicile.</p>
+      <p>Vous disposez de <b>${motNb} contacts</b> pour vous accompagner : ${qui}. ${nbContacts === 2 ? 'Vous pouvez contacter l\'un, l\'autre, ou les deux.' : 'Vous pouvez contacter l\'un ou l\'autre, ou plusieurs d\'entre eux.'}</p>
+      ${sections.join('\n')}
+      <p>Ils peuvent se déplacer jusqu'à chez vous et vous renseigner sur nos tarifs et modèles. N'hésitez pas à leur demander un essai avec un de nos modèles : nous ferons le maximum pour trouver une solution afin que cela se réalise.</p>
+      <p>Nous leur communiquons aussi vos coordonnées.</p>
+      <p>Nous restons à votre disposition si vous avez la moindre question.</p>
+      <p>Bien à vous,</p>
+      <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
+    };
 
     // ── Bloc contact (coordonnées complètes + demande) pour le distributeur ──
     const lignes = [['Nom', d.nom], ['Téléphone', d.telephone ? fmtTel(d.telephone) : ''], ['E-mail', d.email],
@@ -9730,9 +9801,21 @@ async function _diConstruireMails(d, req, veutContact) {
       <p>Bien à vous,</p>
       <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
 
+    // Mail au 2e distributeur (au choix) : même contact, en précisant qu'il a aussi reçu d'autres distributeurs
+    const mailDistrib3 = () => `<div style="${st}">
+      <p>Bonjour,</p>
+      <p>Merci de bien vouloir contacter un client potentiel Eloflex :</p>
+      ${blocContact}
+      <p>Ce client a également reçu les coordonnées d'un autre distributeur de notre réseau, proche de chez lui ; vos coordonnées lui ont été transmises en complément. Il est donc susceptible de vous contacter directement.</p>
+      <p>Si vous ne possédez pas ou souhaitez avoir un fauteuil de notre gamme pour faire des essais, n'hésitez pas à vous rapprocher de nous afin de trouver une solution.</p>
+      <p>Nous restons à votre disposition si vous avez la moindre question.</p>
+      <p>Bien à vous,</p>
+      <div style="margin-top:22px">${SIGNATURE_EMAIL_HTML}</div></div>`;
+    const sujetDistrib = `Eloflex — Nouveau contact à rappeler : ${d.nom || ''}${d.ville ? ' (' + d.ville + ')' : ''}`;
     return {
       from, label2, carte: !!carteHtml,
-      contact: { subject: d.d2 ? 'Eloflex — Vos deux contacts distributeurs' : 'Eloflex — Les coordonnées de votre distributeur le plus proche', html: mailContact() },
+      contact: { subject: nbContacts > 1 ? `Eloflex — Vos ${motNb} contacts distributeurs` : 'Eloflex — Les coordonnées de votre distributeur le plus proche', html: mailContact() },
+      distributeur3: d.d3 ? { subject: sujetDistrib, html: mailDistrib3() } : null,
       distributeur: { subject: `Eloflex — Nouveau contact à rappeler : ${d.nom || ''}${d.ville ? ' (' + d.ville + ')' : ''}`, html: mailDistrib() },
       distributeur2: d.d2 ? { subject: `Eloflex — Nouveau contact à rappeler : ${d.nom || ''}${d.ville ? ' (' + d.ville + ')' : ''}`, html: mailDistrib2() } : null,
     };
@@ -9758,7 +9841,8 @@ router.get('/demandes-info/:id/emails-apercu', requireAuth, async (req, res) => 
       contact_email: d.email || '', contact_nom: d.nom || '', distrib_email: d.c_email || '',
       distrib_nom: d.c_nom || d.distributeur_nom || '', distrib_lie: !!d.cid, position: d.c_lat != null && d.c_lng != null,
       essai_interne: !!d.essai_interne, email_essai: DI_EMAIL_ESSAI,
-      distrib2: d.d2 ? { nom: d.d2.nom, email: d.d2.email || '', label: _labelPremium(d.d2) } : null });
+      distrib2: d.d2 ? { nom: d.d2.nom, email: d.d2.email || '', label: _labelPremium(d.d2) } : null,
+      distrib3: d.d3 ? { nom: d.d3.nom || '', email: d.d3.email || '', lie: !!d.d3.id } : null });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Aperçu modifiable : sujet + HTML de chaque e-mail, tels qu'ils partiraient
@@ -9767,10 +9851,10 @@ router.post('/demandes-info/:id/emails-preview', requireAuth, async (req, res) =
     const pid = await _diIdPrincipal(req.params.id);
     const d = pid ? await _diContexte(pid) : null;
     if (!d) return res.status(404).json({ error: 'Demande introuvable' });
-    const types = Array.isArray((req.body || {}).types) ? req.body.types : ['contact', 'distributeur', 'distributeur2'];
+    const types = Array.isArray((req.body || {}).types) ? req.body.types : ['contact', 'distributeur', 'distributeur2', 'distributeur3'];
     const m = await _diConstruireMails(d, req, types.includes('contact'));
     const out = {};
-    for (const t of ['contact', 'distributeur', 'distributeur2']) if (types.includes(t) && m[t]) out[t] = m[t];
+    for (const t of ['contact', 'distributeur', 'distributeur2', 'distributeur3']) if (types.includes(t) && m[t]) out[t] = m[t];
     res.json({ mails: out, essai_interne: !!d.essai_interne, email_essai: DI_EMAIL_ESSAI });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -9781,7 +9865,7 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
     const d = pid ? await _diContexte(pid) : null;
     if (!d) return res.status(404).json({ error: 'Demande introuvable' });
     const envois = (Array.isArray((req.body || {}).envois) ? req.body.envois : [])
-      .filter(e => e && /^(contact|distributeur|distributeur2)$/.test(e.type) && /@/.test(String(e.email || '')));
+      .filter(e => e && /^(contact|distributeur|distributeur2|distributeur3)$/.test(e.type) && /@/.test(String(e.email || '')));
     if (!envois.length) return res.json({ ok: true, envoyes: [] });
     const m = await _diConstruireMails(d, req, envois.some(e => e.type === 'contact'));
     const label2 = m.label2;
@@ -9793,7 +9877,7 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
       // Contenu modifié dans l'aperçu (sinon le texte standard)
       const subject = (typeof e.subject === 'string' && e.subject.trim()) ? e.subject.trim().slice(0, 250) : base.subject;
       const html = (typeof e.html === 'string' && e.html.trim()) ? e.html.slice(0, 400000) : base.html;
-      const quoi = e.type === 'contact' ? 'e-mail au patient' : e.type === 'distributeur2' ? 'e-mail au distributeur ' + label2 : 'e-mail au distributeur le plus proche';
+      const quoi = e.type === 'contact' ? 'e-mail au patient' : e.type === 'distributeur2' ? 'e-mail au distributeur ' + label2 : e.type === 'distributeur3' ? 'e-mail au 2e distributeur ' + ((d.d3 && d.d3.nom) || '') : 'e-mail au distributeur le plus proche';
       const to = essai ? DI_EMAIL_ESSAI : destReel;
       try {
         await sendBrevoMail({ from: m.from, fromName: 'Eloflex France', to,
@@ -9805,13 +9889,12 @@ router.post('/demandes-info/:id/emails', requireAuth, async (req, res) => {
     }
     if (envoyes.length) {
       const par = _diPar(req), date = new Date().toISOString().slice(0, 10);
-      const lib = x => (x.type === 'contact' ? 'contact' : x.type === 'distributeur2' ? 'distributeur ' + label2 : 'distributeur') + ' → ' + (essai ? DI_EMAIL_ESSAI + ' (essai interne, au lieu de ' + x.destinataire_reel + ')' : x.email) + (x.modifie ? ' (texte modifié)' : '');
+      const lib = x => (x.type === 'contact' ? 'contact' : x.type === 'distributeur2' ? 'distributeur ' + label2 : x.type === 'distributeur3' ? '2e distributeur' : 'distributeur') + ' → ' + (essai ? DI_EMAIL_ESSAI + ' (essai interne, au lieu de ' + x.destinataire_reel + ')' : x.email) + (x.modifie ? ' (texte modifié)' : '');
       const hist = _diHist(d);
       hist.push({ statut: 'emails', date, par, detail: (hist.some(h => h && h.statut === 'emails') ? 'Renvoi — ' : '') + envoyes.map(lib).join(', ') });
       await db.run('UPDATE demandes_info SET historique=$2::jsonb, updated_at=NOW() WHERE id=$1', [d.id, JSON.stringify(hist)]);
-      // Même trace sur la demande jumelle (2e distributeur)
-      const j = await db.get('SELECT id, lien_id, historique FROM demandes_info WHERE id=(SELECT lien_id FROM demandes_info WHERE id=$1)', [d.id]);
-      if (j) { const h2 = _diHist(j); h2.push({ statut: 'emails', date, par, detail: 'Envoyés depuis la demande principale — ' + envoyes.map(lib).join(', ') });
+      // Même trace sur les demandes reliées (autres distributeurs du patient)
+      for (const j of await _diJumelles(d.id)) { const h2 = _diHist(j); h2.push({ statut: 'emails', date, par, detail: 'Envoyés depuis la demande principale — ' + envoyes.map(lib).join(', ') });
         await db.run('UPDATE demandes_info SET historique=$2::jsonb, updated_at=NOW() WHERE id=$1', [j.id, JSON.stringify(h2)]); }
     }
     res.json({ ok: !erreurs.length, envoyes, erreurs, carte: m.carte, essai_interne: essai });

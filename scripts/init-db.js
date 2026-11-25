@@ -315,6 +315,11 @@ async function initDB() {
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS essai_interne BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS lien_id INTEGER`);
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS role_lien TEXT`);
+    // 2e distributeur « libre » (en plus du distributeur le plus proche et du Privilèges / Avantage)
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS client3_id INTEGER`);
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS distributeur3_nom TEXT`);
+    // Demande reliée : 'premium' (Privilèges / Avantage) ou 'autre' (2e distributeur libre)
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS lien_type TEXT`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (
