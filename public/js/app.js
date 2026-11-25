@@ -10895,6 +10895,7 @@ async function chargerDemandesParDistrib(){
         ${ntBadge}
         <span style="background:var(--bg2,#eef1f4);border:1px solid var(--border);border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none" title="${TR('Nombre de demandes')}">${g.items.length}</span>
         <span style="flex:1"></span>
+        <button class="btn sm primary" title="${TR('Nouvelle demande pour ce distributeur')}" onclick="event.stopPropagation();diNouvelleDemandeGroupe('${gid}')"><i class="ti ti-plus"></i></button>
         ${g.client_id?`<button class="btn sm" title="${TR('Ouvrir la fiche du distributeur (ventes, adresse…)')}" onclick="event.stopPropagation();ouvrirFicheDistrib(${g.client_id})"><i class="ti ti-user"></i></button>`:''}
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
@@ -10991,6 +10992,14 @@ async function confirmerReaffectation(nom){
   }catch(e){ toast('Erreur : '+e.message,'ti-alert-circle','var(--danger)'); }
 }
 window.confirmerReaffectation = confirmerReaffectation;
+// Bouton « + » sur chaque distributeur : nouvelle demande déjà rattachée à ce distributeur
+async function diNouvelleDemandeGroupe(gid){
+  const nom=(window._DI_GID2NOM||{})[gid]; const g=(window._DI_GROUPS||{})[nom]; if(!g) return;
+  await modalDemande(g.client_id||null, g.nom);
+  const el=document.getElementById('di-distrib'); if(el && !el.value){ el.value=g.nom; diDistribChange(g.nom); }
+  const n=document.getElementById('di-nom'); if(n) n.focus();
+}
+window.diNouvelleDemandeGroupe = diNouvelleDemandeGroupe;
 function voirDemandesDistrib(nom){ DEMANDES_FILTRE={statut:'',non_traitees:false,q:nom}; DEMANDES_VUE='liste'; render(); }
 window.voirDemandesDistrib = voirDemandesDistrib;
 
@@ -11032,8 +11041,8 @@ async function modalDemande(clientId, distribNom, id){
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="di-tel" value="${esc(fmtTel(d.telephone||''))}"></div>
-        <div class="form-group"><label class="form-label">${TR('Ville')}</label><input class="form-input" id="di-ville" value="${esc(d.ville||'')}" onchange="diChargerPremium()"></div>
-        <div class="form-group"><label class="form-label">${TR('Code postal')}</label><input class="form-input" id="di-cp" value="${esc(d.cp||'')}" onchange="diChargerPremium()"></div>
+        <div class="form-group" style="position:relative"><label class="form-label">${TR('Ville')}</label><input class="form-input" id="di-ville" autocomplete="off" value="${esc(d.ville||'')}" oninput="diGeoSaisie('ville')" onblur="diGeoFermer('ville')" onchange="diChargerPremium()"><div id="di-geo-ville" class="di-geo-box" style="display:none"></div></div>
+        <div class="form-group" style="position:relative"><label class="form-label">${TR('Code postal')}</label><input class="form-input" id="di-cp" autocomplete="off" inputmode="numeric" value="${esc(d.cp||'')}" oninput="diGeoSaisie('cp')" onblur="diGeoFermer('cp')" onchange="diChargerPremium()"><div id="di-geo-cp" class="di-geo-box" style="display:none"></div></div>
         <div class="form-group"><label class="form-label">${TR('E-mail')}</label><input class="form-input" id="di-email" value="${esc(d.email||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Statut')}</label><select class="form-input" id="di-statut">${diStatutOptions(d.statut)}</select></div>
         <div class="form-group"><label class="form-label">${TR('Date de transmission')}</label><input class="form-input" id="di-date" type="date" value="${(d.date_transmission||'').slice(0,10)}"></div>
@@ -11047,6 +11056,76 @@ async function modalDemande(clientId, distribNom, id){
   setTimeout(()=>{ const di=$('di-distrib'); if(di) diDistribChange(di.value); diChargerPremium(); },0);
 }
 window.modalDemande = modalDemande;
+// ── Aide à la saisie Ville / Code postal (demandes d'info) ───────────────────
+// • CP (5 chiffres) → communes correspondantes (geo.api.gouv.fr) ; ville remplie
+//   automatiquement s'il n'y en a qu'une, sinon liste à choisir ; alerte si la ville
+//   saisie ne correspond pas au CP.
+// • Ville (3 lettres et +) → suggestions tolérantes aux fautes (Géoplateforme IGN),
+//   un clic remplit la ville bien orthographiée + le CP.
+let _diGeoT = null, _diGeoReq = 0;
+const _diGeoNorm = s => String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\bst\b/g,'saint').replace(/\bste\b/g,'sainte').replace(/[^a-z0-9]+/g,' ').trim();
+function _diGeoStyle(){
+  if (document.getElementById('di-geo-style')) return;
+  const st=document.createElement('style'); st.id='di-geo-style';
+  st.textContent='.di-geo-box{position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;color:var(--text,#1f2937);border:1px solid rgba(100,150,200,.35);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);margin-top:2px;max-height:240px;overflow:auto;font-size:13px}'+
+    '.di-geo-box .dg-it{padding:7px 10px;cursor:pointer;display:flex;justify-content:space-between;gap:8px}.di-geo-box .dg-it:hover{background:rgba(46,124,246,.10)}'+
+    '.di-geo-box .dg-cp{color:var(--text3,#667);font-variant-numeric:tabular-nums}.di-geo-box .dg-msg{padding:7px 10px;color:var(--text3,#667);font-size:12px}.di-geo-box .dg-warn{padding:7px 10px;color:#b45309;font-size:12px;font-weight:600}';
+  document.head.appendChild(st);
+}
+function _diGeoAfficher(champ, html){
+  _diGeoStyle();
+  const b=document.getElementById('di-geo-'+champ); if(!b) return;
+  if(!html){ b.style.display='none'; b.innerHTML=''; return; }
+  b.innerHTML=html; b.style.display='block';
+}
+function diGeoFermer(champ){ setTimeout(()=>_diGeoAfficher(champ,''), 200); }
+window.diGeoFermer = diGeoFermer;
+function diGeoChoisir(nom, cp){
+  const v=document.getElementById('di-ville'), c=document.getElementById('di-cp');
+  if(v) v.value=nom; if(c && cp) c.value=cp;
+  _diGeoAfficher('ville',''); _diGeoAfficher('cp','');
+  diChargerPremium();
+}
+window.diGeoChoisir = diGeoChoisir;
+const _diGeoItem = (nom, cp) => `<div class="dg-it" data-nom="${esc(nom)}" data-cp="${esc(cp||'')}" onmousedown="event.preventDefault();diGeoChoisir(this.dataset.nom,this.dataset.cp)"><span>${esc(nom)}</span><span class="dg-cp">${esc(cp||'')}</span></div>`;
+function diGeoSaisie(champ){
+  clearTimeout(_diGeoT);
+  _diGeoT = setTimeout(()=> champ==='cp' ? _diGeoParCp() : _diGeoParVille(), champ==='cp' ? 150 : 350);
+}
+window.diGeoSaisie = diGeoSaisie;
+async function _diGeoParCp(){
+  const cpEl=document.getElementById('di-cp'), vEl=document.getElementById('di-ville'); if(!cpEl) return;
+  const cp=cpEl.value.replace(/\s/g,'');
+  if(!/^\d{5}$/.test(cp)){ _diGeoAfficher('cp',''); return; }
+  const req=++_diGeoReq;
+  let L=[]; try{ L=await fetch('https://geo.api.gouv.fr/communes?fields=nom&codePostal='+cp).then(r=>r.json()); }catch(e){ return; }
+  if(req!==_diGeoReq) return;
+  if(!Array.isArray(L) || !L.length){ _diGeoAfficher('cp', `<div class="dg-warn">${TR('Code postal inconnu')}</div>`); return; }
+  L.sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
+  const ville=(vEl&&vEl.value||'').trim();
+  if(ville){
+    const ok=L.find(x=>_diGeoNorm(x.nom)===_diGeoNorm(ville));
+    if(ok){ if(vEl.value!==ok.nom) vEl.value=ok.nom; _diGeoAfficher('cp',''); return; }
+    _diGeoAfficher('cp', `<div class="dg-warn">${TR('La ville saisie ne correspond pas à ce code postal')} :</div>`+L.map(x=>_diGeoItem(x.nom,cp)).join(''));
+    return;
+  }
+  if(L.length===1){ vEl.value=L[0].nom; _diGeoAfficher('cp',''); diChargerPremium(); return; }
+  _diGeoAfficher('cp', `<div class="dg-msg">${L.length} ${TR('communes pour ce code postal')} :</div>`+L.map(x=>_diGeoItem(x.nom,cp)).join(''));
+}
+async function _diGeoParVille(){
+  const vEl=document.getElementById('di-ville'); if(!vEl) return;
+  const q=vEl.value.trim();
+  if(q.length<3){ _diGeoAfficher('ville',''); return; }
+  const req=++_diGeoReq;
+  let F=[]; try{ const j=await fetch('https://data.geopf.fr/geocodage/search?index=address&type=municipality&limit=6&q='+encodeURIComponent(q)).then(r=>r.json()); F=(j&&j.features)||[]; }catch(e){ return; }
+  if(req!==_diGeoReq || document.activeElement!==vEl) return;
+  const vus=new Set(), L=[];
+  for(const f of F){ const p=f.properties||{}; const nom=p.city||p.name; if(!nom) continue; const k=nom+'|'+(p.postcode||''); if(vus.has(k)) continue; vus.add(k); L.push({nom, cp:p.postcode||'', score:p.score||0}); }
+  if(!L.length){ _diGeoAfficher('ville', `<div class="dg-warn">${TR('Aucune commune trouvée — vérifiez l\u2019orthographe')}</div>`); return; }
+  const exact=L.some(x=>_diGeoNorm(x.nom)===_diGeoNorm(q));
+  const entete = exact ? '' : `<div class="dg-msg">${TR('Vouliez-vous dire')} :</div>`;
+  _diGeoAfficher('ville', entete+L.map(x=>_diGeoItem(x.nom,x.cp)).join(''));
+}
 // 2e distributeur Privilèges / Avantage : liste classée par distance du patient
 let _diPremiumReq = 0;
 async function diChargerPremium(){
