@@ -10969,7 +10969,7 @@ async function chargerDemandesParDistrib(){
         <span style="background:var(--bg2,#eef1f4);border:1px solid var(--border);border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none" title="${TR('Nombre de demandes')}">${g.items.length}</span>
         <span style="flex:1"></span>
         <button class="btn sm primary" title="${TR('Nouvelle demande pour ce distributeur')}" onclick="event.stopPropagation();diNouvelleDemandeGroupe('${gid}')"><i class="ti ti-plus"></i></button>
-        ${g.client_id?`<button class="btn sm" title="${TR('Ouvrir la fiche du distributeur (ventes, adresse…)')}" onclick="event.stopPropagation();ouvrirFicheDistrib(${g.client_id})"><i class="ti ti-user"></i></button>`:''}
+        ${g.client_id?`<button class="btn sm" title="${TR('Coordonnées du distributeur')}" onclick="event.stopPropagation();diPopupDistrib(${g.client_id})"><i class="ti ti-user"></i></button>`:''}
         <button class="btn sm" title="${TR('Renommer / réaffecter ce distributeur')}" onclick="reaffecterGroupe('${g.nom.replace(/'/g,'&#39;')}')"><i class="ti ti-arrow-move-right"></i></button>
       </div>
       <div id="bd-${gid}" style="display:${open?'block':'none'};overflow:hidden">
@@ -11073,6 +11073,40 @@ async function diNouvelleDemandeGroupe(gid){
   const n=document.getElementById('di-nom'); if(n) n.focus();
 }
 window.diNouvelleDemandeGroupe = diNouvelleDemandeGroupe;
+// Popup « coordonnées du distributeur » (au lieu d'ouvrir la fiche complète)
+async function diPopupDistrib(clientId){
+  if(!clientId) return;
+  let c=null;
+  try{ c=await API.client(clientId); }catch(e){ c=(window._clientsCache||[]).find(x=>x.id===clientId)||null; }
+  if(!c){ toast(TR('Fiche distributeur introuvable'),'ti-alert-circle','var(--danger)'); return; }
+  const liste=v=>String(v||'').split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean);
+  const tels=[c.tel,c.portable].filter(Boolean).map(t=>fmtTel(t)).filter((t,i,a)=>a.indexOf(t)===i);
+  const mails=liste(c.email);
+  const adr=[c.adresse,c.adresse2].filter(Boolean);
+  const cpv=[c.cp,c.ville].filter(Boolean).join(' ');
+  const pays=c.pays&&!/^(fr|france)$/i.test(c.pays)?c.pays:'';
+  const texteAdr=[...adr,cpv,pays].filter(Boolean).join('\n');
+  const gmaps='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([c.nom,adr.join(' '),cpv,pays].filter(Boolean).join(', '));
+  const ligne=(ic,lab,val)=>val?`<div style="display:flex;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)"><i class="ti ${ic}" style="color:var(--accent);font-size:18px;width:20px;flex:none;margin-top:1px"></i><div style="flex:1;min-width:0"><div style="font-size:11.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">${lab}</div><div style="font-size:14.5px;word-break:break-word">${val}</div></div></div>`:'';
+  const copier=(txt,lib)=>`<button class="btn sm" style="margin-left:6px" title="${TR('Copier')}" onclick="navigator.clipboard.writeText(this.dataset.t).then(()=>toast('${lib} ${TR('copié(e)')}','ti-copy'))" data-t="${esc(txt)}"><i class="ti ti-copy"></i></button>`;
+  const badges=(c.privileges?badgeOptionCarte('privileges',16)+' Privilèges ':'')+(c.avantages?badgeOptionCarte('avantages',16)+' Avantage':'');
+  window._DI_POPUP_C={id:c.id,nom:c.nom};
+  showModal(`<div class="modal-header"><i class="ti ti-building-store" style="color:var(--accent)"></i><h2>${esc(c.nom||'')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      ${badges?`<div style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px">${badges}</div>`:''}
+      ${ligne('ti-user',TR('Contact'),esc(c.contact||''))}
+      ${ligne('ti-map-pin',TR('Adresse'),texteAdr?esc(texteAdr).replace(/\n/g,'<br>')+copier(texteAdr,TR('Adresse'))+` <a class="btn sm" href="${gmaps}" target="_blank" rel="noopener" title="Google Maps"><i class="ti ti-map-2"></i></a>`:'')}
+      ${ligne('ti-phone',TR('Téléphone'),tels.map(t=>`<a href="tel:${esc(telHref(t))}" style="color:inherit;text-decoration:none;font-weight:600">${esc(t)}</a>`+copier(t,TR('Téléphone'))).join('<br>'))}
+      ${ligne('ti-mail',TR('E-mail'),mails.map(m=>`<a href="mailto:${esc(m)}" style="color:var(--accent);text-decoration:none">${esc(m)}</a>`+copier(m,TR('E-mail'))).join('<br>'))}
+      ${ligne('ti-id',TR('SIRET'),esc(c.siret||''))}
+      ${ligne('ti-notes',TR('Annotation'),c.annotation?esc(c.annotation).replace(/\n/g,'<br>'):'')}
+      ${(!texteAdr&&!tels.length&&!mails.length)?`<div style="color:var(--warning);font-size:13px;margin-top:8px"><i class="ti ti-alert-triangle"></i> ${TR('Aucune coordonnée renseignée sur la fiche.')}</div>`:''}
+    </div>
+    <div class="modal-footer"><button class="btn" style="margin-right:auto" onclick="closeModal();ouvrirFicheDistrib(${c.id})"><i class="ti ti-external-link"></i> ${TR('Fiche complète')}</button>
+      <button class="btn" onclick="closeModal()">${TR('Fermer')}</button>
+      <button class="btn primary" onclick="closeModal();modalDemande(window._DI_POPUP_C.id, window._DI_POPUP_C.nom)"><i class="ti ti-plus"></i> ${TR('Nouvelle demande')}</button></div>`);
+}
+window.diPopupDistrib = diPopupDistrib;
 function voirDemandesDistrib(nom){ DEMANDES_FILTRE={statut:'',non_traitees:false,q:nom}; DEMANDES_VUE='liste'; render(); }
 window.voirDemandesDistrib = voirDemandesDistrib;
 
