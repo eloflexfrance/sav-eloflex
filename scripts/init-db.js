@@ -881,6 +881,7 @@ async function initDB() {
         ['statut', "TEXT DEFAULT 'En cours'"],
         ['stock_integre', 'BOOLEAN DEFAULT FALSE'],
         ['integre_le', 'TIMESTAMP'],
+        ['emplacement_reception', 'TEXT'],
         ['created_at', 'TIMESTAMP DEFAULT NOW()'],
         ['updated_at', 'TIMESTAMP DEFAULT NOW()']
       ]) {

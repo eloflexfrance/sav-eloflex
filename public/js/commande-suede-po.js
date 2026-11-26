@@ -201,6 +201,7 @@ async function renderEdition(ttl, c, a) {
 
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin:16px 0 30px">
       <div style="margin-right:auto;display:flex;gap:8px">
+        ${cs.id && cs.stock_integre && (typeof isAdmin === 'function' && isAdmin()) && typeof csAnnulerIntegration === 'function' ? `<button class="btn" style="color:var(--danger)" onclick="csAnnulerIntegration(${cs.id})"><i class="ti ti-arrow-back-up"></i>${_T('Annuler la réception')}</button>` : ''}
         ${cs.id && !cs.stock_integre && (typeof isAdmin === 'function' && isAdmin()) ? `<button class="btn danger" onclick="csSupprimer()" title="${_T('Suppression définitive (administrateur)')}"><i class="ti ti-trash"></i>${_T('Supprimer')}</button>` : ''}
         ${cs.id && !cs.stock_integre && cs.etape !== 'annulee' && (cfg.peut_valider || (typeof isAdmin === 'function' && isAdmin())) ? `<button class="btn" onclick="csAnnuler()" style="color:var(--danger)"><i class="ti ti-ban"></i>${_T('Annuler la commande')}</button>` : ''}
       </div>

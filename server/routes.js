@@ -2015,13 +2015,48 @@ router.post('/commandes-suede/:id/integrer-stock', adminOrOp, async (req, res) =
       totalReliquat += reliquat;
     }
     await pgClient.query(
-      `UPDATE commandes_suede SET stock_integre=TRUE, statut=$1, integre_le=NOW(), updated_at=NOW() WHERE id=$2`,
-      [totalReliquat > 0 ? 'Intégrée (reliquat)' : 'Intégrée', req.params.id]
+      `UPDATE commandes_suede SET stock_integre=TRUE, statut=$1, integre_le=NOW(), emplacement_reception=$3, updated_at=NOW() WHERE id=$2`,
+      [totalReliquat > 0 ? 'Intégrée (reliquat)' : 'Intégrée', req.params.id, versParis ? 'paris' : 'lagord']
     );
     await pgClient.query('COMMIT');
     res.json({ ok: true, pieces_maj: piecesMaj, total_reliquat: totalReliquat });
   } catch (e) {
     await pgClient.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { pgClient.release(); }
+});
+
+// Annuler une réception intégrée par erreur (administrateur) : retire du stock les quantités reçues,
+// remet la commande « en attente » (date de livraison effacée) — les lignes et leur rattachement sont conservés.
+router.post('/commandes-suede/:id/annuler-integration', adminOnly, async (req, res) => {
+  const pgClient = await db.pool.connect();
+  try {
+    await pgClient.query('BEGIN');
+    const { rows: [cs] } = await pgClient.query('SELECT * FROM commandes_suede WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!cs) { await pgClient.query('ROLLBACK'); return res.status(404).json({ error: 'Introuvable' }); }
+    if (!cs.stock_integre) { await pgClient.query('ROLLBACK'); return res.status(409).json({ error: "Cette commande n'est pas intégrée au stock." }); }
+    const empl = ['paris', 'lagord'].includes(req.body && req.body.emplacement) ? req.body.emplacement : (cs.emplacement_reception || 'lagord');
+    if (empl === 'paris') await require('./inventaires').ensureTables(db);
+    const { rows: lignes } = await pgClient.query('SELECT * FROM commandes_suede_lignes WHERE commande_id=$1', [cs.id]);
+    const retraits = [];
+    for (const l of lignes) {
+      const q = parseInt(l.quantite_recue) || 0;
+      if (l.catalogue_id && q > 0) {
+        const { rows: [c] } = await pgClient.query('UPDATE catalogue SET stock=GREATEST(0, stock-$1), updated_at=NOW() WHERE id=$2 RETURNING ref, stock', [q, l.catalogue_id]);
+        if (empl === 'paris') await pgClient.query(`UPDATE catalogue_emplacements SET quantite=GREATEST(0, quantite-$1), updated_at=NOW() WHERE catalogue_id=$2 AND emplacement='paris'`, [q, l.catalogue_id]);
+        if (c) retraits.push(`${c.ref} −${q}`);
+      }
+    }
+    await pgClient.query('UPDATE commandes_suede_lignes SET quantite_recue=NULL, reliquat=0 WHERE commande_id=$1', [cs.id]);
+    const statut = cs.num_suivi ? 'En transit' : 'En cours';
+    await pgClient.query(`UPDATE commandes_suede SET stock_integre=FALSE, integre_le=NULL, emplacement_reception=NULL, date_livraison=NULL, statut=$2, updated_at=NOW() WHERE id=$1`, [cs.id, statut]);
+    const u = (req.session && req.session.user) || {};
+    await pgClient.query(`INSERT INTO activity_logs (user_id, user_nom, action, module, methode, chemin, cible_id) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [u.id || null, u.nom || u.email || '—', `Annulation réception ${cs.numero_bc} (${empl}) : ${retraits.join(', ')}`.slice(0, 500), 'commandes', 'POST', req.originalUrl.slice(0, 300), cs.id]).catch(() => {});
+    await pgClient.query('COMMIT');
+    res.json({ ok: true, emplacement: empl, pieces: retraits.length, retraits });
+  } catch (e) {
+    await pgClient.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: e.message });
   } finally { pgClient.release(); }
 });

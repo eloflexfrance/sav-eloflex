@@ -7008,7 +7008,7 @@ async function ouvrirCommandeSuede(id) {
         ${cs.stock_integre ? `<div style="font-size:13px;color:var(--success);margin-top:8px"><i class="ti ti-check"></i> Stock intégré${cs.integre_le?' le '+fd(String(cs.integre_le).slice(0,10)):''}</div>` : ''}
       </div>
       <div class="modal-footer" style="justify-content:space-between">
-        <div>${cs.stock_integre ? '' : `<button class="btn sm danger" onclick="supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i>${TR('Supprimer')}</button>`}</div>
+        <div>${cs.stock_integre ? ((typeof isAdmin === 'function' && isAdmin()) ? `<button class="btn sm" style="color:var(--danger)" onclick="csAnnulerIntegration(${cs.id})" title="${TR('Retire du stock les quantités reçues et remet la commande en attente de livraison')}"><i class="ti ti-arrow-back-up"></i>${TR('Annuler la réception')}</button>` : '') : `<button class="btn sm danger" onclick="supprimerCommandeSuede(${cs.id})"><i class="ti ti-trash"></i>${TR('Supprimer')}</button>`}</div>
         <div style="display:flex;gap:6px">
           ${cs.stock_integre ? '' : `<button class="btn" onclick="sauverCommandeSuede(${cs.id})"><i class="ti ti-device-floppy"></i>${TR('Enregistrer')}</button>`}
           ${peutIntegrer ? `<button class="btn primary" onclick="modalIntegrerStock(${cs.id})"><i class="ti ti-package-import"></i>${TR('Intégrer dans le stock')}</button>` : ''}
@@ -7033,6 +7033,34 @@ async function csRelierLigneCommande(csId, ligneId) {
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
 window.csRelierLigneCommande = csRelierLigneCommande;
+
+// Annuler une réception intégrée par erreur (administrateur)
+async function csAnnulerIntegration(id) {
+  let cs; try { cs = await API.commandeSuede(id); } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); return; }
+  const lignes = (cs.lignes || []).filter(l => l.catalogue_id && (parseInt(l.quantite_recue) || 0) > 0);
+  const empl = cs.emplacement_reception || '';
+  showModal(`<div class="modal-header"><h3><i class="ti ti-arrow-back-up"></i>${TR('Annuler la réception')} ${esc(cs.numero_bc)}</h3><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+    <div class="modal-body">
+      <p style="margin-top:0">${TR('Les quantités reçues ci-dessous seront retirées du stock, et la commande repassera « en attente de livraison » (date de livraison effacée). Les lignes et leurs références sont conservées pour la vraie réception.')}</p>
+      <div class="table-wrap" style="max-height:300px;overflow:auto"><table class="t"><thead><tr><th>${TR('Réf.')}</th><th>${TR('Désignation')}</th><th>${TR('À retirer')}</th><th>${TR('Stock actuel')}</th></tr></thead>
+        <tbody>${lignes.map(l => `<tr><td class="mono">${esc(l.reference || '')}</td><td>${esc(l.designation || '')}</td><td><b>−${l.quantite_recue}</b></td><td>${l.catalogue_stock_actuel == null ? '—' : l.catalogue_stock_actuel}</td></tr>`).join('')}</tbody></table></div>
+      <div class="form-group" style="margin-top:12px;max-width:340px"><label class="form-label">${TR('Emplacement où la réception avait été faite')}</label>
+        <select class="form-input" id="cs-ann-empl"><option value="lagord" ${empl !== 'paris' ? 'selected' : ''}>Lagord</option><option value="paris" ${empl === 'paris' ? 'selected' : ''}>Paris</option></select>
+        ${empl ? '' : `<div style="font-size:12px;color:var(--text3);margin-top:3px">${TR('Emplacement non enregistré pour cette réception : vérifiez le choix.')}</div>`}</div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="ouvrirCommandeSuede(${id})">${TR('Retour')}</button>
+      <button class="btn danger" onclick="csConfirmerAnnulationIntegration(${id})"><i class="ti ti-arrow-back-up"></i>${TR('Retirer du stock')} (${lignes.length})</button></div>`);
+}
+window.csAnnulerIntegration = csAnnulerIntegration;
+async function csConfirmerAnnulationIntegration(id) {
+  try {
+    const r = await API.annulerIntegrationSuede(id, (document.getElementById('cs-ann-empl') || {}).value || 'lagord');
+    closeModal();
+    toast(TR('Réception annulée') + ' : ' + r.pieces + ' ' + TR('pièce(s) retirée(s) du stock'), 'ti-check', 'var(--success)');
+    if (window._CSPO && window._CSPO.vue === 'edition') { window._CSPO.cs = null; render(); } else chargerCommandesSuede();
+  } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+window.csConfirmerAnnulationIntegration = csConfirmerAnnulationIntegration;
 
 async function sauverCommandeSuede(id) {
   try {
