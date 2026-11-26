@@ -11348,7 +11348,7 @@ async function modalEmailsDemande(id){
     <div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px">
       <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer"><input type="checkbox" id="dim-${k}" ${coche?'checked':''} onchange="dimMaj()"> ${titre}</label>
       <div style="font-size:12px;color:var(--text3);margin:2px 0 6px 24px">${sousTitre}</div>
-      <input class="form-input" id="dim-${k}-email" style="margin-left:24px;width:calc(100% - 24px)" value="${esc(String(email||'').split(/[,;\s]+/).filter(Boolean).join('; '))}" placeholder="adresse@exemple.fr ; autre@exemple.fr" oninput="dimMaj()" onblur="this.value=this.value.split(/[,;\s]+/).filter(Boolean).join('; ')">
+      <input class="form-input" id="dim-${k}-email" style="margin-left:24px;width:calc(100% - 24px)" value="${esc(String(email||'').split(/[,;\s]+/).filter(Boolean).join('; '))}" placeholder="adresse@exemple.fr ; autre@exemple.fr" oninput="dimMaj()" onblur="dimNormaliserMails(this)">
     </div>`;
   const env = a.envois||[]; window._DIM_RENVOI = env.length>0;
   showModal(`<div class="modal-header"><i class="ti ti-mail-forward" style="color:var(--accent)"></i><h2>${env.length?TR('Renvoyer les e-mails de la demande'):TR('Envoyer les e-mails de la demande')}</h2><button class="btn sm" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
@@ -11377,6 +11377,9 @@ async function modalEmailsDemande(id){
   dimMaj();
 }
 window.modalEmailsDemande = modalEmailsDemande;
+// Nettoie la saisie (plusieurs adresses séparées par « ; », virgule ou espace) sans toucher aux adresses elles-mêmes
+function dimNormaliserMails(el){ if(!el) return; el.value=String(el.value||'').split(/[,;\s]+/).map(x=>x.trim()).filter(Boolean).join('; '); dimMaj(); }
+window.dimNormaliserMails = dimNormaliserMails;
 function _dimEnvois(){
   // Une ou plusieurs adresses par destinataire, séparées par « ; » (la virgule et l'espace sont aussi acceptés)
   const out=[]; const un=v=>/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(v);
