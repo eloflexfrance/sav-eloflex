@@ -10900,7 +10900,7 @@ async function chargerDemandesParDistrib(){
     list = list.map(g=>{
       const nameHit = _diKey(g.nom).includes(q);
       if(nameHit) return Object.assign({}, g, {_open:true, _items:g.items});
-      const its = g.items.filter(d=> _diKey(d.nom).includes(q) || _diKey(d.email).includes(q) || _diKey(d.telephone).includes(q) || _diKey(d.ville).includes(q) || _diKey(d.cp).includes(q) || _diKey(d.annotation).includes(q));
+      const its = g.items.filter(d=> _diKey(d.nom).includes(q) || _diKey(d.email).includes(q) || _diKey(d.telephone).includes(q) || _diKey(d.ville).includes(q) || _diKey(d.cp).includes(q) || _diKey(d.adresse).includes(q) || _diKey(d.annotation).includes(q));
       return its.length ? Object.assign({}, g, {_open:true, _items:its}) : null;
     }).filter(Boolean);
   }
@@ -10955,7 +10955,7 @@ async function chargerDemandesParDistrib(){
       <td style="padding:7px 10px;word-break:break-word">${esc(d.nom||'')}${diLienMini(d)}</td>
       <td style="padding:7px 10px;white-space:nowrap">${d.telephone?`<a href="tel:${esc(telHref(d.telephone))}" style="color:inherit;text-decoration:none">${esc(fmtTel(d.telephone))}</a>`:'—'}</td>
       <td style="padding:7px 10px;word-break:break-word">${d.email?`<a href="mailto:${esc(d.email)}" style="color:var(--accent);text-decoration:none;font-size:13px">${esc(d.email)}</a>`:'—'}</td>
-      <td style="padding:7px 10px;word-break:break-word">${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
+      <td style="padding:7px 10px;word-break:break-word"${d.adresse?` title="${esc(d.adresse)}"`:''}>${esc(d.ville||'')}${d.cp?`<span style="color:var(--text3)"> ${esc(d.cp)}</span>`:''}${(!d.ville&&!d.cp)?'—':''}</td>
       <td style="padding:7px 10px;font-size:13px;word-break:break-word">${esc(d.demande_client||'')}</td>
       <td style="padding:7px 10px;font-size:13px;color:var(--text2);word-break:break-word">${esc(d.annotation||'')}</td>
       <td style="padding:7px 8px;text-align:center">${diHistCell(d)}</td>
@@ -11128,6 +11128,7 @@ async function modalDemande(clientId, distribNom, id){
       <div class="grid-2">
         <div class="form-group"><label class="form-label">${TR('Nom du contact / patient')}</label><input class="form-input" id="di-nom" value="${esc(d.nom||'')}"></div>
         <div class="form-group"><label class="form-label">${TR('Téléphone')}</label><input class="form-input" id="di-tel" value="${esc(fmtTel(d.telephone||''))}"></div>
+        <div class="form-group" style="grid-column:1/-1"><label class="form-label">${TR('Adresse')} <span style="font-weight:400;text-transform:none;color:var(--text3)">(${TR('facultatif')})</span></label><input class="form-input" id="di-adresse" autocomplete="off" value="${esc(d.adresse||'')}" placeholder="${TR('N° et rue, complément…')}"></div>
         <div class="form-group" style="position:relative"><label class="form-label">${TR('Ville')}</label><input class="form-input" id="di-ville" autocomplete="off" value="${esc(d.ville||'')}" oninput="diGeoSaisie('ville')" onblur="diGeoFermer('ville')" onchange="diChargerPremium()"><div id="di-geo-ville" class="di-geo-box" style="display:none"></div></div>
         <div class="form-group" style="position:relative"><label class="form-label">${TR('Code postal')}</label><input class="form-input" id="di-cp" autocomplete="off" inputmode="numeric" value="${esc(d.cp||'')}" oninput="diGeoSaisie('cp')" onblur="diGeoFermer('cp')" onchange="diChargerPremium()"><div id="di-geo-cp" class="di-geo-box" style="display:none"></div></div>
         <div class="form-group"><label class="form-label">${TR('E-mail')}</label><input class="form-input" id="di-email" value="${esc(d.email||'')}"></div>
@@ -11313,7 +11314,7 @@ async function saveDemande(){
   const id=gv('di-id');
   const data={
     client_id: gv('di-client-id')||null, distributeur_nom: gv('di-distrib')||null,
-    nom: gv('di-nom')||null, telephone: gv('di-tel')||null, ville: gv('di-ville')||null, cp: gv('di-cp')||null,
+    nom: gv('di-nom')||null, telephone: gv('di-tel')||null, adresse: gv('di-adresse')||null, ville: gv('di-ville')||null, cp: gv('di-cp')||null,
     email: gv('di-email')||null, statut: gv('di-statut')||'transmise',
     date_transmission: gv('di-date')||null, annotation: gv('di-annot')||null,
     demande_client: gv('di-demande')||null,

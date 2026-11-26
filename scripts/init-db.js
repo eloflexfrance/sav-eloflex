@@ -320,6 +320,8 @@ async function initDB() {
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS distributeur3_nom TEXT`);
     // Demande reliée : 'premium' (Privilèges / Avantage) ou 'autre' (2e distributeur libre)
     await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS lien_type TEXT`);
+    // Adresse postale du patient (facultative)
+    await client.query(`ALTER TABLE demandes_info ADD COLUMN IF NOT EXISTS adresse TEXT`);
 
     // Table commandes (suivi distributeurs, import historique Excel + VosFactures)
     await client.query(`CREATE TABLE IF NOT EXISTS commandes (

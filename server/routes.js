@@ -9272,6 +9272,7 @@ async function _diSyncJumelle(id, par) {
     const memeDistrib = tw && (cid ? tw.client_id === cid : (!tw.client_id && String(tw.distributeur_nom || '').trim().toLowerCase() === nom.toLowerCase()));
     if (memeDistrib) {
       await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, essai_interne=$7, lien_type=$8, updated_at=NOW() WHERE id=$9`, [...patient, s.type, tw.id]);
+      await db.run('UPDATE demandes_info SET adresse=$1 WHERE id=$2', [d.adresse || null, tw.id]);
       gardees.push({ id: tw.id, type: s.type }); continue;
     }
     if (tw) await retirer(tw);
@@ -9282,6 +9283,7 @@ async function _diSyncJumelle(id, par) {
     const n = await db.run(`INSERT INTO demandes_info (client_id, distributeur_nom, nom, ville, cp, telephone, email, demande_client, essai_interne, statut, date_transmission, cree_par, historique, lien_id, role_lien, lien_type)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transmise',$10,$11,$12::jsonb,$13,'secondaire',$14) RETURNING id`,
       [cid, nom || (c && c.nom) || null, ...patient, d.date_transmission || new Date().toISOString().slice(0, 10), d.cree_par, JSON.stringify(hist), d.id, s.type]);
+    await db.run('UPDATE demandes_info SET adresse=$1 WHERE id=$2', [d.adresse || null, n.id]);
     gardees.push({ id: n.id, type: s.type });
   }
   // Jumelles en trop (anciennes données) : détachées
@@ -9313,7 +9315,7 @@ router.get('/demandes-info', requireAuth, async (req, res) => {
     if (req.query.client_id) { conds.push(`d.client_id = $${++i}`); p.push(req.query.client_id); conds.push('NOT COALESCE(d.essai_interne,FALSE)'); }
     if (req.query.statut)    { conds.push(`d.statut = $${++i}`); p.push(req.query.statut); }
     if (req.query.non_traitees === '1') conds.push(`d.statut = ANY('{transmise,relance}')`);
-    if (req.query.q) { conds.push(`(d.nom ILIKE $${++i} OR d.ville ILIKE $${i} OR d.telephone ILIKE $${i} OR d.annotation ILIKE $${i} OR COALESCE(c.nom,d.distributeur_nom) ILIKE $${i})`); p.push('%'+req.query.q+'%'); }
+    if (req.query.q) { conds.push(`(d.nom ILIKE $${++i} OR d.ville ILIKE $${i} OR d.telephone ILIKE $${i} OR d.annotation ILIKE $${i} OR d.adresse ILIKE $${i} OR COALESCE(c.nom,d.distributeur_nom) ILIKE $${i})`); p.push('%'+req.query.q+'%'); }
     const where = conds.length ? 'WHERE '+conds.join(' AND ') : '';
     const rows = await db.all(
       `SELECT d.*, c.nom AS client_nom_actuel, c.email AS client_email_actuel,
@@ -9407,6 +9409,7 @@ router.post('/demandes-info', requireAuth, async (req, res) => {
        d.demande_client||null, d.relance_mail_date||null, d.relance_tel_date||null,
        parseInt(d.client2_id)||null, (parseInt(d.client2_id) && d.distributeur2_nom) || null, !!d.essai_interne,
        parseInt(d.client3_id)||null, String(d.distributeur3_nom||'').trim() || null]);
+    if (row && d.adresse) { await db.run('UPDATE demandes_info SET adresse=$1 WHERE id=$2', [String(d.adresse).trim() || null, row.id]); row.adresse = String(d.adresse).trim() || null; }
     if (row && (row.client2_id || row.client3_id || row.distributeur3_nom)) { const tid = await _diSyncJumelle(row.id, _diPar(req)); if (tid) { row.lien_id = tid; row.role_lien = 'principal'; } }
     res.json(row);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -9426,6 +9429,10 @@ router.put('/demandes-info/:id', requireAuth, async (req, res) => {
     if (!row) return res.status(404).json({ error: 'Demande introuvable' });
     if (Object.prototype.hasOwnProperty.call(d, 'essai_interne'))
       await db.run('UPDATE demandes_info SET essai_interne=$1 WHERE id=$2', [!!d.essai_interne, req.params.id]);
+    if (Object.prototype.hasOwnProperty.call(d, 'adresse')) {
+      row.adresse = String(d.adresse || '').trim() || null;
+      await db.run('UPDATE demandes_info SET adresse=$1 WHERE id=$2', [row.adresse, req.params.id]);
+    }
     if (Object.prototype.hasOwnProperty.call(d, 'client2_id') && row.role_lien !== 'secondaire') {
       const c2 = parseInt(d.client2_id) || null;
       const r2 = await db.run('UPDATE demandes_info SET client2_id=$1, distributeur2_nom=$2 WHERE id=$3 RETURNING client2_id, distributeur2_nom',
@@ -9443,6 +9450,7 @@ router.put('/demandes-info/:id', requireAuth, async (req, res) => {
       if (row.lien_id) {
         await db.run(`UPDATE demandes_info SET nom=$1, ville=$2, cp=$3, telephone=$4, email=$5, demande_client=$6, updated_at=NOW() WHERE id=$7`,
           [row.nom, row.ville, row.cp, row.telephone, row.email, row.demande_client, row.lien_id]);
+        await db.run('UPDATE demandes_info SET adresse=$1 WHERE id=$2', [row.adresse || null, row.lien_id]);
         await _diSyncJumelle(row.lien_id, _diPar(req));
       }
     } else await _diSyncJumelle(row.id, _diPar(req));
@@ -9700,6 +9708,7 @@ router.post('/demandes-info/:id/relance', requireAuth, async (req, res) => {
           ${ligne(d.nom)}
           ${ligne(fmtTel(d.telephone))}
           ${ligne(d.email)}
+          ${ligne(d.adresse)}
           ${ligne(villeCp)}
           ${ligne(d.demande_client)}
         </div>
@@ -9839,7 +9848,7 @@ async function _diConstruireMails(d, req, veutContact) {
 
     // ── Bloc contact (coordonnées complètes + demande) pour le distributeur ──
     const lignes = [['Nom', d.nom], ['Téléphone', d.telephone ? fmtTel(d.telephone) : ''], ['E-mail', d.email],
-      ['Ville', [d.cp, d.ville].filter(Boolean).join(' ')], ['Demande', d.demande_client]].filter(x => x[1]);
+      ['Adresse', d.adresse], ['Ville', [d.cp, d.ville].filter(Boolean).join(' ')], ['Demande', d.demande_client]].filter(x => x[1]);
     const blocContact = `<table cellpadding="0" cellspacing="0" border="0" role="presentation" style="width:100%;max-width:580px;border-collapse:collapse;margin:14px 0 18px;background:#F5F8FC;border-left:4px solid #2B7DC7">
       ${lignes.map(([k, v]) => `<tr><td style="padding:7px 14px;font-size:13px;color:#666;width:110px;vertical-align:top">${k}</td><td style="padding:7px 14px;font-size:14px;color:#1F3A5F;font-weight:bold">${k === 'E-mail' ? `<a href="mailto:${esc(v)}" style="color:#2B7DC7">${esc(v)}</a>` : k === 'Téléphone' ? `<a href="tel:${esc(String(v).replace(/\s/g, ''))}" style="color:#2B7DC7;text-decoration:none">${esc(v)}</a>` : esc(v).replace(/\n/g, '<br>')}</td></tr>`).join('')}
     </table>`;
