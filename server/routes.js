@@ -1714,7 +1714,7 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
     const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     function rapprocher(productId, texte) {
       let cat = null;
-      if (productId) cat = catalogue.find(c => c.vf_product_id === productId);
+      if (productId) cat = catalogue.find(c => String(c.vf_product_id) === String(productId));
       if (!cat) {
         const pn = norm(texte);
         cat = catalogue.find(c => norm(c.ref) === pn)
@@ -1722,38 +1722,52 @@ router.get('/vosfactures/stock-lookup', async (req, res) => {
       }
       return cat;
     }
+    // Produit VosFactures non relié au catalogue (doublon, ancienne fiche…) : on lit son code (EAN) chez VF
+    const _codesVF = {};
+    async function rapprocherParCodeVF(productId) {
+      if (!productId) return null;
+      if (!(productId in _codesVF)) {
+        try { const { data } = await vfApi.get(`/products/${productId}.json`); _codesVF[productId] = data && data.code ? String(data.code) : ''; }
+        catch (_) { _codesVF[productId] = ''; }
+      }
+      let code = norm(_codesVF[productId]); if (!code) return null;
+      if (/^350006\d{7}$/.test(code)) code = '7' + code;
+      return catalogue.find(c => norm(c.ref) === code) || null;
+    }
 
     let lignes, dateDoc, fournisseur;
     if (source === 'warehouse') {
       const { data: detail } = await vfApi.get(`/warehouse_documents/${doc.id}.json`);
       const actions = detail.warehouse_actions || [];
-      lignes = actions.map(a => {
-        const cat = rapprocher(a.product_id, a.product_name || a.name);
-        return {
+      lignes = [];
+      for (const a of actions) {
+        const cat = rapprocher(a.product_id, a.product_name || a.name) || await rapprocherParCodeVF(a.product_id);
+        lignes.push({
           reference: cat ? cat.ref : '',
           designation: a.product_name || a.name || '',
           quantite: parseInt(a.quantity) || 1,
           catalogue_id: cat ? cat.id : null,
           catalogue_ref: cat ? cat.ref : null,
           catalogue_designation: cat ? cat.designation : null
-        };
-      });
+        });
+      }
       dateDoc = detail.issue_date;
       fournisseur = detail.client_name || 'Eloflex AB';
     } else {
       const { data: detail } = await vfApi.get(`/invoices/${doc.id}.json`);
       const positions = detail.positions || detail.invoice_items || [];
-      lignes = positions.map(p => {
-        const cat = rapprocher(p.product_id, p.code || p.name);
-        return {
+      lignes = [];
+      for (const p of positions) {
+        const cat = rapprocher(p.product_id, p.code || p.name) || await rapprocherParCodeVF(p.product_id);
+        lignes.push({
           reference: p.code || (cat ? cat.ref : ''),
           designation: p.name || '',
           quantite: parseInt(p.quantity) || 1,
           catalogue_id: cat ? cat.id : null,
           catalogue_ref: cat ? cat.ref : null,
           catalogue_designation: cat ? cat.designation : null
-        };
-      });
+        });
+      }
       dateDoc = detail.issue_date || detail.sell_date;
       fournisseur = detail.seller_name || 'Eloflex AB';
     }
@@ -1798,7 +1812,7 @@ router.get('/vosfactures/stock-doc/:id', async (req, res) => {
     const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     function rapprocher(productId, texte) {
       let cat = null;
-      if (productId) cat = catalogue.find(c => c.vf_product_id === productId);
+      if (productId) cat = catalogue.find(c => String(c.vf_product_id) === String(productId));
       if (!cat) {
         const pn = norm(texte);
         cat = catalogue.find(c => norm(c.ref) === pn)
@@ -1806,36 +1820,50 @@ router.get('/vosfactures/stock-doc/:id', async (req, res) => {
       }
       return cat;
     }
+    // Produit VosFactures non relié au catalogue (doublon, ancienne fiche…) : on lit son code (EAN) chez VF
+    const _codesVF = {};
+    async function rapprocherParCodeVF(productId) {
+      if (!productId) return null;
+      if (!(productId in _codesVF)) {
+        try { const { data } = await vfApi.get(`/products/${productId}.json`); _codesVF[productId] = data && data.code ? String(data.code) : ''; }
+        catch (_) { _codesVF[productId] = ''; }
+      }
+      let code = norm(_codesVF[productId]); if (!code) return null;
+      if (/^350006\d{7}$/.test(code)) code = '7' + code;
+      return catalogue.find(c => norm(c.ref) === code) || null;
+    }
 
     let lignes, dateDoc, fournisseur;
     if (source === 'warehouse') {
       const actions = detail.warehouse_actions || [];
-      lignes = actions.map(a => {
-        const cat = rapprocher(a.product_id, a.product_name || a.name);
-        return {
+      lignes = [];
+      for (const a of actions) {
+        const cat = rapprocher(a.product_id, a.product_name || a.name) || await rapprocherParCodeVF(a.product_id);
+        lignes.push({
           reference: cat ? cat.ref : '',
           designation: a.product_name || a.name || '',
           quantite: parseInt(a.quantity) || 1,
           catalogue_id: cat ? cat.id : null,
           catalogue_ref: cat ? cat.ref : null,
           catalogue_designation: cat ? cat.designation : null
-        };
-      });
+        });
+      }
       dateDoc = detail.issue_date;
       fournisseur = detail.client_name || 'Eloflex AB';
     } else {
       const positions = detail.positions || detail.invoice_items || [];
-      lignes = positions.map(p => {
-        const cat = rapprocher(p.product_id, p.code || p.name);
-        return {
+      lignes = [];
+      for (const p of positions) {
+        const cat = rapprocher(p.product_id, p.code || p.name) || await rapprocherParCodeVF(p.product_id);
+        lignes.push({
           reference: p.code || (cat ? cat.ref : ''),
           designation: p.name || '',
           quantite: parseInt(p.quantity) || 1,
           catalogue_id: cat ? cat.id : null,
           catalogue_ref: cat ? cat.ref : null,
           catalogue_designation: cat ? cat.designation : null
-        };
-      });
+        });
+      }
       dateDoc = detail.issue_date || detail.sell_date;
       fournisseur = detail.seller_name || 'Eloflex AB';
     }

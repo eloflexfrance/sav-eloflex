@@ -7000,7 +7000,7 @@ async function ouvrirCommandeSuede(id) {
         <div class="section-title" style="margin-top:8px"><i class="ti ti-list"></i>Lignes (${cs.lignes.length})</div>
         <div class="table-wrap"><table class="t"><thead><tr><th>${TR('Désignation')}</th><th>${TR('Réf.')}</th><th>${TR('Cmdé')}</th>${cs.stock_integre?'<th>'+TR("Reçu")+'</th><th>Reliquat</th>':''}</tr></thead>
           <tbody>${cs.lignes.map(l => `<tr>
-            <td>${esc(l.designation)}${l.catalogue_id?'':' <span class="badge hg" title="'+TR("Non rattaché au catalogue")+'">?</span>'}</td>
+            <td>${esc(l.designation)}${l.catalogue_id?'':' <span class="badge hg" title="'+TR("Non rattaché au catalogue")+'">?</span>'}${!l.catalogue_id&&!cs.stock_integre?` <span onclick="csRelierLigneCommande(${cs.id},${l.id})" style="color:var(--accent);cursor:pointer;font-size:12px;white-space:nowrap"><i class="ti ti-link"></i> ${TR('relier au stock')}</span>`:''}</td>
             <td class="mono">${esc(l.reference||'—')}</td>
             <td>${l.quantite_commandee}</td>
             ${cs.stock_integre?`<td>${l.quantite_recue==null?'—':l.quantite_recue}</td><td>${l.reliquat>0?`<span class="badge hg">${l.reliquat}</span>`:'0'}</td>`:''}
@@ -7016,6 +7016,23 @@ async function ouvrirCommandeSuede(id) {
       </div>`);
   } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
 }
+
+// Relier une ligne « ? » (non rattachée au catalogue) à une pièce, avant la réception
+async function csRelierLigneCommande(csId, ligneId) {
+  try {
+    const cs = await API.commandeSuede(csId);
+    const l = (cs.lignes || []).find(x => x.id === ligneId); if (!l) return;
+    if (!_csCatalogue) { try { _csCatalogue = await API.catalogue(); } catch (_) { _csCatalogue = []; } }
+    const choix = prompt(TR('Référence de la pièce du catalogue à relier :') + '\n« ' + (l.designation || '') + ' »', l.reference || '');
+    if (!choix) return;
+    const art = _csTrouverRef(choix);
+    if (!art) { toast(TR('Référence introuvable dans le catalogue'), 'ti-alert-circle', 'var(--danger)'); return; }
+    await API.put(`/commandes-suede/${csId}/lignes`, [{ id: l.id, catalogue_id: art.id, reference: art.ref, designation: l.designation || art.designation, quantite_commandee: l.quantite_commandee }]);
+    toast(TR('Ligne reliée au stock') + ' : ' + art.ref + ' — ' + art.designation, 'ti-link', 'var(--success)');
+    ouvrirCommandeSuede(csId);
+  } catch (e) { toast(e.message, 'ti-alert-circle', 'var(--danger)'); }
+}
+window.csRelierLigneCommande = csRelierLigneCommande;
 
 async function sauverCommandeSuede(id) {
   try {
@@ -7096,18 +7113,33 @@ function majIntLigne(index, champ, valeur) {
       const reliquat = Math.max(0, l.quantite_commandee - l._recu);
       cell.innerHTML = reliquat > 0 ? `<span class="badge hg">${reliquat}</span>` : '<span style="color:var(--text3)">0</span>';
     }
+  } else if (champ === 'reference') {
+    l.reference = valeur;
+    // Référence saisie présente au catalogue → ligne reliée au stock automatiquement
+    const art = _csTrouverRef(valeur);
+    if (art) { l.catalogue_id = art.id; l.reference = art.ref; if (!l.designation) l.designation = art.designation; toast(TR('Ligne reliée au stock') + ' : ' + art.ref, 'ti-link', 'var(--success)'); }
+    else if (l.catalogue_id) { l.catalogue_id = null; }
+    dessinerLignesIntegration();
   } else {
     l[champ] = valeur;
   }
 }
 window.majIntLigne = majIntLigne;
 
+// Recherche tolérante d'une pièce par référence (espaces, casse, « 7 » initial manquant des EAN 350006…)
+function _csTrouverRef(saisie) {
+  const n = x => String(x || '').replace(/\s+/g, '').toLowerCase();
+  let q = n(saisie); if (!q) return null;
+  if (/^350006\d{7}$/.test(q)) q = '7' + q;
+  const cat = _csCatalogue || [];
+  return cat.find(c => n(c.ref) === q) || cat.find(c => n(c.ref_fournisseur).includes(q) && q.length >= 8) || null;
+}
 function relierLigneCatalogue(index) {
   const l = (window._csIntLignes || [])[index];
   if (!l) return;
   const choix = prompt(TR('Référence de la pièce du catalogue à relier :'), l.reference || '');
   if (!choix) return;
-  const art = (_csCatalogue || []).find(c => String(c.ref).toLowerCase() === choix.trim().toLowerCase());
+  const art = _csTrouverRef(choix);
   if (!art) { toast(TR('Référence introuvable dans le catalogue'), 'ti-alert-circle', 'var(--danger)'); return; }
   l.catalogue_id = art.id;
   l.reference = art.ref;
