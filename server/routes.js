@@ -7471,8 +7471,12 @@ router.get('/carte/points', requireAuth, async (req, res) => {
 });
 
 // Clé MapTiler éventuelle (fond de carte "pro"). Vide = on utilise le fond sans clé (Esri).
-router.get('/carte/tiles-key', requireAuth, (req, res) => {
-  res.json({ key: process.env.MAPTILER_KEY || process.env.MAPTILER_API_KEY || '' });
+// Paramètre « carte_fond » : 'maptiler' (défaut si une clé existe, bascule auto sur Esri en cas de blocage) ou 'esri'
+router.get('/carte/tiles-key', requireAuth, async (req, res) => {
+  const cle = process.env.MAPTILER_KEY || process.env.MAPTILER_API_KEY || '';
+  let fond = 'maptiler';
+  try { const r = await db.get(`SELECT valeur FROM parametres WHERE cle='carte_fond'`); if (r && r.valeur === 'esri') fond = 'esri'; } catch (_) {}
+  res.json({ key: fond === 'esri' ? '' : cle, fond: cle ? fond : 'esri', maptiler_configure: !!cle });
 });
 
 // Export Excel de la base complète des distributeurs de la carte (table distributeurs_carte).

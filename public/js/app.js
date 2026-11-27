@@ -3296,6 +3296,7 @@ Object.assign(window,{ pretSouhaitModal, pretSouhaitAutoRappel, pretSouhaitEnreg
 async function renderParametres(ttl,c,a){
   ttl.textContent=t('param_title');
   a.innerHTML=`<button class="btn primary" onclick="saveParametres()"><i class="ti ti-check"></i>${t('btn_enregistrer')}</button>`;
+  setTimeout(()=>{ fetch('/api/carte/tiles-key').then(r=>r.json()).then(d=>{ const el=document.getElementById('p-carte-fond-info'); if(el) el.textContent = d.maptiler_configure ? TR('Clé MapTiler configurée sur le serveur.') : TR('Aucune clé MapTiler sur le serveur : la carte utilise Esri quel que soit ce choix.'); }).catch(()=>{}); }, 300);
   const p=await API.parametres();
   CACHE.params=p;
   setTimeout(chargerResumeSauvegarde, 50);
@@ -3403,6 +3404,13 @@ async function renderParametres(ttl,c,a){
           <option value="0" ${p.mode_sombre!=='1'?'selected':''}>${t('param_dark_clair')}</option>
           <option value="1" ${p.mode_sombre==='1'?'selected':''}>${t('param_dark_sombre')}</option>
         </select>
+      </div>
+      <div class="form-group"><label class="form-label">${TR('Fond de la carte des distributeurs')}</label>
+        <select class="form-input" id="p-carte-fond">
+          <option value="maptiler" ${p.carte_fond!=='esri'?'selected':''}>${TR('MapTiler (bascule automatique sur Esri si le quota est atteint)')}</option>
+          <option value="esri" ${p.carte_fond==='esri'?'selected':''}>${TR('Esri (gratuit, sans quota)')}</option>
+        </select>
+        <div id="p-carte-fond-info" style="font-size:12px;color:var(--text3);margin-top:3px"></div>
       </div>
       <div class="form-group"><label class="form-label">${t('param_langue')}</label>
         <div style="display:flex;gap:8px;margin-top:4px">
@@ -4429,6 +4437,7 @@ async function saveParametres(){
     email_smtp_user_relance:gv('p-smtp-user-relance')||'',
     email_smtp_pass_relance:gv('p-smtp-pass-relance')||''
   };
+  if(document.getElementById('p-carte-fond')){ p.carte_fond=gv('p-carte-fond')||'maptiler'; window._MAPTILER_KEY=undefined; window._MAPTILER_HS=false; }
   if(document.getElementById('p-ecl-ordre')) p.eclates_ordre=gv('p-ecl-ordre').trim();
   if(document.getElementById('p-esp-prix')) p.espace_prix_visibles=gv('p-esp-prix')||'0';
   if(document.getElementById('p-esp-auto')) p.espace_lien_auto=gv('p-esp-auto')||'1';
