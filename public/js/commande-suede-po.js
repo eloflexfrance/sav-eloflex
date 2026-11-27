@@ -595,6 +595,64 @@ window.csConfirmerAnnulation = confirmerAnnulation;
 
 // ── Import d'un devis Pennylane → bon de commande Suède pré-rempli ──
 const nRef = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+// ── Références Pennylane → références attendues par la Suède (tableau « références internes et Suède ») ──
+// Fauteuil : <EAN modèle>-<n° de taille>  (43/45 cm → -2, 48 → -3, 50 → -4, 55 → -5 ; H2 : toujours -1)
+// + éventuel complément sur une 2e ligne : coussin Ease One (-O), coussin Ease Wedge (-W) ou Kit A (-A), selon la taille.
+const SUEDE_MODELES = { L: '7350006080067', F: '7350006080685', P: '7350006080531', D2: '7350006080616', R: '7350006086007', H2: '7350006088162' };
+const SUEDE_TAILLE = { 43: 2, 45: 2, 48: 3, 50: 4, 55: 5 };
+const SUEDE_H2_TAILLES = [48, 52, 55, 60];
+const SUEDE_COMPL = {
+  O: { std: { 2: ['7350006084225', 'Ease One cushion, 42.5 cm'], 3: ['7350006084683', 'Ease One cushion, 47.5 cm'], 4: ['7350006084683', 'Ease One cushion, 47.5 cm'], 5: ['7350006084690', 'Ease One cushion, 52.5 cm'] },
+       h2:  { 48: ['7350006084683', 'Ease One cushion, 47.5 cm'], 52: ['7350006084683', 'Ease One cushion, 47.5 cm'], 55: ['7350006084690', 'Ease One cushion, 52.5 cm'], 60: ['7350006084690', 'Ease One cushion, 52.5 cm'] } },
+  W: { std: { 2: ['7350006085253', 'Ease Wedge cushion, 42.5 cm'], 3: ['7350006085819', 'Ease Wedge cushion, 47.5 cm'], 4: ['7350006085819', 'Ease Wedge cushion, 47.5 cm'], 5: ['7350006085826', 'Ease Wedge cushion, 52.5 cm'] },
+       h2:  { 48: ['7350006085819', 'Ease Wedge cushion, 47.5 cm'], 52: ['7350006085819', 'Ease Wedge cushion, 47.5 cm'], 55: ['7350006085826', 'Ease Wedge cushion, 52.5 cm'], 60: ['7350006085826', 'Ease Wedge cushion, 52.5 cm'] } },
+};
+// Fauteuils d'essai H2 : pièce complémentaire selon la taille (tableau Suède)
+const SUEDE_ESSAI_H2 = { 52: '7350006087967', 55: '7350006087974', 60: '7350006087981' };
+function tailleDans(...txts) {
+  for (const t of txts) { const m = /(?:^|[^\d,.])(43|45|48|50|52|55|60)\s*cm\b/i.exec(String(t || '')); if (m) return +m[1]; }
+  return null;
+}
+// Retourne null si la ligne n'est pas un fauteuil concerné ; sinon { modele, taille, lignes:[{reference, designation, principale}], essai, alerte }
+function refsSuede(l) {
+  const brut = String(l.reference || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const texte = String(l.designation || '') + ' ' + sansHtml(l.description || '');
+  let modele = null, variante = 'E', taille = null, essai = false;
+  let m = /^ESSAI-([A-Z][0-9]?)-(\d{2})\s*CM$/.exec(brut);
+  if (m) { modele = m[1]; taille = +m[2]; essai = true; }
+  else {
+    m = /^7?(350006\d{6})(?:-([EOWA1]))?(?:\s+(\d{2}))?$/.exec(brut);
+    if (!m) return null;
+    const ean = '7' + m[1];
+    modele = Object.keys(SUEDE_MODELES).find(k => SUEDE_MODELES[k] === ean) || null;
+    if (!modele) return null;
+    if (!m[2] && !m[3]) return null;               // EAN seul (ancienne nomenclature) : inchangé
+    variante = m[2] === '1' ? 'E' : (m[2] || 'E');
+    taille = m[3] ? +m[3] : tailleDans(l.designation, texte);
+  }
+  if (!SUEDE_MODELES[modele]) return null;
+  const ean = SUEDE_MODELES[modele], h2 = modele === 'H2';
+  const nomMod = h2 ? 'Model H2' : `Model ${modele} (new nomenclature)`;
+  let alerte = '';
+  if (!taille) { taille = h2 ? 48 : 45; alerte = `taille absente du devis : ${taille} cm par défaut, à vérifier`; }
+  let refFauteuil;
+  if (h2) { refFauteuil = ean + '-1'; if (!SUEDE_H2_TAILLES.includes(taille)) alerte = alerte || `taille ${taille} cm inconnue pour le H2`; }
+  else {
+    const n = SUEDE_TAILLE[taille];
+    if (!n) return { modele, taille, essai, alerte: `taille ${taille} cm sans correspondance suédoise`, lignes: [{ reference: brut, designation: l.designation || '', principale: true }] };
+    refFauteuil = `${ean}-${n}`;
+  }
+  const lignes = [{ reference: refFauteuil, designation: `${nomMod}, size ${taille} cm`, principale: true }];
+  if (variante === 'O' || variante === 'W') {
+    const t = h2 ? SUEDE_COMPL[variante].h2[taille] : SUEDE_COMPL[variante].std[SUEDE_TAILLE[taille]];
+    if (t) lignes.push({ reference: t[0], designation: t[1] });
+  } else if (variante === 'A') {
+    lignes.push(['R', 'H2'].includes(modele) ? { reference: '7350006088131', designation: 'Kit A model R/H2 (new nomenclature)' } : { reference: '7350006086021', designation: 'Kit A (new nomenclature)' });
+  }
+  if (essai && h2 && SUEDE_ESSAI_H2[taille]) lignes.push({ reference: SUEDE_ESSAI_H2[taille], designation: `Model H2 size ${taille} cm — additional part` });
+  return { modele, taille, essai, alerte, lignes };
+}
 const estFrais = d => /frais|\bport\b|livraison|exp[ée]dition|transport|shipping|\benvoi\b|colissimo|chronopost|remise|escompte/i.test(String(d || ''));
 const sansHtml = t => String(t || '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 function modalDevisPL(numero) {
@@ -632,29 +690,34 @@ async function chercherDevisPL() {
   const cat = await catalogue();
   const parRef = new Map();
   cat.forEach(c => { [c.ref, c.ref_fournisseur].forEach(k => { const n = nRef(k); if (n && !parRef.has(n)) parRef.set(n, c); }); });
-  // Fauteuils d'essai : ESSAI-D2-50CM → 7350006080616-E 50 (modèles ayant une référence « -E » au catalogue)
-  const eanE = {};
-  cat.forEach(c => { const m = /^(7350006\d{6})-E$/.exec(String(c.ref || '').trim()), mm = /mod[eè]le\s+([A-Z0-9]+)/i.exec(c.designation || '');
-    if (m && mm) eanE[mm[1].toUpperCase()] = { ean: m[1], designation: c.designation }; });
-  for (const [k, e] of Object.entries({ L: '7350006080067', P: '7350006080531', D2: '7350006080616', F: '7350006080685', R: '7350006086007' }))
-    if (!eanE[k]) eanE[k] = { ean: e, designation: `Fauteuil Eloflex Modèle ${k} - NM - Equipements de série` };
-  S._pl = { r, lignes: (r.lignes || []).map(l => {
-    const ess = /^ESSAI-([A-Z0-9]+)-(\d{2})\s*CM$/i.exec(String(l.reference || '').trim());
-    if (ess) {
-      const mod = ess[1].toUpperCase(), taille = ess[2], e = eanE[mod];
-      const des = e ? String(e.designation).replace(/\s*-\s*DEMONSTRATION\s*$/i, '').replace(/\d{2}\s*cm/i, taille + ' cm') : (l.designation || '');
-      return { garder: (+l.quantite || 0) > 0, catalogue_id: null, reference: e ? `${e.ean}-E ${taille}` : (l.reference || ''), ref_fournisseur: '',
-        designation: !e || /\d{2}\s*cm/i.test(des) ? des : des + ' - ' + taille + ' cm', note: '', quantite: Math.max(1, parseInt(l.quantite) || 1),
-        prix_unitaire: null, options: refPantographeGauche(mod) ? optionsDefaut() : undefined, frais: false, essai: e ? 'ok' : 'inconnu', refOrigine: l.reference };
+  const parRefSansTaille = ref => parRef.get(nRef(String(ref || '').replace(/\s+\d{2}\s*(CM)?$/i, ''))) || null;
+  const lignesPL = [];
+  for (const l of (r.lignes || [])) {
+    const sv = refsSuede(l);
+    if (sv) {
+      // Fauteuil : référence(s) suédoise(s) — la 1re ligne reste reliée à l'article du catalogue (stock), le complément suit sa quantité
+      const c = sv.essai ? null : parRefSansTaille(l.reference);
+      const qte = Math.max(1, parseInt(l.quantite) || 1), garder = (+l.quantite || 0) > 0;
+      const parent = lignesPL.length;
+      sv.lignes.forEach((x, k) => {
+        const cc = k === 0 ? c : null;
+        lignesPL.push({ garder, catalogue_id: cc ? cc.id : null, reference: x.reference, ref_fournisseur: '',
+          designation: x.designation, note: k === 0 && sv.essai ? 'Demonstration model' : '', quantite: qte,
+          prix_unitaire: k === 0 && cc && cc.prix_achat_suede != null ? String(cc.prix_achat_suede) : null,
+          options: k === 0 && refPantographeGauche(sv.modele) ? optionsDefaut() : undefined, frais: false,
+          suede: k === 0 ? 'fauteuil' : 'complement', parent: k === 0 ? null : parent, refOrigine: l.reference, alerte: k === 0 ? sv.alerte : '' });
+      });
+      continue;
     }
     const c = parRef.get(nRef(l.reference)) || null;
     const frais = estFrais(l.designation) || /^ESSAI/i.test(String(l.reference || '')) || /offre d.essai/i.test(String(l.designation || ''));
-    return { garder: !frais && (+l.quantite || 0) > 0, catalogue_id: c ? c.id : null, reference: c ? c.ref : (l.reference || ''),
+    lignesPL.push({ garder: !frais && (+l.quantite || 0) > 0, catalogue_id: c ? c.id : null, reference: c ? c.ref : (l.reference || ''),
       ref_fournisseur: c ? (c.ref_fournisseur || '') : '', designation: c ? c.designation : (l.designation || ''),
       note: c ? '' : sansHtml(l.description).slice(0, 300), quantite: Math.max(1, parseInt(l.quantite) || 1),
       prix_unitaire: c && c.prix_achat_suede != null ? String(c.prix_achat_suede) : null, frais,
-      options: (c && aOptions({ reference: c.ref, designation: c.designation })) || (!c && aOptions(l)) ? optionsDefaut() : undefined };
-  }) };
+      options: (c && aOptions({ reference: c.ref, designation: c.designation })) || (!c && aOptions(l)) ? optionsDefaut() : undefined });
+  }
+  S._pl = { r, lignes: lignesPL };
   const cl = r.client || {};
   const adrDist = [cl.adresse, [cl.cp, cl.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
   z.innerHTML = `
@@ -663,7 +726,7 @@ async function chercherDevisPL() {
     <div class="table-wrap"><table class="t"><thead><tr><th style="width:30px"></th><th>${_T('Réf.')}</th><th>${_T('Désignation')}</th><th style="width:70px">${_T('Qté')}</th></tr></thead>
       <tbody>${S._pl.lignes.map((l, i) => `<tr style="${l.frais ? 'opacity:.55' : ''}">
         <td><input type="checkbox" ${l.garder ? 'checked' : ''} onchange="csPlLigne(${i},'garder',this.checked)"></td>
-        <td class="mono" style="font-weight:700">${e_(l.reference || '—')}${l.essai ? `<div style="font-size:11px;font-weight:400;color:${l.essai === 'ok' ? 'var(--success)' : 'var(--warning)'}">${l.essai === 'ok' ? '<i class="ti ti-arrows-exchange"></i> ' + _T('remplace') + ' ' + e_(l.refOrigine) : _T('modèle d’essai sans référence « -E » : à vérifier')}</div>` : l.catalogue_id ? `<div style="font-size:11px;font-weight:400;color:var(--success)"><i class="ti ti-link"></i> ${_T('catalogue')}</div>` : `<div style="font-size:11px;font-weight:400;color:var(--text3)">${_T('hors catalogue')}</div>`}</td>
+        <td class="mono" style="font-weight:700">${e_(l.reference || '—')}${l.suede ? `<div style="font-size:11px;font-weight:400;color:var(--success)"><i class="ti ti-arrows-exchange"></i> ${l.suede === 'fauteuil' ? _T('réf. Suède, remplace') : _T('complément de')} ${e_(l.refOrigine)}</div>${l.alerte ? `<div style="font-size:11px;font-weight:600;color:var(--warning)"><i class="ti ti-alert-triangle"></i> ${e_(l.alerte)}</div>` : ''}` : l.catalogue_id ? `<div style="font-size:11px;font-weight:400;color:var(--success)"><i class="ti ti-link"></i> ${_T('catalogue')}</div>` : `<div style="font-size:11px;font-weight:400;color:var(--text3)">${_T('hors catalogue')}</div>`}</td>
         <td>${e_(l.designation)}${l.note ? `<div style="font-size:11.5px;color:var(--text3);font-style:italic">${e_(l.note.slice(0, 140))}${l.note.length > 140 ? '…' : ''}</div>` : ''}${l.frais ? `<div style="font-size:11.5px;color:var(--text3)">${_T('frais ou offre d’essai — non repris par défaut')}</div>` : ''}</td>
         <td><input class="form-input" type="number" min="1" value="${l.quantite}" style="width:60px;padding:3px 6px" onchange="csPlLigne(${i},'quantite',this.value)"></td></tr>`).join('')}</tbody></table></div>
     <div class="section-title" style="margin-top:12px"><i class="ti ti-map-pin"></i>${_T('Livraison')}</div>
@@ -675,10 +738,16 @@ async function chercherDevisPL() {
 function plLigne(i, k, v) {
   const l = S._pl && S._pl.lignes[i]; if (!l) return;
   if (k === 'garder') l.garder = !!v; else l.quantite = Math.max(1, parseInt(v) || 1);
+  // Fauteuil → ses compléments (coussin, kit A…) suivent la case et la quantité
+  if (l.suede === 'fauteuil') {
+    S._pl.lignes.forEach((x, j) => { if (x.parent === i) { if (k === 'garder') x.garder = l.garder; else x.quantite = l.quantite;
+      const el = document.querySelector(`#cs-pl-res tbody tr:nth-child(${j + 1}) ${k === 'garder' ? 'input[type=checkbox]' : 'input[type=number]'}`);
+      if (el) { if (k === 'garder') el.checked = x.garder; else el.value = x.quantite; } } });
+  }
 }
 async function creerDepuisDevisPL() {
   const pl = S._pl; if (!pl) return;
-  const lignes = pl.lignes.filter(l => l.garder).map(({ garder, frais, essai, refOrigine, ...l }) => l);
+  const lignes = pl.lignes.filter(l => l.garder).map(({ garder, frais, essai, refOrigine, suede, parent, alerte, ...l }) => l);
   if (!lignes.length) { _toast(_T('Cochez au moins un article.'), 'ti-alert-circle', 'var(--danger)'); return; }
   const liv = (document.querySelector('input[name=cs-pl-liv]:checked') || {}).value || 'lagord';
   const cfg = await config(true);
