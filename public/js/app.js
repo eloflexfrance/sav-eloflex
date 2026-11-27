@@ -8113,16 +8113,31 @@ function anneauxOptionsCarte(point, x, y){
 }
 
 // Construit le calque de fond de carte : MapTiler (clé) si disponible, sinon Esri (sans clé).
-function _carteBaseTiles() {
-  var key = window._MAPTILER_KEY || '';
-  if (key) {
-    return L.tileLayer('https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=' + encodeURIComponent(key), {
-      attribution: '© MapTiler · © OpenStreetMap', maxZoom: 20, crossOrigin: true
-    });
-  }
+// MapTiler indisponible (quota mensuel du forfait gratuit atteint, clé invalide…) → bascule automatique sur Esri.
+function _carteTilesEsri() {
   return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tuiles © Esri · © OpenStreetMap', maxZoom: 19
   });
+}
+function _carteBaseTiles() {
+  var key = window._MAPTILER_KEY || '';
+  if (key && !window._MAPTILER_HS) {
+    var mt = L.tileLayer('https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=' + encodeURIComponent(key), {
+      attribution: '© MapTiler · © OpenStreetMap', maxZoom: 20, crossOrigin: true
+    });
+    var erreurs = 0, ok = 0;
+    mt.on('tileload', function(){ ok++; });
+    mt.on('tileerror', function(){
+      erreurs++;
+      if (window._MAPTILER_HS || erreurs < 3 || ok > erreurs * 3) return;
+      window._MAPTILER_HS = true;   // pour le reste de la session : Esri directement
+      var map = mt._map; if (!map) return;
+      map.removeLayer(mt); _carteTilesEsri().addTo(map);
+      console.warn('[CARTE] MapTiler indisponible (quota ?) → fond de carte Esri');
+    });
+    return mt;
+  }
+  return _carteTilesEsri();
 }
 window._carteBaseTiles = _carteBaseTiles;
 
